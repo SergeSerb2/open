@@ -250,7 +250,7 @@ final class AppCommandBarSession: CommandBarDelegate {
   func stateForAutomation() -> [String: Any] {
     guard let bar = controller else { return ["created": false, "presented": false] }
     let range = (factory.window?.firstResponder as? NSTextView)?.selectedRange
-    return ["created": true, "presented": bar.isPresented, "mode": bar.request?.mode.rawValue ?? "",
+    var state: [String: Any] = ["created": true, "presented": bar.isPresented, "mode": bar.request?.mode.rawValue ?? "",
       "text": bar.text, "editorText": (factory.window?.firstResponder as? NSTextView)?.string ?? "", "editorCanUndo": (factory.window?.firstResponder as? NSTextView)?.undoManager?.canUndo ?? false, "profile": bar.request?.profileID?.description ?? "", "space": bar.request?.spaceID?.description ?? "",
       "selected": bar.selectedIndex ?? -1, "range": [range?.location ?? -1, range?.length ?? 0],
       "firstResultsMs": firstResultsMilliseconds ?? -1, "openFirstResultsMs": openFirstResultsMilliseconds ?? -1,
@@ -272,6 +272,10 @@ final class AppCommandBarSession: CommandBarDelegate {
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title, "subtitle": $0.subtitle,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? "",
-        "extension": $0.extensionID ?? "", "content": $0.extensionContent ?? "", "keycaps": $0.shortcutKeys] }] as [String: Any]
+        "extension": $0.extensionID ?? "", "content": $0.extensionContent ?? "", "keycaps": $0.shortcutKeys] }]
+    #if DEBUG || OPEN_AUTOMATION
+    state["drawnText"] = bar.view.debugDrawnTexts.map { ["id": $0.id, "title": $0.title, "subtitle": $0.subtitle, "titleGaveRoom": $0.titleGaveRoom] as [String: Any] }
+    #endif
+    return state
   }
 }

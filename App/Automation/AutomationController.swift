@@ -98,6 +98,7 @@
       case 2: .changed
       case 4: .ended
       case 8: .cancelled
+      case 128: .mayBegin
       default: []
       }
     }
@@ -516,7 +517,8 @@
           "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
           "settingsVisible": adapter.settingsPresenter.window?.isVisible ?? false,
           "scrollTarget": adapter.settings.scrollTarget ?? "",
-          "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
+          "generalError": adapter.settings.general.errorText,
+          "generalUpdateMessage": adapter.settings.general.updateMessage, "advancedStatus": adapter.settings.advanced.statusText,
           "library": adapter.libraryWindow?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
           "boostsPresentation": adapter.library?.boostsPresentation.rawValue ?? "",
@@ -1695,6 +1697,12 @@
           "paneBackgrounds": controller.container.slots.map { ["tab": $0.tabID.description,
             "color": colorComponents($0.paneChrome?.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) })] as [String: Any] },
           "shownPages": w.contents.filter { $0.value.view.window === win && !$0.value.view.isHiddenOrHasHiddenAncestor }.keys.map(\.description)] as [String: Any]
+      case "space-rename":
+        // The model rename the Space header and Rename Space… commit (no keyboard focus needed).
+        guard let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }),
+          let title = a["title"] as? String, title.utf8.count <= 256 else { throw Failure(message: "space-rename needs a Space and a title") }
+        app.model.renameSpace(id: space.id, title: title)
+        return true
       case "increase-contrast":
         // Automation stand-in for macOS Increase Contrast in every browser window, through the same
         // path as the system notification (context flag + refresh). The system setting is untouched.
@@ -1869,6 +1877,12 @@
         if let answer = a["answer"] as? String { return w.pageChrome.permissions.press(answer) }
         // A click into the prompt: it takes the keyboard (the prompt never takes it by itself).
         if a["focus"] as? Bool == true { return w.pageChrome.permissions.focusPrompt() }
+        if let hex = a["bezel"] as? String {
+          // "system" restores the accent; otherwise RRGGBB (sRGB) for a light/dark accent check.
+          let value = UInt32(hex, radix: 16)
+          w.pageChrome.permissions.setAllowBezelForAutomation(hex == "system" || value == nil ? nil
+            : NSColor(srgbRed: CGFloat((value! >> 16) & 0xFF) / 255, green: CGFloat((value! >> 8) & 0xFF) / 255, blue: CGFloat(value! & 0xFF) / 255, alpha: 1))
+        }
         return w.pageChrome.permissions.state
       case "permission-decisions":
         guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
@@ -2630,7 +2644,11 @@
         let box = (field.cell as? NSSearchFieldCell)?.searchTextRect(forBounds: field.bounds) ?? field.bounds
         let font = field.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let style = text.flatMap { $0.length > 0 ? $0.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle : nil }
+        let empty = card.emptyLabelFrame
         folderSearch = ["placeholder": card.searchPlaceholder, "textBoxWidth": box.width,
+          "searchHidden": card.searchField.isHidden, "separatorShown": card.separatorShown,
+          "cardHeight": card.bounds.height, "emptyLabel": [empty.minX, empty.minY, empty.width, empty.height],
+          "emptyText": card.emptyLabelText, "rows": card.displayedTabIDs.count,
           "needs": ceil((card.searchPlaceholder as NSString).size(withAttributes: [.font: font]).width),
           "tailEllipsis": style?.lineBreakMode == .byTruncatingTail]
       }
@@ -2686,12 +2704,15 @@
         case "changed": phase = 2
         case "ended": phase = 4
         case "cancelled": phase = 8
+        case "mayBegin": phase = 128
         default: throw Failure(message: "invalid scroll phase")
         }
         cg.location = target.convertPoint(toScreen: point)
         cg.location.y = (NSScreen.screens.first?.frame.maxY ?? 0) - cg.location.y
         cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
-        cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        // continuous=false is a notched mouse wheel (no precise deltas); the default is a trackpad.
+        cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: a["continuous"] as? Bool == false ? 0 : 1)
+        if a["shift"] as? Bool == true { cg.flags = .maskShift }
         cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
         let momentum = a["momentum"] as? Int64 ?? 0
         guard (0...3).contains(momentum) else { throw Failure(message: "invalid momentum phase") }
@@ -3239,7 +3260,23 @@
         "systemAppearance": manager.map { String(describing: $0.context.systemAppearance) } ?? "",
         "appAppearance": NSApp.appearance?.name.rawValue ?? "", "visible": target?.isVisible == true,
         "key": target?.isKeyWindow == true, "section": session?.model.section.rawValue ?? "",
-        "undoRegistrationEnabled": app.undoManager.isUndoRegistrationEnabled, "sectionRows": sectionRows] as [String: Any]
+        "undoRegistrationEnabled": app.undoManager.isUndoRegistrationEnabled, "sectionRows": sectionRows,
+        "layout": spaceManagerLayout(manager, target)] as [String: Any]
+    }
+    /// Window points, top-left origin: what the user sees of the manager and its columns.
+    private func spaceManagerLayout(_ manager: SpaceManagerView?, _ target: NSWindow?) -> [String: Any] {
+      guard let manager, let target else { return [:] }
+      let height = target.contentView?.bounds.height ?? target.frame.height
+      func rect(_ r: NSRect, _ view: NSView) -> [CGFloat] { let w = view.convert(r, to: nil); return [w.minX, height - w.maxY, w.width, w.height] }
+      let clip = manager.scrollView.contentView
+      let fades = manager.edgeFades
+      return ["window": target.windowNumber, "contentWidth": target.contentView?.bounds.width ?? 0,
+        "manager": rect(manager.bounds, manager), "visible": rect(clip.bounds, clip),
+        "documentWidth": manager.scrollView.documentView?.frame.width ?? 0,
+        "columns": manager.context.model.spaces.compactMap { space in manager.columnFrame(spaceID: space.id).map { rect($0, manager.scrollView.documentView!) } },
+        "fadeLeft": fades.left, "fadeRight": fades.right, "masked": manager.scrollView.layer?.mask != nil,
+        "maskWrites": manager.edgeMaskWrites, "originX": manager.scrollView.contentView.bounds.minX,
+        "ownsGesture": manager.stripOwnership.gesture, "ownsMomentum": manager.stripOwnership.momentum]
     }
     /// Coordinates of actual visible row controls; input still uses OEApplication.sendEvent.
     private func spaceManagerRowControls(_ args: [String: Any]) throws -> Any {

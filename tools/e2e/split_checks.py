@@ -267,10 +267,13 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         for i, tid in enumerate(ids): app.call('navigate', tab=tid, url=origin.replace('127.0.0.1', 'pane%d.localhost' % (i+1))+'/four-'+str(i))
         ok, pages = live(ids); row('E1_four_live_pages', ok, pages=pages)
         focus_rows = []
+        # The window title is the focused Space's title (UX round 1 wave 3 W2); pane focus does not change it.
+        spaces_now = app.call('spaces')
+        space_title = next(((x['title'] or 'Space %d' % (n + 1)) for n, x in enumerate(spaces_now) if x.get('focused')), None)
         for i, tid in enumerate(ids):
             app.call('focus', tab=state()['focused']); key(str(i+1)); s = settled(4)
             focus_rows.append(dict(key=i+1, state=s, ok=s['focused'] == tid and [p['id'] for p in s['panes'] if p['ring']] == [tid]
-                                  and s['sidebarCurrent'] and s['selected'] == split_id and s['sidebarURL'] == 'pane%d.localhost' % (i+1) and s['title'] == 'Split /four-'+str(i)))
+                                  and s['sidebarCurrent'] and s['selected'] == split_id and s['sidebarURL'] == 'pane%d.localhost' % (i+1) and s['title'] == space_title))
         key('}'); next_focus = state()['focused']; key('{'); previous = state()['focused']
         row('focus_keys_ring_sidebar', all(r['ok'] for r in focus_rows) and next_focus == ids[0] and previous == ids[3], keys=focus_rows)
         # Queue a native click at a page, so the production NSEvent local monitor observes it.

@@ -9,6 +9,7 @@ Each row reads accessibility frames of the real Settings window over the automat
   settings_shortcuts_fill_pane  in a 1400 × 1000 window the shortcut list grows past the 352 pt cap and
                                 the overlap card still fits in the window (F9)
   settings_download_button      the download location button says "Choose…" (F18)
+  settings_update_status_in_card  the update message is drawn in the Updates card and scrolled into view (S9)
 
 Gate: tools/e2e/engine_e2e.py --only settings-layout (the harness App factory).
 Standalone (hold the on-screen lock; --bundle runs a saved copy, e.g. the parent build):
@@ -107,6 +108,27 @@ def check(app, results, out):
         labels = [c['label'] for c in controls(s) if c['role'] == 'AXButton']
         row('settings_download_button', any(l.startswith('Choose download location') for l in labels)
             and not any('· Choose' in l for l in labels), buttons=labels)
+
+        # UXC-W2-S9 / review r1 #1, #2: at the minimum window, with General scrolled to its end,
+        # Check for Updates (no update feed in this build) shows its message inside the Updates card,
+        # directly under the automatic-updates row, and scrolls it into view.
+        ui(action='resize', width=800, height=540); ui(action='open', section='general'); s = settle(.5)
+        for phase in ['began'] + ['changed'] * 8 + ['ended']:
+            app.call('mouse', action='scroll', window=s['window'], x=600, y=300, dy=(-200 if phase != 'ended' else 0), phase=phase)
+        time.sleep(.8)
+        app.call('menu-perform', id='check-for-updates'); s = settle(1.2)
+        nodes = controls(s)
+        status = next((c for c in nodes if c['id'] == 'general/update-status'), None)
+        toggle = next((c for c in nodes if c['id'] == 'general/automatic-updates'), None)
+        height = s['size'][1]
+        row('settings_update_status_in_card', status is not None and toggle is not None
+            and 'Updates are not set up in this build.' in (status['label'] + status['value'])
+            # directly under the row: the status line's own 12 pt top padding, nothing between
+            and toggle['frame'][1] + toggle['frame'][3] - 2 <= status['frame'][1] <= toggle['frame'][1] + toggle['frame'][3] + 16
+            and status['frame'][1] >= 0 and status['frame'][1] + status['frame'][3] <= height
+            and s['section'] == 'general', status=status and (status['label'], status['frame']),
+            toggle=toggle and toggle['frame'], window=s['size'])
+        ui(action='resize', width=960, height=660); settle()
     finally:
         (out / 'settings-layout.json').write_text(json.dumps(results, indent=1))
         try:

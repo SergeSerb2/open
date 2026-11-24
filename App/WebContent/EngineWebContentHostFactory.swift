@@ -351,6 +351,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
+    updateWindowTitle()  // the Space title from the first frame, before the engine is ready
     attachSavePrompts()
     controller.shouldDeferKeyToFirstResponder = { [weak self] event in
       if let picker = self?.iconPicker, event.window === picker.panel || event.window === picker.toneWindow {
@@ -958,8 +959,30 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   /// The last title update found no selected tab.
   private var showedNoTab = false
+  /// One observation of the title's inputs is armed at a time (it fires once, then re-arms).
+  private var windowTitleObserved = false
+  /// The window title (Window menu, Mission Control, AppleScript `name of window`). A standard window
+  /// shows its focused Space's title, as Arc does (`AXWindow.title` = the Space title,
+  /// docs/re/runtime-observations.md §6; UX round 1 wave 3 W2). Incognito keeps the page title, then
+  /// "Incognito"; a Blank Window keeps the page title, then its Space's (its one internal Space has the
+  /// same name in every Blank Window). The Space title, the Space order (untitled Spaces show "Space N")
+  /// and the focused Space are observed, so a rename or a switch updates the title without a selection change.
   func updateWindowTitle() {
-    let title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : isBlankWindow ? (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open") : "Open")
+    func compute() -> String {
+      let space = focusedSpace.map { model.displayTitle(for: $0) } ?? "Open"
+      guard isIncognito || isBlankWindow else { return space }
+      if let page = selectedTab?.displayTitle, !page.isEmpty { return page }
+      return isIncognito ? "Incognito" : space
+    }
+    let title: String
+    if windowTitleObserved { title = compute() } else {
+      windowTitleObserved = true
+      title = withObservationTracking(compute) { [weak self] in
+        DispatchQueue.main.async { MainActor.assumeIsolated {
+          self?.windowTitleObserved = false; self?.updateWindowTitle()
+        } }
+      }
+    }
     if window?.title != title { window?.title = title }
     showedNoTab = selectedTab == nil
   }
@@ -1550,7 +1573,6 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func completePendingDialog(accept: Bool, text: String?) -> Bool {
     pageChrome.dialogs.answer(accepted: accept, text: text)
   }
-  private func updateChrome() { window?.title = selectedTab?.displayTitle ?? "Open" }
 }
 
 extension EngineWebContentHostFactory {

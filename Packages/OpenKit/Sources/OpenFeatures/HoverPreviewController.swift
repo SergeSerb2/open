@@ -78,6 +78,7 @@ public final class HoverPreviewController {
         guard let folder = context.model.node(id: id)?.folder else { return false }
         let view = FolderPreviewView(context: context, folder: folder)
         view.onSelect = { [weak self] _ in self?.hide(animated: false) }
+        view.onResize = { [weak self] in self?.layout() }
         let card = PreviewCardView(content: view, appearance: appearance, clicksSelect: false)
         card.onPointer = { [weak self] inside in self?.context.hoverPreviews.setPointerInsidePreview(inside) }
         root.addSubview(card)
@@ -168,7 +169,8 @@ public final class HoverPreviewController {
         let top = min(bounds.maxY, bounds.minY + m.windowInset)
         let y = min(max(top, preferredY), max(top, bounds.maxY - m.windowInset - height))
         let frame = CGRect(x: x, y: y, width: width, height: height)
-        if card.frame != frame { card.frame = frame }
+        // A live resize (a folder tab joins or leaves, a glance loads) lays the content out again at the new size.
+        if card.frame != frame { card.frame = frame; card.needsLayout = true }
         context.hoverPreviews.setPreviewFrameInWindow(root.convert(card.frame, to: nil))
     }
 

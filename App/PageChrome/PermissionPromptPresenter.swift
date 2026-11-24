@@ -214,6 +214,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       // This NSPopover is ours; its native window class alone cannot prove
       // ownership to the browser's child-window appearance policy.
       (anchor.view.window as? any WindowContentAppearanceHost)?.contentAppearanceDidChange(for: promptWindow, inheritsAppearance: popover.appearance == nil)
+      PermissionPromptBackdrop.install(in: promptWindow)  // after the appearance pin; every show (reuse)
       if promptWindow.parent == nil { anchor.view.window?.addChildWindow(promptWindow, ordered: .above) }
       // No default button yet: AppKit would send it the Return typed into the page.
       promptWindow.defaultButtonCell = nil
@@ -358,6 +359,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   func popoverDidClose(_ notification: Notification) { if !finishing, !popover.isShown { finish(nil) } }
   #if OPEN_AUTOMATION
+  /// Automation: draw Allow on a given bezel colour (nil: the system accent).
+  func setAllowBezelForAutomation(_ color: NSColor?) { view.bezelOverride = color; view.needsDisplay = true; view.displayIfNeeded() }
   @discardableResult func press(_ answer: String) -> Bool {
     guard isShown, current != nil, ["allow", "notnow"].contains(answer) else { return false }
     (answer == "allow" ? view.allow : view.notNow).performClick(nil); return true
@@ -378,7 +381,11 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
      "pendingPage": current?.page.identifier ?? 0, "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0,
      // The drawn card (no popover shadow margin) and its browser window, AppKit screen points.
      "promptScreenFrame": view.window.map { let r = $0.convertToScreen(view.convert(view.bounds, to: nil)); return [r.minX, r.minY, r.width, r.height] } ?? [],
-     "ownerScreenFrame": owner?.window.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? []]
+     "ownerScreenFrame": owner?.window.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
+     // UXC-W2-S7: Allow styled as the default button; an opaque backdrop behind the popover content.
+     "allowAccent": view.allow.accentFill && view.allow.fillOverride == nil,
+     "opaqueBackdrop": card != nil || (view.window.map { PermissionPromptBackdrop.isInPlace(in: $0) } ?? false),
+     "allowTitleWhite": view.allowTitleColor == .white, "allowDrawn": view.drawnAllowContrast()]
   }
   private func point(in target: NSView, at local: CGPoint? = nil) -> [Double] {
     guard let window = target.window else { return [] }
@@ -387,4 +394,33 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   #endif
   isolated deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+}
+
+/// An opaque window-background fill behind the prompt's content (UXC-W2-S7). NSPopover's own
+/// translucent material picked up the themed sidebar on one side and the white page on the
+/// other, so a light prompt read tinted and uneven; the Little Open card is already opaque.
+/// It is added once to the popover's frame view, under the content, and follows the frame's
+/// shape (the frame view clips its subviews to the popover outline, arrow included).
+@MainActor
+final class PermissionPromptBackdrop: NSView {
+  /// Adds the backdrop once, and on every later show (the popover and its window are reused)
+  /// resizes it to the frame and puts it back directly below the content, above the material.
+  static func install(in window: NSWindow) {
+    guard let content = window.contentView, let frame = content.superview else { return }
+    let backdrop = frame.subviews.first { $0 is PermissionPromptBackdrop } ?? PermissionPromptBackdrop(frame: frame.bounds)
+    backdrop.autoresizingMask = [.width, .height]
+    backdrop.frame = frame.bounds
+    frame.addSubview(backdrop, positioned: .below, relativeTo: content)
+    backdrop.needsDisplay = true
+  }
+  /// Automation evidence: the backdrop covers the frame and sits directly below the content.
+  static func isInPlace(in window: NSWindow) -> Bool {
+    guard let content = window.contentView, let frame = content.superview,
+          let index = frame.subviews.firstIndex(where: { $0 === content }), index > 0,
+          let backdrop = frame.subviews[index - 1] as? PermissionPromptBackdrop else { return false }
+    return backdrop.frame.size == frame.bounds.size && backdrop.frame.origin == .zero
+  }
+  override func draw(_ dirtyRect: NSRect) { NSColor.windowBackgroundColor.setFill(); dirtyRect.fill() }
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  override func isAccessibilityElement() -> Bool { false }
 }

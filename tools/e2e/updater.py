@@ -255,7 +255,7 @@ def run(opts, folder, results, apps):
                         and state['lastCheck'] is None and state['canCheck'] and not requests
                         and len(menu) == 1 and menu[0]['title'] == 'Check for Updates…' and menu[0]['enabled']
                         and settings['settingsVisible'] and settings['pane'] == 'general'
-                        and settings['generalError'] == 'Updates are not set up in this build.',
+                        and settings['generalUpdateMessage'] == 'Updates are not set up in this build.' and settings['generalError'] == '',
                         'state': state, 'canaryRequests': len(requests)}
                     if label == 'placeholder':
                         settings_window = settings['settings']
@@ -265,7 +265,7 @@ def run(opts, folder, results, apps):
                         settings = app.call('settings-state')
                         results['command_dispatch_same_off_status'] = {'ok': settings['settingsVisible']
                             and settings['pane'] == 'general'
-                            and settings['generalError'] == 'Updates are not set up in this build.'}
+                            and settings['generalUpdateMessage'] == 'Updates are not set up in this build.' and settings['generalError'] == ''}
                 finally:
                     app.quit()
                 tracker.checkpoint()

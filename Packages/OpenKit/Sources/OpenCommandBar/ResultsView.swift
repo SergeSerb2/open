@@ -226,4 +226,10 @@ final class ResultsView: NSView {
 
     var rowDrawCount: Int { rowViews.reduce(0) { $0 + $1.drawCount } }
     var visibleRowCount: Int { rowViews.filter { !$0.isHidden && $0.row != nil }.count }
+    #if DEBUG || OPEN_AUTOMATION
+    /// Each shown row's id and the text its last draw showed (with any "…"), top to bottom.
+    var drawnTexts: [(id: String, title: String, subtitle: String, titleGaveRoom: Bool)] {
+        rowViews.compactMap { v in v.isHidden ? nil : v.row.map { ($0.id, v.drawnText.title, v.drawnText.subtitle, v.titleGaveRoom) } }
+    }
+    #endif
 }

@@ -436,9 +436,9 @@ public final class CommandBarController: NSObject {
             if $0.kind == .action, let id = $0.actionID { return isActionEnabled?(id, $0.spaceID) ?? true }
             return true
         }
-        let newRows = visible.map {
+        let newRows = RowPresentation.disambiguate(visible.map {
             RowPresentation.row($0, mode: r?.mode ?? .newTab, currentSpaceID: r?.spaceID, currentURL: r?.currentTabURL, currentTitle: r?.currentTabTitle)
-        }
+        }, suggestions: visible)
         let firstOfQuery = appliedSequence < 0
         var selected: Int?
         if newRows.isEmpty {

@@ -848,6 +848,28 @@ def run(factory, results, tmp, h):
             return check(len(rows) == 3 and all(r['inside'] and r['toolbarSet'] and r['anchorExpected'] for r in rows), rows=rows)
         gate('permission_prompt_inside_window', inside_window)
 
+        # UXC-W2-S7: the prompt is opaque (not the themed sidebar through NSPopover's material) and
+        # Allow looks like the default button; Return still waits for a click into the prompt (V-05).
+        def prompt_style():
+            permission_page('style'); perm(); state = visible(ps)
+            first = {k: state.get(k) for k in ('allowAccent', 'opaqueBackdrop', 'promptHasKeyboard')}
+            # Drawn pixels of Allow (review r2 #4): white title on Blue as macOS default buttons draw it,
+            # and a readable dark title on a very light accent; both at least 3:1.
+            drawn = {}
+            for name, bezel in [('blue', '007AFF'), ('light', 'FFE066')]:
+                drawn[name] = app.call('permission-prompt', bezel=bezel).get('allowDrawn') or {}
+            app.call('permission-prompt', bezel='system')
+            app.call('permission-prompt', answer='notnow')
+            # The popover and its window are reused: a second prompt keeps the backdrop in place.
+            permission_page('style-again'); perm(); again = visible(ps)
+            app.call('permission-prompt', answer='notnow')
+            blue, light = drawn['blue'], drawn['light']
+            return check(first['allowAccent'] is True and first['opaqueBackdrop'] is True and not first['promptHasKeyboard']
+                         and blue.get('titleLight') is True and (blue.get('contrast') or 0) >= 3
+                         and light.get('titleLight') is False and (light.get('contrast') or 0) >= 3
+                         and again.get('opaqueBackdrop') is True, first=first, drawn=drawn, again=again.get('opaqueBackdrop'))
+        gate('permission_prompt_default_and_opaque', prompt_style)
+
         def midi():
             page('http://midi.localhost:%d/midi' % port); perm('midi'); state=visible(ps)
             app.call('permission-prompt',answer='notnow')

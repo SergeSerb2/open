@@ -21,6 +21,8 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     private var filtered: [Tab] = []
     private var loops: [ObservationLoop] = []
     public var onSelect: (@MainActor (ItemID) -> Void)?
+    /// Called when the card's height changes while it is open: a tab joins or leaves the folder.
+    public var onResize: (@MainActor () -> Void)?
 
     public init(context: SidebarContext, folder: Folder) {
         self.context = context; self.folder = folder
@@ -66,8 +68,18 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     public override func keyDown(with event: NSEvent) { tableView.keyDown(with: event) }
     public override var fittingSize: NSSize {
         let m = HoverPreviewMetrics.self
+        // A folder with no tabs is only its "No tabs" text (UX1 wave 2, H2): no search band.
+        if tabs.isEmpty { return CGSize(width: m.folderWidth, height: Self.emptyHeight) }
         return CGSize(width: m.folderWidth, height: m.headerHeight + CGFloat(max(1, min(filtered.count, m.maxVisibleRows))) * m.rowHeight + m.bottomPadding)
     }
+    /// Height of an empty folder's card: the Recents card's empty height, so both empty cards match.
+    static let emptyHeight: CGFloat = RecentsPreviewView.emptyHeight
+    #if DEBUG || OPEN_AUTOMATION
+    /// Layout readback for checks: the header separator is shown, and the empty text's frame and text.
+    public var separatorShown: Bool { !separator.isHidden }
+    public var emptyLabelFrame: CGRect { emptyLabel.isHidden ? .zero : emptyLabel.frame }
+    public var emptyLabelText: String { emptyLabel.isHidden ? "" : emptyLabel.text() }
+    #endif
     /// The search field's placeholder: "Search <folder title>…" (measured text form).
     public var searchPlaceholder: String { searchField.placeholderAttributedString?.string ?? searchField.placeholderString ?? "" }
     public var displayedTabIDs: [ItemID] { filtered.map(\.id) }
@@ -82,7 +94,13 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         return walk(folder.children)
     }
     private func rebuild() {
+        let oldCount = tabs.count, oldHeight = fittingSize.height
         tabs = collectTabs()
+        if tabs.isEmpty, !searchField.stringValue.isEmpty {
+            // The field hides with the folder's last tab: drop its query, so the card says "No tabs".
+            if searchField.currentEditor() != nil { window?.makeFirstResponder(self) }
+            searchField.stringValue = ""
+        }
         let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         filtered = query.isEmpty ? tabs : tabs.filter { $0.displayTitle.localizedCaseInsensitiveContains(query) }
         let name = folder.title.trimmingCharacters(in: .whitespaces)
@@ -94,10 +112,12 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
                 .font: searchField.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize),
                 .foregroundColor: NSColor.placeholderTextColor, .paragraphStyle: style])
         }
-        searchField.isHidden = tabs.isEmpty
+        searchField.isHidden = tabs.isEmpty; separator.isHidden = tabs.isEmpty
         emptyLabel.isHidden = !filtered.isEmpty
         emptyLabel.setAccessibilityLabel(emptyLabel.text())
         tableView.reloadData(); needsLayout = true; invalidateIntrinsicContentSize()
+        // Only a tab joining or leaving resizes an open card; typing a query keeps its height.
+        if tabs.count != oldCount, fittingSize.height != oldHeight { onResize?() }
         // The first row carries the highlight plate (measured); Up / Down move it.
         if !filtered.isEmpty { tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false) }
     }
@@ -113,14 +133,16 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     }
     public override func layout() {
         super.layout()
-        let header = HoverPreviewMetrics.headerHeight
+        let header = tabs.isEmpty ? 0 : HoverPreviewMetrics.headerHeight
         headerIcon.frame = CGRect(x: 10, y: 14, width: 20, height: 20)
         searchField.frame = CGRect(x: 10, y: (header - 24) / 2, width: max(0, bounds.width - 20), height: 24)
         separator.frame = CGRect(x: 0, y: header - 1, width: bounds.width, height: 1)
         let y = header
         scroll.frame = CGRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y - 4))
         tableView.tableColumns.first?.width = bounds.width
-        emptyLabel.frame = CGRect(x: 12, y: y + 6, width: max(0, bounds.width - 24), height: 32)
+        emptyLabel.frame = tabs.isEmpty
+            ? CGRect(x: 12, y: ((bounds.height - 32) / 2).rounded(), width: max(0, bounds.width - 24), height: 32)
+            : CGRect(x: 12, y: y + 6, width: max(0, bounds.width - 24), height: 32)
     }
     public func numberOfRows(in tableView: NSTableView) -> Int { filtered.count }
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {

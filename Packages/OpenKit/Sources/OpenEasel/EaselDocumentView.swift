@@ -536,6 +536,10 @@ final class EaselTitleField: NSTextField, NSTextFieldDelegate {
     /// GUESS 26 pt bold — the 2× capture's glyph run measures ≈ 140 pt wide for
     /// "Untitled Easel"; capture of the font pending.
     static let font = NSFont.systemFont(ofSize: 26, weight: .bold)
+    /// The face in use: `font` at Arc's page width, smaller on a narrower canvas (UXE W3 E3).
+    var titleFont = EaselTitleField.font {
+        didSet { if titleFont != oldValue { font = titleFont; updateColors() } }
+    }
     init() {
         super.init(frame: .zero)
         isBordered = false; drawsBackground = false; focusRingType = .none
@@ -551,7 +555,7 @@ final class EaselTitleField: NSTextField, NSTextFieldDelegate {
         let dark = EaselStyle.dark(effectiveAppearance)
         textColor = EaselStyle.title(dark: dark)
         placeholderAttributedString = NSAttributedString(string: EaselDocument.untitled, attributes: [
-            .font: Self.font, .foregroundColor: EaselStyle.title(dark: dark), .paragraphStyle: {
+            .font: titleFont, .foregroundColor: EaselStyle.title(dark: dark), .paragraphStyle: {
                 let p = NSMutableParagraphStyle(); p.alignment = .center; return p }()])
     }
     override var placeholderString: String? { get { EaselDocument.untitled } set {} }

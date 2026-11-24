@@ -57,7 +57,7 @@ def _rows(app, results, wait_until, tmp):
     after = state()
     title = next((w['title'] for w in app.call('shell-windows') if w['id'] == window), None)
     check('r6_move_to_space_neighbour_not_history', after['space'] == a and after['selected'] == t2 and t2 in after['shownPages']
-          and title == 'R6 T2', state={k: after[k] for k in ('space', 'selected', 'shownPages')}, title=title, t1=t1, t2=t2, t3=t3)
+          and title == 'R6 A', state={k: after[k] for k in ('space', 'selected', 'shownPages')}, title=title, t1=t1, t2=t2, t3=t3)
     app.call('select', tab=keep); settle()
     for t in (t1, t2): app.call('close', tab=t)
     settle()
@@ -164,8 +164,9 @@ def _r8_rows(app, results, wait_until, tmp, window, b, target, opened, state, ch
         before = title_of(window)
         app.call('sidebar-menu', node=solo, item='Move to/' + target); settle()
         after = state(); title = title_of(window)
-        check('r8_move_last_tab_out_updates_title', not favorites and not others and before == 'R6 Solo'
-              and after['space'] == solo_space and after['selected'] == '' and title == 'Open',
+        # The window title is the focused Space's title (UX round 1 wave 3 W2), so it cannot keep the moved tab's.
+        check('r8_move_last_tab_out_updates_title', not favorites and not others and before == 'R8 Solo'
+              and after['space'] == solo_space and after['selected'] == '' and title == 'R8 Solo',
               favorites=favorites, others=others, titleBefore=before, title=title,
               state={k: after[k] for k in ('space', 'selected', 'shownPages')}, solo=solo)
         # Review of #674 #3: Undo brings the tab back selected and shown, with its title (the cleared
@@ -174,7 +175,7 @@ def _r8_rows(app, results, wait_until, tmp, window, b, target, opened, state, ch
         undo_after = app.call('undo-state', undo=True); settle()
         undone = state(); title = title_of(window)
         check('r8_move_last_tab_undo_shows_tab', undone['space'] == solo_space and undone['selected'] == solo
-              and solo in undone['shownPages'] and title == 'R6 Solo',
+              and solo in undone['shownPages'] and title == 'R8 Solo',
               state={k: undone[k] for k in ('space', 'selected', 'shownPages')}, title=title, solo=solo, today=section('today'),
               undoBefore=undo_before, undoAfter=undo_after, spaces=[(x.get('title'), x.get('id')) for x in app.call('spaces')])
         # Review of #674 #3: moved away again, a background tab opened in the empty Space is not taken
@@ -184,7 +185,7 @@ def _r8_rows(app, results, wait_until, tmp, window, b, target, opened, state, ch
         background = app.call('open', url=page.as_uri(), background=True)['id']; settle()
         later = state(); title = title_of(window)
         check('r8_empty_space_background_tab_stays_background', later['space'] == solo_space and later['selected'] == ''
-              and background in section('today') and title == 'Open',
+              and background in section('today') and title == 'R8 Solo',
               state={k: later[k] for k in ('space', 'selected', 'shownPages')}, title=title, background=background)
     guarded('r8_move_last_tab_out_updates_title', move_last_tab)
 

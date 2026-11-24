@@ -15499,11 +15499,19 @@ def main():
                 factory, results["notes-format"], tmp, sys.modules[__name__])
         elif opts.only == "easel":
             results["easel"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/easel.py"))["run"](
+            # OPEN_EASEL_UXE_ONLY=1 runs only the UX round 1 wave 3 rows (tools/e2e/notes_easels_ux1.py).
+            if os.environ.get("OPEN_EASEL_UXE_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/easel.py"))["run"](
+                    factory, results["easel"], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_easels_ux1.py"))["easel_rows"](
                 factory, results["easel"], tmp, sys.modules[__name__])
         elif opts.only == "notes":
             results["notes"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes.py"))["run"](
+            # OPEN_NOTES_UXE_ONLY=1 runs only the UX round 1 wave 3 rows (tools/e2e/notes_easels_ux1.py).
+            if os.environ.get("OPEN_NOTES_UXE_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/notes.py"))["run"](
+                    factory, results["notes"], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_easels_ux1.py"))["note_rows"](
                 factory, results["notes"], tmp, sys.modules[__name__])
         elif opts.only == "welcome":
             results["welcome"] = CheckedResults(tracker)
@@ -15532,11 +15540,12 @@ def main():
             # OPEN_SPLIT_WIN6_ONLY=1 runs only the bug sweep round 6 window rows (tools/e2e/windows_r6.py).
             # OPEN_SPLIT_WIN8_ONLY=1 runs only the bug sweep round 8 window rows (tools/e2e/windows_r8.py).
             # OPEN_SPLIT_UXG_ONLY=1 runs only the UX round 1 pane bar rows (tools/e2e/pagechrome_ux1.py).
+            # OPEN_SPLIT_UXG_WIN_ONLY=1 runs only the UX round 1 wave 3 window rows (tools/e2e/windows_ux1.py).
             win8 = os.environ.get("OPEN_SPLIT_WIN8_ONLY") == "1"
-            uxg = os.environ.get("OPEN_SPLIT_UXG_ONLY") == "1"
+            uxg = os.environ.get("OPEN_SPLIT_UXG_ONLY") == "1" or os.environ.get("OPEN_SPLIT_UXG_WIN_ONLY") == "1"
             if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8 and not uxg:
                 module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
-            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8 and os.environ.get("OPEN_SPLIT_UXG_WIN_ONLY") != "1":
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/pagechrome_ux1.py"))["split_rows"](
                     factory, results["split"], tmp, sys.modules[__name__])
             if not win8 and not uxg:
@@ -15544,6 +15553,9 @@ def main():
                     factory, results["split"], tmp, sys.modules[__name__])
             if not uxg:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r8.py"))["run"](
+                    factory, results["split"], tmp, sys.modules[__name__])
+            if os.environ.get("OPEN_SPLIT_UXG_ONLY") != "1" and os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_ux1.py"))["run"](
                     factory, results["split"], tmp, sys.modules[__name__])
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
@@ -15567,6 +15579,12 @@ def main():
             # OPEN_COMMANDBAR_R6_KEYS_ONLY=1 only bug sweep r6 seed 7 (tools/e2e/keybindings_r6.py).
             setcmd6_only = os.environ.get("OPEN_COMMANDBAR_SETCMD6_ONLY") == "1"
             keys6_only = os.environ.get("OPEN_COMMANDBAR_R6_KEYS_ONLY") == "1"
+            if opts.only == "commandbar" and os.environ.get("OPEN_COMMANDBAR_DUPLICATES_ONLY") == "1":
+                # UX round 1 wave 2 (W2) alone: duplicate tab titles across Spaces.
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/commandbar_duplicates.py"))["run"](factory, results[opts.only], sys.modules[__name__])
+                setcmd6_only = keys6_only = True
+            elif opts.only == "commandbar" and not setcmd6_only and not keys6_only and os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/commandbar_duplicates.py"))["run"](factory, results[opts.only], sys.modules[__name__])
             if opts.only == "commandbar" and not setcmd6_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/keybindings_r6.py"))["run"](factory, results[opts.only])
             if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1" and not setcmd6_only and not keys6_only:
@@ -15605,11 +15623,16 @@ def main():
             if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/themes_ux1.py'))['run'](
                     factory, results[opts.only], tmp, sys.modules[__name__])
+        elif opts.only == "sidebar-completion" and os.environ.get('OPEN_LIBRARY_SPACES_SCROLL_ONLY') == '1':
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/library_spaces_scroll.py'))['run'](factory, results[opts.only], sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
                 sys.modules[__name__], factory, results[opts.only], tmp)
             if os.environ.get('OPEN_MIXED_DELETE_ONLY') != '1':
+                # UX round 1 wave 2 (W3): Library > Spaces with six Spaces, real swipe and wheel.
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/library_spaces_scroll.py'))['run'](factory, results[opts.only], sys.modules[__name__])
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/archive_split_sweep.py'))['checks'](
                     sys.modules[__name__], factory, results[opts.only], tmp)
                 space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
@@ -15755,7 +15778,10 @@ def main():
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "favorites_empty.py"))["run"](factory, results["favorites-empty"], tmp, globals())
         elif opts.only == "live-data":
             results["live-data"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
+            # OPEN_UX1_HOVER_ONLY=1 runs only the UX round 1 hover-card rows (tools/e2e/ux1_hovercards.py).
+            if os.environ.get("OPEN_UX1_HOVER_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "ux1_hovercards.py"))["run"](factory, results["live-data"], tmp, globals())
         elif opts.only == "engine-presentation":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/engine_presentation.py"))["run"](
