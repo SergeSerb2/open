@@ -129,8 +129,12 @@ NS_SWIFT_UI_ACTOR
 - (void)webContent:(OEWebContent*)webContent
          didChange:(OEWebContentChange)changes
     NS_SWIFT_NAME(webContent(_:didChange:));
-/// A user-gesture, non-redirect, main-frame navigation. Return NO to cancel.
-/// A Shift-click new-window disposition uses this same policy with Shift set.
+/// A user-gesture, main-frame navigation policy check. Return NO to cancel.
+/// OnBeforeBrowse calls this only for GET TT_LINK navigations (excluding form
+/// submissions, POST requests, client/server redirects, history traversals,
+/// and direct loads). OnOpenURLFromTab / OnBeforePopup also call this for
+/// Shift-click new-window and Cmd+Option dispositions (CEF does not expose
+/// HTTP method on those callbacks; see docs/followups.md).
 /// The delegate may create new content here. Defer closing this page until
 /// the callback returns.
 - (BOOL)webContent:(OEWebContent*)webContent
