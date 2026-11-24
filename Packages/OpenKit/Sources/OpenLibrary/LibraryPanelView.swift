@@ -480,7 +480,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     public func focusRail() { if let tile=tiles[section] { window?.makeFirstResponder(tile) }; updateRailFocus() }
     func updateRailFocus() {
-        for (candidate,tile) in tiles { tile.keyboardFocus = keyboardRailNavigation && candidate == section && window?.firstResponder === tile }
+        for (_,tile) in tiles { tile.keyboardFocus = keyboardRailNavigation && window?.firstResponder === tile }
     }
     private func updatePointerMonitor() {
         if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil }
