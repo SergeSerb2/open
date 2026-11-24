@@ -32,7 +32,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   private var finishing = false
   private var closed = false
   private var observers: [any NSObjectProtocol] = []
+  #if OPEN_AUTOMATION
   private var anchorState: [String: Any] = [:]
+  #endif
   private(set) var decisions = 0
   init(owner: EngineWebContentHostFactory) {
     self.owner = owner; super.init()
@@ -122,9 +124,12 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     if owner.selectedContent === page, owner.windowState.sidebarMode == .anchored, !sidebar.isHidden, sidebar.urlFieldVisible {
       // Point at the Site Control button's place at the field's trailing end (it shows on hover),
       // where the user changes this decision later; never at the centre of the whole field.
+      // The button's own frame in sidebar points (ChromeViews: the field's width + insetX - trailing - size),
+      // so the arrow does not jump when the button appears on hover.
       let field = sidebar.chromeGeometry.urlField
       let size = URLFieldMetrics.accessorySize
-      let rect = CGRect(x: field.maxX - URLFieldMetrics.siteControlsTrailing - size, y: field.minY, width: size, height: field.height)
+      let rect = CGRect(x: field.maxX + URLFieldMetrics.insetX - URLFieldMetrics.siteControlsTrailing - size,
+                        y: URLFieldMetrics.accessoryY, width: size, height: size)
       return Anchor(view: sidebar, rect: rect, name: "sidebar-url")
     }
     if let bar = controller.container.slots.first(where: { $0.tabID == owner.tabID(for: page) })?.paneChrome, bar.role == .toolbar {
@@ -143,7 +148,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     let windowWidth = window.contentView?.bounds.width ?? window.frame.width
     let room = min(inWindow.midX - margin, windowWidth - inWindow.midX - margin)
     let width = max(minimum, min(preferred, (room * 2).rounded(.down)))
-    let clamped = min(max(inWindow.midX, width / 2 + margin), windowWidth - width / 2 - margin)
+    // A window narrower than the card plus margins (a small window.open panel): centre the card on it.
+    let clamped = windowWidth <= width + 2 * margin ? windowWidth / 2
+      : min(max(inWindow.midX, width / 2 + margin), windowWidth - width / 2 - margin)
     guard abs(clamped - inWindow.midX) > 0.5, let root = window.contentView else { return (width, anchor.rect, anchor.view, anchor.edge) }
     // The moved point can lie outside a small anchor view (the toolbar's Site Control button), where
     // NSPopover refuses to show: position it in the window's content view instead.
@@ -182,8 +189,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
                                                   protocolScheme: entry.request.protocolHandlerScheme)
     let symbol = SitePermissionStore.kinds.first(where: { entry.request.kinds.contains($0.0) })?.2 ?? "lock"
     view.symbol.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 20, weight: .regular))
+    #if OPEN_AUTOMATION
     let screen = anchor.view.window!.convertToScreen(anchor.view.convert(anchor.rect, to: nil))
     anchorState = ["name": anchor.name, "frame": [screen.minX, screen.minY, screen.width, screen.height], "edge": anchor.edge.rawValue]
+    #endif
     // The prompt does not take the keyboard when it shows (bug sweep r6 V-05): a page could time
     // a request so the Return the user types into it grants. A click into the prompt gives it the
     // keyboard; then Return and Escape answer it. VoiceOver no longer follows a focus change, so
@@ -348,6 +357,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
   }
   func popoverDidClose(_ notification: Notification) { if !finishing, !popover.isShown { finish(nil) } }
+  #if OPEN_AUTOMATION
   @discardableResult func press(_ answer: String) -> Bool {
     guard isShown, current != nil, ["allow", "notnow"].contains(answer) else { return false }
     (answer == "allow" ? view.allow : view.notNow).performClick(nil); return true
@@ -375,5 +385,6 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     let p = target.convert(local ?? CGPoint(x: target.bounds.midX, y: target.bounds.midY), to: nil)
     return [p.x, window.frame.height - p.y]
   }
+  #endif
   isolated deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 }
