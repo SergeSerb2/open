@@ -81,13 +81,16 @@ def run(factory, results, h):
                and sorted(s.endswith('oauth') or s.endswith('refresh') for s in shown) == [True, True],
             shown=shown, model=[r.get('subtitle') for r in long_rows], card=card)
 
-        # A narrow card (Cmd+L, the inline editor over the sidebar): a title gives up room only when
-        # its subtitle then really draws.
+        # A narrow card (Cmd+L, the inline editor over the sidebar): a title gives up room only for a
+        # subtitle that then draws, and the drawn subtitles still tell the rows apart (none is the
+        # start of another once "…" is taken out: "— Beta…" next to "— Beta Space…" tells nothing).
         rows, card = query('Duplicate fixture page', key='l')
         narrow = tabs(rows, 'Duplicate fixture page')
         broken = [r['shown'] for r in narrow if r['shown'].get('titleGaveRoom') and not r['shown'].get('subtitle')]
+        cut = [r['shown']['subtitle'].replace('…', '') for r in narrow if r['shown'].get('subtitle')]
+        alike = [(a, b) for i, a in enumerate(cut) for b in cut[i + 1:] if a.startswith(b) or b.startswith(a)]
         results['commandbar_duplicate_narrow_card'] = dict(
-            ok=len(narrow) >= 2 and all(r['shown'].get('title') for r in narrow) and not broken,
-            card=card, shown=[r['shown'] for r in narrow], broken=broken)
+            ok=len(narrow) >= 2 and all(r['shown'].get('title') for r in narrow) and len(cut) >= 2 and not broken and not alike,
+            card=card, shown=[r['shown'] for r in narrow], broken=broken, alike=alike)
     finally:
         app.quit(); server.shutdown()
