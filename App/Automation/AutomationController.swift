@@ -742,6 +742,10 @@
         let frame = controller.contentView.convert(action.view.bounds, from: action.view)
         return ["shown": true, "glyph": action.glyph.map { String(describing: $0) } ?? "", "label": action.view.accessibilityLabel() ?? "",
           "frame": [frame.minX, frame.minY, frame.width, frame.height], "point": [frame.midX, frame.midY]] as [String: Any]
+      case "sidebar-departing-rows":
+        // Row views the front window's outline is animating out (closed, archived or deleted rows).
+        guard let controller = app.frontWindowController else { throw Failure(message: "no window") }
+        return (a["all"] as? Bool == true) ? controller.sidebar.allRowViews : controller.sidebar.departingRows
       case "sidebar-row":
         // A sidebar row's frame and center in the front browser window (top-left origin).
         guard let controller = app.frontWindowController, let raw = a["node"] as? String, let uuid = UUID(uuidString: raw),
@@ -1696,6 +1700,29 @@
         guard let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }),
           let title = a["title"] as? String, title.utf8.count <= 256 else { throw Failure(message: "space-rename needs a Space and a title") }
         app.model.renameSpace(id: space.id, title: title)
+        return true
+      case "increase-contrast":
+        // Automation stand-in for macOS Increase Contrast in every browser window, through the same
+        // path as the system notification (context flag + refresh). The system setting is untouched.
+        guard let on = a["on"] as? Bool else { throw Failure(message: "missing on") }
+        // Kept for windows opened later too (review r1 #6); off returns to the system setting.
+        BrowserWindowController.increaseContrastOverride = on ? true : nil
+        let value = on || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        for controller in app.windowControllers where controller.context.increaseContrast != value {
+          controller.context.increaseContrast = value; controller.refresh()
+        }
+        return value
+      case "sidebar-force-hover":
+        // Render-only hover of a sidebar control (`SidebarContext.forcedHover`), so hover colours can be
+        // measured without the pointer or activating Open. target: urlField, urlStatus, or none.
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        switch a["target"] as? String ?? "none" {
+        case "urlField": controller.context.forcedHover = .urlField
+        case "urlStatus": controller.context.forcedHover = .urlStatus
+        case "none": controller.context.forcedHover = nil
+        default: throw Failure(message: "unknown hover target")
+        }
+        controller.contentView.layoutSubtreeIfNeeded()
         return true
       case "appearance":
         // Open's own appearance only (light, dark, or nil for the system's); the

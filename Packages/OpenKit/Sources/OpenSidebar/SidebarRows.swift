@@ -46,7 +46,7 @@ final class SidebarRowView: NSTableRowView {
                 laidOutFillBounds = nil
                 needsLayout = true
             }
-            keyboardRing?.isHidden = !isKeyboardFocused
+            keyboardRing?.isHidden = leaving || !isKeyboardFocused
         }
     }
     weak var page: SpacePageView?
@@ -142,7 +142,35 @@ final class SidebarRowView: NSTableRowView {
         for case let cell as SidebarCellView in subviews { cell.rowStateChanged() }
     }
 
+    /// The row is being removed. A closed tab's model object is gone at once, so its cell is already
+    /// empty; the plate goes with it, so the row leaves as one piece instead of an empty selected
+    /// plate for a frame (UX round 1, UXD-W2-S1).
+    private(set) var leaving = false
+    func leave() {
+        leaving = true
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        fill.removeAllAnimations()  // a selection or hover fade still running would keep drawing the plate
+        fill.opacity = 0; fill.shadowOpacity = 0
+        for ring in developerOutline { ring.isHidden = true }
+        keyboardRing?.isHidden = true
+        CATransaction.commit()
+        for case let cell as SidebarCellView in subviews { cell.rowWillLeave() }
+    }
+
+    #if DEBUG || OPEN_AUTOMATION
+    /// A row the outline is animating out (UXB-11): its plate, focus ring and Split pane plates.
+    var departureEvidence: [String: Any] {
+        let splitPlates = subviews.compactMap { $0 as? SplitCellView }.map(\.visibleCellFrames.count).reduce(0, +)
+        return ["leaving": leaving, "current": isCurrent, "fillOpacity": Double(fill.opacity),
+                "fillShown": Double(fill.presentation()?.opacity ?? fill.opacity),
+                "fillAnimations": fill.animationKeys() ?? [], "splitPlates": splitPlates,
+                "ringVisible": keyboardRing.map { !$0.isHidden } ?? false,
+                "kind": representedItem.map { String(describing: type(of: $0)) } ?? ""]
+    }
+    #endif
+
     func updateFill(animated: Bool) {
+        if leaving { return }
         let appearance = contentAppearance
         let multiselected = tracked({
             guard let id = itemID(of: representedItem), let selection = page?.context.selection else { return false }
@@ -187,7 +215,7 @@ final class SidebarRowView: NSTableRowView {
     /// 7 pt #322B0F ground (measured at 2x).
     private var developerOutline: [CAShapeLayer] = []
     private func updateDeveloperOutline() {
-        let shown = allowsHighlight && isCurrent && tracked({ [weak self] () -> Bool in
+        let shown = !leaving && allowsHighlight && isCurrent && tracked({ [weak self] () -> Bool in
             guard let self, let tab = self.representedItem as? Tab, let context = self.page?.context else { return false }
             return SidebarDeveloperMode.key(tab.url).map { context.developerModeHosts.contains($0) } ?? false
         }) { [weak self] in self?.invalidateFill() }
@@ -255,6 +283,8 @@ final class SidebarRowView: NSTableRowView {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        // State first, while `leaving` still blocks fill updates: clearing hover and current on a
+        // row that left must not animate its plate (a 1 -> 0 fade on the reused row).
         representedItem = nil
         isKeyboardFocused = false
         isHovered = false
@@ -264,6 +294,12 @@ final class SidebarRowView: NSTableRowView {
         animatesSelectionChange = false
         alphaValue = 1
         fillIndent = 0
+        if leaving {
+            leaving = false
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            fill.removeAllAnimations(); fill.opacity = 0; fill.shadowOpacity = 0
+            CATransaction.commit()
+        }
     }
 }
 
@@ -345,6 +381,8 @@ enum SelectionShadow {
 
 @MainActor
 class SidebarCellView: NSView {
+    /// The row is being removed (`SidebarRowView.leave`): drop any plate the cell draws itself.
+    func rowWillLeave() {}
     weak var page: SpacePageView?
     var depth = 0 { didSet { if depth != oldValue { needsLayout = true } } }
     var indent: CGFloat { CGFloat(depth) * SpaceListMetrics.indentPerLevel }
@@ -1015,12 +1053,22 @@ final class FolderIconView: NSView {
 @MainActor
 final class SplitCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("split")
-    weak var split: Split? { didSet { paneIDs = []; needsLayout = true } }
+    weak var split: Split? { didSet { paneIDs = []; leaving = false; needsLayout = true } }
     private var paneIDs: [ItemID] = []
     private var favicons: [FaviconView] = []
     private var titles: [TextLabel] = []
     private var dividers: [CALayer] = []
     private var cells: [CALayer] = []
+    /// The row is leaving: its pane plates and dividers stay hidden (a selected Split's inner plates
+    /// would otherwise float out without the row's own plate).
+    private var leaving = false
+    override func prepareForReuse() { super.prepareForReuse(); leaving = false }
+    override func rowWillLeave() {
+        leaving = true
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        (dividers + cells).forEach { $0.removeAllAnimations(); $0.isHidden = true }
+        CATransaction.commit()
+    }
     let customIcon = SplitIconView()
     private let customTitle = TextLabel()
 
@@ -1054,6 +1102,8 @@ final class SplitCellView: SidebarCellView {
             t.text = { [weak pane] in pane?.displayTitle ?? "" }
             t.color = { [weak self] in
                 guard let page = self?.page else { return .labelColor }
+                // Increase Contrast: the raised title, as every other row (review r1 #4).
+                if page.context.increaseContrast { return page.roles.title.nsColor }
                 return page.style.splitTitleColor(page.contentAppearanceForSpace).nsColor
             }
             addSubview(f); addSubview(t)
@@ -1115,10 +1165,10 @@ final class SplitCellView: SidebarCellView {
             titles[i].frame = CGRect(x: x + 28, y: 0, width: max(0, pitch - 40), height: m.rowHeight)
             let left = (cellX0 + CGFloat(i) * pitch).rounded(), right = (cellX0 + CGFloat(i) * pitch + pitch - m.splitCellGap).rounded()
             cells[i].frame = CGRect(x: left, y: m.splitCellTop, width: right - left, height: m.splitCellHeight)
-            cells[i].isHidden = !selected || customized
+            cells[i].isHidden = !selected || customized || leaving
             if i > 0 {
                 dividers[i - 1].frame = CGRect(x: x - 10, y: 12, width: m.splitDividerWidth, height: 17)
-                dividers[i - 1].isHidden = selected || customized
+                dividers[i - 1].isHidden = selected || customized || leaving
             }
         }
         CATransaction.commit()
