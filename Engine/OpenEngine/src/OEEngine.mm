@@ -61,6 +61,7 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
   c.keychainAccountName = _keychainAccountName;
   c.useMockKeychain = _useMockKeychain;
   c.defaultDownloadDirectory = _defaultDownloadDirectory;
+  c.disablesDNSErrorProbes = _disablesDNSErrorProbes;
   return c;
 }
 
@@ -1150,6 +1151,19 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
 
 - (void)oe_registerContext:(OEBrowserContext*)context {
   [_allContexts addPointer:(__bridge void*)context];
+  if (_configuration.disablesDNSErrorProbes) {
+    __weak OEBrowserContext* weakProbeContext = context;
+    [context oe_whenReady:^{
+      OEBrowserContext* ready = weakProbeContext;
+      if (!ready || !ready.oe_isReady) return;
+      CefRefPtr<CefRequestContext> request = ready.oe_requestContext;
+      if (!request || !request->CanSetPreference("alternate_error_pages.enabled")) return;
+      CefRefPtr<CefValue> value = CefValue::Create();
+      value->SetBool(false);
+      CefString error;
+      request->SetPreference("alternate_error_pages.enabled", value, error);
+    }];
+  }
   NSString* downloads = _configuration.defaultDownloadDirectory.path;
   if (!downloads.length) return;
   std::string path(downloads.fileSystemRepresentation);
