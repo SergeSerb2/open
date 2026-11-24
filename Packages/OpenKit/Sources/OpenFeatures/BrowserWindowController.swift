@@ -521,11 +521,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.onReturnPreviewHost = { [weak self] in
             self?.hoverPreview.hide(animated: false); self?.context.hoverPreviews.dismiss()
         }
-        // Only an Incognito window shows the page title; a standard window shows its Space's title
-        // (set by the App, UX round 1 wave 3 W2).
+        // Only Incognito and Blank Windows show the page title; a standard window shows its Space's
+        // title (set by the App, UX round 1 wave 3 W2).
         container.onFocusedMetadata = { [weak self] title in
-            guard let self, self.context.isIncognito else { return }
-            self.window?.title = title.isEmpty ? "Incognito" : title
+            guard let self else { return }
+            if self.context.isIncognito { self.window?.title = title.isEmpty ? "Incognito" : title }
+            else if self.context.isWindowOnly, !title.isEmpty { self.window?.title = title }
         }
         container.onURLField = { [weak self] in guard let self else { return }; self.onOpenCommandBar?(.urlField, self.context.currentTab?.url) }
         container.toasts = toasts

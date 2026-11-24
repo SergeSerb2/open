@@ -960,16 +960,18 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var showedNoTab = false
   /// One observation of the title's inputs is armed at a time (it fires once, then re-arms).
   private var windowTitleObserved = false
-  /// The window title (Window menu, Mission Control, AppleScript `name of window`). A standard or Blank
-  /// Window shows its focused Space's title, as Arc does (`AXWindow.title` = the Space title,
+  /// The window title (Window menu, Mission Control, AppleScript `name of window`). A standard window
+  /// shows its focused Space's title, as Arc does (`AXWindow.title` = the Space title,
   /// docs/re/runtime-observations.md §6; UX round 1 wave 3 W2). Incognito keeps the page title, then
-  /// "Incognito". The Space title, the Space order (untitled Spaces show "Space N") and the focused Space
-  /// are observed, so a rename or a switch updates the title without a selection change.
+  /// "Incognito"; a Blank Window keeps the page title, then its Space's (its one internal Space has the
+  /// same name in every Blank Window). The Space title, the Space order (untitled Spaces show "Space N")
+  /// and the focused Space are observed, so a rename or a switch updates the title without a selection change.
   func updateWindowTitle() {
     func compute() -> String {
-      isIncognito
-        ? (selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : "Incognito")
-        : (focusedSpace.map { model.displayTitle(for: $0) } ?? "Open")
+      let space = focusedSpace.map { model.displayTitle(for: $0) } ?? "Open"
+      guard isIncognito || isBlankWindow else { return space }
+      if let page = selectedTab?.displayTitle, !page.isEmpty { return page }
+      return isIncognito ? "Incognito" : space
     }
     let title: String
     if windowTitleObserved { title = compute() } else {
