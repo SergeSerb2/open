@@ -846,20 +846,35 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         beginRename(item: item as AnyObject)
     }
 
-    func beginRename(nodeID: ItemID?) {
-        guard let nodeID else { header.beginRename(); return }
-        guard let obj = context.model.node(id: nodeID)?.object else { return }
-        let row = outline.row(forItem: obj)
-        if row >= 0 { outline.scrollRowToVisible(row) }
-        beginRename(item: obj)
+    func ensureNodeInOutline(_ obj: AnyObject) {
+        guard context.manager?.deferHiddenUpdates() != true else { return }
+        if outline.row(forItem: obj) < 0 {
+            if rootPinnedCollapsed != space.isPinnedCollapsed { syncRoot() }
+            syncExpansion(animated: false)
+        }
     }
 
-    fileprivate func beginRename(item: AnyObject) {
+    @discardableResult
+    func beginRename(nodeID: ItemID?) -> Bool {
+        guard let nodeID else { header.beginRename(); return true }
+        guard let obj = context.model.node(id: nodeID)?.object else { return false }
+        ensureNodeInOutline(obj)
+        let row = outline.row(forItem: obj)
+        if row >= 0 { outline.scrollRowToVisible(row) }
+        return beginRename(item: obj)
+    }
+
+    @discardableResult
+    fileprivate func beginRename(item: AnyObject) -> Bool {
         let row = outline.row(forItem: item)
-        guard row >= 0, let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return }
-        (cell as? TabCellView)?.beginRename()
-        (cell as? FolderCellView)?.beginRename()
-        (cell as? SplitCellView)?.beginRename()
+        guard row >= 0 else { return false }
+        outline.layoutSubtreeIfNeeded()
+        guard let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return false }
+        cell.layoutSubtreeIfNeeded()
+        if let tab = cell as? TabCellView { return tab.beginRename() }
+        if let folder = cell as? FolderCellView { return folder.beginRename() }
+        if let split = cell as? SplitCellView { return split.beginRename() }
+        return false
     }
 
     func menu(at point: NSPoint) -> NSMenu {

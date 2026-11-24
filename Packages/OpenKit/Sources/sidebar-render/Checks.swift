@@ -217,20 +217,56 @@ enum Checks {
         }
         check(delegate.log.contains(.openCommandBar(.newTabRow)), "click on New Tab asks for the command bar")
         delegate.log.removeAll()
+        if let f = sidebar.newFolderButtonFrame {
+            let pinnedBefore = space.pinned.count
+            click(scene.convert(NSPoint(x: f.midX, y: f.midY), from: sidebar))
+            pump()
+            check(delegate.log.contains(.newFolder(in: .spacePinned(space.id))) && space.pinned.count == pinnedBefore + 1,
+                  "click on New Tab row's New Folder button creates a pinned folder")
+            if let field = host.firstResponder as? NSTextView { host.makeFirstResponder(nil); _ = field }
+            undo.undo(); pump()
+        } else { check(false, "New Tab row shows a New Folder button") }
+        delegate.log.removeAll()
         click(scene.convert(NSPoint(x: 100, y: 64), from: sidebar))
         check(delegate.log.contains(.openCommandBar(.urlField)), "click on the URL field asks for the command bar")
 
         print("menus")
         let pinnedTab = space.pinned.compactMap(\.tab).last!
-        // Arc 1.172.2 orders (capture session 3 Part D; docs/re/sidebar-menus-parity.md §1).
-        check(sidebar.menuTitles(nodeID: pinnedTab.id) == ["Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—", "Open in Split View", "Duplicate", "Move to", "—", "Remove Pin"],
-              "pinned tab menu (S3D order): \(sidebar.menuTitles(nodeID: pinnedTab.id).joined(separator: " · "))")
+        // Arc 1.172.2 orders (capture session 3 Part D; docs/re/sidebar-menus-parity.md §1),
+        // with Open's single-tab "New Folder with Tab" shortcut right after "Move to".
+        check(sidebar.menuTitles(nodeID: pinnedTab.id) == ["Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—", "Open in Split View", "Duplicate", "Move to", "New Folder with Tab", "—", "Remove Pin"],
+              "pinned tab menu (S3D order + New Folder with Tab): \(sidebar.menuTitles(nodeID: pinnedTab.id).joined(separator: " · "))")
         if let todayTab = space.today.first {
             // ⌥ alternates (Archive Other Tabs, Archive Tabs Above) are not drawn (capture session 8).
             let split = context.currentTab?.id == todayTab.id ? "Add Split View" : "Open in Split View"
-            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "—", split, "Duplicate", "Move to", "—",
+            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "—", split, "Duplicate", "Move to", "New Folder with Tab", "—",
                                                               "Archive Tab", "Archive Tabs Below"],
-                  "Today tab menu (S3D order): \(sidebar.menuTitles(nodeID: todayTab.id).joined(separator: " · "))")
+                  "Today tab menu (S3D order + New Folder with Tab): \(sidebar.menuTitles(nodeID: todayTab.id).joined(separator: " · "))")
+            // Single-tab "Move to ▸" offers existing folders in the Space and moves the tab there.
+            if let moveMenu = sidebar.contextMenu(nodeID: todayTab.id)?.item(withTitle: "Move to")?.submenu {
+                let folderItem = moveMenu.item(withTitle: folder.title)
+                check(moveMenu.item(withTitle: "Folders")?.isEnabled == false && folderItem?.isEnabled == true,
+                      "Move to ▸ lists existing folders in the Space")
+                if let folderItem {
+                    moveMenu.performActionForItem(at: moveMenu.index(of: folderItem)); pump()
+                    check(model.parent(of: todayTab.id) == .folder(folder.id), "Move to ▸ folder moves the tab into the folder")
+                    undo.undo(); pump()
+                    check(model.parent(of: todayTab.id) == .spaceToday(space.id), "Move to ▸ folder undoes back to Today")
+                }
+            } else { check(false, "Today tab menu has a Move to submenu") }
+            // Single-tab "New Folder with Tab" wraps the tab in place and undoes in one step.
+            if let todayMenu = sidebar.contextMenu(nodeID: todayTab.id),
+               let wrapIndex = todayMenu.items.firstIndex(where: { $0.title == "New Folder with Tab" }) {
+                todayMenu.performActionForItem(at: wrapIndex); pump()
+                let wrappedInFolder: Bool = {
+                    guard case .folder(let fid)? = model.parent(of: todayTab.id),
+                          let created = model.node(id: fid)?.folder else { return false }
+                    return model.parent(of: fid) == .spaceToday(space.id) && created.children.map(\.id) == [todayTab.id]
+                }()
+                check(wrappedInFolder, "New Folder with Tab wraps the single tab in a folder in place")
+                host.makeFirstResponder(nil); undo.undo(); pump()
+                check(model.parent(of: todayTab.id) == .spaceToday(space.id), "New Folder with Tab undoes in one step")
+            } else { check(false, "Today tab menu has New Folder with Tab") }
         }
         if let todayTab = space.today.first, let share = sidebar.contextMenu(nodeID: todayTab.id)?.item(withTitle: "Share")?.submenu {
             let services = share.items.map(\.title)

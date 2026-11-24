@@ -40,7 +40,8 @@ struct SidebarMenus {
         return m
     }
 
-    /// "Move to ▸": all Spaces in dock order, a separator, "New Space…".
+    /// "Move to ▸": all Spaces in dock order, a separator, "New Space…", and any
+    /// eligible folders in the current Space.
     private func moveTo(_ nodeID: ItemID) -> NSMenuItem {
         let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
         if context.isWindowOnly {
@@ -61,6 +62,7 @@ struct SidebarMenus {
         }
         items.append(.separator())
         items.append(item("New Space…", .moveToNewSpace(nodeID: nodeID)))
+        items += folderMoveItems(for: [nodeID], in: current)
         parent.submenu = menu(items)
         return parent
     }
@@ -74,14 +76,62 @@ struct SidebarMenus {
             parent.submenu = menu((context.windowOnlyMoveSpaces?() ?? []).map { item($0.title, enabled: tabsOnly, .moveNodesToSpace(ids: ids, space: $0.id)) })
             return parent
         }
-        let current = Set(ids.compactMap { context.model.parent(of: $0).flatMap(spaceID(of:)) })
+        let parents = ids.map { context.model.parent(of: $0).flatMap(spaceID(of:)) }
+        let current = Set(parents.compactMap { $0 })
         var items = context.model.spaces.map { space in
             item(context.title(of: space), enabled: current != Set([space.id]), .moveNodesToSpace(ids: ids, space: space.id))
         }
         items.append(.separator())
         items.append(item("New Space…", enabled: context.canMoveNodesToNewSpace(ids), .moveNodesToNewSpace(ids: ids)))
+        let allInOneSpace = !parents.contains(where: { $0 == nil }) && current.count == 1
+        items += folderMoveItems(for: ids, in: allInOneSpace ? current.first : nil)
         parent.submenu = menu(items)
         return parent
+    }
+
+    /// Ordinary (non-live) folders in `spaceID`, in sidebar order (Pinned then Today) with nesting depth.
+    private func spaceFolders(in spaceID: SpaceID) -> [(folder: Folder, depth: Int)] {
+        guard let space = context.model.space(id: spaceID) else { return [] }
+        var result: [(Folder, Int)] = []
+        func walk(_ nodes: [SidebarNode], depth: Int) {
+            for case .folder(let folder) in nodes where folder.live == nil {
+                result.append((folder, depth))
+                walk(folder.children, depth: depth + 1)
+            }
+        }
+        walk(space.pinned, depth: 0)
+        walk(space.today, depth: 0)
+        return result
+    }
+
+    /// Folder targets appended to "Move to ▸" when the Space has eligible folders.
+    private func folderMoveItems(for ids: [ItemID], in spaceID: SpaceID?) -> [NSMenuItem] {
+        guard !context.isIncognito, !context.isWindowOnly, let spaceID else { return [] }
+        let candidates = spaceFolders(in: spaceID).filter { candidate in
+            ids.allSatisfy { context.model.canMoveNode(id: $0, to: .folder(candidate.folder.id)) }
+        }
+        guard !candidates.isEmpty else { return [] }
+        let header = NSMenuItem(title: "Folders", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        let icon = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        var items: [NSMenuItem] = [.separator(), header]
+        for (folder, depth) in candidates {
+            let destination = NodeParent.folder(folder.id)
+            let alreadyHere = ids.allSatisfy { context.model.parent(of: $0) == destination }
+            let title = folder.title.isEmpty ? "Folder" : folder.title
+            let row: NSMenuItem
+            if ids.count == 1 {
+                row = alreadyHere ? ClosureMenuItem(title) {}
+                    : item(title, .move(nodeID: ids[0], to: destination, index: folder.children.count))
+                row.state = alreadyHere ? .on : .off
+            } else {
+                row = item(title, enabled: !alreadyHere, .moveNodes(ids: ids, to: destination, index: folder.children.count))
+            }
+            row.indentationLevel = depth
+            row.image = icon
+            items.append(row)
+        }
+        return items
     }
 
     /// Selection menu; folders use Delete only (lead decision Q1).
@@ -255,6 +305,7 @@ struct SidebarMenus {
             splitItem(tab),
             item("Duplicate", .duplicate(nodeID: tab.id)),
             moveTo(tab.id),
+            item("New Folder with Tab", .newFolderFromSelection(ids: [tab.id])),
             .separator(),
             item("Archive Tab", .close(nodeID: tab.id)),
         ]
@@ -305,13 +356,13 @@ struct SidebarMenus {
     func pinnedTab(_ tab: Tab) -> NSMenu {
         if Self.isEasel(tab) { return easel(tab) }
         if Self.isNote(tab) { return note(tab) }
-        return menu(pinnedItems(tab) + [item("Remove Pin", .unpin(tabID: tab.id))])
+        return menu(pinnedItems(tab, includeNewFolder: true) + [item("Remove Pin", .unpin(tabID: tab.id))])
     }
 
     /// The shared pinned / favourite list up to the last separator (S3D: the favourite menu is
     /// the pinned menu with "Remove Favorite" last). C12-D2-3 adds Customize Page… after
     /// Mute only for pages loaded in this launch, immediately before Edit Pinned Page.
-    private func pinnedItems(_ tab: Tab) -> [NSMenuItem] {
+    private func pinnedItems(_ tab: Tab, includeNewFolder: Bool = false) -> [NSMenuItem] {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
         return [
             copyLink(tab),
@@ -326,6 +377,7 @@ struct SidebarMenus {
             splitItem(tab),
             item("Duplicate", .duplicate(nodeID: tab.id)),
             moveTo(tab.id),
+        ] + (includeNewFolder ? [item("New Folder with Tab", .newFolderFromSelection(ids: [tab.id]))] : []) + [
             .separator(),
         ]
     }
@@ -460,7 +512,10 @@ struct SidebarMenus {
         items += [item("Change Icon…", .changeIcon(nodeID: split.id)),
                   ClosureMenuItem("Rename…") { [beginRename] in beginRename(split.id) },
                   .separator(), item("Duplicate", .duplicate(nodeID: split.id))]
-        if !context.isIncognito { items.append(moveTo(split.id)) }
+        if !context.isIncognito {
+            items.append(moveTo(split.id))
+            items.append(item("New Folder with Split View", .newFolderFromSelection(ids: [split.id])))
+        }
         items += [.separator(), item(context.isIncognito ? "Close Split View" : "Archive Item", .close(nodeID: split.id))]
         if !context.isIncognito { items += archiveAlternates(split.id) }
         return menu(items)

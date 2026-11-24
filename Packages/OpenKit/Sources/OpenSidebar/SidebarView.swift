@@ -59,6 +59,7 @@ public final class SidebarView: NSView {
     private var modelUpdateDepth = 0
     private var pendingChanges: [TreeChange] = []
     private var pendingRename: ItemID?
+    private var pendingRenameGeneration = 0
     public var updateBannerState: UpdateBannerState? { didSet { refreshBanners() } }
     public var onUpdateBannerAction: (() -> Void)?
     public var onUpdateBannerDismiss: (() -> Void)?
@@ -384,23 +385,49 @@ public final class SidebarView: NSView {
         guard modelUpdateDepth == 0 else { return }
         let changes = pendingChanges
         pendingChanges = []
+        let renameID = pendingRename
+        pendingRename = nil
+        // Inserting a row with NSOutlineView animation tears down or resigns an inline RenameField
+        // when the animation finishes; land the newly created folder directly before focusing it.
+        let restoreAnimation = renameID != nil && context.animatesChanges
+        if restoreAnimation { context.animatesChanges = false }
         if !changes.isEmpty {
             pager.applyBulk(changes)
             if let profile = context.favoritesProfile {
                 favorites.apply(.reload(parent: .favorites(profile.id)))
             }
         }
-        if let id = pendingRename {
-            pendingRename = nil
-            reveal(nodeID: id)
-            layoutSubtreeIfNeeded()
-            beginRename(nodeID: id)
+        if restoreAnimation { context.animatesChanges = true }
+        if let id = renameID {
+            startRenameForInsertedNode(id)
         }
     }
 
     func renameInsertedNode(_ id: ItemID) {
         if modelUpdateDepth > 0 { pendingRename = id }
-        else { reveal(nodeID: id); layoutSubtreeIfNeeded(); beginRename(nodeID: id) }
+        else { startRenameForInsertedNode(id) }
+    }
+
+    private func startRenameForInsertedNode(_ id: ItemID, remainingAttempts: Int = 6, generation: Int? = nil) {
+        let currentGen: Int
+        if let generation {
+            guard generation == pendingRenameGeneration else { return }
+            currentGen = generation
+        } else {
+            pendingRenameGeneration &+= 1
+            currentGen = pendingRenameGeneration
+        }
+        guard context.model.node(id: id) != nil else { return }
+        reveal(nodeID: id)
+        layoutSubtreeIfNeeded()
+        if pager.currentPage?.beginRename(nodeID: id) == true { return }
+        guard remainingAttempts > 0 else { return }
+        // An animated NSOutlineView insertion may attach or lay out the new row on a later turn.
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(40)) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.startRenameForInsertedNode(id, remainingAttempts: remainingAttempts - 1, generation: currentGen)
+            }
+        }
     }
 
     /// App command handlers and confirmed alerts use the same transactional path
@@ -480,6 +507,15 @@ public final class SidebarView: NSView {
         let row = page.outline.row(forItem: page.newTab)
         guard row >= 0 else { return nil }
         return convert(page.outline.rect(ofRow: row), from: page.outline)
+    }
+
+    /// The focused page's "New Folder" button on the "New Tab" row, in this view.
+    public var newFolderButtonFrame: CGRect? {
+        guard let page = pager.currentPage else { return nil }
+        let row = page.outline.row(forItem: page.newTab)
+        guard row >= 0, let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? NewTabCellView,
+              !cell.newFolderButton.isHidden else { return nil }
+        return convert(cell.newFolderButton.bounds, from: cell.newFolderButton)
     }
 
     /// Actual current-row highlight state, without creating an offscreen row.
