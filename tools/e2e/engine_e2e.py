@@ -7748,9 +7748,10 @@ def sleep_checks(factory, results, tmp, style):
             # A repeated switch takes its last value (base::CommandLine).
             found = re.findall(r"--%s=(\S+)" % flag, cmd)
             return set(found[-1].split(",")) if found else set()
+        # AsyncDns: automation and Debug builds only (App/main.swift); this suite runs those builds.
         off = {"OptimizationHints", "OptimizationTargetPrediction", "OptimizationGuidePageContentExtraction",
                "OptimizationGuideModelExecution", "SegmentationPlatform", "SegmentationPlatformUkmEngine", "MediaRouter",
-               "TranslateRankerQuery", "TranslateRankerEnforcement"}
+               "TranslateRankerQuery", "TranslateRankerEnforcement", "AsyncDns"}
         results["sleep_f0_switches"] = {"ok": "WebContentsDiscard" in feature_list("enable-features") and off <= feature_list("disable-features"),
                                         "enabled": sorted(feature_list("enable-features")), "disabledMissing": sorted(off - feature_list("disable-features"))}
 
