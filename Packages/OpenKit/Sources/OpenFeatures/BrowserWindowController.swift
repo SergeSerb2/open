@@ -258,6 +258,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var hasPeekController: Bool { peekStorage != nil }
     private let emptyPanel = WebPanelChromeLayer()
     private let emptyPanelHost = NSView()
+    /// The empty-Space panel chrome is hidden (automation readback, UX1 wave 2 review r1 #1).
+    public var emptyPanelHidden: Bool { emptyPanelHost.isHidden }
     public var visibilityOverride: OpenSleepWindowState?
     public var onOpenCommandBar: ((CommandBarSource, URL?) -> Void)?
     public var onVisibilityChange: (() -> Void)?

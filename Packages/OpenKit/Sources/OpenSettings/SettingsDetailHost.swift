@@ -44,6 +44,8 @@ struct SettingsDetailHost: NSViewRepresentable {
     private var pages: [SettingsSection: (NSView, SettingsPageState)] = [:]
     private var search: NSView?
     private var active: NSView?
+    /// The shown page: the Settings navigation's Tab target (K1).
+    var activePage: NSView? { active }
     private var lastArrival = -1
     private var idleWork: DispatchWorkItem?
     private var idleSections: [SettingsSection] = [.links, .adBlocking, .shortcuts]

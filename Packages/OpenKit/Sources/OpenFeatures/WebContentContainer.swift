@@ -301,6 +301,9 @@ public final class WebContentContainer: NSView {
     }
     public var spacePageRetainsEmptySurface: Bool { spaceMotionStorage?.keepsEmptySourceVisible == true }
     public var spacePageMotionPhase: String { spaceMotionStorage?.plate.phase.rawValue ?? "idle" }
+    /// The cover is fading out over the presented page or Space background (UX1 wave 2).
+    public var spacePageCoverFading: Bool { spaceMotionStorage?.plate.isFading == true }
+    public var spacePageCoverFades: Int { spaceMotionStorage?.plate.fadeCount ?? 0 }
     public var spacePageUsesSnapshot: Bool { spaceMotionStorage?.plate.destinationUsesSnapshot ?? false }
     public var spacePageSnapshotBytes: Int { spaceMotionStorage?.plate.cachedBytes ?? 0 }
     public var spacePageCaptureCount: Int { spaceMotionStorage?.captureCount ?? 0 }
@@ -439,7 +442,7 @@ public final class WebContentContainer: NSView {
     /// on every host) Space switching keeps main's path: no cover and no timer.
     /// A transition already in flight finishes on the cover path.
     private var usesSpacePageMotion: Bool {
-        if let motion = spaceMotionStorage, motion.plate.phase != .idle { return true }
+        if let motion = spaceMotionStorage, motion.plate.phase != .idle || motion.plate.isFading { return true }
         return cache.values.contains { $0.framePresentation != nil }
     }
     /// Whether a Space selection applied later (behind the Space cover, after its input turn) may
@@ -448,6 +451,7 @@ public final class WebContentContainer: NSView {
     /// `deferred`: applied after the input turn, once the Space cover is in place.
     func applySpaceSelection(_ selection: SpaceContentSelection, animateSlots: Bool, notify: Bool = true, deferred: Bool = false) {
         if let focused = selection.focused {
+            emptyHidePending = false
             isHidden = false
             showNative(tabIDs: selection.tabs, focusedTabID: focused, orientation: selection.orientation,
                 fractions: selection.fractions, spaceID: selection.space, profileID: selection.profile,
@@ -458,8 +462,26 @@ public final class WebContentContainer: NSView {
         }
         if notify { onSpaceSelectionApplied?() }
     }
-    func finishEmptySpaceSelection() { isHidden = true; onSpaceSelectionApplied?() }
+    /// An empty Space hides the container once its cover has faded out over the window
+    /// background (UX1 wave 2, W2); a later non-empty selection cancels that hide.
+    private var emptyHidePending = false
+    func finishEmptySpaceSelection() {
+        if let plate = spaceMotionStorage?.plate, plate.isFading {
+            emptyHidePending = true
+            plate.whenRetired { [weak self] in
+                guard let self, self.emptyHidePending else { return }
+                // Hiding a manually laid-out child does not lay the window out: tell the window,
+                // so the empty-Space panel and shadow follow the hidden container (review r1 #1).
+                // A fade ended by this container's own layout (Cmd+S, resize) runs inside the window's
+                // layout pass: ask for another pass instead of re-entering it (review r2 #1).
+                self.emptyHidePending = false; self.isHidden = true
+                if self.inLayout { self.superview?.needsLayout = true } else { self.onSpaceSelectionApplied?() }
+            }
+        } else { isHidden = true }
+        onSpaceSelectionApplied?()
+    }
     private func showNative(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID, animateSlots: Bool, deferred: Bool = false) {
+        emptyHidePending = false
         // Selection may come from keyboard cycling, automation, or model observers.
         // Return the preview before changing slots or refreshing any selected host.
         if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }
@@ -990,9 +1012,12 @@ public final class WebContentContainer: NSView {
         orientation == .horizontal ? CGRect(x: edge, y: box.minY, width: 0, height: box.height)
             : CGRect(x: box.minX, y: edge, width: box.width, height: 0)
     }
+    /// True inside `layout()`: a cover fade ended here must not re-enter the window's layout pass.
+    private var inLayout = false
     public override func layout() {
         let region = WindowSpeedTrace.begin("webContainer.layout")
         defer { region?() }
+        inLayout = true; defer { inLayout = false }
         super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false); spaceMotionStorage?.layout()
     }
     private func layoutDividers() {

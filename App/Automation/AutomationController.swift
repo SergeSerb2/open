@@ -159,6 +159,7 @@
 
     init(app: AppDelegate) {
       self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self
+      Self.installFullKeyboardAccessOverrideIfRequested()
       if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREPARATION_TRACE"] == "1" {
         libraryPreparationHeartbeat = LibraryPreparationHeartbeat()
         libraryPreparationHeartbeat?.start()
@@ -473,6 +474,9 @@
           throw Failure(message: "activation peer \(pid) maps this executable but is not a running application after 2 s")
         }
         NSApp.yieldActivation(to: target); return true
+      case "responder": return try auditResponder(a)
+      case "ax-tree": return try auditAXTree(a)
+      case "ax-debug": return try auditAXDebug(a)
       case "native-focus-state":
         return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "uptime": ProcessInfo.processInfo.systemUptime,
@@ -1560,6 +1564,9 @@
           "cardSamples": controller.cardMotionSamples.map { ["time": $0.time, "offset": $0.offset] },
           "space": controller.sidebar.spaceSlideAnimation.map(describeAnimation) ?? [:],
           "spacePage": ["phase": controller.container.spacePageMotionPhase,
+            "coverFading": controller.container.spacePageCoverFading, "containerHidden": controller.container.isHidden,
+            "coverFades": controller.container.spacePageCoverFades, "emptyPanelHidden": controller.emptyPanelHidden,
+            "containerMasked": controller.container.layer?.mask != nil,
             "cachedDestination": controller.container.spacePageUsesSnapshot,
             "cacheBytes": controller.container.spacePageSnapshotBytes,
             "captures": controller.container.spacePageCaptureCount,
@@ -2932,7 +2939,9 @@
       // AppKit preserves Shift in charactersIgnoringModifiers. Native menu
       // equivalents such as Redo need "Z", even though the key router folds case.
       // `characters` sends what real hardware gives (Cmd+Shift+2 carries "@"), for the base-key check.
-      let eventCharacters = (a["characters"] as? String).flatMap { $0.count == 1 ? $0 : nil } ?? (mods.contains(.shift) ? chars.uppercased() : chars)
+      // Hardware Shift-Tab carries the backtab character (0x19), which NSTextView maps to insertBacktab:.
+      let shiftedChars = chars == "\t" ? "\u{19}" : chars.uppercased()
+      let eventCharacters = (a["characters"] as? String).flatMap { $0.count == 1 ? $0 : nil } ?? (mods.contains(.shift) ? shiftedChars : chars)
       let route = a["route"] as? String ?? "app"
       let observeCommands = a["observeCommands"] as? Bool == true
       var menuObserver: (any NSObjectProtocol)?
