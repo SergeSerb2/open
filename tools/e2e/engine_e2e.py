@@ -13554,9 +13554,15 @@ def space_editor_creation_checks(factory, results, tmp):
         key('escape')
         require('A5_cancel_changes_nothing', spaces() == before and not state()['open']
                 and state()['modelUndoGeneration'] == cancel_generation)
-        app.call('editor-open', kind='create'); app.call('type', text='   '); finish()
-        require('A5_blank_is_untitled_no_theme', focused()['title'] == '' and app.call('theme-get')['style'] is None)
-        undo(); require('A5_blank_one_undo', spaces() == before)
+        # A spaces-only name counts as empty (Arc §20.8 keeps Create disabled): Return creates nothing,
+        # leaves no model Undo step, and Escape closes the form.
+        blank_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create'); app.call('type', text='   '); key('return')
+        blank = state()
+        require('A5_blank_name_refused', blank['open'] and blank['name'] == '   ' and blank['createEnabled'] is False
+                and spaces() == before and blank['modelUndoGeneration'] == blank_generation, state=blank)
+        key('escape')
+        require('A5_blank_escape_closes', bool(wait_until(lambda: not state()['open'], timeout=5)) and spaces() == before)
         # Native field typing is session-local. Its Undo falls back to the
         # form's persistent draft stack after the typing steps are exhausted.
         app.call('editor-open', kind='create')
