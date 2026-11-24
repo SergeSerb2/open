@@ -5141,7 +5141,13 @@ def sidebar_bars_checks(factory, results, tmp):
     runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_bars.py"))["run"](factory, results, wait_until, tmp, ROOT, read_image)
 
 
+def sidebar_rowleave_checks(factory, results, tmp):
+    """A removed row drops its plates at once (tools/e2e/sidebar_rowleave.py, UXB-11)."""
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_rowleave.py"))["run"](factory, results, wait_until, tmp, ROOT)
+
+
 def sidebar_checks(factory, results, tmp):
+    sidebar_rowleave_checks(factory, results, tmp)
     sidebar_bars_checks(factory, results, tmp)
     # Bug sweep r6 sidebar rows (tools/e2e/sidebar_r6.py); OPEN_SIDEBAR_R6_ONLY=1 runs only them.
     runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_r6.py"))["run"](factory, results, wait_until, tmp)
@@ -15051,6 +15057,7 @@ def main():
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--sidebar-pinfav-only", action="store_true", help="run only the pinned-tab and Favorite close rows of the sidebar suite")
+    ap.add_argument("--sidebar-rowleave-only", action="store_true", help="run only the removed-row plate row (UXB-11) of the sidebar suite")
     ap.add_argument("--sidebar-bars-only", action="store_true", help="run only the bottom-bar and Space header geometry rows (UXB-1..3) of the sidebar suite")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
@@ -15716,6 +15723,8 @@ def main():
             results["sidebar"] = CheckedResults(tracker)
             if opts.sidebar_pinfav_only:
                 sidebar_pinfav_checks(factory, results["sidebar"], tmp)
+            elif opts.sidebar_rowleave_only:
+                sidebar_rowleave_checks(factory, results["sidebar"], tmp)
             elif opts.sidebar_bars_only:
                 sidebar_bars_checks(factory, results["sidebar"], tmp)
             else:
