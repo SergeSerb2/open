@@ -300,8 +300,10 @@ def run(factory, results, tmp, h):
         ended = bool(until(lambda: not state().get('active')))
         time.sleep(3.5)  # longer than the first-run close path's 2.5 s fade before it quits
         def pid_alive(pid):
-            try: os.kill(pid, 0); return True
-            except OSError: return False
+            # In the gate lane the App is this harness's direct child: once it exits it stays a
+            # zombie until reaped, and kill(pid, 0) still succeeds. proc_pidpath has no path for
+            # a zombie, so it answers "still running" correctly for direct and LaunchServices launches.
+            return bool(h.Open.process_path(pid))
         browsers, again = 0, False
         if pid_alive(app.pid):
             browsers = len(app.call('shell-windows'))

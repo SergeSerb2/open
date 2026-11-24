@@ -1,7 +1,7 @@
 import Foundation
 
 /// Generated inputs only; no caller-supplied source data enters these checks.
-public enum SyntheticSecretsScenario: Sendable { case standard, batchBoundary, fieldAtLimit, fieldOverLimit, empty, nonlocalAddress, invalidLogin }
+public enum SyntheticSecretsScenario: String, Sendable { case standard, batchBoundary, fieldAtLimit, fieldOverLimit, empty, nonlocalAddress, invalidLogin, noLogins }
 
 /// Copy what is needed before returning. Complete only after the writes are
 /// durable (LoginDatabase completion, web-data read barrier, cookie flush).
@@ -62,6 +62,21 @@ public struct ArcSecretsProfileCounts: Equatable, Sendable {
     }
 }
 
+/// One report row: a record kind and what happened to the records found for it.
+public struct SecretsReportRow: Hashable, Sendable {
+    public let title: String
+    public let added: Int
+    public let existing: Int
+    public let failed: Int
+    /// Records found but not imported on purpose: expired cookies, federated logins, unmapped Profiles.
+    public let skipped: Int
+    public init(title: String, added: Int, existing: Int, failed: Int, skipped: Int = 0) {
+        self.title = title; self.added = added; self.existing = existing; self.failed = failed; self.skipped = skipped
+    }
+    /// The source had none of these records (for example no saved passwords). Skipped records count as found.
+    public var noneFound: Bool { added == 0 && existing == 0 && failed == 0 && skipped == 0 }
+}
+
 /// Counts only; the UI can render these lines without retaining source records.
 public struct ArcSecretsImportReport: Sendable {
     public var profiles: [String: ArcSecretsProfileCounts] = [:]
@@ -72,6 +87,14 @@ public struct ArcSecretsImportReport: Sendable {
     public var total: ArcSecretsProfileCounts { profiles.values.reduce(into: .init()) { $0.add($1) } }
     public static let unfinishedMessage = "The last import stopped before it finished. Import again to add the rest."
     public static let passkeyMessage = "Passkeys saved only in Arc stay in Arc. Sign in to those sites again to create new ones."
+    /// Passwords, Cookies, Addresses, Cards: the same four kinds, in the same order, as the first four `lines`.
+    public var rows: [SecretsReportRow] {
+        let counts = total
+        return [("Passwords", counts.logins), ("Cookies", counts.cookies), ("Addresses", counts.addresses), ("Cards", counts.cards)].map {
+            SecretsReportRow(title: $0.0, added: $0.1.added, existing: $0.1.existing, failed: $0.1.failed,
+                             skipped: $0.1.skippedFederated + $0.1.skippedExpired + $0.1.unmapped)
+        }
+    }
     public var lines: [String] {
         let counts = total
         var result = [("Passwords", counts.logins), ("Cookies", counts.cookies), ("Addresses", counts.addresses), ("Cards", counts.cards)].map {

@@ -95,8 +95,14 @@ import ImageIO
   override func layout() {
     super.layout(); scene.frame = bounds; room.frame = bounds
     readyCard.frame = cardRect
-    favoriteMiniature.frame = CGRect(x: 44,y: bounds.height*0.12,width: 480,height: 544)
-    progress.frame = CGRect(x: 40,y: 36,width: 104,height: 6)
+    // 12 pt above the old 12% line keeps a clear gap over the page dots on the footer line.
+    // On a short or narrow preview the miniature scales down (480 x 544 at most), stays 12 pt above
+    // the dots (top at 75 pt) and keeps 24 pt clear at the top and right.
+    let floorY = max(87,bounds.height*0.12+12)
+    let scale = max(0.2,min(1,(bounds.height-floorY-24)/544,(bounds.width-44-24)/480))
+    favoriteMiniature.frame = CGRect(x: 44,y: floorY,width: floor(480*scale),height: floor(544*scale))
+    // The dots share the footer's centre line (72 pt above the bottom) and the miniature's left edge.
+    progress.frame = CGRect(x: 44,y: 69,width: 104,height: 6)
     progress.selected = ["name","import","favorites","theme","blocker","defaultBrowser","ready"].firstIndex(of: step) ?? 0
     mail.frame = CGRect(x: 58,y: bounds.height-126,width: 184,height: 48)
     flyingLink.frame = CGRect(x: 112,y: bounds.height-184,width: 160,height: 40)
@@ -149,6 +155,10 @@ import ImageIO
     needsLayout = true
   }
   var favoriteState: [String:Any] { favoriteMiniature.favoriteState }
+  #if OPEN_AUTOMATION
+  /// Preview, miniature and dots frames in this view's coordinates (layout rows).
+  var layoutFrames: [String: NSRect] { ["preview": bounds, "miniature": favoriteMiniature.frame, "dots": progress.frame] }
+  #endif
   #if OPEN_AUTOMATION
   var artworkState: [String:Any] {
     ["step":step,"miniature":favoriteMiniature.demoState,"miniatureHidden":favoriteMiniature.isHidden,

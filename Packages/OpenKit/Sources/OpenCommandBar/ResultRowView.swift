@@ -11,7 +11,8 @@ final class ResultRowView: NSView {
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true; updateSplitPlate() } } }
     var theme = CommandBarTheme.default { didSet { if theme != oldValue { needsDisplay = true; updateSplitPlate() } } }
     var extensionIcon: (@MainActor (String) -> NSImage?)?
-    weak var favicons: CommandBarFaviconSource?
+    /// A source set after the first draw (Little Open) repaints the row and its split plate (review r1 #3).
+    weak var favicons: CommandBarFaviconSource? { didSet { if favicons !== oldValue { needsDisplay = true; updateSplitPlate() } } }
     /// Diagnostics: draw passes since creation.
     private(set) var drawCount = 0
     var onPress: (() -> Void)?

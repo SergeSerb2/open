@@ -117,12 +117,15 @@ struct OpenSettingsSwitchStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
             ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-                Capsule().fill(configuration.isOn ? accent : Color(nsColor: SettingsStyle.control.nsColor))
-                Capsule().stroke(Color(nsColor: SettingsStyle.controlLine.nsColor), lineWidth: 1)
-                Circle().fill(Color(nsColor: SettingsStyle.white.nsColor)).frame(width: 17, height: 17)
-                    .shadow(color: Color(nsColor: SettingsStyle.shadow.nsColor), radius: 1, y: 1).padding(.horizontal, 2.5)
+                // Disabled (UX round 1 F8): the fill and knob fade, the outline stays at full strength,
+                // so an unavailable switch keeps its shape on the card instead of disappearing.
+                Capsule().fill(configuration.isOn ? accent : Color(nsColor: SettingsStyle.control.nsColor)).opacity(enabled ? 1 : 0.5)
+                Capsule().stroke(Color(nsColor: enabled ? SettingsStyle.controlLine.nsColor : SettingsStyle.keyLine.nsColor), lineWidth: 1)
+                Circle().fill(Color(nsColor: enabled ? SettingsStyle.white.nsColor : SettingsStyle.control.nsColor)).frame(width: 17, height: 17)
+                    .overlay(Circle().stroke(Color(nsColor: enabled ? SettingsStyle.controlLine.nsColor : SettingsStyle.keyLine.nsColor), lineWidth: enabled ? 0.5 : 1))
+                    .shadow(color: enabled ? Color(nsColor: SettingsStyle.shadow.nsColor) : .clear, radius: 1, y: 1).padding(.horizontal, 2.5)
             }.frame(width: 36, height: 22)
-        }.buttonStyle(.plain).opacity(enabled ? 1 : 0.45)
+        }.buttonStyle(.plain)
             .accessibilityElement(children: .ignore).accessibilityLabel(label)
             .accessibilityValue(configuration.isOn ? "On" : "Off")
             .accessibilityAddTraits(configuration.isOn ? [.isSelected] : [])
@@ -170,8 +173,7 @@ struct OpenSettingsPop<Value: Hashable>: View {
     var profile = false
     var accent: NSColor? = nil
     private var width: CGFloat {
-        let label = options.first(where: { $0.1 == value })?.0 ?? "Choose"
-        return ceil((label as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width) + (profile ? 55 : 32)
+        SettingsChoiceButton.width(for: options.first(where: { $0.1 == value })?.0 ?? "Choose", profile: profile)
     }
     var body: some View {
         SettingsNativeChoice(title: title, value: $value, options: options, profile: profile, accent: accent)
@@ -210,9 +212,20 @@ private struct SettingsNativeChoice<Value: Hashable>: NSViewRepresentable {
     }
 }
 
+/// Open's pop-up: the one pop-up drawing in Settings and its sheets (UX round 1 F6).
 @MainActor final class SettingsChoiceButton: NSPopUpButton {
     var profile = false
     var accent: NSColor?
+    static let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+    /// The hugging width for a label: text, side padding and the chevron.
+    static func width(for label: String, profile: Bool = false, image: Bool = false) -> CGFloat {
+        ceil((label as NSString).size(withAttributes: [.font: font]).width) + (profile ? 55 : 32) + (image ? 20 : 0)
+    }
+    override init(frame: NSRect, pullsDown: Bool) {
+        super.init(frame: frame, pullsDown: pullsDown)
+        isBordered = false; focusRingType = .none  // the drawn accent ring is the only focus ring
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { isEnabled }
     override func becomeFirstResponder() -> Bool { needsDisplay = true; return super.becomeFirstResponder() }
@@ -223,13 +236,75 @@ private struct SettingsNativeChoice<Value: Hashable>: NSViewRepresentable {
         SettingsStyle.controlLine.nsColor.setStroke(); shape.lineWidth = 1; shape.stroke()
         let text = selectedItem?.title ?? "Choose"
         let color = SettingsStyle.text.nsColor.withAlphaComponent(isEnabled ? 1 : 0.45)
-        (text as NSString).draw(at: .init(x: profile ? 29 : 10, y: profile ? 6 : 5), withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: color])
+        var x: CGFloat = profile ? 29 : 10
+        if !profile, var image = selectedItem?.image {
+            // A template symbol (Selected app) takes the text colour; app icons draw as they are.
+            // Full-alpha tint: the draw below dims a disabled image once (fraction 0.45).
+            if image.isTemplate, let tinted = image.withSymbolConfiguration(.init(pointSize: 12, weight: .regular).applying(.init(paletteColors: [SettingsStyle.text.nsColor]))) { image = tinted }
+            let scale = min(16 / max(image.size.width, 1), 16 / max(image.size.height, 1), 1)
+            let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            image.draw(in: .init(x: x + (16 - size.width) / 2, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height),
+                from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.45, respectFlipped: true, hints: nil)
+            x += 20
+        }
+        let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
+        let textHeight = ceil(Self.font.ascender - Self.font.descender)
+        (text as NSString).draw(in: .init(x: x, y: ((bounds.height - textHeight) / 2).rounded(), width: max(0, bounds.width - x - 22), height: textHeight),
+            withAttributes: [.font: Self.font, .foregroundColor: color, .paragraphStyle: style])
         if profile { (accent ?? SettingsStyle.accent.nsColor).setFill(); NSBezierPath(ovalIn: .init(x: 5, y: 5, width: 18, height: 18)).fill() }
         SettingsStyle.secondary.nsColor.setStroke()
         let arrow = NSBezierPath(); arrow.lineWidth = 1.2; arrow.lineCapStyle = .round; arrow.lineJoinStyle = .round
         arrow.move(to: .init(x: bounds.width - 15, y: bounds.midY - 1)); arrow.line(to: .init(x: bounds.width - 12, y: bounds.midY + 2)); arrow.line(to: .init(x: bounds.width - 9, y: bounds.midY - 1)); arrow.stroke()
         if window?.firstResponder === self { (accent ?? SettingsStyle.accent.nsColor).withAlphaComponent(0.35).setStroke(); let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.5, dy: 1.5), xRadius: profile ? 14 : 7, yRadius: profile ? 14 : 7); ring.lineWidth = 3; ring.stroke() }
     }
+}
+
+/// A pull-down menu drawn as Open's push button (UX round 1 F7): "More ⌄" and the Profile
+/// "⋯" actions. The first menu item is the pull-down title; `symbol` draws an icon-only button.
+@MainActor class SettingsMenuButton: NSPopUpButton {
+    var symbol: String?
+    init(symbol: String? = nil) {
+        self.symbol = symbol
+        super.init(frame: .zero, pullsDown: true)
+        isBordered = false; focusRingType = .none
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    override var isFlipped: Bool { true }
+    override var acceptsFirstResponder: Bool { isEnabled }
+    override func becomeFirstResponder() -> Bool { needsDisplay = true; return super.becomeFirstResponder() }
+    override func resignFirstResponder() -> Bool { needsDisplay = true; return super.resignFirstResponder() }
+    static let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+    static func width(title: String) -> CGFloat { ceil((title as NSString).size(withAttributes: [.font: font]).width) + 11 + 6 + 9 + 10 }
+    override func draw(_ dirtyRect: NSRect) {
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 7, yRadius: 7)
+        SettingsStyle.control.nsColor.setFill(); shape.fill()
+        SettingsStyle.controlLine.nsColor.setStroke(); shape.lineWidth = 1; shape.stroke()
+        let color = SettingsStyle.text.nsColor.withAlphaComponent(isEnabled ? 1 : 0.45)
+        if let symbol, let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold).applying(.init(paletteColors: [color]))) {
+            let size = image.size
+            image.draw(in: .init(x: ((bounds.width - size.width) / 2).rounded(), y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height),
+                from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        } else {
+            let title = itemTitles.first ?? ""
+            let textHeight = ceil(Self.font.ascender - Self.font.descender)
+            (title as NSString).draw(at: .init(x: 11, y: ((bounds.height - textHeight) / 2).rounded()), withAttributes: [.font: Self.font, .foregroundColor: color])
+            SettingsStyle.secondary.nsColor.setStroke()
+            let arrow = NSBezierPath(); arrow.lineWidth = 1.2; arrow.lineCapStyle = .round; arrow.lineJoinStyle = .round
+            arrow.move(to: .init(x: bounds.width - 18, y: bounds.midY - 1.5)); arrow.line(to: .init(x: bounds.width - 15, y: bounds.midY + 1.5)); arrow.line(to: .init(x: bounds.width - 12, y: bounds.midY - 1.5)); arrow.stroke()
+        }
+        if window?.firstResponder === self {
+            SettingsStyle.accent.nsColor.withAlphaComponent(0.35).setStroke()
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.5, dy: 1.5), xRadius: 7, yRadius: 7); ring.lineWidth = 3; ring.stroke()
+        }
+    }
+}
+
+/// The one title style for Settings sheets (UX round 1 F11).
+struct SettingsSheetTitle: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View { Text(text).font(.system(size: 17, weight: .semibold)).tracking(-0.2).fixedSize(horizontal: false, vertical: true) }
 }
 
 struct SettingsKeycaps: View {

@@ -35,7 +35,8 @@ struct SettingsDownloadsSection: View {
     var body: some View {
         OpenSettingsGroup("Saving files") {
             OpenSettingsRow(root: root, id: "downloads/location", title: "Download location", help: model.downloadDirectory.isEmpty ? "~/Downloads" : (model.downloadDirectory as NSString).abbreviatingWithTildeInPath, changed: !["", "~/Downloads"].contains(model.downloadDirectory), reset: { model.downloadDirectory = "~/Downloads" }) {
-                Button(name + " · Choose…") { chooseFolder() }
+                // The help line shows the folder; the button only says what it does (UX round 1 F18).
+                Button("Choose…") { chooseFolder() }.accessibilityLabel("Choose download location, now " + name)
             }
             OpenSettingsRow(root: root, id: "downloads/ask", title: "Ask where to save each file", help: "Choose a location each time a download starts.", changed: model.askWhereToSave, last: true, reset: { model.askWhereToSave = false }) {
                 Toggle("Ask where to save each file", isOn: $model.askWhereToSave).toggleStyle(OpenSettingsSwitchStyle(accent: Color(nsColor: SettingsStyle.accessibleAccent(root.settingsAccentSource, dark: scheme == .dark)), label: "Ask where to save each file"))
@@ -66,7 +67,8 @@ struct SettingsDestinationSection: View {
     let root: SettingsViewModel
     let section: SettingsSection
     var body: some View {
-        SettingsInlineMessage(text: explanation)
+        // 18 pt under the header, as the General hero: the Profile pill must not touch it (UX round 1 F5).
+        SettingsInlineMessage(text: explanation).padding(.top, 18)
         OpenSettingsGroup(section == .extensions ? "Browser tools" : "This Profile") {
             switch section {
             case .sitePermissions:
@@ -133,6 +135,7 @@ struct SettingsAdBlockingSection: View {
             HStack(spacing: 10) {
                 TextField("example.com", text: $model.hostDraft).textFieldStyle(.plain).accessibilityLabel("Allowed site")
                     .padding(.horizontal, 8).frame(height: 26).background(Color(nsColor: SettingsStyle.control.nsColor), in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(nsColor: SettingsStyle.controlLine.nsColor), lineWidth: 1))
                     .onSubmit { if model.validHostDraft { model.setExcluded(model.hostDraft, excluded: true) } }
                 Button("Add site") { model.setExcluded(model.hostDraft, excluded: true) }.disabled(!model.validHostDraft || model.busy || !model.isReady)
             }.padding(.horizontal, 14).frame(height: 44)

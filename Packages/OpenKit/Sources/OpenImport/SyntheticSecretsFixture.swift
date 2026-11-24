@@ -42,6 +42,9 @@ final class SyntheticSecretsFixture {
                 try modify("Web Data", "INSERT INTO addresses SELECT guid || '-remote', use_count, use_date, date_modified, language_code, 1 FROM addresses")
             case .invalidLogin:
                 try modify("Login Data", "UPDATE logins SET password_value = X'763131' WHERE id = 1")
+            case .noLogins:
+                // A browser with cookies but no saved passwords (the common real case).
+                try modify("Login Data", "DELETE FROM logins; DELETE FROM password_notes")
             }
         }
     }
