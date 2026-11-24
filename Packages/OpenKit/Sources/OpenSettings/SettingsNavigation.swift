@@ -17,7 +17,7 @@ struct SettingsNavigation: NSViewRepresentable {
 
 @MainActor final class SettingsNavigationView: NSView, NSTextFieldDelegate {
     let model: SettingsViewModel
-    let search = NSTextField()
+    let search = SettingsSearchField()
     private let clear = NSButton(title: "×", target: nil, action: nil)
     private let hint = NSTextField(labelWithString: "⌘F")
     private let glass = NSImageView()
@@ -29,6 +29,8 @@ struct SettingsNavigation: NSViewRepresentable {
     private var groups: [(NSTextField, SettingsSection)] = []
     private var lastFocus = 0
     private var currentQuery = ""
+    /// Whether the last draw painted the search field's focus ring (automation evidence for K3).
+    private(set) var drewSearchFocusRing = false
     override var isFlipped: Bool { true }
     init(model: SettingsViewModel) {
         self.model = model; super.init(frame: .zero)
@@ -40,6 +42,7 @@ struct SettingsNavigation: NSViewRepresentable {
         // The same SF magnifier as the Shortcuts and Block lists search fields (UX round 1 F13).
         glass.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
         glass.imageScaling = .scaleNone
+        glass.setAccessibilityElement(false); glass.cell?.setAccessibilityElement(false)  // decoration beside the labelled field (K9)
         addSubview(search); addSubview(glass)
         hint.font = .systemFont(ofSize: 11, weight: .medium); addSubview(hint)
         clear.isBordered = false; clear.target = self; clear.action = #selector(clearSearch)
@@ -76,6 +79,7 @@ struct SettingsNavigation: NSViewRepresentable {
         if search.stringValue != query { search.stringValue = query }
         let counts = Dictionary(grouping: results, by: \.section).mapValues(\.count)
         let accent = SettingsTokens.Redesign.accessibleAccent(model.settingsAccentSource, dark: contentAppearance == .dark)
+        defer { updateKeyLoop() }
         for button in buttons {
             button.selected = query.isEmpty && button.section == section
             button.resultCount = query.isEmpty ? nil : counts[button.section, default: 0]
@@ -143,6 +147,7 @@ struct SettingsNavigation: NSViewRepresentable {
         (background.blended(withFraction: dark ? 0.06 : 0.08, of: accent) ?? background).setFill(); bounds.fill()
         t.control.nsColor.setFill(); NSBezierPath(roundedRect: .init(x: 10, y: 44, width: bounds.width - 20, height: 30), xRadius: 8, yRadius: 8).fill()
         let focused = (window?.firstResponder as? NSTextView)?.delegate === search
+        drewSearchFocusRing = focused
         (focused ? accent : t.controlLine.nsColor).setStroke()
         let ring = NSBezierPath(roundedRect: .init(x: 10.5, y: 44.5, width: bounds.width - 21, height: 29), xRadius: 8, yRadius: 8)
         ring.lineWidth = 1; ring.stroke()
@@ -159,15 +164,87 @@ struct SettingsNavigation: NSViewRepresentable {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.insertTab(_:)):
-            // NSHostingView's automatic key loop otherwise stops on the host
-            // before these native navigation controls.
-            window?.makeFirstResponder(buttons.first); return true
+            // NSHostingView's automatic key loop otherwise stops on the host before these native
+            // navigation controls. The section list is one Tab stop: its selected section (K1).
+            focusSelectedSection(); return true
+        case #selector(NSResponder.insertBacktab(_:)):
+            enterPage(forward: false, from: search); return true
         case #selector(NSResponder.moveDown(_:)): model.searchSelection = min(max(0, model.searchResults.count - 1), model.searchSelection + 1); return true
         case #selector(NSResponder.moveUp(_:)): model.searchSelection = max(0, model.searchSelection - 1); return true
         case #selector(NSResponder.insertNewline(_:)): model.openSearchSelection(); return true
         case #selector(NSResponder.cancelOperation(_:)): clearSearch(); return true
         default: return false
         }
+    }
+    /// Keyboard order (UX round 1 wave 2 K1, review r1 #1), one loop in both directions:
+    /// search field → selected section → the page's key views (reading order) → search field.
+    /// The section list is one stop (only the selected section is a key view); ↑/↓ move in it (K2).
+    private func detailPage() -> NSView? {
+        func find(_ view: NSView) -> SettingsSectionHost? {
+            if let host = view as? SettingsSectionHost { return host }
+            return view.subviews.lazy.compactMap(find).first
+        }
+        return window?.contentView.flatMap(find)?.activePage
+    }
+    var selectedButton: SettingsNavigationButton? { buttons.first { $0.section == model.selectedSection } }
+    /// Rebuilds the AppKit key-view loop around the selected section and the shown page.
+    func updateKeyLoop() {
+        guard let page = detailPage(), let selected = selectedButton else { return }
+        for button in buttons where button !== selected { button.nextKeyView = nil }
+        search.nextKeyView = selected; selected.nextKeyView = page; page.nextKeyView = search
+    }
+    /// The page's AppKit key views in reading order (its text fields and native controls; with Full
+    /// Keyboard Access every control that can take focus).
+    private func pageKeyViews(_ page: NSView) -> [NSView] {
+        var views: [NSView] = []
+        func collect(_ view: NSView) {
+            guard !view.isHiddenOrHasHiddenAncestor else { return }
+            if view !== page, view.canBecomeKeyView { views.append(view); return }
+            view.subviews.forEach(collect)
+        }
+        collect(page)
+        return views.sorted { a, b in
+            let ra = a.convert(a.bounds, to: nil), rb = b.convert(b.bounds, to: nil)
+            return ra.maxY != rb.maxY ? ra.maxY > rb.maxY : ra.minX < rb.minX  // window coordinates: top first
+        }
+    }
+    func focusSelectedSection() {
+        updateKeyLoop()
+        guard let selected = selectedButton else { return }
+        window?.makeFirstResponder(selected); selected.scrollToVisible(selected.bounds)
+    }
+    /// Enters the page forward (from the section list) or backward (from the search field). With Full
+    /// Keyboard Access the SwiftUI page takes the keyboard through AppKit's key-view selection, which
+    /// hands it to its first or last control. Otherwise the page's first or last AppKit key view takes
+    /// it; a page with none passes focus on around the loop.
+    func enterPage(forward: Bool, from origin: NSView) {
+        guard let window, let page = detailPage() else { return }
+        updateKeyLoop()
+        if NSApp.isFullKeyboardAccessEnabled {
+            if forward { window.selectKeyView(following: origin) } else { window.selectKeyView(preceding: origin) }
+            if let responder = window.firstResponder as? NSView, responder === page || responder.isDescendant(of: page) { return }
+            if let editor = window.firstResponder as? NSTextView, let field = editor.delegate as? NSView, field.isDescendant(of: page) { return }
+        }
+        let views = pageKeyViews(page)
+        if let target = forward ? views.first : views.last {
+            target.scrollToVisible(target.bounds)
+            window.makeFirstResponder(target)
+        } else if forward {
+            window.makeFirstResponder(search)
+        } else {
+            focusSelectedSection()
+        }
+    }
+    func focusDetail(from button: SettingsNavigationButton) { enterPage(forward: true, from: button) }
+    func focusSearch() { window?.makeFirstResponder(search) }
+    func moveSection(from button: SettingsNavigationButton, by delta: Int) {
+        guard let index = buttons.firstIndex(where: { $0 === button }) else { return }
+        let target = buttons[max(0, min(buttons.count - 1, index + delta))]
+        guard target !== button else { return }
+        model.navigate(to: target.section)
+        window?.makeFirstResponder(target)
+        target.scrollToVisible(target.bounds)
+        updateKeyLoop()
     }
     @objc private func clearSearch() { model.searchQuery = ""; window?.makeFirstResponder(search) }
     @objc private func checkUpdates() { model.general.checkForUpdates() }
@@ -199,9 +276,26 @@ private final class FlippedSettingsView: NSView { override var isFlipped: Bool {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
     override var acceptsFirstResponder: Bool { true }
+    /// Only the selected section is a stop in AppKit's key-view loop: the list is one Tab stop in
+    /// both directions (review r1 #1). Arrow keys and clicks still reach every section.
+    override var canBecomeKeyView: Bool { selected && !isHiddenOrHasHiddenAncestor }
     override func becomeFirstResponder() -> Bool { needsDisplay = true; return super.becomeFirstResponder() }
     override func resignFirstResponder() -> Bool { needsDisplay = true; return super.resignFirstResponder() }
+    private var navigation: SettingsNavigationView? {
+        var ancestor = superview
+        while let view = ancestor { if let nav = view as? SettingsNavigationView { return nav }; ancestor = view.superview }
+        return nil
+    }
     override func keyDown(with event: NSEvent) {
+        let plain = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+        // Tab leaves the list for the page; Shift-Tab returns to search; ↑/↓ move between sections (K1, K2).
+        if plain, event.keyCode == 48, let navigation {
+            if event.modifierFlags.contains(.shift) { navigation.focusSearch() } else { navigation.focusDetail(from: self) }
+            return
+        }
+        if plain, event.keyCode == 125 || event.keyCode == 126, let navigation {
+            navigation.moveSection(from: self, by: event.keyCode == 125 ? 1 : -1); return
+        }
         // Space, Return and Enter open the focused section, as for any focused button (Full Keyboard
         // Access). Other printable keys start a Settings search.
         if event.modifierFlags.intersection([.command, .control, .option]).isEmpty, [49, 36, 76].contains(event.keyCode) {
@@ -264,5 +358,15 @@ enum SettingsNavigationGlyph {
         case .advanced: for (y,x) in [(4.5,10.0),(8,6),(11.5,11)] { line([(2.5,y),(x-2,y)]); line([(x+2,y),(13.5,y)]); circle(x,y,1.4) }
         }
         path.stroke()
+    }
+}
+
+/// The search field redraws its rounded focus ring as soon as it takes focus from Tab, not only
+/// once typing starts (UX round 1 wave 2 K3).
+@MainActor final class SettingsSearchField: NSTextField {
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        superview?.needsDisplay = true
+        return accepted
     }
 }
