@@ -137,16 +137,21 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   /// The prompt's width and anchor rect so that a popover centred on the anchor stays inside the
   /// window with an 8 pt margin: full width when there is room, down to `minimumWidth`, then the
   /// anchor point moves inward (the arrow still lies on the anchor's edge line).
-  private func fitted(_ anchor: Anchor, in window: NSWindow) -> (width: CGFloat, rect: CGRect) {
+  private func fitted(_ anchor: Anchor, in window: NSWindow) -> (width: CGFloat, rect: CGRect, view: NSView, edge: NSRectEdge) {
     let preferred = PermissionPromptView.preferredWidth, minimum = PermissionPromptView.minimumWidth, margin: CGFloat = 8
     let inWindow = anchor.view.convert(anchor.rect, to: nil)
     let windowWidth = window.contentView?.bounds.width ?? window.frame.width
     let room = min(inWindow.midX - margin, windowWidth - inWindow.midX - margin)
     let width = max(minimum, min(preferred, (room * 2).rounded(.down)))
     let clamped = min(max(inWindow.midX, width / 2 + margin), windowWidth - width / 2 - margin)
-    guard abs(clamped - inWindow.midX) > 0.5 else { return (width, anchor.rect) }
-    let point = anchor.view.convert(CGPoint(x: clamped, y: inWindow.midY), from: nil)
-    return (width, CGRect(x: point.x - 0.5, y: anchor.rect.minY, width: 1, height: anchor.rect.height))
+    guard abs(clamped - inWindow.midX) > 0.5, let root = window.contentView else { return (width, anchor.rect, anchor.view, anchor.edge) }
+    // The moved point can lie outside a small anchor view (the toolbar's Site Control button), where
+    // NSPopover refuses to show: position it in the window's content view instead.
+    let shifted = CGRect(x: clamped - 0.5, y: inWindow.minY, width: 1, height: inWindow.height)
+    // A y edge names "below" differently in flipped and unflipped views: keep the same side.
+    var edge = anchor.edge
+    if anchor.view.isFlipped != root.isFlipped, edge == .maxY || edge == .minY { edge = edge == .maxY ? .minY : .maxY }
+    return (width, root.convert(shifted, from: nil), root, edge)
   }
   func presentPending() {
     guard !closed, !finishing, current == nil, let owner, !owner.isClosing,
@@ -195,7 +200,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     popover.contentSize = CGSize(width: placed.width, height: view.preferredHeight(width: placed.width))
     // The window that has the keyboard now: only it may get key status back (review round 2).
     let keyBefore = NSApp.keyWindow
-    popover.show(relativeTo: placed.rect, of: anchor.view, preferredEdge: anchor.edge)
+    popover.show(relativeTo: placed.rect, of: placed.view, preferredEdge: placed.edge)
     if let promptWindow = view.window {
       // This NSPopover is ours; its native window class alone cannot prove
       // ownership to the browser's child-window appearance policy.
