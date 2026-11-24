@@ -13612,8 +13612,10 @@ def space_editor_creation_checks(factory, results, tmp):
         require('rename_hidden_one_undo', spaces() == before
                 and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces())
         app.call('menu-perform', id='toggle-sidebar')
-        # Create an inline Profile in the same one-step transaction.
+        # Create an inline Profile in the same one-step transaction. Create Space is disabled while
+        # the Space name is empty (Arc §20.8), so name the Space first; an empty Profile name is refused.
         app.call('editor-open', kind='create')
+        app.call('type', text='Inline Space')
         app.call('editor-act', action='profile', name='New Profile…')
         key('return')
         require('A5_invalid_profile_keeps_form', state()['open'] and state()['creatingProfile'] and spaces() == before)
