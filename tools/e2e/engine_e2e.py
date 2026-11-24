@@ -15575,9 +15575,12 @@ def main():
         elif opts.only == "downloads":
             import downloads
             results["downloads"] = CheckedResults(tracker)
-            # UX round 1 wave 2 (UXC) error and empty state rows; OPEN_STATES_UX1_ONLY=1 runs only them.
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/states_ux1.py"))["run"](factory, results["downloads"], tmp, sys.modules[__name__])
-            if os.environ.get("OPEN_STATES_UX1_ONLY") != "1":
+            # UX round 1 wave 2 (UXC) error and empty state rows; OPEN_STATES_UX1_ONLY=1 runs only them. They are
+            # not observer rows: the observers lane and a targeted OPEN_DOWNLOADS_CASE skip them.
+            states_only = os.environ.get("OPEN_STATES_UX1_ONLY") == "1"
+            if states_only or (opts.lane != "observers" and not os.environ.get("OPEN_DOWNLOADS_CASE")):
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/states_ux1.py"))["run"](factory, results["downloads"], tmp, sys.modules[__name__])
+            if not states_only:
                 downloads.checks(factory, results["downloads"], tmp, opts.config, sys.modules[__name__])
         elif opts.only == "incognito":
             import incognito

@@ -5,6 +5,8 @@ Rows (each fails on the parent code and passes with the fix):
   "Close Tab" label must be readable (pixels inside the button), and both buttons draw light.
 - states_import_no_arc_data: Settings ▸ Import from Arc on a folder with no Arc data; the error is
   plain and has no path, and every Arc data type that was not found is unticked.
+- states_import_not_found_unticks_history: History ticked beforehand is unticked when the folder has none.
+- states_import_unreadable_arc_data: an unreadable sidebar says the data could not be read.
 - states_download_time_left: a running download with a known size shows its time left in plain
   units ("25 min left"), not raw seconds ("1519s").
 
@@ -88,20 +90,40 @@ def _sad_tab(factory, row, tmp, h, base):
 
 def _import(factory, row, tmp, h):
     empty = tempfile.mkdtemp(prefix='states-no-arc-data-', dir=tmp)
+    corrupt = tempfile.mkdtemp(prefix='states-corrupt-arc-', dir=tmp)
+    Path(corrupt, 'StorableSidebar.json').write_text('{ this is not a sidebar')
     app = factory(urls=(), fresh=True)
-    try:
+
+    def choose(directory):
         # The Settings wizard fields come back only from a settings-… action. A later count can supersede the
         # first one under load, so poll the no-op settings-inspect until the counts have settled.
-        state = app.call('first-run', action='settings-import', directory=empty)
+        state = app.call('first-run', action='settings-import', directory=directory)
         if not state.get('settingsWizardError'):
             state = h.wait_until(lambda: (lambda s: s if s.get('settingsWizardError') and not s.get('settingsBusy') else None)(
                 app.call('first-run', action='settings-inspect')), timeout=20, step=.2) or app.call('first-run', action='settings-inspect')
+        return state
+
+    try:
+        state = choose(empty)
         error = state.get('settingsWizardError', '')
         plan = state.get('settingsArcPlan', {})
         not_found = state.get('settingsArcNotFound', [])
         row('states_import_no_arc_data', bool(error) and empty not in error and '/' not in error and len(error) <= 120
-            and set(not_found) == set(plan) and plan and not any(plan.values()),
+            and 'no Arc data' in error and set(not_found) == set(plan) and len(plan) == 7 and not any(plan.values()),
             error=error, arcPlan=plan, arcNotFound=not_found)
+        # History ticked before the folder is read (as after a browser source ticked it): reading a folder
+        # without History must untick it, not leave it ticked on a disabled toggle (review r1 #695 #1).
+        app.call('first-run', action='settings-select', history=True)
+        ticked = app.call('first-run', action='settings-inspect').get('settingsArcPlan', {}).get('History')
+        again = choose(empty)
+        row('states_import_not_found_unticks_history', ticked is True and again.get('settingsArcPlan', {}).get('History') is False
+            and 'History' in again.get('settingsArcNotFound', []),
+            tickedBefore=ticked, arcPlan=again.get('settingsArcPlan'), arcNotFound=again.get('settingsArcNotFound'))
+        # A sidebar that exists but cannot be read is not "no Arc data" (review r1 #695 #2).
+        broken = choose(corrupt)
+        message = broken.get('settingsWizardError', '')
+        row('states_import_unreadable_arc_data', 'could not read' in message and 'no Arc data' not in message
+            and corrupt not in message, error=message)
         try: app.call('first-run', action='settings-done')
         except RuntimeError: pass
     finally:

@@ -762,7 +762,8 @@ nonisolated func downloadKind(_ fileName: String) -> String? {
 /// captured (GUESS until capture UXC-W2-C4).
 nonisolated func downloadTimeLeft(_ seconds: Int64) -> String {
     if seconds < 60 { return "\(max(1, seconds)) sec left" }
-    if seconds < 3600 { return "\((seconds + 30) / 60) min left" }
+    // 59 min 30 s and up round to the hour line below ("1 hr left"), never "60 min left".
+    if seconds < 3570 { return "\((seconds + 30) / 60) min left" }
     let hours = seconds / 3600, minutes = (seconds % 3600 + 30) / 60
     return minutes == 0 || minutes == 60 ? "\(hours + (minutes == 60 ? 1 : 0)) hr left" : "\(hours) hr \(minutes) min left"
 }

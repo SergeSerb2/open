@@ -99,7 +99,11 @@ import OpenImport
     public func continueFromSource() async {
         guard step == .source, canContinueFromSource else { return }
         clearConsent(); outcome = nil; errorText = ""
+        // A new source starts from its own defaults: types unticked for the previous source are not ticked again.
+        untickedNotFound.removeAll()
         if let source = selectedSource, source.family == .arc {
+            // A browser source ticks History; Arc's History stays opt-in, as ImportPlan's default (review r1 #695 #1).
+            plan.history = false
             plan.source = .arc; plan.directory = source.dataRoot; step = .choose; await refreshCounts(); return
         }
         guard let source = selectedSource, let profile = source.profiles.first else { return }
@@ -280,11 +284,16 @@ import OpenImport
         guard !Task.isCancelled,request == countRequest,directory == plan.directory else {if request == countRequest {counting=false};return}
         probe=result;counts=result.settingsCounts;spaceMapping=labels
         await refreshProviderCounts()
+        guard !Task.isCancelled,request == countRequest,directory == plan.directory,plan.isArc else {if request == countRequest {counting=false};return}
         readable=result.sidebarFound && result.spaces != nil
         counting=false
         untickNotFound()
         // The folder is already shown above ("From: …"); a long temp path in the error broke mid-word.
-        if !readable {errorText="This folder has no Arc data. Choose the Arc folder in Library ▸ Application Support."}
+        // A sidebar that exists but cannot be read is not "no Arc data" (its rows say "Could not be read").
+        if !readable {
+            errorText = result.sidebarFound ? "Open could not read the Arc data in this folder."
+                : "This folder has no Arc data. Choose the Arc folder in Library ▸ Application Support."
+        }
     }
     public func countLabel(_ category:String)->String {
         if let family = browserFamily, family != .chromium {
@@ -312,7 +321,8 @@ import OpenImport
         // Arc's own data types too: a folder with no Arc data left them ticked next to "Not found" (UX round 1 W2 S4).
         let browserKeys: [(String, WritableKeyPath<ImportPlan, Bool>)] = [("Bookmarks", \.bookmarks), ("History", \.history), ("Open tabs", \.openTabs)]
         let arcKeys: [(String, WritableKeyPath<ImportPlan, Bool>)] = [("Spaces", \.spaces), ("Pinned and Today tabs", \.tabs),
-            ("Favorites", \.favorites), ("Folders", \.folders), ("Archive", \.archive)]
+            ("Favorites", \.favorites), ("Folders", \.folders), ("Archive", \.archive), ("History", \.history),
+            ("Passwords and cookies", \.secretsRequested)]
         let keys = plan.isArc ? arcKeys : browserKeys
         for (category, key) in keys {
             if isNotFound(category) {
