@@ -46,12 +46,16 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     private var creatingProfile = false
     private var entered = false
     /// Whether each label's text fits its frame (no clipped line, no wrap): automation and checks.
+    /// Measured without the label's line limit, so a cut last line counts as not fitting.
     public var textFit: [String: Bool] {
-        func lines(_ field: NSTextField, width: CGFloat) -> CGFloat { ceil(field.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: width, height: 1000)).height ?? 0) }
-        let themeTitle = (themeButton.cell?.titleRect(forBounds: themeButton.bounds).width ?? 0)
-        let themeNeeded = ceil((themeButton.title as NSString).size(withAttributes: [.font: themeButton.font as Any]).width)
-        return ["subtitle": lines(subtitle, width: subtitle.frame.width) <= subtitle.frame.height + 0.5,
-                "themeTitle": themeNeeded <= themeTitle + 0.5]
+        let subtitleNeeded = ceil(subtitle.attributedStringValue.boundingRect(with: CGSize(width: subtitle.frame.width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
+        let theme = themeTitleWidths
+        return ["subtitle": subtitleNeeded <= subtitle.frame.height + 0.5, "themeTitle": theme.needed <= theme.available + 0.5]
+    }
+    public var themeTitleWidths: (needed: CGFloat, available: CGFloat) {
+        (ceil((themeButton.title as NSString).size(withAttributes: [.font: themeButton.font as Any]).width),
+         themeButton.cell?.titleRect(forBounds: themeButton.bounds).width ?? 0)
     }
     public var cardFrames: [String: CGRect] {
         ["header": header.frame, "name": nameCard.frame, "theme": themeCard.frame, "profile": profileCard.frame,
@@ -186,7 +190,12 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         iconButton.frame = CGRect(x: 6, y: 6, width: 32, height: 32)
         nameField.frame = CGRect(x: 44, y: 13, width: cw - 50, height: 22)
         themeButton.frame = CGRect(x: 0, y: 0, width: cw, height: 44)
-        swatch.frame = CGRect(x: cw - 36, y: 10, width: 24, height: 24)
+        // Compact: a 20 pt swatch and a 6 pt gap leave "Choose a Theme" room on one line at 164 pt.
+        let swatchSize: CGFloat = widthClass == .compact ? 20 : 24
+        swatch.frame = CGRect(x: cw - 12 - swatchSize, y: (44 - swatchSize) / 2, width: swatchSize, height: swatchSize)
+        if let cell = themeButton.cell as? CreationThemeCell, cell.trailingReserve != 12 + swatchSize + (widthClass == .compact ? 6 : 8) {
+            cell.trailingReserve = 12 + swatchSize + (widthClass == .compact ? 6 : 8); themeButton.needsDisplay = true
+        }
         profileLabel.frame = CGRect(x: 12, y: 14, width: 43, height: 18)
         profileInfo.isHidden = widthClass == .compact
         profileInfo.frame = CGRect(x: 57, y: 16, width: 12, height: 12)
@@ -366,10 +375,11 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
 }
 
 @MainActor private final class CreationThemeCell: NSButtonCell {
+    /// Right-hand space kept for the swatch: its 12 pt margin, its size and the gap before it.
+    var trailingReserve: CGFloat = 44
     override func titleRect(forBounds rect: NSRect) -> NSRect {
         let title = super.titleRect(forBounds: rect)
-        // Title from 12 pt to 8 pt before the 24 pt swatch (12 pt from the card's right edge).
-        return CGRect(x: rect.minX + 12, y: title.minY, width: max(0, rect.width - 56), height: title.height)
+        return CGRect(x: rect.minX + 12, y: title.minY, width: max(0, rect.width - 12 - trailingReserve), height: title.height)
     }
 }
 
