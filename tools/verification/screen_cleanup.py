@@ -25,10 +25,11 @@ def cleanup_owned(ledger, native_roots):
             ordinary = (root.parent == Path.home()/'Library/Application Support'
                         and root.name.startswith('Open-E2E-'))
             # Onboarding replay deliberately requires an actual temporary
-            # directory. Accept only that fixture's mkdtemp prefix and its
-            # eight-character random suffix, alongside exact file identity.
+            # directory. Accept only that fixture's two mkdtemp prefixes
+            # (open-intro-replay- and open-intro-replay-fresh-, onboarding.py)
+            # and the eight-character random suffix, alongside exact file identity.
             replay = (root.parent.resolve() == Path('/tmp').resolve()
-                      and re.fullmatch(r'open-intro-replay-[a-z0-9_]{8}', root.name))
+                      and re.fullmatch(r'open-intro-replay-(?:fresh-)?[a-z0-9_]{8}', root.name))
             if not ordinary and not replay:
                 raise ValueError('screen ledger contains a foreign profile root')
             entries.append(entry)

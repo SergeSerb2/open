@@ -1,4 +1,5 @@
 import AppKit
+import OpenCommandBar
 import OpenCommands
 import OpenFeatures
 import OpenModel
@@ -31,6 +32,8 @@ extension AppDelegate {
       LittleOpenWebContent(app: self, profileID: profile)
     }
     littleOpenCoordinator = coordinator
+    // The same stored favicons as the main bar, before any Little Open bar paints (UX1 D9).
+    coordinator.commandBarFavicons = stores.sidebarFavicons.map { StoredCommandBarFavicons(cache: $0) }
     installLittleOpenPageClose(on: coordinator)
     coordinator.onSwitchToTab = { [weak self] id, space in self?.selectLittleOpenDestination(tabID: id, spaceID: space) }
     coordinator.onOpenInMain = { [weak self] windowID, tabID, host in

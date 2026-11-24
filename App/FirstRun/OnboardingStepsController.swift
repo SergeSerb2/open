@@ -111,7 +111,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   @objc private func acceptName(_ sender: Any?) { if step == .name { next() } }
   override func viewDidLayout() {
     super.viewDidLayout()
-    let width = min(520, view.bounds.width * 0.48)
+    // At least 460 pt (348 pt of content) so the widest footer fits on a narrow screen.
+    let width = min(520, max(460, view.bounds.width * 0.48))
     panel.frame = NSRect(x: 0, y: 0, width: width, height: view.bounds.height)
     let contentWidth = width-112
     titleLabel.frame = NSRect(x: 56, y: 72, width: contentWidth, height: 112)
@@ -126,10 +127,19 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     let controlsY = descriptionLabel.frame.maxY+32
     controls.frame = NSRect(x: 56,y: controlsY,width: contentWidth,height: max(40,view.bounds.height-controlsY-112))
     footer.frame = NSRect(x: 56,y: view.bounds.height-88,width: contentWidth,height: 32)
-    backButton?.frame = NSRect(x: 0,y: 2,width: 28,height: 28)
-    skipButton?.frame = NSRect(x: 40,y: 0,width: 130,height: 32)
-    let primaryWidth = max(88,ceil((primary?.title as NSString?)?.size(withAttributes: [.font:NSFont.systemFont(ofSize: 13,weight: .semibold)]).width ?? 0)+32)
+    // Footer: Back alone on the left; Skip and the primary action grouped on the right.
+    // Every width comes from its label, so no label is ever truncated.
+    // A narrow column first tightens the label padding (32/28 pt to 24/16 pt), never the gaps.
+    func widths(_ pad: CGFloat, _ quietPad: CGFloat, _ minimum: CGFloat) -> (CGFloat, CGFloat, CGFloat) {
+      (backButton == nil ? 0:max(minimum,OnboardingButton.labelWidth(backButton)+pad),
+       skipButton == nil ? 0:OnboardingButton.labelWidth(skipButton)+quietPad,
+       max(88,OnboardingButton.labelWidth(primary)+pad))
+    }
+    var (backWidth,skipWidth,primaryWidth) = widths(32,28,72)
+    if backWidth+(backWidth > 0 ? 12:0)+skipWidth+(skipWidth > 0 ? 8:0)+primaryWidth > contentWidth { (backWidth,skipWidth,primaryWidth) = widths(24,16,64) }
     primary?.frame = NSRect(x: contentWidth-primaryWidth,y: 0,width: primaryWidth,height: 32)
+    backButton?.frame = NSRect(x: 0,y: 0,width: backWidth,height: 32)
+    skipButton?.frame = NSRect(x: contentWidth-primaryWidth-8-skipWidth,y: 0,width: skipWidth,height: 32)
     nameField?.frame = NSRect(x: 0,y: 0,width: contentWidth,height: 36)
     if step == .theme {
       presetStrip?.frame = NSRect(x: 0,y: 0,width: contentWidth,height: 32)
@@ -266,11 +276,11 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     }
     backButton = nil; skipButton = nil
     if step != .name {
-      let back = button("Back") { [weak self] in self?.back() }; back.image = NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Back"); back.imagePosition = .imageOnly
+      let back = button("Back") { [weak self] in self?.back() }; back.pill = true
       footer.addSubview(back); backButton = back; back.isEnabled = !firstRun.busy && !defaultPending && !finishing
     }
-    let skip: String? = switch step { case .name, .favorites: "Skip for now"; case .importData: [.report, .importing].contains(firstRun.step) ? nil:firstRun.step == .secretsConsent ? PasswordsImportCopy.skipButton:"Start fresh"; case .theme: "Do this later"; case .blocker: "Not now"; default: nil }
-    if let skip { let b = button(skip) { [weak self] in self?.skip() }; footer.addSubview(b); skipButton = b; b.isEnabled = !firstRun.busy && !finishing }
+    let skip: String? = switch step { case .name, .favorites: "Skip for now"; case .importData: [.report, .importing].contains(firstRun.step) ? nil:firstRun.step == .secretsConsent ? "Skip":"Start fresh"; case .theme: "Do this later"; case .blocker: "Not now"; default: nil }
+    if let skip { let b = button(skip) { [weak self] in self?.skip() }; b.quiet = true; footer.addSubview(b); skipButton = b; b.isEnabled = !firstRun.busy && !finishing }
     var text = "Next"
     if step == .importData { text = firstRun.step == .secretsConsent ? PasswordsImportCopy.allowButton : firstRun.step == .report ? "Next" : firstRun.step == .failed ? "Try Again" : "Import" }
     if step == .defaultBrowser && defaultYes && !firstRun.isDefaultBrowser { text = "Make default" }
@@ -508,7 +518,28 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
           "frame": [button.frame.minX, button.frame.minY, button.frame.width, button.frame.height]]
       }]
   }
-  var state: [String: Any] { ["screen": step.rawValue, "favoritePreview": preview.favoriteState, "favoriteCountLabel": favoriteCounter?.stringValue ?? "", "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
+  var state: [String: Any] {
+    var state = baseState
+    #if OPEN_AUTOMATION
+    state["layout"] = layoutState
+    #endif
+    return state
+  }
+  #if OPEN_AUTOMATION
+  /// Real frames for the layout rows: window points with a top-left origin.
+  private var layoutState: [String: Any] {
+    let height = view.window?.contentView?.bounds.height ?? view.bounds.height
+    func frame(_ v: NSView, _ rect: NSRect? = nil) -> [CGFloat] { let r = v.convert(rect ?? v.bounds, to: nil); return [r.minX, height-r.maxY, r.width, r.height] }
+    let buttons = [backButton, skipButton, primary].compactMap { $0 }.filter { $0.superview != nil }
+    return ["panel": frame(panel), "footer": frame(footer), "contentHeight": height,
+      "buttons": buttons.map { ["label": $0.title, "frame": frame($0), "labelWidth": OnboardingButton.labelWidth($0)] as [String: Any] },
+      "nameTextInsets": (nameField as? OnboardingNameField)?.textInsets ?? [],
+      "nameEditing": nameField?.currentEditor() != nil,
+      "artwork": preview.layoutFrames.mapValues { frame(preview, $0) },
+      "nameFieldFrame": nameField.map { frame($0) } ?? []]
+  }
+  #endif
+  private var baseState: [String: Any] { ["screen": step.rawValue, "favoritePreview": preview.favoriteState, "favoriteCountLabel": favoriteCounter?.stringValue ?? "", "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
   private func accessibleControls(_ root: NSView) -> [[String: String]] {
     // Artwork is one AX image. Its native miniature controls are decorative
     // descendants, not extra controls in the setup keyboard/VoiceOver flow.
@@ -554,6 +585,18 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   var usesLightInk = false
   var circular = false
   var outlined = false
+  /// Secondary footer action (Back): a pill the same height and radius as the primary.
+  var pill = false
+  /// Tertiary footer action (Skip): text only, with a pill plate on hover.
+  var quiet = false
+  static func labelWidth(_ button: OnboardingButton?) -> CGFloat {
+    guard let button else { return 0 }
+    return ceil((button.title as NSString).size(withAttributes: [.font: button.font ?? .systemFont(ofSize: 13)]).width)
+  }
+  private var plateColor: NSColor {
+    let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    return dark ? NSColor(white: 1, alpha: hovered ? 0.14:0.08):NSColor(white: 0, alpha: hovered ? 0.08:0.045)
+  }
   private let press: @MainActor () -> Void
   private var hovered = false
   var interactionHoverScale: Double { 1.02 }
@@ -577,6 +620,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     if prominent { layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 16, cornerHeight: 16, transform: nil) }
   }
   required init?(coder: NSCoder) { nil }
+  override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
   override var acceptsFirstResponder: Bool { true }
   override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }
   override func keyDown(with event: NSEvent) {
@@ -607,8 +651,13 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   override func draw(_ dirtyRect: NSRect) {
     if circular { NSColor.white.withAlphaComponent(hovered ? 0.24:0.16).setFill(); NSBezierPath(ovalIn: bounds).fill() }
     if prominent { Self.primaryBlue.withAlphaComponent(isEnabled ? 1:0.4).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 16, yRadius: 16).fill() }
-    if title == "Back" || outlined {
-      let plate = title == "Back" ? NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5,dy: 0.5)):NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 7,yRadius: 7)
+    if pill || (quiet && hovered && isEnabled) {
+      let plate = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: (bounds.height-1)/2,yRadius: (bounds.height-1)/2)
+      plateColor.setFill(); plate.fill()
+      if pill { NSColor.separatorColor.setStroke(); plate.lineWidth = 1; plate.stroke() }
+    }
+    if outlined {
+      let plate = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 7,yRadius: 7)
       NSColor.controlBackgroundColor.withAlphaComponent(hovered ? 0.95:0.65).setFill(); plate.fill()
       NSColor.separatorColor.setStroke(); plate.lineWidth = 1; plate.stroke()
     }
@@ -625,7 +674,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       } else { tinted = image.withSymbolConfiguration(.init(paletteColors: [usesLightInk || prominent ? .white:.labelColor])) ?? image }
       tinted.draw(in: NSRect(x: bounds.midX-9, y: bounds.midY-9, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: (isEnabled ? 1:0.4)*(circular ? 0.9:1))
     }
-    else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: prominent ? NSColor.white : outlined ? NSColor.labelColor : NSColor.secondaryLabelColor, .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
-    if window?.firstResponder === self { Self.primaryBlue.withAlphaComponent(0.65).setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 18, yRadius: 18); path.lineWidth = 2; path.stroke() }
+    else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: { let ink = prominent ? NSColor.white : outlined || pill || (quiet && hovered && isEnabled) ? NSColor.labelColor : NSColor.secondaryLabelColor; return isEnabled ? ink:ink.withAlphaComponent(0.4) }(), .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
+    if window?.firstResponder === self {
+      let radius = outlined ? 5:circular ? (bounds.height-4)/2:min(18,(bounds.height-4)/2)
+      Self.primaryBlue.withAlphaComponent(0.65).setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: radius, yRadius: radius); path.lineWidth = 2; path.stroke()
+    }
   }
 }

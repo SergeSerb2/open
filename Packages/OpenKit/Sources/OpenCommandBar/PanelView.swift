@@ -18,6 +18,7 @@ final class PanelView: NSView {
         didSet {
             guard layoutSpec != oldValue else { return }
             input.layoutSpec = layoutSpec; results.layoutSpec = layoutSpec; needsLayout = true
+            edge.emphasized = theme.isDark && layoutSpec == .inline
         }
     }
     var theme = CommandBarTheme.default {
@@ -27,6 +28,7 @@ final class PanelView: NSView {
             CATransaction.setDisableActions(true)
             separator.backgroundColor = theme.separator.cgColor
             CATransaction.commit()
+            edge.emphasized = theme.isDark && layoutSpec == .inline
         }
     }
 
@@ -167,7 +169,8 @@ final class MaterialView: NSView {
         case .none:
             tintLayer.isHidden = true
         case .uniform:
-            let c = tint.withAlpha(tint.alpha * CommandCard.inlineTintShare).cgColor
+            let share = theme.isDark ? CommandCard.inlineTintShareDark : CommandCard.inlineTintShare
+            let c = tint.withAlpha(tint.alpha * share).cgColor
             tintLayer.colors = [c, c]; tintLayer.locations = [0, 1]; tintLayer.isHidden = false
         case .overSidebar(let edge):
             // Full tint up to the sidebar edge, then a premultiplied fade (the tint's own color at alpha 0) over 60 pt.
@@ -186,6 +189,15 @@ final class MaterialView: NSView {
 @MainActor
 final class EdgeView: NSView {
     private let outer = CALayer()
+    /// The dark inline editor's light hairline (UX1 D8); otherwise the measured black hairline.
+    var emphasized = false {
+        didSet {
+            guard emphasized != oldValue else { return }
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            outer.borderColor = (emphasized ? CommandCard.inlineDarkHairline : CommandCard.hairline).cgColor
+            CATransaction.commit()
+        }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)

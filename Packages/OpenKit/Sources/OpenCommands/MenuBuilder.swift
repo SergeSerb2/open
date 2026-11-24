@@ -79,6 +79,23 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
         dispatcher?.performCommand(id, payload: info["payload"])
     }
 
+    private static let tidiedSeparator = NSUserInterfaceItemIdentifier("open.menu.tidied-separator")
+    /// A hidden item must not leave two separators in a row (View: "— Cast —" with Cast hidden,
+    /// UX round 1 F12). Hides a separator that follows another visible separator (or starts the
+    /// menu), and shows again only separators hidden here.
+    static func tidySeparators(in menu: NSMenu) {
+        var afterSeparator = true
+        for item in menu.items {
+            if item.isSeparatorItem {
+                if afterSeparator, !item.isHidden { item.isHidden = true; item.identifier = tidiedSeparator }
+                else if !afterSeparator, item.isHidden, item.identifier == tidiedSeparator { item.isHidden = false; item.identifier = nil }
+                if !item.isHidden { afterSeparator = true }
+            } else if !item.isHidden {
+                afterSeparator = false
+            }
+        }
+    }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let info = menuItem.representedObject as? [String: String],
               let id = info["command"] else { return true }
@@ -91,7 +108,10 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
             let mark: NSControl.StateValue = checked ? .on : .off
             if menuItem.state != mark { menuItem.state = mark }
         }
-        if let hidden = state?.isHidden, menuItem.isHidden != hidden { menuItem.isHidden = hidden }
+        if let hidden = state?.isHidden, menuItem.isHidden != hidden {
+            menuItem.isHidden = hidden
+            if let menu = menuItem.menu { Self.tidySeparators(in: menu) }
+        }
         if state?.isHidden == true { return false }
         if SystemCommandActions.selectors[id] == nil, MenuBuilder.blocksBrowserCommands(keyWindow: NSApp.keyWindow) { return false }
         return dispatcher?.isCommandEnabled(id, enabledKey: key) ?? true

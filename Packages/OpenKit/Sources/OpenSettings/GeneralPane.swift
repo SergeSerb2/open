@@ -92,7 +92,7 @@ public struct PreviewsSheet: View {
     public init(model:GeneralViewModel) {self.model=model}
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Previews").font(.title2)
+            SettingsSheetTitle("Previews")
             PreferenceToggle(title: "Show Open Previews:", key: "open.general.previewsEnabled", root: model.root)
             PreferenceToggle(title: "Folders", key: "open.general.previewsFolders", root: model.root).disabled(!model.root.bool("open.general.previewsEnabled"))
             PreferenceToggle(title: "Pinned tabs and Favorites", key: "open.general.previewsPages", root: model.root).disabled(!model.root.bool("open.general.previewsEnabled"))

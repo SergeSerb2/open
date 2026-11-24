@@ -247,6 +247,14 @@ public struct FirstRunView:View {
             .animation(reduceMotion ? nil:.easeInOut(duration:Motion.selectionFade),value:model.step)
             .task {if startsProbe && model.probe == nil {await model.refreshProbe()}}
     }
+    /// First run: content that runs past a short window fades out over its last 24 pt instead of
+    /// stopping mid-row (static mask; the trailing padding lets the last row scroll clear of it).
+    private var scrollEdge:some View {
+        GeometryReader {proxy in
+            let fade=embeddedImport && proxy.size.height > 0 ? min(0.5,24/proxy.size.height):0
+            LinearGradient(stops:[.init(color:.black,location:0),.init(color:.black,location:1-fade),.init(color:fade > 0 ? .clear:.black,location:1)],startPoint:.top,endPoint:.bottom)
+        }
+    }
     private func primary(_ title:String,action:@escaping ()->Void)->some View {Button(title,action:action).keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))}
     private var brand:some View {AppIconPreview(option:.openDefault).frame(width:64,height:64)}
     private var welcome:some View {VStack(spacing:0) {
@@ -301,7 +309,7 @@ public struct FirstRunView:View {
                 SettingsGroup {choice("Passwords and cookies",help:model.passwordsCopy.help,found:model.found(model.probe?.savedItems,singular:"saved item",plural:"saved items",present:model.probe?.secretsFound ?? false,partial:model.probe?.savedItemsPartial ?? false),value:$model.includeSecrets,height:74,last:true,enabled:model.wizard.canImportPasswordsAndCookies)}
                 if model.probe?.sidebarFound == true && model.probe?.spaces == nil {Text("Open found the sidebar file, but could not count it. You can try the import or choose a different folder.").font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             }
-        }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
+        }.frame(maxWidth:.infinity,alignment:.leading).padding(.bottom,embeddedImport ? 24:0)}.scrollIndicators(.automatic).mask(scrollEdge)
         if !embeddedImport {HStack {
             Button("Back"){model.step = .welcome}
             if model.probe?.sidebarFound == true && model.probe?.spaces == nil {chooseFolder}
@@ -342,40 +350,69 @@ public struct FirstRunView:View {
         Group {if let value=model.progress {ProgressView(value:value)} else {ProgressView().progressViewStyle(.linear)}}.frame(width:320).accessibilityValue(model.phaseText)
         if model.browserHasLanded && model.phaseText == "Importing your history…" {Text("Your browser is ready. History is still importing in the background.").frame(width:SettingsTokens.firstRunSparseTextWidth).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.top,12)}
     }}}
+    /// One report row: a category, its value and the value's ink.
+    private struct ReportRow:Hashable {let title:String;let value:String;let ink:Ink;enum Ink {case normal,dim,failure}}
+    private var reportRows:[ReportRow] {
+        let categories=model.wizard.displayedReportCategories.map {name->ReportRow in
+            let value=model.reportValue(name)
+            // A long failure sentence would truncate in a one-line row: the row says "Not imported" and the
+            // sentence is shown once below the table (reportFailureNotes, or the passwords line).
+            if let failure=model.outcome?.failures[name] {return ReportRow(title:ImportCountCopy.displayCategory(name),value:name == "Passwords and cookies" || failure.count > 24 ? "Not imported":failure,ink:.failure)}
+            return ReportRow(title:ImportCountCopy.displayCategory(name),value:value,ink:value.contains("Not ") ? .dim:.normal)
+        }
+        let secrets=model.wizard.secretsReportRows.map {ReportRow(title:$0.title,value:model.wizard.secretsReportValue($0),ink:$0.noneFound ? .dim:.normal)}
+        return categories+secrets
+    }
+    private func ink(_ value:ReportRow.Ink)->Color {
+        switch value {case .failure:Color.red;case .dim:embeddedImport ? Color(nsColor:.tertiaryLabelColor):secondary;case .normal:Color.primary}
+    }
+    /// Long failure sentences shortened in their rows, other than the passwords one (it has its own line).
+    private var reportFailureNotes:[String] {
+        model.wizard.displayedReportCategories.compactMap {name in
+            guard name != "Passwords and cookies",let failure=model.outcome?.failures[name],failure.count > 24 else {return nil}
+            return ImportCountCopy.displayCategory(name)+": "+failure
+        }
+    }
+    /// The table already lists every count, so the headline only says how the import ended.
+    private var reportHeadline:String {model.outcome?.failures.isEmpty == false || model.errorText != nil ? "Import finished.":"Import complete."}
     private var report:some View {VStack(alignment:.leading,spacing:10) {
         if !embeddedImport {Text("Import complete").font(.title2)}
         ScrollView {VStack(alignment:.leading,spacing:10) {
-            Text(model.reportSummary).font(embeddedImport ? .system(size:13,weight:.medium):Font(SettingsTokens.label.font)).fixedSize(horizontal:false,vertical:true)
             if embeddedImport {
+                Text(reportHeadline).font(.system(size:13,weight:.semibold)).fixedSize(horizontal:false,vertical:true)
+                let rows=reportRows
                 VStack(spacing:0) {
-                    ForEach(Array(model.wizard.displayedReportCategories.enumerated()),id:\.element) {index,name in
-                        HStack {
-                            Text(ImportCountCopy.displayCategory(name));Spacer()
-                            Text(model.reportValue(name)).monospacedDigit()
-                                .foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? Color(nsColor:.tertiaryLabelColor):Color.primary)
+                    ForEach(Array(rows.enumerated()),id:\.element) {index,row in
+                        HStack(spacing:12) {
+                            Text(row.title).lineLimit(1);Spacer(minLength:8)
+                            Text(row.value).monospacedDigit().lineLimit(1).foregroundStyle(ink(row.ink))
                         }.font(.system(size:12)).padding(.horizontal,16).frame(height:32)
                             .overlay(alignment:.bottom) {
-                                if index != model.wizard.displayedReportCategories.count-1 {Divider().padding(.horizontal,16)}
+                                if index != rows.count-1 {Divider().padding(.horizontal,16)}
                             }
                     }
                 }.background(Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:12))
                     .overlay(RoundedRectangle(cornerRadius:12).strokeBorder(Color(nsColor:.separatorColor),lineWidth:1))
             } else {
-            SettingsGroup {ForEach(Array(model.wizard.displayedReportCategories.enumerated()),id:\.element) {index,name in
-                SettingsRow(height:30,divider:index != model.wizard.displayedReportCategories.count-1) {HStack {
-                    Text(ImportCountCopy.displayCategory(name));Spacer();
-                    Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? secondary:Color.primary)
+            Text(model.reportSummary).font(Font(SettingsTokens.label.font)).fixedSize(horizontal:false,vertical:true)
+            let rows=reportRows
+            SettingsGroup {ForEach(Array(rows.enumerated()),id:\.element) {index,row in
+                SettingsRow(height:30,divider:index != rows.count-1) {HStack {
+                    Text(row.title);Spacer();
+                    Text(row.value).monospacedDigit().foregroundStyle(ink(row.ink))
                 }}
             }}
             }
-            ForEach(model.wizard.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
-            if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(secondary) }
-            if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).foregroundStyle(secondary) }
+            let noteFont:Font=embeddedImport ? .system(size:12):section
+            ForEach(reportFailureNotes, id: \.self) { Text($0).font(noteFont).foregroundStyle(Color.red).fixedSize(horizontal:false,vertical:true) }
+            ForEach(model.wizard.secretsReportNotes, id: \.self) { Text($0).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }
+            if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }
+            if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }
             if embeddedImport, model.outcome?.errorText != nil, !model.wizard.hasImportedData {Button("Try Again") {model.showImport()}}
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}
             if let note=model.reportNote {Text(note).font(embeddedImport ? .system(size:12):section).foregroundStyle(model.reportNoteIsError ? Color.red:embeddedImport ? Color(nsColor:.tertiaryLabelColor):secondary).fixedSize(horizontal:false,vertical:true)}
-        }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
+        }.frame(maxWidth:.infinity,alignment:.leading).padding(.bottom,embeddedImport ? 24:0)}.scrollIndicators(.automatic).mask(scrollEdge)
         if !embeddedImport {HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true).disabled(model.wizard.extensions.isInstalling)}
     }}
     private var defaultBrowser:some View {VStack(spacing:16) {

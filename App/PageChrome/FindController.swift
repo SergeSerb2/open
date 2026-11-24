@@ -204,8 +204,16 @@ final class FindController {
     if focusedID == id { factory.hosts[id]?.content.focusPage() }
   }
   func sync(refreshResults: Bool = true) {
-    guard let controller = factory.controller else { return }
     var targets: [ItemID: (parent: NSView, viewport: NSView)] = [:]
+    guard let controller = factory.controller else {
+      // Little Open (UX1 D7): its own factory has no browser window; the bar sits in the page surface.
+      if let surface = factory.standaloneSurface as? LittleOpenWebContent, let host = surface.host, !host.closed,
+         host.view.superview === surface.view {
+        targets[host.tabID] = (surface.view, host.view)
+      }
+      place(targets, refreshResults: refreshResults)
+      return
+    }
     for slot in controller.container.slots where !slot.isHidden {
       if let viewport = slot.contentHostView { targets[slot.tabID] = (slot, viewport) }
     }
@@ -217,6 +225,9 @@ final class FindController {
         self.close(id); return true
       }
     }
+    place(targets, refreshResults: refreshResults)
+  }
+  private func place(_ targets: [ItemID: (parent: NSView, viewport: NSView)], refreshResults: Bool) {
     for (id, state) in states {
       guard factory.model.tab(id: id) != nil || factory.hosts[id] != nil else {
         state.overlay?.removeFromSuperview(); states[id] = nil; continue
