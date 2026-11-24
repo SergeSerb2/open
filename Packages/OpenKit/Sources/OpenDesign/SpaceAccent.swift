@@ -27,6 +27,10 @@ public struct SpaceAccent: Sendable, Hashable {
     /// White text must stay readable on the selection: a light (pastel) sidebar's accent keeps its hue and
     /// saturation at this HSL lightness at most. Gold (0.59) is below it and unchanged. D3 addition, not in plan §2.6.
     public static let accentMaxLightness = 0.62
+    /// HSL lightness is not luminance: a grey at 0.62 still gives white text only 2.7:1. The Light selection
+    /// darkens further (same hue and saturation) until white text reaches this WCAG ratio, computed in sRGB
+    /// with a margin over AA's 4.5 for the drawn colour (UX round 1 wave 2, T1). Dark accents are far darker.
+    public static let accentMinimumWhiteContrast = 4.8
     public static let darkLightness = 0.32
     public static let darkSaturationScale = 1.4
     /// Tint colour: the accent hue at a fixed lightness, saturation scaled from the accent's.
@@ -36,7 +40,7 @@ public struct SpaceAccent: Sendable, Hashable {
     public static let night = SpaceAccent(accent: RGBA(hex: 0x6F66D9), darkAccent: RGBA(hex: 0x5148C4))
 
     public init(accent: RGBA, darkAccent: RGBA) {
-        self.accent = accent; self.darkAccent = darkAccent
+        self.accent = Self.readableUnderWhite(accent); self.darkAccent = darkAccent
         let (h, _, s) = Self.hls(accent)
         lightTint = Self.rgb(h: h, l: Self.lightTintLightness, s: min(1, s * Self.lightTintSaturationScale)).withAlpha(Self.lightTintAlpha)
         darkTint = Self.rgb(h: h, l: Self.darkTintLightness, s: min(1, s * Self.darkTintSaturationScale)).withAlpha(Self.darkTintAlpha)
@@ -65,6 +69,19 @@ public struct SpaceAccent: Sendable, Hashable {
         let (h, _, s) = Self.hls(top)
         let dark = Self.rgb(h: h, l: Self.darkLightness, s: min(1, s * Self.darkSaturationScale))
         self.init(accent: accent, darkAccent: dark)
+    }
+
+    /// `color` with its HSL lightness lowered (hue and saturation kept) until white text on it reaches
+    /// `accentMinimumWhiteContrast`.
+    public static func readableUnderWhite(_ color: RGBA) -> RGBA {
+        func contrast(_ c: RGBA) -> Double { 1.05 / (SpaceThemeStyle.luminance(c) + 0.05) }
+        guard contrast(color) < accentMinimumWhiteContrast else { return color }
+        let (h, start, s) = hls(color)
+        var l = start, result = color
+        while contrast(result) < accentMinimumWhiteContrast, l > 0 {
+            l = max(0, l - 0.005); result = rgb(h: h, l: l, s: s).withAlpha(color.alpha)
+        }
+        return result
     }
 
     /// Selected row fill: Light uses the accent, Dark the dark accent.
