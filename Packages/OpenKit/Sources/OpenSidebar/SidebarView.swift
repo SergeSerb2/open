@@ -583,6 +583,7 @@ extension SidebarView {
     public var displayedSpaceTitle: String? { pager.currentPage?.header.displayedTitle }
     #if DEBUG || OPEN_AUTOMATION
     public var spaceHeaderTitleDraw: [String: Any] { pager.currentPage?.header.titleDrawEvidence ?? [:] }
+    public var pagerState: [String: Any] { pager.diagnostics }
     #endif
 
     /// Favorite tiles in display order.

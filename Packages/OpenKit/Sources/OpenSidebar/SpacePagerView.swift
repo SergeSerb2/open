@@ -80,6 +80,44 @@ final class SpacePagerView: NSView {
         placeStrip()
     }
 
+    /// Each page's strip position lives in its layer's x translation. When AppKit rebuilds the layer
+    /// tree after a subview change (`-[NSView _updateLayerGeometryFromView]` inside
+    /// `-[NSWindow displayIfNeeded]`), it sets a view layer's transform from the view's own geometry,
+    /// which is identity. A page built for a Space switch then sat at x 0, off screen, and the new
+    /// Space showed a blank list (UX round 1, B7). The pager keeps the translation it wants per layer
+    /// and puts it back in the same pass, before the frame renders.
+    private var translations: [ObjectIdentifier: CGFloat] = [:]
+    private var translationWatches: [ObjectIdentifier: NSKeyValueObservation] = [:]
+    private(set) var translationRestores = 0
+
+    private func setTranslation(_ x: CGFloat, of view: NSView) {
+        guard let layer = view.layer else { return }
+        let key = ObjectIdentifier(layer)
+        translations[key] = x
+        if translationWatches[key] == nil {
+            translationWatches[key] = layer.observe(\.transform, options: [.new]) { [weak self] layer, change in
+                // AppKit sets view layer transforms on the main thread (the display pass).
+                nonisolated(unsafe) let layer = layer
+                guard let now = change.newValue?.m41 else { return }
+                MainActor.assumeIsolated {
+                    guard let self, let wanted = self.translations[ObjectIdentifier(layer)], now != wanted else { return }
+                    self.translationRestores += 1
+                    CATransaction.begin(); CATransaction.setDisableActions(true)
+                    layer.setValue(wanted, forKeyPath: "transform.translation.x")
+                    CATransaction.commit()
+                }
+            }
+        }
+        layer.setValue(x, forKeyPath: "transform.translation.x")
+    }
+
+    private func forgetTranslation(of view: NSView) {
+        guard let layer = view.layer else { return }
+        let key = ObjectIdentifier(layer)
+        translations[key] = nil
+        translationWatches.removeValue(forKey: key)?.invalidate()
+    }
+
     private func layoutPages() {
         let frame = CGRect(origin: .zero, size: bounds.size)
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -89,14 +127,14 @@ final class SpacePagerView: NSView {
         if let creationPage {
             creationPage.wantsLayer = true
             if creationPage.frame != frame { creationPage.frame = frame }
-            creationPage.layer?.setValue(CGFloat(spaces.count) * bounds.width, forKeyPath: "transform.translation.x")
+            setTranslation(CGFloat(spaces.count) * bounds.width, of: creationPage)
         }
         let live = Set(spaces.map(\.id))
-        for (id, page) in pages where !live.contains(id) { page.removeFromSuperview(); pages[id] = nil }
+        for (id, page) in pages where !live.contains(id) { forgetTranslation(of: page); page.removeFromSuperview(); pages[id] = nil }
         for (index, space) in spaces.enumerated() {
             guard let page = pages[space.id] else { continue }
             if page.frame != frame { page.frame = frame }
-            page.layer?.setValue(CGFloat(index) * bounds.width, forKeyPath: "transform.translation.x")
+            setTranslation(CGFloat(index) * bounds.width, of: page)
         }
         strip.inputPage = creationPage ?? context.focusedSpace.flatMap { pages[$0.id] }
         CATransaction.commit()
@@ -162,6 +200,28 @@ final class SpacePagerView: NSView {
         slide(from: presentationX, spring: Motion.spaceSwitch, requestedAt: requestedAt)
         themeBackground?.crossfade(to: style, animated: true)
     }
+
+    #if DEBUG || OPEN_AUTOMATION
+    /// Pager internals for layout checks: each built page's layer state and the strip offsets.
+    var diagnostics: [String: Any] {
+        func tx(_ l: CALayer?) -> Double { Double((l?.value(forKeyPath: "transform.translation.x") as? CGFloat) ?? .nan) }
+        func ptx(_ l: CALayer?) -> Double { Double((l?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat) ?? .nan) }
+        let order = spaces.map(\.id)
+        let built: [[String: Any]] = pages.map { id, p in
+            ["space": id.description, "index": order.firstIndex(of: id) ?? -1, "layerHidden": p.layer?.isHidden ?? true,
+             "viewHidden": p.isHidden, "inStrip": p.superview === strip, "translation": tx(p.layer),
+             "presentationTranslation": ptx(p.layer), "frame": [p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map(Double.init),
+             "alpha": Double(p.alphaValue), "layerOpacity": Double(p.layer?.opacity ?? 0), "hasLayer": p.layer != nil,
+             "sublayers": p.layer?.sublayers?.count ?? 0, "subviews": p.subviews.count,
+             "layerID": p.layer.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? ""]
+        }
+        return ["offset": Double(offset), "stripTranslation": tx(strip.layer), "stripPresentation": ptx(strip.layer),
+                "shownSpace": shownSpaceID?.description ?? "", "focusedIndex": focusedIndex, "animating": animating,
+                "creation": creationPage != nil, "width": Double(bounds.width), "pages": built,
+                "stripHidden": strip.layer?.isHidden ?? true, "stripAnimations": strip.layer?.animationKeys() ?? [],
+                "translationRestores": translationRestores]
+    }
+    #endif
 
     private var presentationOffset: CGFloat {
         strip.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat
@@ -229,6 +289,7 @@ final class SpacePagerView: NSView {
 
     func endCreation() {
         let from = presentationOffset
+        if let creationPage { forgetTranslation(of: creationPage) }
         creationPage?.removeFromSuperview(); creationPage = nil
         strip.layer?.removeAnimation(forKey: "slide"); animating = false
         shownSpaceID = nil

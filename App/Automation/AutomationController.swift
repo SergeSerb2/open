@@ -1609,6 +1609,7 @@
             }
           },
           "switcherGeometry": controller.sidebar.switcherGeometry(in: root),
+          "pagerState": controller.sidebar.pagerState,
           "hint": ["shows": controller.hintShows, "visible": controller.hintToast != nil,
             "frame": controller.hintToast.map { rect($0.frame) } ?? [], "keys": controller.hintToast?.keys ?? "",
             "plate": controller.hintToast.map { rect($0.plateFrame) } ?? []] as [String: Any],

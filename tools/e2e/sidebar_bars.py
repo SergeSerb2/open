@@ -11,6 +11,9 @@ UXB-4  Real scroll events (a trackpad gesture and a vertical mouse wheel, sent t
 UXB-5  Fit and near-fit widths (6 Spaces at 300, 288 and 280 pt): no fade where no icon is hidden.
 UXB-6  Resize sweep 164 -> 176 pt in 1 pt drags with the middle Space current: the strip offset only
        moves one way (no jitter) and the current icon's ink stays out of both fades.
+UXB-8  A Space switch always shows the new Space's list: 4 launches (emoji or letter icons, Reduce
+       Motion on and off) visit 11 new Spaces each; after every switch the list area must have
+       drawn pixels (contrast) and the focused page must sit at index x width in the strip.
 UXB-7  At 164 pt, moving the current Space from index 0 to 2 (real Space Manager drag; the Library
        shows about three columns, so both must be on screen) and undoing it (Cmd+Z) keeps the
        current Space visible and out of the fades.
@@ -21,6 +24,7 @@ Fixtures are synthetic (generated from Packages/OpenKit/Fixtures/space-schema1).
 """
 import copy
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -92,7 +96,9 @@ def _bar_problems(g, current=True):
     return problems
 
 
-def run(factory, results, wait_until, scratch, root):
+def run(factory, results, wait_until, scratch, root, read_image=None):
+    if os.environ.get('OPEN_UXB8_ONLY') == '1':  # the Space-switch draw row alone (B7 iteration)
+        return _switch_draw_rows(factory, results, scratch, root, read_image)
     for count in (6, 20):
         fixture, ids = _fixture(root, scratch, count)
         app = factory(urls=(), snapshot=fixture)
@@ -138,6 +144,63 @@ def run(factory, results, wait_until, scratch, root):
                 _reveal_rows(app, results, wait_until, ids, resize, geometry)
         finally:
             app.quit()
+    if read_image is not None:
+        _switch_draw_rows(factory, results, scratch, root, read_image)
+
+
+def _switch_draw_rows(factory, results, scratch, root, read_image):
+    """UXB-8. A page built on first use must draw at its strip position (B7: AppKit reset its
+    layer transform during the next layer-tree build, so the page sat off screen)."""
+    letters = ['W', 'P', 'R', 'S', 'H', 'M', 'T', 'Q', 'A', 'B', 'K', 'L']
+    summary, failures, restores = [], [], []
+    for icons in ('emoji', 'letters'):
+        for reduced in (False, True):
+            data = json.loads(Path(root, 'Packages/OpenKit/Fixtures/space-schema1/State/browser.json').read_text())
+            template = data['spaces'][0]
+            spaces = []
+            for i in range(12):
+                space = copy.deepcopy(template)
+                space['id'] = str(uuid.uuid4()).upper(); space['title'] = 'Space %d' % (i + 1)
+                space['icon'] = {'emoji': {'_0': (EMOJI if icons == 'emoji' else letters)[i % 12]}}
+                now = time.time()
+                space['today'] = [{'tab': {'_0': {'createdAt': now, 'id': str(uuid.uuid4()).upper(), 'isMuted': False, 'isUnread': False,
+                                                  'lastActiveAt': now, 'title': 'Row %d' % j, 'url': PAGE}}} for j in range(2)]
+                spaces.append(space)
+            data['spaces'] = spaces
+            window = data['windows'][0]
+            window.update(focusedSpaceID=spaces[0]['id'], sidebarWidth=228, sidebarMode='anchored', frameX=80, frameY=80,
+                          frameWidth=1280, frameHeight=800, selectedNodeBySpace={})
+            data['windows'] = [window]
+            fixture = Path(scratch, 'sidebar-bars-switch-%s.json' % icons); fixture.write_text(json.dumps(data))
+            app = factory(urls=(), snapshot=str(fixture))
+            try:
+                app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+                app.call('window-motion', reduced=reduced)
+                for index in range(1, 12):
+                    app.call('space', space=spaces[index]['id']); time.sleep(.5 if reduced else .8)
+                    png = str(Path(scratch, 'uxb8-%s-%s-%02d.png' % (icons, reduced, index)))
+                    app.call('snapshot', path=png)
+                    state = app.call('window-state')
+                    width, height, pixel = read_image(png)
+                    k = width / state['frame'][2]
+                    lum = [sum(pixel(int(x * k), int(y * k))) / 3 for x in range(12, 200, 3) for y in range(204, 330, 3)]
+                    mean = sum(lum) / len(lum); spread = (sum((v - mean) ** 2 for v in lum) / len(lum)) ** .5
+                    pager = state['pagerState']
+                    page = next((p for p in pager['pages'] if p['index'] == index), None)
+                    placed = page is not None and abs(page['translation'] - index * pager['width']) < .5 and not page['layerHidden']
+                    row = {'icons': icons, 'reduced': reduced, 'index': index, 'contrast': round(spread, 1), 'placed': placed,
+                           'translation': page and page['translation']}
+                    summary.append(row)
+                    if spread < 12 or not placed: failures.append(row)
+                    try: os.remove(png)
+                    except OSError: pass
+                restores.append(app.call('window-state')['pagerState'].get('translationRestores'))
+            finally:
+                try: app.call('window-motion', reduced=False)
+                except Exception: pass
+                app.quit()
+    results['UXB8_space_switch_draws_list'] = {'ok': not failures and len(summary) == 44, 'switches': len(summary),
+                                               'failures': failures, 'restoresPerLaunch': restores}
 
 
 def _scroll_rows(app, results, wait_until, ids, resize, geometry):

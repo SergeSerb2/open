@@ -5138,7 +5138,7 @@ def page_commands_checks(factory, results, tmp):
 
 def sidebar_bars_checks(factory, results, tmp):
     """Bottom bar and Space header geometry after resize drags (tools/e2e/sidebar_bars.py, UXB-1..3)."""
-    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_bars.py"))["run"](factory, results, wait_until, tmp, ROOT)
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_bars.py"))["run"](factory, results, wait_until, tmp, ROOT, read_image)
 
 
 def sidebar_checks(factory, results, tmp):
