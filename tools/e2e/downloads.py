@@ -19,7 +19,7 @@ from loopback_http import LoopbackHTTPServer
 
 # Running Library rows. Known total: "1.2/33.6 MB" or "512 KB/33.6 MB", then " · 12s" with a speed.
 # Unknown total: the received byte count alone.
-LIVE_SUBTITLE = re.compile(r'^[\d.,]+( [A-Za-z]+)?/[\d.,]+ [A-Za-z]+( · \d+s)?$')
+LIVE_SUBTITLE = re.compile(r'^[\d.,]+( [A-Za-z]+)?/[\d.,]+ [A-Za-z]+( · (\d+ (sec|min|hr)|\d+ hr \d+ min) left)?$')
 UNKNOWN_SUBTITLE = re.compile(r'^[\d.,]+ [A-Za-z]+$')
 
 QUIT_EVENT_SOURCE = r"""
