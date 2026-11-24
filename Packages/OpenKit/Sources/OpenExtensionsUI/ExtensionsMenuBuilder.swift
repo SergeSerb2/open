@@ -35,7 +35,9 @@ public struct ExtensionsMenuEntry: Codable, Equatable, Sendable {
             result += entries(rest)
         }
         if !result.isEmpty { result.append(.init(separator: true)) }
-        result += [.init(title: "Manage Extensions…", command: "manage-extensions"), .init(title: "Add Extension…", command: "add-extension")]
+        // Arc's captured menu-bar order (menus-and-hotkeys.md §"Visible order"): Add, then Manage. The
+        // overflow, pane and Little Open menus list the same extensions, so they end the same way (UX round 1 X5).
+        result += [.init(title: "Add Extension…", command: "add-extension"), .init(title: "Manage Extensions…", command: "manage-extensions")]
         return result
     }
     public static func menu(actions: [ExtensionActionInfo], kind: Kind, run: @escaping (String, ExtensionRunSource) -> Void,

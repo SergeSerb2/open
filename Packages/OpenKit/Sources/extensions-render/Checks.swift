@@ -255,7 +255,7 @@ import OpenExtensionsUI
         let menu = ExtensionsMenuBuilder.menu(actions: actions, kind: .bar, run: { _, _ in }, command: { _ in })
         let emptyMenu = ExtensionsMenuBuilder.menu(actions: [], kind: .bar, run: { _, _ in }, command: { _ in })
         check("menu.bar", menu.items.prefix(6).map(\.title) == actions.prefix(6).map(\.name) && !menu.items[1].isEnabled
-            && menu.items[8].isSeparatorItem && menu.items.suffix(2).map(\.title) == ["Manage Extensions…", "Add Extension…"]
+            && menu.items[8].isSeparatorItem && menu.items.suffix(2).map(\.title) == ["Add Extension…", "Manage Extensions…"]
             && menu.items.prefix(8).allSatisfy { $0.image?.size == CGSize(width: 16, height: 16) }
             && emptyMenu.items.count == 2 && !emptyMenu.items.contains(where: \.isSeparatorItem), "pinned first, names, disabled, 16pt icons, separator, empty menu")
         let labels = ["Remove from Chromium", "Remove from Chrome…", "Remove from Chromium…", "Pin to Toolbar", "Unpin from Toolbar", "Chrome Tools", "Chromium Settings Sync"]

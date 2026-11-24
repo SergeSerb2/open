@@ -36,6 +36,7 @@ extension AutomationController {
         extensionAutomation.registerContexts()
       }
       if args["clear"] as? Bool == true { extensionAutomation.cancelAll() }
+      if args["scrollBody"] as? String == "end" { return extensionAutomation.scrollActiveBodyToEnd() }
       var result: [String: Any] = ["pending": false]
       if let prompt = extensionAutomation.pending.first {
         result = extensionAutomation.describe(prompt)

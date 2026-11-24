@@ -28,7 +28,14 @@ private final class EngineExtensionPrompt: ExtensionPromptModel {
   var chromiumAcceptLabel: String { source.chromiumAcceptLabel }
   var chromiumCancelLabel: String { source.chromiumCancelLabel }
   var triggeringExtensionName: String? { source.triggeringExtensionName }
-  var permissions: [ExtensionPermissionMessage] { source.permissions.map { ExtensionPermissionMessage($0.message, details: $0.details) } }
+  var permissions: [ExtensionPermissionMessage] {
+    source.permissions.map { ExtensionPermissionMessage(Self.shown($0.message), details: $0.details.map(Self.shown)) }
+  }
+  /// Open has no accounts or sync: Chromium's history lines ("… on all your signed-in devices")
+  /// would promise a reach that does not exist here (UX round 1 X4).
+  static func shown(_ line: String) -> String {
+    line.replacingOccurrences(of: " on all your signed-in devices", with: "")
+  }
   func accept() { finish(true) }
   func cancel() { finish(false) }
   private func finish(_ accepted: Bool) {
@@ -178,6 +185,42 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
   }
   isolated deinit { windowObservers.values.forEach { NotificationCenter.default.removeObserver($0) } }
   #if OPEN_AUTOMATION
+  /// How the sheet's scrolling body ends, read from its real labels (UX round 1 X1): whether a text line is
+  /// cut by the visible bottom edge, and whether anything marks that more of the list follows.
+  func promptBodyState(_ view: ExtensionPromptView, scrollToEnd: Bool = false) -> [String: Any] {
+    let scroll = view.bodyScroll
+    guard let document = scroll.documentView, scroll.superview != nil else { return ["present": false] }
+    if scrollToEnd {
+      scroll.contentView.scroll(to: CGPoint(x: 0, y: max(0, document.frame.height - scroll.contentView.bounds.height)))
+      scroll.reflectScrolledClipView(scroll.contentView)
+    }
+    let visible = scroll.contentView.bounds
+    var cut: [String] = []
+    var lastWholeLine = ""
+    for case let label as NSTextField in document.subviews where label.stringValue != "•" {
+      let font = label.font ?? .systemFont(ofSize: 13)
+      let count = max(1, Int((label.frame.height / NSLayoutManager().defaultLineHeight(for: font)).rounded()))
+      for k in 0..<count {
+        let top = label.frame.minY + label.frame.height * CGFloat(k) / CGFloat(count)
+        let bottom = label.frame.minY + label.frame.height * CGFloat(k + 1) / CGFloat(count)
+        if top < visible.maxY - 0.5 && bottom > visible.maxY + 0.5 { cut.append(label.stringValue) }
+        if bottom <= visible.maxY + 0.5 { lastWholeLine = label.stringValue }
+      }
+    }
+    let inWindow = scroll.convert(scroll.bounds, to: nil)
+    let windowHeight = scroll.window?.frame.height ?? 0
+    return ["present": true, "documentHeight": document.frame.height, "visibleHeight": visible.height,
+      // The body's frame in its sheet window, top-left origin (points), for pixel checks of the fade.
+      "frameInWindow": [inWindow.minX, windowHeight - inWindow.maxY, inWindow.width, inWindow.height],
+      "sheetWidth": scroll.window?.frame.width ?? 0,
+      "visibleMaxY": visible.maxY, "overflows": document.frame.height > visible.height + 0.5,
+      "lineCutAtBottom": !cut.isEmpty, "cutLines": cut, "lastVisibleLabel": lastWholeLine,
+      "fadeMask": scroll.layer?.mask != nil, "hasScroller": scroll.hasVerticalScroller]
+  }
+  func scrollActiveBodyToEnd() -> [String: Any] {
+    guard let view = queues.values.compactMap(\.active).first?.promptView else { return ["present": false] }
+    return promptBodyState(view, scrollToEnd: true)
+  }
   func answer(_ prompt: OEExtensionPrompt, accepted: Bool) {
     let key = ObjectIdentifier(prompt)
     for queue in queues.values where (queue.active?.promptView.model as? EngineExtensionPrompt)?.source === prompt {
@@ -195,6 +238,9 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
       "chromiumButtons": [prompt.chromiumCancelLabel, prompt.chromiumAcceptLabel],
       "permissions": prompt.permissions.map { ["message": $0.message, "details": $0.details] },
       "permissionLines": prompt.permissions.flatMap { [$0.message] + $0.details },
+      // The lines the sheet shows (after Open's wording), and how its scrolling body ends.
+      "shownPermissionLines": model.permissions.flatMap { [$0.message] + $0.details },
+      "body": sheet.map { promptBodyState($0.promptView) } ?? [:],
       "retainedFiles": prompt.retainedFiles, "retainedDevices": prompt.retainedDevices,
       "triggeringExtensionName": prompt.triggeringExtensionName ?? "", "webContent": prompt.webContent?.identifier ?? 0,
       "browser": prompt.browser?.identifier ?? 0, "sheetVisible": sheet?.isVisible == true,

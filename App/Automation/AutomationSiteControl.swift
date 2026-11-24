@@ -214,6 +214,7 @@ extension AutomationController {
       "canCreateBoost": snapshot?.canCreateBoost ?? false,
       "rows": rows, "controls": controls, "items": menu,
       "extensionsVisible": scc.isPresented && panel.extensionsSectionVisible,
+      "extensionsNote": panel.extensionsNote ?? "",
       "boostsVisible": scc.isPresented && panel.boostsSectionVisible,
       "reloadVisible": scc.isPresented && panel.showsReload,
       "visibleAnchor": visibleAnchor,
