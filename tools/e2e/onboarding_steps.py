@@ -822,7 +822,7 @@ def run_layout_rows(factory, results, tmp, h):
         report = app.call('first-run')
         rows = dict(map(tuple, report.get('secretsReportRows') or []))
         results['steps_secrets_report_rows'] = dict(ok=rows.get('Passwords') == 'None found in Arc'
-            and all(rows.get(k, '').isdigit() for k in ('Cookies', 'Addresses', 'Cards')), rows=rows, notes=report.get('secretsReportNotes'), load=os.getloadavg())
+            and all(rows.get(k, ' ')[0].isdigit() for k in ('Cookies', 'Addresses', 'Cards')), rows=rows, notes=report.get('secretsReportNotes'), load=os.getloadavg())
         for step in ('theme', 'blocker', 'defaultBrowser', 'ready'):
             if state()['screen'] == 'defaultBrowser': action('choose-default', yes=False)
             current = state()['screen']; action('next'); until(lambda: state()['screen'] != current)
