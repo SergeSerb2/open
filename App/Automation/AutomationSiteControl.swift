@@ -214,7 +214,9 @@ extension AutomationController {
       "canCreateBoost": snapshot?.canCreateBoost ?? false,
       "rows": rows, "controls": controls, "items": menu,
       "extensionsVisible": scc.isPresented && panel.extensionsSectionVisible,
-      "extensionsNote": panel.extensionsNote ?? "",
+      // The lines the note label draws (not a stored copy), and its frame in the panel body.
+      "extensionsNote": panel.extensionsNoteDrawn?.lines.joined(separator: "\n") ?? "",
+      "extensionsNoteFrame": panel.extensionsNoteDrawn.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
       "boostsVisible": scc.isPresented && panel.boostsSectionVisible,
       "reloadVisible": scc.isPresented && panel.showsReload,
       "visibleAnchor": visibleAnchor,

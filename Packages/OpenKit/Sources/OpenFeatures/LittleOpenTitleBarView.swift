@@ -84,10 +84,10 @@ public final class LittleOpenTitleBarView: NSView {
         default: break
         }
     }
-    public func update(url: URL?, profile: Profile?, showsProfile: Bool, spaceTitle: String?) {
+    public func update(url: URL?, profile: Profile?, showsProfile: Bool, spaceTitle: String?, hostName: String? = nil) {
         let m = LittleOpenMetrics.self
-        var host = url?.host ?? url?.absoluteString ?? ""
-        if host.hasPrefix("www.") { host.removeFirst(4) }
+        var host = hostName ?? url?.host ?? url?.absoluteString ?? ""
+        if hostName == nil, host.hasPrefix("www.") { host.removeFirst(4) }
         hostButton.title = host; hostButton.setAccessibilityLabel(host)
         hostButton.attributedTitle = NSAttributedString(string: host, attributes: [.font: NSFont.systemFont(ofSize: m.fontSize), .foregroundColor: m.text.nsColor])
         let name = profile?.name ?? "Profile"

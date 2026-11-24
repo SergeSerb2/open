@@ -221,10 +221,14 @@ final class SiteControlBodyView: NSView {
 final class SiteControlBaselineLabel: NSView {
     let text: String
     let multiline: Bool
+    /// First baseline for a one-line label (default: the Reload row's 20 pt in its 32 pt row).
+    let baseline: CGFloat
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
-    init(_ text: String,multiline: Bool = false) {
-        self.text = text; self.multiline = multiline; super.init(frame: .zero); wantsLayer = true
+    /// Exactly the lines `updateLayer` draws (automation reads these, not a stored copy).
+    var drawnLines: [String] { multiline ? ["Boosts are off.","Turn them on in Settings."] : [text] }
+    init(_ text: String,multiline: Bool = false,baseline: CGFloat = 20) {
+        self.text = text; self.multiline = multiline; self.baseline = baseline; super.init(frame: .zero); wantsLayer = true
         setAccessibilityElement(true); setAccessibilityRole(.staticText); setAccessibilityLabel(text)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -233,8 +237,7 @@ final class SiteControlBaselineLabel: NSView {
         let scale = window?.backingScaleFactor ?? 1
         layer?.contentsScale = scale
         layer?.contents = SiteControlDrawing.bitmap(size: bounds.size,scale: scale) { _ in
-            let lines = multiline ? ["Boosts are off.","Turn them on in Settings."] : [text]
-            for (i,line) in lines.enumerated() { SiteControlDrawing.text(line,x: 0,baseline: multiline ? 11+CGFloat(i)*15 : 20,width: bounds.width,font: Typography.siteControlRowSubtitle.font,color: SiteControlColors.rowSubtitle.resolved(contentAppearance).nsColor) }
+            for (i,line) in drawnLines.enumerated() { SiteControlDrawing.text(line,x: 0,baseline: multiline ? 11+CGFloat(i)*15 : baseline,width: bounds.width,font: Typography.siteControlRowSubtitle.font,color: SiteControlColors.rowSubtitle.resolved(contentAppearance).nsColor) }
         }
     }
 }

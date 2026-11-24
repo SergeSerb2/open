@@ -75,6 +75,7 @@ extension AutomationController {
         "contentFrame": frame(CGRect(x: contentRect.minX - window.frame.minX,
           y: window.frame.maxY - contentRect.maxY, width: contentRect.width, height: contentRect.height)),
         "titleElements": controller.titleBar.elementFrames.mapValues(frame),
+        "hostText": controller.titleBar.hostButton.title,
         "profileIconText": controller.titleBar.profileIconText,
         "profileIconImage": controller.titleBar.profileIconImage?.tiffRepresentation?.base64EncodedString() ?? "",
         "pickerWindow": controller.spacePicker?.view.window?.windowNumber ?? 0,

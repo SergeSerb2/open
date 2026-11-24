@@ -77,7 +77,23 @@ public final class PaneChromeView: NSView {
     var fallbackColor: NSColor = .white
     let label = NSTextField(labelWithString: "")
     private var buttons: [ActionButton] = []
-    public var extensionsUI: ExtensionsUIContext? { didSet { if extensionsUI !== oldValue { extensionStrip?.removeFromSuperview(); extensionStrip = nil; needsLayout = true } } }
+    public var extensionsUI: ExtensionsUIContext? {
+        didSet {
+            guard extensionsUI !== oldValue else { return }
+            extensionStrip?.removeFromSuperview(); extensionStrip = nil; needsLayout = true
+            if let pageObservation { oldValue?.removeObserver(pageObservation) }
+            // An extension's own page names the extension; re-read it when the name or icon arrives (review r1 #3).
+            var seen = extensionsUI?.pageIdentityRevision ?? 0
+            pageObservation = extensionsUI?.observe { [weak self] _ in
+                guard let self, let revision = self.extensionsUI?.pageIdentityRevision, revision != seen else { return }
+                seen = revision; self.update()
+            }
+            update()
+        }
+    }
+    private var pageObservation: UUID?
+    /// The host text the bar shows (automation reads it).
+    public var hostText: String { label.stringValue }
     public private(set) var extensionStrip: ExtensionStripView?
     private var reloadShowsStop: Bool?
     /// App permission popovers anchor to the toolbar URL area (S11).
@@ -134,7 +150,8 @@ public final class PaneChromeView: NSView {
             extensionStrip?.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         }
         let text = host?.currentURL?.absoluteString == "open://welcome" ? "Welcome to Open"
-            : Self.pageKind(host?.currentURL) ?? (role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
+            : Self.pageKind(host?.currentURL) ?? extensionsUI?.extensionName(ofPage: host?.currentURL)
+            ?? (role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
             : host?.currentURL?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? "")
         var layoutChanged = false
         if label.stringValue != text { label.stringValue = text; layoutChanged = true }
