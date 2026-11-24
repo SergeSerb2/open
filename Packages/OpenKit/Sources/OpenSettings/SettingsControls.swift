@@ -117,15 +117,15 @@ struct OpenSettingsSwitchStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
             ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-                Capsule().fill(configuration.isOn ? accent : Color(nsColor: SettingsStyle.control.nsColor))
-                // Disabled: a stronger outline keeps the track's shape readable on the card (UX round 1 F8).
+                // Disabled (UX round 1 F8): the fill and knob fade, the outline stays at full strength,
+                // so an unavailable switch keeps its shape on the card instead of disappearing.
+                Capsule().fill(configuration.isOn ? accent : Color(nsColor: SettingsStyle.control.nsColor)).opacity(enabled ? 1 : 0.5)
                 Capsule().stroke(Color(nsColor: enabled ? SettingsStyle.controlLine.nsColor : SettingsStyle.keyLine.nsColor), lineWidth: 1)
-                Circle().fill(Color(nsColor: SettingsStyle.white.nsColor)).frame(width: 17, height: 17)
-                    // A hairline keeps the knob visible on the light track when the shadow fades (disabled).
-                    .overlay(Circle().stroke(Color(nsColor: enabled ? SettingsStyle.controlLine.nsColor : SettingsStyle.keyLine.nsColor), lineWidth: 0.5))
-                    .shadow(color: Color(nsColor: SettingsStyle.shadow.nsColor), radius: 1, y: 1).padding(.horizontal, 2.5)
+                Circle().fill(Color(nsColor: enabled ? SettingsStyle.white.nsColor : SettingsStyle.control.nsColor)).frame(width: 17, height: 17)
+                    .overlay(Circle().stroke(Color(nsColor: enabled ? SettingsStyle.controlLine.nsColor : SettingsStyle.keyLine.nsColor), lineWidth: enabled ? 0.5 : 1))
+                    .shadow(color: enabled ? Color(nsColor: SettingsStyle.shadow.nsColor) : .clear, radius: 1, y: 1).padding(.horizontal, 2.5)
             }.frame(width: 36, height: 22)
-        }.buttonStyle(.plain).opacity(enabled ? 1 : 0.6)
+        }.buttonStyle(.plain)
             .accessibilityElement(children: .ignore).accessibilityLabel(label)
             .accessibilityValue(configuration.isOn ? "On" : "Off")
             .accessibilityAddTraits(configuration.isOn ? [.isSelected] : [])
