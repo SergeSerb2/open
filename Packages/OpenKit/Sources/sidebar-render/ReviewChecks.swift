@@ -241,6 +241,79 @@ enum ReviewChecks {
         check(!back.performDragOperation(returnDrag), "Space drop propagates delegate refusal")
         delegate.refuses = false
 
+        print("review: multi-space drag target routing and draggingEnded safety")
+        model.focusSpace(windowID: state.id, spaceID: space.id)
+        pump()
+        let focusedOutline = sidebar.focusedOutline!
+        let pinnedTarget = space.pinned.compactMap(\.tab)[0]
+        let unpinnedMover = model.newTab(in: space.id, url: Synthetic.url("pin-drag-mover"), title: "Pin Drag Mover")
+        pump()
+        let targetCountBefore = target.pinned.count + target.today.count
+        let findDragTarget = NSSelectorFromString("_findDragTargetFrom:")
+        check(host.responds(to: findDragTarget), "NSWindow exposes _findDragTargetFrom:")
+        func windowCenter(ofRow item: AnyObject) -> NSPoint {
+            let r = focusedOutline.row(forItem: item)
+            let rect = focusedOutline.rect(ofRow: r)
+            return focusedOutline.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+        }
+        func runDrag(ids: [ItemID], at location: NSPoint, perform: Bool) -> (target: NSView?, indicator: CGRect?, accepted: Bool) {
+            let info = SidebarDragEvent(ids: ids, window: host)
+            info.draggingLocation = location
+            defer { info.draggingPasteboard.releaseGlobally() }
+            let resolved = host.perform(findDragTarget, with: info)?.takeUnretainedValue() as? NSView
+            var indicator: CGRect?
+            var accepted = false
+            if let resolved {
+                let entered = resolved.draggingEntered(info)
+                let updated = resolved.draggingUpdated(info)
+                indicator = sidebar.dropIndicatorFrame
+                if perform, !entered.isEmpty, !updated.isEmpty, resolved.prepareForDragOperation(info) {
+                    accepted = resolved.performDragOperation(info)
+                    resolved.concludeDragOperation(info)
+                } else {
+                    resolved.draggingExited(info)
+                }
+                focusedOutline.draggingEnded(info)
+                if resolved !== focusedOutline, resolved.responds(to: #selector(NSDraggingDestination.draggingEnded(_:))) {
+                    resolved.draggingEnded(info)
+                }
+            }
+            pump()
+            return (resolved, indicator, accepted)
+        }
+        let pinDrop = runDrag(ids: [unpinnedMover.id], at: windowCenter(ofRow: pinnedTarget), perform: true)
+        check(pinDrop.target === focusedOutline && pinDrop.indicator != nil && pinDrop.accepted,
+              "multi-space drag onto pinned row routes to focused Space outline with indicator")
+        let pinnedIdxMover = space.pinned.firstIndex { $0.id == unpinnedMover.id }
+        let pinnedIdxTarget = space.pinned.firstIndex { $0.id == pinnedTarget.id }
+        check(pinnedIdxMover != nil && pinnedIdxTarget != nil && pinnedIdxMover! < pinnedIdxTarget!
+              && target.pinned.count + target.today.count == targetCountBefore,
+              "unpinned-to-pinned drop moves inside focused Space and never leaks to hidden Space")
+        let reorderDrop = runDrag(ids: [pinnedTarget.id], at: windowCenter(ofRow: unpinnedMover), perform: true)
+        let reorderedIdxTarget = space.pinned.firstIndex { $0.id == pinnedTarget.id }
+        let reorderedIdxMover = space.pinned.firstIndex { $0.id == unpinnedMover.id }
+        check(reorderDrop.target === focusedOutline && reorderDrop.indicator != nil && reorderDrop.accepted
+              && reorderedIdxTarget != nil && reorderedIdxMover != nil && reorderedIdxTarget! < reorderedIdxMover!
+              && target.pinned.count + target.today.count == targetCountBefore,
+              "rearranging pinned tabs stays in focused Space")
+        let lastRowRect = focusedOutline.rect(ofRow: focusedOutline.numberOfRows - 1)
+        let emptyPoint = focusedOutline.convert(NSPoint(x: lastRowRect.midX, y: min(lastRowRect.maxY + 30, focusedOutline.bounds.maxY - 4)), to: nil)
+        let emptyDrop = runDrag(ids: [unpinnedMover.id], at: emptyPoint, perform: true)
+        check(emptyDrop.target === focusedOutline && emptyDrop.accepted && space.today.last?.id == unpinnedMover.id
+              && !space.pinned.contains(where: { $0.id == unpinnedMover.id })
+              && target.pinned.count + target.today.count == targetCountBefore,
+              "dropping in empty space below Today appends to Today instead of Pinned")
+        space.isPinnedCollapsed = true
+        pump()
+        let topRect = focusedOutline.rect(ofRow: 0)
+        let collapsedDrop = runDrag(ids: [unpinnedMover.id], at: focusedOutline.convert(NSPoint(x: topRect.midX, y: topRect.midY), to: nil), perform: true)
+        check(collapsedDrop.target === focusedOutline && collapsedDrop.accepted
+              && space.today.first?.id == unpinnedMover.id
+              && !space.pinned.contains(where: { $0.id == unpinnedMover.id }),
+              "dropping above divider while Pinned is collapsed lands at Today top instead of hidden Pinned")
+        space.isPinnedCollapsed = false
+        pump()
+
         print("review: theme rebuild count across 120 resize steps")
         let before = scene.background.fieldRebuildCount
         scene.background.viewWillStartLiveResize()

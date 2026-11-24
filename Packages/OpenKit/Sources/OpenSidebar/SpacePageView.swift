@@ -80,6 +80,28 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     var roles: SidebarRoles { context.roles(for: space) }
     private var animatesChanges: Bool { context.animatesChanges && animatesSidebarChanges }
 
+    private static let draggedTypes: [NSPasteboard.PasteboardType] = [.sidebarNode, .URL, .fileURL]
+    private var acceptsDrops = true
+
+    /// Inactive Space pages stay in the view tree with only `layer.isHidden = true` (#575).
+    /// AppKit's drag target lookup walks the view tree rather than `PagerStrip.hitTest` or
+    /// `CALayer.isHidden`, so only the active page's outline may remain registered for drops.
+    func setAcceptsDrops(_ enabled: Bool) {
+        guard acceptsDrops != enabled else { return }
+        acceptsDrops = enabled
+        if enabled {
+            outline.registerForDraggedTypes(Self.draggedTypes)
+        } else {
+            clearDropIndicator()
+            outline.unregisterDraggedTypes()
+        }
+    }
+
+    private var acceptsSidebarDrops: Bool {
+        guard let pager = scroll.pager else { return true }
+        return !pager.isShowingCreation && context.focusedSpace?.id == space.id
+    }
+
     private func configureOutline() {
         let column = NSTableColumn(identifier: .init("Tabs"))
         column.resizingMask = .autoresizingMask
@@ -104,7 +126,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         outline.target = self
         outline.action = #selector(rowClicked)
         outline.doubleAction = #selector(rowDoubleClicked)
-        outline.registerForDraggedTypes([.sidebarNode, .URL, .fileURL])
+        outline.registerForDraggedTypes(Self.draggedTypes)
         outline.setDraggingSourceOperationMask(.move, forLocal: true)
         outline.setDraggingSourceOperationMask(.copy, forLocal: false)
         outline.draggingDestinationFeedbackStyle = .none
@@ -281,6 +303,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         outline.endUpdates()
         applyingBulk = false
+        if root { rememberRootShape() }
         syncExpansion(animated: animatesChanges)
         updateRowStates(animated: false)
         refreshHoverAfterRowChange()
@@ -987,9 +1010,26 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             let pinnedEnd = 1 + pinnedCount
             let newTabIndex = pinnedEnd + (context.hidesSpaceChrome || space.today.isEmpty ? 0 : 1)
             let todayStart = newTabIndex + (context.manager?.libraryLayout == true ? 0 : 1)
-            if !context.hidesSpaceChrome, childIndex <= pinnedEnd { return (.spacePinned(space.id), max(0, childIndex - 1), childIndex < 1 ? (nil, 1) : nil) }
+            if childIndex == NSOutlineViewDropOnItemIndex {
+                return (.spaceToday(space.id), space.today.count, (nil, rootItems.count))
+            }
+            if !context.hidesSpaceChrome, !space.isPinnedCollapsed, childIndex <= pinnedEnd {
+                return (.spacePinned(space.id), max(0, childIndex - 1), childIndex < 1 ? (nil, 1) : nil)
+            }
             if childIndex <= todayStart { return (.spaceToday(space.id), 0, childIndex == todayStart ? nil : (nil, todayStart)) }
             return (.spaceToday(space.id), childIndex - todayStart, nil)
+        case is SpacerItem:
+            return dropDestination(item: nil, childIndex: 1).map { ($0.parent, $0.index, $0.retarget ?? (nil, 1)) }
+        case is DividerItem:
+            guard !context.hidesSpaceChrome else { return nil }
+            let pinnedEnd = 1 + (space.isPinnedCollapsed ? 0 : space.pinned.count)
+            return dropDestination(item: nil, childIndex: pinnedEnd).map { ($0.parent, $0.index, $0.retarget ?? (nil, pinnedEnd)) }
+        case is NewTabItem:
+            let pinnedCount = context.hidesSpaceChrome || space.isPinnedCollapsed ? 0 : space.pinned.count
+            let pinnedEnd = 1 + pinnedCount
+            let newTabIndex = pinnedEnd + (context.hidesSpaceChrome || space.today.isEmpty ? 0 : 1)
+            let todayStart = newTabIndex + (context.manager?.libraryLayout == true ? 0 : 1)
+            return (.spaceToday(space.id), 0, (nil, todayStart))
         case let t as AnyObject where t is Tab || t is Split:
             // Dropping onto a row: insert above it in its parent.
             let parent = outlineView(outline, parentOf: t)
@@ -1033,7 +1073,15 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         let row: Int
         if index == NSOutlineViewDropOnItemIndex, let item { row = outline.row(forItem: item) + 1 }
         else if items.indices.contains(index) { row = outline.row(forItem: items[index]) }
-        else if let last = items.last { row = outline.row(forItem: last) + 1 }
+        else if item == nil { row = outline.numberOfRows }
+        else if let last = items.last {
+            var r = outline.row(forItem: last)
+            if r >= 0 {
+                let base = outline.level(forRow: r)
+                repeat { r += 1 } while r < outline.numberOfRows && outline.level(forRow: r) > base
+            }
+            row = max(0, r)
+        }
         else { row = 0 }
         let y = row < outline.numberOfRows ? outline.rect(ofRow: max(0, row)).minY
             : (outline.numberOfRows > 0 ? outline.rect(ofRow: outline.numberOfRows - 1).maxY : 0)
@@ -1044,6 +1092,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
+        guard acceptsSidebarDrops else { clearDropIndicator(); return [] }
         context.suppressPreviews(.drag, true)
         guard let dest = dropDestination(item: item, childIndex: index) else { clearDropIndicator(); return [] }
         if let r = dest.retarget { outlineView.setDropItem(r.0, dropChildIndex: r.1) }
@@ -1064,6 +1113,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
         defer { context.suppressPreviews(.drag, false); clearDropIndicator() }
+        guard acceptsSidebarDrops else { return false }
         guard let dest = dropDestination(item: item, childIndex: index) else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
             let accepted = context.performNodeDrop(ids: ids, to: dest.parent, index: dest.index)
@@ -1149,8 +1199,13 @@ final class SidebarOutlineView: NSOutlineView {
 
     override func draggingEnded(_ sender: any NSDraggingInfo) {
         page?.clearDropIndicator()
+        page?.context.haptics.endDrag()
         page?.context.suppressPreviews(.drag, false)
-        super.draggingEnded(sender)
+        // NSOutlineView / NSTableView / NSView do not implement the optional draggingEnded(_:);
+        // calling super unconditionally throws NSInvalidArgumentException.
+        if NSOutlineView.instancesRespond(to: #selector(NSDraggingDestination.draggingEnded(_:))) {
+            super.draggingEnded(sender)
+        }
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {

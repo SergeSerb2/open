@@ -3,7 +3,7 @@ import AppKit
 @MainActor
 public final class SplitDropOverlayView: NSView {
     public enum Zone { case left, right, top, bottom, center }
-    public var zone: Zone = .center { didSet { needsDisplay = true } }
+    public var zone: Zone = .center { didSet { if zone != oldValue { needsDisplay = true } } }
     public func zone(at point: CGPoint) -> Zone {
         let x = min(bounds.width / 2, max(80, bounds.width * 0.25)), y = min(bounds.height / 2, max(80, bounds.height * 0.25))
         if point.x < x { return .left }; if point.x > bounds.width - x { return .right }

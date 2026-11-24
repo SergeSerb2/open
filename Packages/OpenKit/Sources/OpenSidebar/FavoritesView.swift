@@ -243,6 +243,15 @@ final class FavoritesCollectionView: NSCollectionView {
         super.draggingExited(sender)
     }
 
+    override func draggingEnded(_ sender: any NSDraggingInfo) {
+        owner?.context.haptics.endDrag()
+        owner?.context.suppressPreviews(.drag, false)
+        owner?.setDropTarget(false)
+        if NSCollectionView.instancesRespond(to: #selector(NSDraggingDestination.draggingEnded(_:))) {
+            super.draggingEnded(sender)
+        }
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let p = convert(event.locationInWindow, from: nil)
         guard let owner, let menus = owner.menus, let i = indexPathForItem(at: p)?.item, owner.tabs.indices.contains(i) else { return nil }
