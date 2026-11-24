@@ -13,6 +13,10 @@ the ends does not rewrite the fade
 """
 import time
 
+# A trackpad sends gesture events at the display rate. AppKit treats a burst of a few events and a
+# lift within milliseconds unevenly (it may glide, stop at the deltas, or not move at all).
+PACE = .012
+
 
 def run(factory, results, h):
     app = factory(urls=('about:blank',), fresh=True)
@@ -33,7 +37,7 @@ def run(factory, results, h):
         def gesture(point, dx, dy, steps, may_begin=False):
             if may_begin: scroll(point, dx=0, dy=0, phase='mayBegin')
             scroll(point, dx=0, dy=0, phase='began')
-            for _ in range(steps): scroll(point, dx=dx, dy=dy, phase='changed')
+            for _ in range(steps): scroll(point, dx=dx, dy=dy, phase='changed'); time.sleep(PACE)
             scroll(point, dx=0, dy=0, phase='ended')
         def wheel(point, dx=0, dy=0, steps=1, shift=False):
             for _ in range(steps): scroll(point, dx=dx, dy=dy, phase='none', continuous=False, shift=shift)
@@ -109,14 +113,15 @@ def run(factory, results, h):
         home(); before = state(); c = before.get('columns') or []
         point = (c[1][0] + c[1][2] / 2, c[1][1] + 200) if len(c) > 1 else (0, 0)
         def under(s):
-            return next((i for i, col in enumerate(s.get('columns') or []) if col[0] <= point[0] <= col[0] + col[2]), None)
+            # The column the pointer is over, or (in a gap) the one to its left.
+            return max((i for i, col in enumerate(s.get('columns') or []) if col[0] <= point[0]), default=None)
         scroll(point, dx=0, dy=0, phase='mayBegin'); scroll(point, dx=0, dy=0, phase='began')
         # Columns are 264 pt apart: after 410 pt the third column has just come under the pointer, and
         # the first event it gets is a slightly vertical one.
-        for dx in [-40] * 10 + [-10]: scroll(point, dx=dx, dy=0, phase='changed')
+        for dx in [-40] * 10 + [-10]: scroll(point, dx=dx, dy=0, phase='changed'); time.sleep(PACE)
         time.sleep(.1); crossed = state()
-        scroll(point, dx=-2, dy=-8, phase='changed')
-        for _ in range(4): scroll(point, dx=-40, dy=0, phase='changed')
+        scroll(point, dx=-2, dy=-8, phase='changed'); time.sleep(PACE)
+        for _ in range(4): scroll(point, dx=-40, dy=0, phase='changed'); time.sleep(PACE)
         time.sleep(.1); moving = state()
         scroll(point, dx=0, dy=0, phase='ended'); time.sleep(.05); lifted = state()
         scroll(point, dx=-20, dy=0, phase='none', momentum=1)
@@ -125,11 +130,11 @@ def run(factory, results, h):
         # Then a vertical wheel turn over the column now under the pointer scrolls that column only.
         rest = glided.get('originX'); wheel(point, dy=-3, steps=4); after_wheel = origin()
         results['library_spaces_cross_column_swipe'] = dict(
-            ok=under(before) == 1 and (under(crossed) or 0) >= 3 and (under(lifted) or 0) > (under(crossed) or 0)
+            ok=under(before) == 1 and under(crossed) == 3 and (under(moving) or 0) >= 3
                and moving.get('originX', 0) - crossed.get('originX', 0) >= 120
                and crossed.get('ownsGesture') is True and lifted.get('ownsGesture') is False
                and glided.get('ownsGesture') is False and glided.get('ownsMomentum') is False and after_wheel == rest,
-            columnUnderPointer=[under(before), under(crossed), under(lifted)],
+            columnUnderPointer={'start': under(before), 'wobble': under(crossed), 'lift': under(moving)},
             origin=[before.get('originX'), crossed.get('originX'), moving.get('originX'), lifted.get('originX')],
             owns={k: [s.get('ownsGesture'), s.get('ownsMomentum')] for k, s in (('swiping', crossed), ('lifted', lifted), ('atRest', glided))},
             wheelAfter=[rest, after_wheel])
