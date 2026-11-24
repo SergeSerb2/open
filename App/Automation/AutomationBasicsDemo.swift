@@ -74,6 +74,8 @@ extension AutomationController {
         .compactMap { tab in sidebar.favoriteFrame(tabID: tab.id).map { ["id": tab.id.description, "frame": box($0, in: sidebar)] } }
       let page = controller.container
       return ["rows": rows, "spaces": switchers, "favorites": favorites,
+        "favoritesEmptyCard": sidebar.favoritesEmptyCard.map { box($0.bounds, in: $0) } ?? [],
+        "dropFolder": sidebar.dropTargetFolderState ?? NSNull(),
         "newTab": sidebar.newTabRowFrame.map { box($0, in: sidebar) } ?? [],
         "sidebar": box(sidebar.bounds, in: sidebar), "page": box(page.bounds, in: page),
         "window": [target.frame.width, target.frame.height]] as [String: Any]

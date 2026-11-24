@@ -36,7 +36,10 @@ final class LibraryControl: NSButton {
     var isChip = false
     var keyboardFocus = false { didSet { if keyboardFocus != oldValue { needsDisplay = true } } }
     var onKeyboardFocus: (() -> Void)?
-    var showsDot = false
+    var showsDot = false { didSet { if showsDot != oldValue { needsDisplay = true } } }
+    /// The dot as drawn: the layer's pending update applied first. Read by
+    /// `LibraryPanelView.automationState()`, which every build compiles.
+    var drawnDot: Bool { layer?.displayIfNeeded(); return !dotLayer.isHidden }
     var selected = false { didSet { if selected != oldValue { needsDisplay = true; setAccessibilityValue(selected ? 1 : 0) } } }
     var foreground = NSColor.labelColor { didSet { if foreground != oldValue { needsDisplay = true } } }
     var overlay = NSColor.labelColor { didSet { if overlay != oldValue { needsDisplay = true } } }

@@ -706,6 +706,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         rowView.isCurrent = item != nil && item === current
         rowView.isPeekSource = context.peekSourceNodeID.map { itemID(of: item) == $0 } ?? false
         rowView.isHovered = item != nil && item === hover
+        rowView.isDropTarget = item != nil && item === dropTargetFolder
         rowView.alphaValue = itemID(of: item).map { draggingIDs.contains($0) } == true ? 0.4 : 1
         if let cell = rowView.view(atColumn: 0) as? DividerCellView { cell.showsClear = item === hover && hover === divider }
     }

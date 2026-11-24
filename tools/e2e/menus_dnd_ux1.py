@@ -7,8 +7,15 @@
 - `uxe_empty_split_pane_title`: an empty split pane is "New Tab" in the split row's menu, never
   the raw "about:blank" (M1).
 - `uxe_library_filter_dot_only_off_default`: the Library Filter button shows its dot only when a
-  filter differs from the section's default (UXC-W2-S8): none at the default in Downloads, Archive
-  and History; a dot for All Profiles in Downloads and for a When chip in History; none again after.
+  filter differs from the section's default (UXC-W2-S8). Checked by the control's drawn state and by
+  the window's pixels, after filter changes (with the Filter drawer opened and closed) and after
+  section switches: none at the default, a dot for All Profiles or a When chip, none again after.
+- `uxe_favorites_empty_tray_no_gap_mark`: over the empty Favorites tray the empty-state card is the
+  drop feedback; no clipped or zero-size gap mark is shown (review r1 #2). Its own App launch.
+- `uxe_drop_fill_survives_row_reuse`: the folder fill comes back on a new row view during a still
+  drag (the outer folder of the target collapses and expands; review r1 #4).
+- `uxe_drop_fill_cleared_on_space_switch`: a Space switch during a drag (⌃2, ⌃1) leaves no folder
+  fill on the page that slid away (review r1 #4).
 
 Drags use `basics-demo drag-begin/over/end`: the real destination views' NSDraggingDestination
 callbacks with a real pasteboard, hit-tested at window points. Socket only (no desktop input).
@@ -22,6 +29,7 @@ import time
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from loopback_http import LoopbackHTTPServer  # noqa: E402
+from library_ux1 import png_luma  # noqa: E402
 
 
 def _server():
@@ -65,6 +73,45 @@ def _find(nodes, kind):
 
 
 def run(factory, results, tmp, h):
+    empty_tray_rows(factory, results, tmp)
+    main_rows(factory, results, tmp, h)
+
+
+def empty_tray_rows(factory, results, tmp):
+    # Its own App: the demo drag cannot end an NSCollectionView drag session the way AppKit does
+    # (NSOutlineView's draggingEnded needs a real session), so in one App only the first demo drag
+    # over the Favorites collection shows a gap mark. The empty-state card is off by default in
+    # harness profiles.
+    server, origin = _server()
+    app = factory(urls=(origin + '/e0', origin + '/e1'), fresh=True, extra_args=['--favorites-empty-state=shown'])
+    try:
+        tabs = [t['id'] for t in app.call('tabs')]
+        def empty_tray():
+            empty = app.call('favorites-empty-state', action='state')
+            card = app.call('basics-demo', op='targets').get('favoritesEmptyCard')
+            if card is None:
+                return False, {'error': 'targets has no favoritesEmptyCard (automation predates the row)'}
+            if not card:
+                return False, {'error': 'no Favorites empty-state card', 'state': empty}
+            rows = {r['id']: r['frame'] for r in app.call('basics-demo', op='targets')['rows']}
+            app.call('basics-demo', op='drag-begin', node=tabs[1], image=os.path.join(tmp, 'uxe-drag0.png'), point=_center(rows[tabs[1]]))
+            try:
+                replies = [app.call('basics-demo', op='drag-over', point=_center(card)) for _ in range(2)]
+                during = app.call('favorites-empty-state', action='state')
+            finally:
+                app.call('basics-demo', op='drag-end', point=[600, 400], perform=False)
+            gap = replies[-1].get('favoritesGap')
+            ok = gap == [] and during.get('dropTarget') is True
+            return ok, {'card': card, 'favoritesGap': gap, 'cardDropTarget': during.get('dropTarget'),
+                        'destination': replies[-1].get('destination')}
+        _row(results, 'uxe_favorites_empty_tray_no_gap_mark', empty_tray)
+    finally:
+        try: app.quit()
+        except Exception: pass
+        server.shutdown(); server.server_close()
+
+
+def main_rows(factory, results, tmp, h):
     server, origin = _server()
     app = factory(urls=tuple(origin + '/t%d' % i for i in range(7)), fresh=True)
     wait = h.wait_until
@@ -75,6 +122,8 @@ def run(factory, results, tmp, h):
             try: app.call('wait', tab=tab, timeout=15)
             except Exception: pass
         fav, pinned, today = tabs[:3], tabs[3:5], tabs[5:]
+
+
         for tab in fav:
             app.call('favorite', tab=tab)
         for tab in pinned:
@@ -143,35 +192,120 @@ def run(factory, results, tmp, h):
                 return False, {'error': 'no split row in the sidebar tree'}
             items = app.call('sidebar-menu-items', node=split['id'])['items']
             panes = [i for i in items if i.endswith(' ▸') and i not in ('Move to ▸',)]
-            ok = 'New Tab ▸' in panes and not any('about:blank' in i for i in items)
-            return ok, {'items': items, 'paneSubmenus': panes}
+            drawn = (app.call('split', op='state').get('rowPresentation') or {}).get('titles', [])
+            labels = [e['label'] for e in app.call('ax-elements') if e.get('label', '').startswith('Split View:')]
+            ok = ('New Tab ▸' in panes and not any('about:blank' in i for i in items)
+                  and 'New Tab' in drawn and 'about:blank' not in drawn
+                  and labels and all('New Tab' in l and 'about:blank' not in l for l in labels))
+            return ok, {'items': items, 'paneSubmenus': panes, 'rowTitles': drawn, 'axLabels': labels}
         _row(results, 'uxe_empty_split_pane_title', empty_pane)
 
         def filter_dot():
-            seen, problems = {}, []
+            seen, problems = [], []
+
+            def dot(label):
+                """The dot as the control reports it and as the window's pixels show it."""
+                state = app.call('library')
+                if 'filterDot' not in state:
+                    raise RuntimeError('library state has no filterDot (automation predates the row)')
+                f = state['header']['filterFrame']
+                path = os.path.join(tmp, 'uxe-filter-dot-%s.png' % label)
+                app.call('snapshot', path=path)
+                width, height, luma = png_luma(path)
+                scale = width / app.call('window-state')['frame'][2]
+
+                def box(x, y, w, h):
+                    return [luma(int(px), int(py)) for py in range(int(y * scale), int((y + h) * scale))
+                            for px in range(int(x * scale), int((x + w) * scale))]
+                # The 4 pt dot sits 8 pt in from the control's right edge, 5 pt down; the 2 pt band
+                # right of it is the control's own (clear) background.
+                ink = box(f[0] + f[2] - 7.5, f[1] + 5.5, 3, 3)
+                ground = box(f[0] + f[2] - 3, f[1] + 5, 2, 4)
+                base = sorted(ground)[len(ground) // 2]
+                contrast = round(max(abs(v - base) for v in ink), 3)
+                return state['filterDot'], contrast > 0.25, contrast
+
+            def check(label, want):
+                drawn, pixels, contrast = dot(label)
+                seen.append({'step': label, 'want': want, 'drawn': drawn, 'pixels': pixels, 'contrast': contrast})
+                if drawn != want or pixels != want:
+                    problems.append('%s: want %s, drawn %s, pixels %s (%.2f)' % (label, want, drawn, pixels, contrast))
+
+            def chip(chip_id):
+                app.call('library', action='filter', open=True); time.sleep(.3)
+                app.call('library', action='chip', id=chip_id); time.sleep(.2)
+                app.call('library', action='filter', open=False); time.sleep(.4)
+
+            def section(name):
+                app.call('library', action='select', section=name); time.sleep(.5)
             try:
-                for section in ('downloads', 'archive', 'history'):
-                    app.call('library', action='open', section=section); time.sleep(.4)
-                    state = app.call('library')
-                    if 'filterDot' not in state:
-                        return False, {'error': 'library state has no filterDot (automation predates the row)'}
-                    seen[section + ':default'] = state['filterDot']
-                    if state['filterDot']: problems.append('dot on %s with the default filter' % section)
-                app.call('library', action='select', section='downloads'); time.sleep(.3)
+                app.call('library', action='open', section='downloads'); time.sleep(.6)
                 owner = app.call('library')['profiles']['downloads']
-                for step, chip, want in (('all-profiles', 'profile:' + owner, True), ('back-to-default', 'profile:' + owner, False)):
-                    app.call('library', action='chip', id=chip); time.sleep(.3)
-                    seen['downloads:' + step] = app.call('library')['filterDot']
-                    if seen['downloads:' + step] != want: problems.append('downloads %s: dot %s' % (step, seen['downloads:' + step]))
-                app.call('library', action='select', section='history'); time.sleep(.3)
-                for step, want in (('today', True), ('cleared', False)):
-                    app.call('library', action='chip', id='when:today'); time.sleep(.3)
-                    seen['history:' + step] = app.call('library')['filterDot']
-                    if seen['history:' + step] != want: problems.append('history %s: dot %s' % (step, seen['history:' + step]))
+                check('downloads-default', False)
+                chip('profile:' + owner); check('downloads-all-profiles', True)
+                section('archive'); check('archive-default', False)
+                section('downloads'); check('downloads-all-profiles-again', True)
+                chip('profile:' + owner); check('downloads-back-to-default', False)
+                section('history'); check('history-default', False)
+                chip('when:today'); check('history-today', True)
+                section('archive'); check('archive-after-history', False)
+                section('history'); check('history-today-again', True)
+                chip('when:today'); check('history-cleared', False)
             finally:
                 app.call('library', action='close')
-            return not problems, {'dot': seen, 'problems': problems}
+            return not problems, {'steps': seen, 'problems': problems}
         _row(results, 'uxe_library_filter_dot_only_off_default', filter_dot)
+
+        def hold_over_folder():
+            rows = {r['id']: r['frame'] for r in app.call('basics-demo', op='targets')['rows']}
+            app.call('basics-demo', op='drag-begin', node=today[1], image=os.path.join(tmp, 'uxe-drag2.png'), point=_center(rows[today[1]]))
+            on = app.call('basics-demo', op='drag-over', point=_center(rows[folder]))
+            return (on.get('dropFolder') or {}).get('rowFilled') is True
+
+
+        def fill_survives_row_reuse():
+            # A folder inside an expanded folder; the pointer stays over the inner folder while the
+            # outer one collapses (the inner row and its row view go away) and expands (a new row
+            # view is added). No drag-over runs in between, so only `configure` can refill the row.
+            space = next(x['id'] for x in app.call('spaces') if x['focused'])
+            outer = app.call('folder', tabs=[], title='Outer Folder', section='pinned')
+            inner = app.call('folder', tabs=[], title='Inner Folder', section='pinned')
+            app.call('sidebar-drop', nodes=[inner], parent={'kind': 'folder', 'id': outer}, index=0)
+            if not app.call('folder-toggle', folder=outer)['expanded']:
+                app.call('folder-toggle', folder=outer)
+            time.sleep(.5)
+            rows = {r['id']: r['frame'] for r in app.call('basics-demo', op='targets')['rows']}
+            if inner not in rows:
+                return False, {'error': 'inner folder row not shown', 'space': space}
+            app.call('basics-demo', op='drag-begin', node=today[1], image=os.path.join(tmp, 'uxe-drag3.png'), point=_center(rows[today[1]]))
+            states = {}
+            try:
+                held = app.call('basics-demo', op='drag-over', point=_center(rows[inner])).get('dropFolder') or {}
+                for step in ('collapsed', 'expanded'):
+                    app.call('folder-toggle', folder=outer); time.sleep(.6)
+                    states[step] = app.call('basics-demo', op='targets').get('dropFolder')
+            finally:
+                app.call('basics-demo', op='drag-end', point=[600, 400], perform=False)
+            ok = held.get('folder') == inner and held.get('rowFilled') is True and (states['expanded'] or {}).get('rowFilled') is True
+            return ok, {'held': held, 'states': states}
+        _row(results, 'uxe_drop_fill_survives_row_reuse', fill_survives_row_reuse)
+
+        def fill_cleared_on_space_switch():
+            focused_space = lambda: next((x['id'] for x in app.call('spaces') if x['focused']), None)
+            space_one = focused_space()
+            app.call('space-create', title='Second', profile='Second')
+            app.call('space', space=space_one); time.sleep(.8)
+            held = hold_over_folder()
+            try:
+                app.call('key', key='2', modifiers=['ctrl'], route='app'); time.sleep(.8)
+                app.call('key', key='1', modifiers=['ctrl'], route='app'); time.sleep(.8)
+                back = app.call('basics-demo', op='targets').get('dropFolder')
+                focused = focused_space()
+            finally:
+                app.call('basics-demo', op='drag-end', point=[600, 400], perform=False)
+            ok = held and focused == space_one and not back
+            return ok, {'heldFilled': held, 'afterSwitchBack': back, 'focused': focused, 'spaceOne': space_one}
+        _row(results, 'uxe_drop_fill_cleared_on_space_switch', fill_cleared_on_space_switch)
     finally:
         try: app.quit()
         except Exception: pass

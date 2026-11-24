@@ -143,7 +143,11 @@ final class SpacePagerView: NSView {
             placeStrip(); finishSlide()
             return
         }
-        if previous != nil { context.selection.clear(); context.existingHoverPreviews?.dismiss() }
+        if let previous {
+            context.selection.clear(); context.existingHoverPreviews?.dismiss()
+            // A drag can stay over the sidebar through ⌃N: the outgoing page keeps no drop line or folder fill.
+            pages[previous]?.clearDropIndicator()
+        }
         let target = focusedIndex
         let w = bounds.width
         let from = previous.flatMap { id in spaces.firstIndex { $0.id == id } } ?? target

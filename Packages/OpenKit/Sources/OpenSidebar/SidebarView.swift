@@ -695,6 +695,7 @@ extension SidebarView {
         guard let page = pager.currentPage, !page.dropIndicator.isHidden else { return nil }
         return convert(page.dropIndicator.bounds, from: page.dropIndicator)
     }
+    #if DEBUG || OPEN_AUTOMATION
     /// The Favorites tray's insertion mark during a drag, in this view's coordinates.
     public var favoritesGapIndicatorFrame: CGRect? {
         guard let frame = favorites.gapIndicatorFrame else { return nil }
@@ -712,6 +713,7 @@ extension SidebarView {
         return ["folder": folder.id.description, "rowFilled": rowView?.isDropTarget ?? false,
                 "glyphOpen": icon?.dropOpen ?? false, "drawnGlyph": icon?.lastDrawnGlyph ?? ""]
     }
+    #endif
 
     /// Simulates a two-finger horizontal swipe through the pager's real handler.
     public func simulateSwipe(_ events: [NSEvent]) {
