@@ -511,7 +511,7 @@ def spaces_polish_rows(factory, results, tmp, harness):
             harness.wait_until(lambda: app.call('creation-state').get('open'), timeout=5, step=.05); time.sleep(.4)
             state = app.call('creation-state')
             row('creation_create_disabled_when_empty_w%d' % width, state['name'] == '' and state.get('createEnabled') is False,
-                name=state['name'], createEnabled=state.get('createEnabled'))
+                spaceName=state['name'], createEnabled=state.get('createEnabled'))
             row('creation_text_fits_w%d' % width, state.get('textFit') == {'subtitle': True, 'themeTitle': True},
                 textFit=state.get('textFit'), widthClass=state.get('widthClass'))
             app.call('editor-close'); harness.wait_until(lambda: not app.call('creation-state').get('open'), timeout=5, step=.05)
