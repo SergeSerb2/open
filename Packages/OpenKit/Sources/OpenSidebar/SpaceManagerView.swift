@@ -10,7 +10,10 @@ public final class SpaceManagerView: NSView {
     public var libraryLayout = false { didSet { context.titleFontOverride = libraryLayout ? .systemFont(ofSize:15) : nil; for column in columns.values { column.controls.libraryLayout = libraryLayout }; needsLayout = true } }
     public let context: SidebarContext
     public var onIntent: (@MainActor (SidebarIntent) -> Bool)?
-    public let scrollView = NSScrollView()
+    public let scrollView: NSScrollView = SpaceManagerScrollView()
+    /// Fades the edge that has more columns past it (static mask; its stops change only on scroll).
+    private let edgeMask = CAGradientLayer()
+    private static let fadeWidth: CGFloat = 32
     private let strip = SpaceManagerStrip()
     private var columns: [SpaceID: SpaceManagerColumn] = [:]
     private var loop: ObservationLoop?
@@ -42,6 +45,8 @@ public final class SpaceManagerView: NSView {
         scrollView.documentView = strip
         scrollView.contentView.postsBoundsChangedNotifications = true
         addSubview(scrollView)
+        scrollView.wantsLayer = true
+        edgeMask.startPoint = CGPoint(x: 0, y: 0.5); edgeMask.endPoint = CGPoint(x: 1, y: 0.5)
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         observer = context.model.addObserver { [weak self] change in self?.apply(change) }
         loop = ObservationLoop(read: { [weak self] in _ = self?.context.model.spaces.map(\.id) }) { [weak self] in self?.syncColumns() }
@@ -117,6 +122,25 @@ public final class SpaceManagerView: NSView {
         strip.frame.size = CGSize(width: max(bounds.width, insetX * 2 + CGFloat(columns.count) * columnWidth + CGFloat(max(0, columns.count - 1)) * (pitch-columnWidth)), height: max(0, scrollView.contentSize.height))
         placeColumns(animated: false)
         buildVisibleColumns()
+        updateEdgeFade()
+    }
+
+    /// Which edges have columns past them: (left, right).
+    public var edgeFades: (left: Bool, right: Bool) {
+        let visible = scrollView.documentVisibleRect, width = strip.frame.width
+        return (visible.minX > 0.5, visible.maxX < width - 0.5)
+    }
+    private func updateEdgeFade() {
+        let (left, right) = edgeFades
+        guard left || right, scrollView.bounds.width > Self.fadeWidth * 2 else { scrollView.layer?.mask = nil; return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let f = Double(Self.fadeWidth / scrollView.bounds.width)
+        edgeMask.frame = scrollView.bounds
+        edgeMask.locations = [0, NSNumber(value: f), NSNumber(value: 1 - f), 1]
+        let solid = NSColor.black.cgColor, clear = NSColor.black.withAlphaComponent(0).cgColor
+        edgeMask.colors = [left ? clear : solid, solid, solid, right ? clear : solid]
+        if scrollView.layer?.mask !== edgeMask { scrollView.layer?.mask = edgeMask }
+        CATransaction.commit()
     }
 
     private var displayedOrder: [SpaceID] {
@@ -141,7 +165,7 @@ public final class SpaceManagerView: NSView {
         }
     }
 
-    @objc private func scrolled() { buildVisibleColumns() }
+    @objc private func scrolled() { buildVisibleColumns(); updateEdgeFade() }
     private func buildVisibleColumns() {
         let visible = scrollView.documentVisibleRect
         for column in columns.values where column.frame.intersects(visible) { column.buildContent() }
@@ -406,4 +430,20 @@ private final class SpaceManagerColumn: NSView {
 @MainActor extension SidebarDiagnostics {
     /// Optional capture of the real native reorder presentation, used by the harness.
     public static var spaceReorderFrame: (@MainActor () -> Void)?
+}
+
+/// The Space Manager strip scrolls sideways. A mouse wheel has no sideways axis, so a plain (not
+/// trackpad) vertical wheel turn that reaches the strip moves it sideways; columns pass trackpad
+/// swipes and Shift-wheel turns here (PageScrollView).
+final class SpaceManagerScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        guard !event.hasPreciseScrollingDeltas, abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) else {
+            super.scrollWheel(with: event); return
+        }
+        // One wheel line moves 48 pt, like a row of the columns.
+        var bounds = contentView.bounds
+        bounds.origin.x -= event.scrollingDeltaY * 48
+        contentView.scroll(to: contentView.constrainBoundsRect(bounds).origin)
+        reflectScrolledClipView(contentView)
+    }
 }

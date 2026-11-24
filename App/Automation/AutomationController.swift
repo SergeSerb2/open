@@ -2656,7 +2656,8 @@
         cg.location = target.convertPoint(toScreen: point)
         cg.location.y = (NSScreen.screens.first?.frame.maxY ?? 0) - cg.location.y
         cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
-        cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        // continuous=false is a notched mouse wheel (no precise deltas); the default is a trackpad.
+        cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: a["continuous"] as? Bool == false ? 0 : 1)
         cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
         let momentum = a["momentum"] as? Int64 ?? 0
         guard (0...3).contains(momentum) else { throw Failure(message: "invalid momentum phase") }
@@ -3194,7 +3195,21 @@
         "systemAppearance": manager.map { String(describing: $0.context.systemAppearance) } ?? "",
         "appAppearance": NSApp.appearance?.name.rawValue ?? "", "visible": target?.isVisible == true,
         "key": target?.isKeyWindow == true, "section": session?.model.section.rawValue ?? "",
-        "undoRegistrationEnabled": app.undoManager.isUndoRegistrationEnabled, "sectionRows": sectionRows] as [String: Any]
+        "undoRegistrationEnabled": app.undoManager.isUndoRegistrationEnabled, "sectionRows": sectionRows,
+        "layout": spaceManagerLayout(manager, target)] as [String: Any]
+    }
+    /// Window points, top-left origin: what the user sees of the manager and its columns.
+    private func spaceManagerLayout(_ manager: SpaceManagerView?, _ target: NSWindow?) -> [String: Any] {
+      guard let manager, let target else { return [:] }
+      let height = target.contentView?.bounds.height ?? target.frame.height
+      func rect(_ r: NSRect, _ view: NSView) -> [CGFloat] { let w = view.convert(r, to: nil); return [w.minX, height - w.maxY, w.width, w.height] }
+      let clip = manager.scrollView.contentView
+      let fades = manager.edgeFades
+      return ["window": target.windowNumber, "contentWidth": target.contentView?.bounds.width ?? 0,
+        "manager": rect(manager.bounds, manager), "visible": rect(clip.bounds, clip),
+        "documentWidth": manager.scrollView.documentView?.frame.width ?? 0,
+        "columns": manager.context.model.spaces.compactMap { space in manager.columnFrame(spaceID: space.id).map { rect($0, manager.scrollView.documentView!) } },
+        "fadeLeft": fades.left, "fadeRight": fades.right, "masked": manager.scrollView.layer?.mask != nil]
     }
     /// Coordinates of actual visible row controls; input still uses OEApplication.sendEvent.
     private func spaceManagerRowControls(_ args: [String: Any]) throws -> Any {

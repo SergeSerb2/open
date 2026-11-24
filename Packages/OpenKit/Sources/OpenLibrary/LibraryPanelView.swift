@@ -37,7 +37,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public var isPresented = false {
         didSet { guard isPresented != oldValue else { return }; if isPresented { lastOpenWasPrebuilt = prebuiltReady; if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme(); onIdleRefresh?() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
     }
-    public var desiredWidth: CGFloat { section == .spaces ? max(417, (superview?.bounds.width ?? 1280)-56) : 417 }
+    /// Spaces spans the whole window: its columns clip inside the panel, with edge fades, not against a strip of page.
+    public var desiredWidth: CGFloat { section == .spaces ? max(417, superview?.bounds.width ?? 1280) : 417 }
     let rail = NSScrollView()
     let railDocument = LibraryRailDocument()
     var tiles: [LibraryPanelSection: LibraryControl] = [:]

@@ -15509,10 +15509,15 @@ def main():
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
                     sys.modules[__name__], factory, results[opts.only], tmp)
                 space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
+        elif opts.only == "sidebar-completion" and os.environ.get('OPEN_LIBRARY_SPACES_SCROLL_ONLY') == '1':
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/library_spaces_scroll.py'))['run'](factory, results[opts.only], sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
                 sys.modules[__name__], factory, results[opts.only], tmp)
+            # UX round 1 wave 2 (W3): Library > Spaces with six Spaces, real swipe and wheel.
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/library_spaces_scroll.py'))['run'](factory, results[opts.only], sys.modules[__name__])
             if os.environ.get('OPEN_MIXED_DELETE_ONLY') != '1':
                 runpy.run_path(os.path.join(ROOT, 'tools/e2e/archive_split_sweep.py'))['checks'](
                     sys.modules[__name__], factory, results[opts.only], tmp)

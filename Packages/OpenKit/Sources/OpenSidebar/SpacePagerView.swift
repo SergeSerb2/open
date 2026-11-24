@@ -386,9 +386,23 @@ final class PagerStrip: NSView {
 final class PageScrollView: NSScrollView {
     weak var pager: SpacePagerView?
     private var routing = false
+    private var managerStrip: SpaceManagerScrollView? {
+        var view = superview
+        while let candidate = view { if let strip = candidate as? SpaceManagerScrollView { return strip }; view = candidate.superview }
+        return nil
+    }
 
     override func scrollWheel(with event: NSEvent) {
         (documentView as? SidebarOutlineView)?.page?.context.existingHoverPreviews?.dismiss()
+        // A Space Manager column (no pager) scrolls only vertically: a sideways trackpad gesture, or a
+        // sideways wheel turn (Shift-wheel), belongs to the manager's sideways strip.
+        if pager == nil, let strip = managerStrip {
+            let plain = event.phase == [] && event.momentumPhase == []
+            if plain || event.phase == .began { routing = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) }
+            if routing { strip.scrollWheel(with: event) } else { super.scrollWheel(with: event) }
+            if plain || event.momentumPhase == .ended || event.momentumPhase == .cancelled { routing = false }
+            return
+        }
         if event.phase == .began { routing = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) }
         if routing, let pager, pager.handleScroll(event) {
             if event.phase == .ended || event.phase == .cancelled { routing = false }
