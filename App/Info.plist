@@ -67,6 +67,8 @@
 	<string>Websites you visit can ask for your location.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Websites you visit can ask for your location.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Open uses your network to look up the websites you visit.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Websites you visit can ask to connect to Bluetooth devices.</string>
 	<key>NSUserActivityTypes</key>
