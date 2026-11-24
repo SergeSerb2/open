@@ -27,6 +27,9 @@ final class WelcomePageView: NSScrollView {
   var openHelp: (() -> Void)?
   let canvas = WelcomeCanvas()
   private let backdrop = WelcomeBackdropView()
+  /// The clip deliberately runs past the page's right edge. This static strip, a copy of the backdrop
+  /// behind it, fades the clip into the page there. Rendered on layout only; no per-frame work.
+  private let edgeFade = WelcomeEdgeFadeView()
   private let mark = WelcomeMarkView()
   let heading = NSTextField(labelWithString: "You're all set.")
   let subheading = NSTextField(labelWithString: "Here are the basics.")
@@ -85,6 +88,7 @@ final class WelcomePageView: NSScrollView {
       canvas.addSubview(label)
     }
     canvas.addSubview(clipPanel)
+    canvas.addSubview(edgeFade)
     for (i, copy) in Self.steps.enumerated() {
       let card = WelcomeStepView(index: i, copy: copy)
       card.press = { [weak self] in self?.replay(card: i) }
@@ -170,6 +174,15 @@ final class WelcomePageView: NSScrollView {
     heading.frame = m.heading; subheading.frame = m.subheading
     clipPanel.shownRect = m.clipShown
     clipPanel.frame = m.clip
+    // Shadow room above and below the clip; the strip ends at the page's right edge.
+    let fadeWidth: CGFloat = 72
+    if m.clipShown.width < m.clip.width - 1 {
+      let edge = m.clip.minX + m.clipShown.width
+      edgeFade.frame = CGRect(x: edge - fadeWidth, y: max(0, m.clip.minY - 40), width: fadeWidth,
+                              height: min(m.document.height, m.clip.maxY + 40) - max(0, m.clip.minY - 40))
+      edgeFade.isHidden = false
+      edgeFade.render(backdrop: backdrop, scale: window?.backingScaleFactor ?? 2)
+    } else { edgeFade.isHidden = true }
     let linkTop: CGFloat = 23.5
     let helpSize = help.intrinsicContentSize, shortcutSize = shortcuts.intrinsicContentSize
     help.frame = CGRect(x: m.document.width - 23.5 - helpSize.width, y: linkTop, width: helpSize.width, height: 42)
@@ -424,6 +437,38 @@ final class WelcomeBackdropView: NSView {
     cool.frame = CGRect(x: -b.width * 0.25, y: b.height * 0.45, width: b.width * 0.9, height: b.height * 0.9)
     warm.frame = CGRect(x: b.width * 0.45, y: b.height * 0.55, width: b.width * 0.9, height: b.height * 0.8)
     haze.frame = CGRect(x: b.width * 0.35, y: -b.height * 0.45, width: b.width * 0.9, height: b.height * 0.9)
+    CATransaction.commit()
+  }
+}
+
+/// A copy of the backdrop strip under it, faded in from the left by a static mask.
+@MainActor
+final class WelcomeEdgeFadeView: NSView {
+  private let fade = CAGradientLayer()
+  private var rendered: (CGRect, CGFloat)?
+  override init(frame: NSRect) {
+    super.init(frame: frame); wantsLayer = true; setAccessibilityElement(false)
+    fade.startPoint = CGPoint(x: 0, y: 0.5); fade.endPoint = CGPoint(x: 1, y: 0.5)
+    fade.colors = [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.cgColor]
+    layer?.mask = fade
+  }
+  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+  override var isFlipped: Bool { true }
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  /// Draws the backdrop's layers for this view's frame into one bitmap (at most 72 x page height pt).
+  func render(backdrop: NSView, scale: CGFloat) {
+    guard rendered.map({ $0.0 != frame || $0.1 != scale }) ?? true, frame.width > 0, frame.height > 0,
+          let source = backdrop.layer else { return }
+    rendered = (frame, scale)
+    let width = Int(ceil(frame.width * scale)), height = Int(ceil(frame.height * scale))
+    guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+    // The backdrop is flipped (y down); draw it top-down, offset to this strip.
+    context.translateBy(x: 0, y: CGFloat(height)); context.scaleBy(x: scale, y: -scale)
+    context.translateBy(x: -frame.minX, y: -frame.minY)
+    source.render(in: context)
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    layer?.contents = context.makeImage(); layer?.contentsScale = scale; fade.frame = bounds
     CATransaction.commit()
   }
 }

@@ -535,12 +535,16 @@ public struct ImportWizard: View {
                         Text(model.outcome?.failures.isEmpty == false ? "Import finished." : "Import complete.").font(.headline)
                         let rows = model.displayedReportCategories.map { name -> (String, String, Color) in
                             let value = model.reportValue(name), failed = model.outcome?.failures[name] != nil
-                            return (ImportCountCopy.displayCategory(name), failed && value.count > 24 ? "Not imported" : value,
+                            return (ImportCountCopy.displayCategory(name), failed && (name == "Passwords and cookies" || value.count > 24) ? "Not imported" : value,
                                     failed ? .red : value.hasPrefix("Not ") ? .secondary : .primary)
                         } + model.secretsReportRows.map { ($0.title, model.secretsReportValue($0), $0.noneFound ? Color.secondary : Color.primary) }
                         SettingsGroup { ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                             SettingsRow(height: 30, divider: index != rows.count-1) { HStack { Text(row.0); Spacer(); Text(row.1).monospacedDigit().lineLimit(1).foregroundStyle(row.2) } }
                         } }
+                        // A long failure says "Not imported" in its row; its sentence is shown once here.
+                        ForEach(model.displayedReportCategories.filter { $0 != "Passwords and cookies" && (model.outcome?.failures[$0]?.count ?? 0) > 24 }, id: \.self) { name in
+                            Text(ImportCountCopy.displayCategory(name) + ": " + (model.outcome?.failures[name] ?? "")).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                        }
                         ForEach(model.secretsReportNotes, id: \.self) { Text($0).foregroundStyle(.secondary) }
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
