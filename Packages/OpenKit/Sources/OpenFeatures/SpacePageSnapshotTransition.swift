@@ -31,6 +31,14 @@ final class SpacePageSnapshotTransition: NSView {
 
     enum Phase: String { case idle, moving, awaitingPresentation, presentationFailed }
     private(set) var phase: Phase = .idle
+    /// True while an idle plate fades out over the presented page (`retire(fading:)`).
+    private(set) var isFading = false
+    private var retiredHandlers: [@MainActor () -> Void] = []
+    /// Runs `handler` once the plate is gone: at once when it is not fading, else when the fade
+    /// ends or is cut by `cancel`. A new `begin` drops pending handlers (its owner re-decides).
+    func whenRetired(_ handler: @escaping @MainActor () -> Void) {
+        if isFading { retiredHandlers.append(handler) } else { handler() }
+    }
     private(set) var destinationUsesSnapshot = false
     private(set) var lastAnimation: CAAnimation?
     private(set) var cachedBytes = 0
@@ -139,6 +147,7 @@ final class SpacePageSnapshotTransition: NSView {
               themeFrame.width > 0, themeFrame.height > 0 else { return false }
         generation &+= 1
         let receipt = Receipt(generation: generation)
+        isFading = false; retiredHandlers = []
         covered = onCovered
         // Replacement of an interrupted composition is atomic. The owner must
         // capture its presentation first; no native page is exposed here.
@@ -210,7 +219,7 @@ final class SpacePageSnapshotTransition: NSView {
     /// A stale completion, load event, rAF or timer cannot remove these pixels.
     func presented(_ receipt: Receipt) {
         guard receipt.generation == generation, phase == .awaitingPresentation else { return }
-        retire()
+        retire(fading: true)
     }
 
     /// A closed/crashed renderer is not a presentation receipt. Keep its plate
@@ -224,12 +233,41 @@ final class SpacePageSnapshotTransition: NSView {
     /// is ready. Never use this as the normal live-page handoff.
     func cancel() { generation &+= 1; retire() }
 
-    private func retire() {
+    /// `fading`: the live page is presented under the plate, so the plate fades out over
+    /// `Motion.spacePlateRetire` instead of leaving in one frame. A flat Space field (empty or
+    /// not-yet-live destination) differs from the real grained background, and a one-frame swap
+    /// showed as a tone and texture pop at the end of the switch (UX1 wave 2, W1/W2). The plate is
+    /// idle at once (no hits, a new switch may start); a new `begin` or `cancel` ends the fade.
+    private func retire(fading: Bool = false) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        outgoing?.removeFromSuperlayer(); incoming?.removeFromSuperlayer()
-        outgoing = nil; incoming = nil; covered = nil; lastAnimation = nil
+        outgoing?.removeFromSuperlayer(); outgoing = nil
+        covered = nil; lastAnimation = nil
         phase = .idle
+        if fading, let plate = incoming {
+            isFading = true
+            let token = generation
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 1; fade.toValue = 0
+            fade.duration = Motion.spacePlateRetire; fade.timingFunction = Motion.easeOut
+            CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
+                guard let self, self.generation == token, self.phase == .idle else { return }
+                self.finishRetire()
+            } }
+            plate.opacity = 0
+            plate.add(fade, forKey: "spacePlateRetire")
+            CATransaction.commit()
+            return
+        }
         CATransaction.commit()
+        finishRetire()
+    }
+    private func finishRetire() {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        incoming?.removeFromSuperlayer(); incoming = nil
+        CATransaction.commit()
+        isFading = false
         removeFromSuperview()
+        let handlers = retiredHandlers; retiredHandlers = []
+        for handler in handlers { handler() }
     }
 }

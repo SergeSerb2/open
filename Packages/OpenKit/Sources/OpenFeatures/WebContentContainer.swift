@@ -301,6 +301,8 @@ public final class WebContentContainer: NSView {
     }
     public var spacePageRetainsEmptySurface: Bool { spaceMotionStorage?.keepsEmptySourceVisible == true }
     public var spacePageMotionPhase: String { spaceMotionStorage?.plate.phase.rawValue ?? "idle" }
+    /// The cover is fading out over the presented page or Space background (UX1 wave 2).
+    public var spacePageCoverFading: Bool { spaceMotionStorage?.plate.isFading == true }
     public var spacePageUsesSnapshot: Bool { spaceMotionStorage?.plate.destinationUsesSnapshot ?? false }
     public var spacePageSnapshotBytes: Int { spaceMotionStorage?.plate.cachedBytes ?? 0 }
     public var spacePageCaptureCount: Int { spaceMotionStorage?.captureCount ?? 0 }
@@ -444,6 +446,7 @@ public final class WebContentContainer: NSView {
     }
     func applySpaceSelection(_ selection: SpaceContentSelection, animateSlots: Bool, notify: Bool = true) {
         if let focused = selection.focused {
+            emptyHidePending = false
             isHidden = false
             showNative(tabIDs: selection.tabs, focusedTabID: focused, orientation: selection.orientation,
                 fractions: selection.fractions, spaceID: selection.space, profileID: selection.profile,
@@ -454,7 +457,19 @@ public final class WebContentContainer: NSView {
         }
         if notify { onSpaceSelectionApplied?() }
     }
-    func finishEmptySpaceSelection() { isHidden = true; onSpaceSelectionApplied?() }
+    /// An empty Space hides the container once its cover has faded out over the window
+    /// background (UX1 wave 2, W2); a later non-empty selection cancels that hide.
+    private var emptyHidePending = false
+    func finishEmptySpaceSelection() {
+        if let plate = spaceMotionStorage?.plate, plate.isFading {
+            emptyHidePending = true
+            plate.whenRetired { [weak self] in
+                guard let self, self.emptyHidePending else { return }
+                self.emptyHidePending = false; self.isHidden = true
+            }
+        } else { isHidden = true }
+        onSpaceSelectionApplied?()
+    }
     private func showNative(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID, animateSlots: Bool) {
         // Selection may come from keyboard cycling, automation, or model observers.
         // Return the preview before changing slots or refreshing any selected host.

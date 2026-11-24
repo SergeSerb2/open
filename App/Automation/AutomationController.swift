@@ -1559,6 +1559,7 @@
           "cardSamples": controller.cardMotionSamples.map { ["time": $0.time, "offset": $0.offset] },
           "space": controller.sidebar.spaceSlideAnimation.map(describeAnimation) ?? [:],
           "spacePage": ["phase": controller.container.spacePageMotionPhase,
+            "coverFading": controller.container.spacePageCoverFading, "containerHidden": controller.container.isHidden,
             "cachedDestination": controller.container.spacePageUsesSnapshot,
             "cacheBytes": controller.container.spacePageSnapshotBytes,
             "captures": controller.container.spacePageCaptureCount,

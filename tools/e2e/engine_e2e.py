@@ -5221,6 +5221,35 @@ def sidebar_checks(factory, results, tmp):
             "ok": w8_first != "idle" and bool(w8_idle) and w8_page,
             "first_phase": w8_first, "after": w8_after, "page_shown": w8_page, "restored_frame": w8_frame,
             "w8_tab": w8_tab}
+        # UX round 1 wave 2 (W2): a switch into an empty Space ends with its cover fading out over the
+        # Space background (the container stays visible during the fade, then hides). Before, the
+        # flat cover and its container vanished in one frame: a tone and texture pop at the end.
+        ux_home = next(s for s in app.call("spaces") if s["focused"])["id"]
+        ux_empty = app.call("space-create", title="UX1 Empty")
+        app.call("space", space=ux_home); app.call("select", tab=a)
+        wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
+        ux_reduced = app.call("window-motion")["reduced"]
+        app.call("window-motion", reduced=False)
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+        ux_samples = []
+        try:
+            app.call("space", space=ux_empty)
+            ux_end = time.monotonic() + 1.5
+            while time.monotonic() < ux_end:
+                page = app.call("window-motion")["spacePage"]
+                ux_samples.append({k: page.get(k) for k in ("phase", "coverFading", "containerHidden")})
+                if ux_samples[-1]["phase"] == "idle" and not ux_samples[-1]["coverFading"] and len(ux_samples) > 3:
+                    break
+        finally:
+            app.call("window-motion", reduced=ux_reduced)
+            app.call("space", space=ux_home); app.call("select", tab=a)
+            wait_until(lambda: app.call("window-motion")["spacePage"]["phase"] == "idle", timeout=5, step=.05)
+        ux_fading = [x for x in ux_samples if x["phase"] == "idle" and x["coverFading"]]
+        results["UX1W2_empty_space_cover_fades_out"] = {
+            "ok": any(x["phase"] != "idle" for x in ux_samples) and bool(ux_fading)
+                  and all(x["containerHidden"] is False for x in ux_fading)
+                  and bool(ux_samples) and ux_samples[-1]["coverFading"] is False and ux_samples[-1]["containerHidden"] is True,
+            "samples": ux_samples[:60]}
         s1 = next(s for s in app.call("spaces") if s["focused"])["id"]
         s2 = app.call("space-create", title="Work", profile="Work")
         e = new_tab(app, fixture("Sidebar E"))
