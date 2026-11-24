@@ -2931,7 +2931,9 @@
       // AppKit preserves Shift in charactersIgnoringModifiers. Native menu
       // equivalents such as Redo need "Z", even though the key router folds case.
       // `characters` sends what real hardware gives (Cmd+Shift+2 carries "@"), for the base-key check.
-      let eventCharacters = (a["characters"] as? String).flatMap { $0.count == 1 ? $0 : nil } ?? (mods.contains(.shift) ? chars.uppercased() : chars)
+      // Hardware Shift-Tab carries the backtab character (0x19), which NSTextView maps to insertBacktab:.
+      let shiftedChars = chars == "\t" ? "\u{19}" : chars.uppercased()
+      let eventCharacters = (a["characters"] as? String).flatMap { $0.count == 1 ? $0 : nil } ?? (mods.contains(.shift) ? shiftedChars : chars)
       let route = a["route"] as? String ?? "app"
       let observeCommands = a["observeCommands"] as? Bool == true
       var menuObserver: (any NSObjectProtocol)?

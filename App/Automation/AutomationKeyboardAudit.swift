@@ -45,6 +45,26 @@ extension AutomationController {
     guard let window = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? NSApp.keyWindow,
       let content = window.contentView else { throw Failure(message: "no window") }
     var tables: [[String: Any]] = []
+    // `mode: count`: only the cheap paths a screen reader uses to size and page through a long list.
+    // Reports how many row views existed before and after, so a full build of every row shows.
+    if a["mode"] as? String == "count" {
+      func existing(_ table: NSTableView) -> Int { (0..<table.numberOfRows).filter { table.rowView(atRow: $0, makeIfNecessary: false) != nil }.count }
+      func walkCount(_ view: NSView) {
+        if let table = view as? NSTableView {
+          let before = existing(table)
+          let children = table.accessibilityArrayAttributeCount(.children), rows = table.accessibilityArrayAttributeCount(.rows)
+          let visible = table.accessibilityArrayAttributeCount(.visibleRows)
+          let page = table.accessibilityArrayAttributeValues(.rows, index: 0, maxCount: 5)
+          let index = page.first.map { table.accessibilityIndex(ofChild: $0) } ?? -1
+          tables.append(["class": String(describing: type(of: table)), "numberOfRows": table.numberOfRows, "countChildren": children,
+            "countRows": rows, "countVisible": visible, "firstPage": page.count, "indexOfFirst": index,
+            "rowViewsBefore": before, "rowViewsAfter": existing(table)])
+        }
+        view.subviews.forEach(walkCount)
+      }
+      walkCount(content)
+      return ["tables": tables]
+    }
     func walk(_ view: NSView) {
       if let table = view as? NSTableView {
         let modern = table.accessibilityChildren() ?? []

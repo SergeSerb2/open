@@ -17,8 +17,11 @@ accessibility client, no System Events, no VoiceOver.
   a11y_library_focus_ring             Tab to a rail item that is not the selected section draws its ring (K4)
 """
 import http.server
+import json
+import os
 import threading
 import time
+import uuid
 from loopback_http import LoopbackHTTPServer
 
 
@@ -64,6 +67,8 @@ def run(factory, results, tmp, h):
             debug = app.call('ax-debug', window=browser)['tables']
             outline = next((t for t in debug if t['class'] == 'SidebarOutlineView'), {})
             ok = (outline.get('modern', 0) >= 3 and outline.get('attributeChildren') == outline.get('modern')
+                  and outline.get('unignored') == outline.get('modern')
+                  and all(not d.get('ignored') and d.get('element') for d in outline.get('detail', []))
                   and outline.get('attributeRows') == outline.get('modern')
                   and outline.get('arrayCountChildren') == outline.get('modern')
                   and outline.get('arrayCountRows') == outline.get('modern')
@@ -122,15 +127,25 @@ def run(factory, results, tmp, h):
             key('escape', window=window); time.sleep(.6)
         attempt('a11y_library_focus_ring', library)
 
+        SECTIONS = ['general', 'appearance', 'tabs-archive', 'search', 'links', 'downloads', 'previews', 'ad-blocking',
+                    'site-permissions', 'passwords-cards', 'browsing-data', 'profiles', 'shortcuts', 'extensions', 'advanced']
         def settings():
             app.call('defaults', key='open.general.searchSuggestNoticeDismissed', value=True)
             app.call('menu-perform', id='settings'); time.sleep(1)
             window = app.call('settings-ui')['window']
+            def who():
+                r = app.call('responder', window=window)
+                return r.get('class', ''), r.get('label') or r.get('title') or ''
             try:
-                leaked.extend((n['label'], n['class'], 'settings') for n in tree(window) if n['role'] == 'AXImage' and n['label'] == 'Search')
+                for section in ['general', 'ad-blocking', 'shortcuts']:
+                    app.call('settings-ui', action='open', section=section); time.sleep(.5)
+                    leaked.extend((n['label'], n['class'], 'settings-' + section) for n in tree(window)
+                                  if n['role'] == 'AXImage' and n['label'] in ('Search', 'magnifyingglass'))
                 app.call('settings-ui', action='open', section='ad-blocking'); time.sleep(.6)
                 app.call('settings-ui', action='focus-nav', section='general'); time.sleep(.2)
-                key('tab', ['shift'], window=window); time.sleep(.2)   # back to the search field
+                key('tab', ['shift'], window=window); time.sleep(.3)   # back to the search field
+                ring = app.call('settings-ui').get('searchFocusRing')
+                row('a11y_settings_search_ring', who()[0] == 'SettingsSearchField' and ring is True, responder=who(), ring=ring)
                 key('tab', window=window); time.sleep(.2)
                 from_search = app.call('responder', window=window)
                 key('down', window=window); time.sleep(.4)
@@ -142,11 +157,61 @@ def run(factory, results, tmp, h):
                 row('a11y_settings_keyboard', from_search.get('label') == 'Ad Blocking' and down == ('site-permissions', 'Site Permissions')
                     and up == ('ad-blocking', 'Ad Blocking') and into_page.get('label') == 'Search block lists',
                     fromSearch=from_search.get('label'), down=down, up=up, intoPage=into_page.get('label'))
+                # Every pane, both directions (review r1 #1): from the selected section, Tab goes through
+                # the page's key views and back to search then the section; Shift-Tab is the same loop
+                # reversed. No other section is ever a stop.
+                walks, bad = {}, []
+                for section in SECTIONS:
+                    app.call('settings-ui', action='open', section=section); time.sleep(.5)
+                    app.call('settings-ui', action='focus-nav', section=section); time.sleep(.2)
+                    label = who()[1]
+                    fwd = []
+                    for _ in range(10):
+                        key('tab', window=window); time.sleep(.1); fwd.append(who())
+                        if fwd[-1] == ('SettingsNavigationButton', label): break
+                    app.call('settings-ui', action='focus-nav', section=section); time.sleep(.2)
+                    back = []
+                    for _ in range(10):
+                        key('tab', ['shift'], window=window); time.sleep(.1); back.append(who())
+                        if back[-1] == ('SettingsNavigationButton', label): break
+                    page_fwd = fwd[:-2]; page_back = back[1:-1]
+                    ok = (len(fwd) >= 2 and fwd[-1] == ('SettingsNavigationButton', label) and fwd[-2][0] == 'SettingsSearchField'
+                          and back and back[0][0] == 'SettingsSearchField' and back[-1] == ('SettingsNavigationButton', label)
+                          and page_back == list(reversed(page_fwd))
+                          and not any(c == 'SettingsNavigationButton' for c, _ in fwd[:-1] + back[:-1]))
+                    walks[section] = dict(forward=fwd, backward=back)
+                    if not ok: bad.append(section)
+                row('a11y_settings_tab_loop_every_pane', not bad, bad=bad, walks=walks)
             finally:
                 key('w', ['cmd'], window=window); time.sleep(.3)
         attempt('a11y_settings_keyboard', settings)
 
-        row('a11y_no_leaked_decorative_images', not leaked and 'a11y_no_leaked_decorative_images' not in results, leaked=leaked)
+        if 'a11y_no_leaked_decorative_images' not in results:   # keep an earlier error's evidence
+            row('a11y_no_leaked_decorative_images', not leaked, leaked=leaked)
+    finally:
+        app.quit()
+
+    # Review r1 #2: a Space with 300 tabs answers VoiceOver's row count, a first page of rows and an
+    # index without building a row view for every tab.
+    fixture = json.loads(open(os.path.join(h.ROOT, 'Packages/OpenKit/Fixtures/space-schema1/State/browser.json')).read())
+    space = fixture['spaces'][0]; space['pinned'] = []
+    now = time.time()
+    space['today'] = [{'tab': {'_0': {'id': str(uuid.uuid4()).upper(), 'url': base + '/t%d' % i, 'title': 'Tab %d' % i,
+                                      'createdAt': now, 'lastActiveAt': now, 'isMuted': False, 'isUnread': False}}} for i in range(300)]
+    fixture['spaces'] = [space]
+    window = fixture['windows'][0]; window.update(focusedSpaceID=space['id'], selectedNodeBySpace={}); fixture['windows'] = [window]
+    path = os.path.join(tmp, 'a11y-300-tabs.json'); open(path, 'w').write(json.dumps(fixture))
+    app = factory(urls=(), fresh=True, snapshot=path)
+    try:
+        state = app.call('window-state'); app.call('window-focus', id=state['id'], activate=True); time.sleep(.6)
+        number = next(w['number'] for w in app.call('windows') if w.get('class', '').endswith('BrowserWindow'))
+        outline = next((t for t in app.call('ax-debug', window=number, mode='count')['tables'] if t['class'] == 'SidebarOutlineView'), {})
+        built = outline.get('rowViewsAfter', 0) - outline.get('rowViewsBefore', 0)
+        row('a11y_sidebar_300_tabs_count_without_build', outline.get('countRows', 0) >= 300 and outline.get('countChildren') == outline.get('countRows')
+            and outline.get('firstPage') == 5 and outline.get('indexOfFirst') == 0 and outline.get('countVisible', 0) < 40 and built <= 5,
+            outline=outline, rowViewsBuilt=built)
+    except Exception as error:
+        row('a11y_sidebar_300_tabs_count_without_build', False, error=repr(error))
     finally:
         app.quit()
         server.shutdown(); server.server_close()
