@@ -481,15 +481,14 @@ final class PagerStrip: NSView {
 final class PageScrollView: NSScrollView {
     weak var pager: SpacePagerView?
     private var routing = false
-    /// In a Space Manager column: where the current trackpad gesture goes. Its first event that moves
-    /// decides (`mayBegin` and often `began` carry no movement).
+    /// In a Space Manager column: where this column's trackpad gesture goes, decided by its first event
+    /// that moves (`mayBegin` and often `began` carry none). Once it goes to the strip, the strip owns
+    /// the gesture and its momentum (`SpaceManagerScrollView.ownsGesture`), wherever they land.
     private enum Route { case undecided, strip, column }
     private var route = Route.undecided
-    /// Gesture events that came before the deciding one; replayed to the chosen view, so that view
+    /// This column's gesture events before the deciding one; replayed to the chosen view, so that view
     /// sees the whole gesture from its start (dropped when the gesture ends without moving).
     private var held: [NSEvent] = []
-    /// This column's last gesture went to the strip: its momentum follows it there.
-    private var momentumToStrip = false
     private var managerStrip: SpaceManagerScrollView? {
         var view = superview
         while let candidate = view { if let strip = candidate as? SpaceManagerScrollView { return strip }; view = candidate.superview }
@@ -515,21 +514,26 @@ final class PageScrollView: NSScrollView {
         if event.phase == [] {
             if event.momentumPhase == [] {
                 // A notched wheel turn: sideways when it turns sideways, or a vertical turn with Shift.
-                momentumToStrip = false
                 if dx > dy || (!event.hasPreciseScrollingDeltas && event.modifierFlags.contains(.shift)) {
                     strip.scrollSideways(with: event)
-                } else { super.scrollWheel(with: event) }
-            } else {
-                if momentumToStrip || dx > dy { strip.scrollSideways(with: event) } else { super.scrollWheel(with: event) }
-                if event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled) { momentumToStrip = false }
-            }
+                } else { strip.releaseGesture(); super.scrollWheel(with: event) }
+            } else if strip.ownsMomentum {
+                strip.scrollSideways(with: event)  // including a zero-delta momentum end
+            } else { super.scrollWheel(with: event) }
             return
         }
-        if event.phase.contains(.mayBegin) || event.phase.contains(.began) {
-            if event.phase.contains(.mayBegin) { held = [] }
-            route = .undecided; momentumToStrip = false
-        }
         let ends = event.phase.contains(.ended) || event.phase.contains(.cancelled)
+        if event.phase.contains(.mayBegin) || event.phase.contains(.began) {
+            // A new gesture starts here: nothing earlier is still owned by the strip or this column.
+            if event.phase.contains(.mayBegin) { held = [] } else { held.removeAll { !$0.phase.contains(.mayBegin) } }
+            route = .undecided; strip.releaseGesture()
+        }
+        if strip.ownsGesture {
+            // The strip's gesture, begun over another column (or this one): it keeps all of it.
+            strip.scrollSideways(with: event)
+            if ends { route = .undecided }
+            return
+        }
         if route == .undecided {
             guard dx + dy > 0 else {
                 if ends { held = [] } else { held.append(event) }
@@ -540,7 +544,7 @@ final class PageScrollView: NSScrollView {
             for early in pending { deliver(early, to: strip) }
         }
         deliver(event, to: strip)
-        if ends { momentumToStrip = route == .strip; route = .undecided }
+        if ends { route = .undecided }
     }
 
     private func deliver(_ event: NSEvent, to strip: SpaceManagerScrollView) {

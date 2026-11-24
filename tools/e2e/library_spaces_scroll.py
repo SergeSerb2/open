@@ -6,7 +6,9 @@ column headers, and a real Shift + wheel over a column body (macOS delivers it w
 must each bring the sixth column fully into view; one wheel notch moves the strip the same distance
 over a header, over the gap between columns and (with Shift) over a column. Vertical input over
 a column (a wheel turn, a trackpad gesture, also right after a sideways swipe) must not move the strip.
-The edge with more columns past it fades, and scrolling between the ends does not rewrite the fade
+One swipe that crosses columns (and its momentum) stays with the strip to its end, through
+whichever column is under the pointer. The edge with more columns past it fades, and scrolling between
+the ends does not rewrite the fade
 (the 56 pt page peek at the right is the Library's design: library_overlay `spaces_pushes_full_page_card`).
 """
 import time
@@ -99,5 +101,37 @@ def run(factory, results, h):
             ok=after.get('originX') is not None and m0 is not None and after['originX'] > m0
                and [after.get('fadeLeft'), after.get('fadeRight')] == [True, True] and 0 <= writes <= 1,
             origin=[m0, after.get('originX')], maskWrites=writes)
+
+        # One swipe that crosses columns: it starts over one column, the strip slides the next columns
+        # under the still pointer, a slightly vertical event comes mid-swipe, and the lift and the
+        # momentum land over another column. The strip keeps the whole gesture, then its momentum.
+        app.call('window-frame', frame=[60, 60, 1000, 800]); time.sleep(.8)
+        home(); before = state(); c = before.get('columns') or []
+        point = (c[1][0] + c[1][2] / 2, c[1][1] + 200) if len(c) > 1 else (0, 0)
+        def under(s):
+            return next((i for i, col in enumerate(s.get('columns') or []) if col[0] <= point[0] <= col[0] + col[2]), None)
+        scroll(point, dx=0, dy=0, phase='mayBegin'); scroll(point, dx=0, dy=0, phase='began')
+        # Columns are 264 pt apart: after 410 pt the third column has just come under the pointer, and
+        # the first event it gets is a slightly vertical one.
+        for dx in [-40] * 10 + [-10]: scroll(point, dx=dx, dy=0, phase='changed')
+        time.sleep(.1); crossed = state()
+        scroll(point, dx=-2, dy=-8, phase='changed')
+        for _ in range(4): scroll(point, dx=-40, dy=0, phase='changed')
+        time.sleep(.1); moving = state()
+        scroll(point, dx=0, dy=0, phase='ended'); time.sleep(.05); lifted = state()
+        scroll(point, dx=-20, dy=0, phase='none', momentum=1)
+        for _ in range(3): scroll(point, dx=-20, dy=0, phase='none', momentum=2)
+        scroll(point, dx=0, dy=0, phase='none', momentum=3); origin(); glided = state()
+        # Then a vertical wheel turn over the column now under the pointer scrolls that column only.
+        rest = glided.get('originX'); wheel(point, dy=-3, steps=4); after_wheel = origin()
+        results['library_spaces_cross_column_swipe'] = dict(
+            ok=under(before) == 1 and (under(crossed) or 0) >= 3 and (under(lifted) or 0) > (under(crossed) or 0)
+               and moving.get('originX', 0) - crossed.get('originX', 0) >= 120
+               and crossed.get('ownsGesture') is True and lifted.get('ownsGesture') is False
+               and glided.get('ownsGesture') is False and glided.get('ownsMomentum') is False and after_wheel == rest,
+            columnUnderPointer=[under(before), under(crossed), under(lifted)],
+            origin=[before.get('originX'), crossed.get('originX'), moving.get('originX'), lifted.get('originX')],
+            owns={k: [s.get('ownsGesture'), s.get('ownsMomentum')] for k, s in (('swiping', crossed), ('lifted', lifted), ('atRest', glided))},
+            wheelAfter=[rest, after_wheel])
     finally:
         app.quit()

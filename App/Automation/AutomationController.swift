@@ -98,6 +98,7 @@
       case 2: .changed
       case 4: .ended
       case 8: .cancelled
+      case 128: .mayBegin
       default: []
       }
     }
@@ -3221,7 +3222,8 @@
         "documentWidth": manager.scrollView.documentView?.frame.width ?? 0,
         "columns": manager.context.model.spaces.compactMap { space in manager.columnFrame(spaceID: space.id).map { rect($0, manager.scrollView.documentView!) } },
         "fadeLeft": fades.left, "fadeRight": fades.right, "masked": manager.scrollView.layer?.mask != nil,
-        "maskWrites": manager.edgeMaskWrites, "originX": manager.scrollView.contentView.bounds.minX]
+        "maskWrites": manager.edgeMaskWrites, "originX": manager.scrollView.contentView.bounds.minX,
+        "ownsGesture": manager.stripOwnership.gesture, "ownsMomentum": manager.stripOwnership.momentum]
     }
     /// Coordinates of actual visible row controls; input still uses OEApplication.sendEvent.
     private func spaceManagerRowControls(_ args: [String: Any]) throws -> Any {

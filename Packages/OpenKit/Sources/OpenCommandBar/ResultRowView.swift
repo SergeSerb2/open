@@ -7,7 +7,16 @@ import OpenSuggest
 /// rows, so a selection change redraws only the two rows whose text color changes.
 @MainActor
 final class ResultRowView: NSView {
-    var row: CommandBarRow? { didSet { if row != oldValue { needsDisplay = true; updateSplitPlate() } } }
+    var row: CommandBarRow? {
+        didSet {
+            guard row != oldValue else { return }
+            needsDisplay = true; updateSplitPlate()
+            #if DEBUG || OPEN_AUTOMATION
+            // A reused or emptied row keeps no text from its previous row.
+            drawnTitle = nil; drawnSubtitle = nil; titleGaveRoom = false
+            #endif
+        }
+    }
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true; updateSplitPlate() } } }
     var theme = CommandBarTheme.default { didSet { if theme != oldValue { needsDisplay = true; updateSplitPlate() } } }
     var extensionIcon: (@MainActor (String) -> NSImage?)?
@@ -68,7 +77,9 @@ final class ResultRowView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let row, let ctx = NSGraphicsContext.current?.cgContext else { return }
         drawCount += 1
+        #if DEBUG || OPEN_AUTOMATION
         drawnTitle = nil; drawnSubtitle = nil; titleGaveRoom = false
+        #endif
         let l = layoutSpec
         let w = bounds.width
         drawIcon(row.icon, in: ctx)
@@ -126,19 +137,30 @@ final class ResultRowView: NSView {
         if row.subtitleDisambiguates, let subtitle {
             // The subtitle is what tells this row apart: the title gives up room for it (down to 55% of
             // the row), but only when the subtitle then gets its minimum width; otherwise the title keeps it.
-            let shrunk = min(titleRoom, max(available * 0.55, available - ceil(subtitle.width) - l.rowGap))
-            if available - min(ceil(title.width), shrunk) - l.rowGap >= Self.minimumDisambiguatingWidth { titleRoom = shrunk; titleGaveRoom = shrunk < ceil(title.width) }
+            // Whole points: a line cut to `shrunk` is then never wider than `shrunk` after `ceil`, so this
+            // test and the subtitle's room below agree.
+            let shrunk = floor(min(titleRoom, max(available * 0.55, available - ceil(subtitle.width) - l.rowGap)))
+            if available - min(ceil(title.width), shrunk) - l.rowGap >= Self.minimumDisambiguatingWidth {
+                titleRoom = shrunk
+                #if DEBUG || OPEN_AUTOMATION
+                titleGaveRoom = shrunk < ceil(title.width)
+                #endif
+            }
         }
         title = title.truncated(to: titleRoom, font: font, color: titleColor.cgColor)
         title.draw(at: l.titleX, baseline: y, in: ctx)
-        drawnTitle = title; drawnSubtitle = nil
+        #if DEBUG || OPEN_AUTOMATION
+        drawnTitle = title
+        #endif
         if let subtitle {
             let room = available - ceil(title.width) - l.rowGap
             if room >= (row.subtitleDisambiguates ? Self.minimumDisambiguatingWidth : Self.minimumSubtitleWidth) {
                 // A disambiguating subtitle ("Space · host/path") differs at its end: cut it in the middle.
                 let sub = subtitle.truncated(to: room, mode: row.subtitleDisambiguates ? .middle : .end, font: subFont, color: subColor.cgColor)
                 sub.draw(at: l.titleX + ceil(title.width) + l.rowGap, baseline: y, in: ctx)
+                #if DEBUG || OPEN_AUTOMATION
                 drawnSubtitle = sub
+                #endif
             }
         }
     }
@@ -148,6 +170,7 @@ final class ResultRowView: NSView {
     /// A subtitle that tells rows apart needs room for part of the Space and the end that differs
     /// ("— Beta…licate/1"); narrower, it would tell nothing, so the title keeps the room.
     private static let minimumDisambiguatingWidth: CGFloat = 72
+    #if DEBUG || OPEN_AUTOMATION
     /// The title and subtitle lines of the last draw (nil subtitle: none drawn), for automation.
     private var drawnTitle: TextLine?
     private var drawnSubtitle: TextLine?
@@ -155,6 +178,7 @@ final class ResultRowView: NSView {
     private(set) var titleGaveRoom = false
     /// What the last draw showed: the title and subtitle text with any "…".
     var drawnText: (title: String, subtitle: String) { (drawnTitle?.visibleText ?? "", drawnSubtitle?.visibleText ?? "") }
+    #endif
 
     private func drawIcon(_ icon: CommandBarIcon, in ctx: CGContext) {
         let frame = iconFrame

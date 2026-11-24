@@ -7,13 +7,18 @@ import OpenDesign
 struct TextLine {
     let line: CTLine
     let width: CGFloat
-    /// The string the line was set from (a truncated line keeps its source's).
+    #if DEBUG || OPEN_AUTOMATION
+    /// The string the line was set from (a truncated line keeps its source's). Automation builds only:
+    /// a shipping build keeps no copy of row text (Incognito titles) past the draw.
     private let source: String
     /// Marks the "…" run of a truncated line, so `visibleText` can tell it from the source's own text.
     private static let tokenKey = NSAttributedString.Key("OpenTruncationToken")
+    #endif
 
     init(_ string: String, font: NSFont, color: CGColor, boldRanges: [Range<Int>] = []) {
+        #if DEBUG || OPEN_AUTOMATION
         source = string
+        #endif
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         if boldRanges.isEmpty {
             line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
@@ -27,9 +32,11 @@ struct TextLine {
         width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
-    private init(line: CTLine, source: String) {
+    private init(line: CTLine, from original: TextLine) {
         self.line = line
-        self.source = source
+        #if DEBUG || OPEN_AUTOMATION
+        source = original.source
+        #endif
         width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
@@ -37,11 +44,16 @@ struct TextLine {
     func truncated(to maxWidth: CGFloat, mode: CTLineTruncationType = .end, font: NSFont, color: CGColor) -> TextLine {
         guard width > maxWidth else { return self }
         guard maxWidth > 0 else { return TextLine("", font: font, color: color) }
-        let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [.font: font, .foregroundColor: color, Self.tokenKey: true]))
+        var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        #if DEBUG || OPEN_AUTOMATION
+        attributes[Self.tokenKey] = true
+        #endif
+        let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: attributes))
         guard let cut = CTLineCreateTruncatedLine(line, Double(maxWidth), mode, token) else { return self }
-        return TextLine(line: cut, source: source)
+        return TextLine(line: cut, from: self)
     }
 
+    #if DEBUG || OPEN_AUTOMATION
     /// The text this line shows, with "…" where it was cut (automation reads what a row really draws).
     var visibleText: String {
         let text = source as NSString
@@ -54,6 +66,7 @@ struct TextLine {
         }
         return out
     }
+    #endif
 
     /// Draws with the baseline at `y` in a flipped context.
     func draw(at x: CGFloat, baseline y: CGFloat, in ctx: CGContext) {

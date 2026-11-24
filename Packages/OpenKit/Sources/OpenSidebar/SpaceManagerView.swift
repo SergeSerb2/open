@@ -132,15 +132,24 @@ public final class SpaceManagerView: NSView {
     }
     /// The fade last written, so scrolling between the ends writes nothing.
     private var appliedFade: (left: Bool, right: Bool, size: CGSize)?
+    #if DEBUG || OPEN_AUTOMATION
     /// Mask writes since creation (automation: scrolling must not rewrite it every frame).
     public private(set) var edgeMaskWrites = 0
+    /// Whether the strip owns a trackpad gesture, and its momentum (automation).
+    public var stripOwnership: (gesture: Bool, momentum: Bool) {
+        let strip = scrollView as? SpaceManagerScrollView
+        return (strip?.ownsGesture ?? false, strip?.ownsMomentum ?? false)
+    }
+    #endif
     private func updateEdgeFade() {
         var (left, right) = edgeFades
         let size = scrollView.bounds.size
         if size.width <= Self.fadeWidth * 2 { (left, right) = (false, false) }
         if let applied = appliedFade, applied.left == left, applied.right == right, applied.size == size { return }
         appliedFade = (left, right, size)
+        #if DEBUG || OPEN_AUTOMATION
         edgeMaskWrites += 1
+        #endif
         CATransaction.begin(); CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
         guard left || right else { scrollView.layer?.mask = nil; return }
@@ -448,23 +457,53 @@ private final class SpaceManagerColumn: NSView {
 final class SpaceManagerScrollView: NSScrollView {
     private static let lineStep: CGFloat = 48
 
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        // AppKit runs a gesture's momentum on the scroll view it latched (this strip) without passing
+        // it through `scrollWheel(with:)`; the end of live scrolling is the end of that momentum.
+        NotificationCenter.default.addObserver(self, selector: #selector(liveScrollEnded), name: NSScrollView.didEndLiveScrollNotification, object: self)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    @objc private func liveScrollEnded() { if !ownsGesture { ownsMomentum = false } }
+    /// A trackpad gesture the strip is following, and then its momentum. The strip slides columns under
+    /// a still pointer, so the rest of one gesture arrives over other columns: while these are set, every
+    /// column passes its events here, whatever their axis (PageScrollView).
+    private(set) var ownsGesture = false
+    private(set) var ownsMomentum = false
+
     /// Sideways input a column passed on: a trackpad gesture, or a wheel turn (sideways, or Shift).
     func scrollSideways(with event: NSEvent) {
         guard !event.hasPreciseScrollingDeltas, event.phase == [], event.momentumPhase == [] else {
-            super.scrollWheel(with: event); return
+            follow(event); super.scrollWheel(with: event); return
         }
-        step(event)
+        releaseGesture(); step(event)
     }
 
     override func scrollWheel(with event: NSEvent) {
-        // Over a column's list, input reaches the strip only through `scrollSideways(with:)`. What
-        // arrives here from there is vertical input the list could not use (it fits, or is at its end),
-        // passed up the responder chain: it must not move the strip.
-        if isOverColumnList(event) { return }
+        // Over a column's list, the column decides. What arrives here from there is vertical input the
+        // list could not use (it fits, or is at its end), passed up the responder chain: it must not
+        // move the strip. A gesture or momentum the strip owns is the exception: AppKit sends the rest
+        // of a scroll it latched to the strip straight here, wherever the pointer is.
+        if isOverColumnList(event), !(ownsGesture || ownsMomentum) { return }
         guard !event.hasPreciseScrollingDeltas, event.phase == [], event.momentumPhase == [] else {
-            super.scrollWheel(with: event); return
+            follow(event); super.scrollWheel(with: event); return
         }
-        step(event)
+        releaseGesture(); step(event)
+    }
+
+    /// A new gesture somewhere, or a wheel turn: whatever the strip followed is over.
+    func releaseGesture() { ownsGesture = false; ownsMomentum = false }
+
+    private func follow(_ event: NSEvent) {
+        if event.phase != [] {
+            let ends = event.phase.contains(.ended) || event.phase.contains(.cancelled)
+            ownsGesture = !ends
+            // Momentum follows a lift (`ended`), never a cancel; it is over when live scrolling ends,
+            // or at the next gesture or wheel turn.
+            ownsMomentum = ends && event.phase.contains(.ended)
+        } else if event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled) {
+            ownsMomentum = false
+        }
     }
 
     /// One notched turn: its larger axis, vertical (a plain wheel) or sideways (Shift, a tilt wheel).

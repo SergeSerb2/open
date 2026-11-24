@@ -161,8 +161,10 @@ public final class CommandBarView: NSView {
     public var debugInput: CommandBarInput { panel.input.input }
     /// Row draw passes since creation.
     public var debugRowDrawCount: Int { panel.results.rowDrawCount }
+    #if DEBUG || OPEN_AUTOMATION
     /// Each shown row's id and the title and subtitle text it drew (with any "…").
     public var debugDrawnTexts: [(id: String, title: String, subtitle: String, titleGaveRoom: Bool)] { panel.results.drawnTexts }
+    #endif
     /// True when the input is being edited by the bar's own field editor.
     public var debugUsesOwnFieldEditor: Bool { window?.firstResponder === panel.input.editor }
     /// True while the (i) privacy footer shows.
