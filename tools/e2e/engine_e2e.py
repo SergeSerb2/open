@@ -15429,14 +15429,20 @@ def main():
             results["split"] = CheckedResults(tracker)
             # OPEN_SPLIT_WIN6_ONLY=1 runs only the bug sweep round 6 window rows (tools/e2e/windows_r6.py).
             # OPEN_SPLIT_WIN8_ONLY=1 runs only the bug sweep round 8 window rows (tools/e2e/windows_r8.py).
+            # OPEN_SPLIT_UXG_ONLY=1 runs only the UX round 1 pane bar rows (tools/e2e/pagechrome_ux1.py).
             win8 = os.environ.get("OPEN_SPLIT_WIN8_ONLY") == "1"
-            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
+            uxg = os.environ.get("OPEN_SPLIT_UXG_ONLY") == "1"
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8 and not uxg:
                 module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
-            if not win8:
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/pagechrome_ux1.py"))["split_rows"](
+                    factory, results["split"], tmp, sys.modules[__name__])
+            if not win8 and not uxg:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r6.py"))["run"](
                     factory, results["split"], tmp, sys.modules[__name__])
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r8.py"))["run"](
-                factory, results["split"], tmp, sys.modules[__name__])
+            if not uxg:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r8.py"))["run"](
+                    factory, results["split"], tmp, sys.modules[__name__])
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
@@ -15535,7 +15541,13 @@ def main():
             spec = importlib.util.spec_from_file_location("boosteditor_suite", os.path.join(ROOT, "tools/e2e/boosteditor.py"))
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results[opts.only] = CheckedResults(tracker)
-            module.run(factory, results[opts.only], tmp, globals())
+            # OPEN_E2E_BOOST_UXG_ONLY=1 runs only the UX round 1 Zap placement rows (tools/e2e/pagechrome_ux1.py).
+            if os.environ.get("OPEN_E2E_BOOST_UXG_ONLY") != "1":
+                module.run(factory, results[opts.only], tmp, globals())
+            if not any(os.environ.get(k) == "1" for k in ("OPEN_E2E_BOOST_ZAP_REVIEW_ONLY", "OPEN_E2E_BOOST_RETIRE_ONLY",
+                                                          "OPEN_E2E_BOOST_MATCH_ONLY", "OPEN_E2E_BOOST_SWEEP7_ONLY", "OPEN_E2E_BOOST_ZAP_ONLY")):
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/pagechrome_ux1.py"))["zap_rows"](
+                    factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
             (page_tools_clear_checks if opts.page_site_data_only else page_checks)(factory, results["page"], tmp, opts.style)
