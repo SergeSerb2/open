@@ -210,6 +210,14 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
 final class FavoritesCollectionView: NSCollectionView {
     weak var owner: FavoritesView?
     override var isOpaque: Bool { false }
+    // VoiceOver: the list has a name, and the empty-state card (a subview, not an item) is one of
+    // its children, so its Close button is reachable (UX round 1 wave 2 K11).
+    override func accessibilityLabel() -> String? { "Favorites" }
+    override func accessibilityChildren() -> [Any]? {
+        let items = super.accessibilityChildren() ?? []
+        guard let card = owner?.emptyCard, card.superview === self, !card.isHidden else { return items }
+        return items + [card]
+    }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
         owner?.context.haptics.endDrag()

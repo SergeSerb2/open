@@ -31,6 +31,11 @@ public final class FavoritesEmptyStateView: NSView {
     private let titleLabel = NSTextField(wrappingLabelWithString: FavoritesEmptyStateView.title)
     private let bodyLabel = NSTextField(wrappingLabelWithString: FavoritesEmptyStateView.body)
     public let dismissButton = FavoritesEmptyDismissButton()
+    public override func isAccessibilityElement() -> Bool { true }
+    public override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    public override func accessibilityLabel() -> String? { Self.title }
+    public override func accessibilityHelp() -> String? { Self.body }
+    public override func accessibilityChildren() -> [Any]? { [dismissButton] }
     private var roles: SidebarRoles?
     private var content: ContentAppearance = .dark
     var onDismiss: (@MainActor () -> Void)? { didSet { dismissButton.onPress = onDismiss } }
@@ -156,6 +161,8 @@ public final class FavoritesEmptyDismissButton: NSView {
     public override var isFlipped: Bool { true }
     public override func isAccessibilityElement() -> Bool { true }
     public override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    public override func accessibilityLabel() -> String? { "Close" }
+    public override func accessibilityHelp() -> String? { "Hide this tip" }
     public override func accessibilityPerformPress() -> Bool { onPress?(); return onPress != nil }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     public override func draw(_ dirtyRect: NSRect) {
