@@ -162,7 +162,8 @@ extension AppImportRunner {
       let sinks: [String: any OpenImport.SecretsImportSink] = [profile.id: try secretsSink(for: target)]
       try Task.checkCancellation()
       #if OPEN_AUTOMATION
-      if let synthetic = try await syntheticSecretsOutcome(sinks: sinks) { return synthetic }
+      // Same one-profile restriction as the real Chromium path below.
+      if let synthetic = try await syntheticSecretsOutcome(sinks: sinks, onlyProfiles: [profile.id]) { return synthetic }
       #endif
       secretsConsentAdapterCalls += 1
       let consent = SecretsImportConsent.grantedByUser(reason: "import-wizard")

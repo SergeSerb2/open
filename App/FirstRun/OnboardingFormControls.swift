@@ -31,10 +31,12 @@ import OpenSpaceEditor
   override func textDidEndEditing(_ notification: Notification) { super.textDidEndEditing(notification); needsDisplay = true }
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
   #if OPEN_AUTOMATION
-  /// Insets of the live text (field editor while focused, else the drawn text) inside the field: left, top, bottom.
+  /// Insets of the field editor inside the field while it edits: left, top, bottom, right. Empty when not
+  /// editing (the drawn-text rect would hide a broken editor frame).
   var textInsets: [CGFloat] {
-    let rect = (currentEditor() as? NSView).map { $0.convert($0.bounds, to: self) } ?? (cell?.drawingRect(forBounds: bounds) ?? bounds)
-    return [rect.minX, rect.minY, bounds.height-rect.maxY]
+    guard let editor = currentEditor() as? NSView else { return [] }
+    let rect = editor.convert(editor.bounds, to: self)
+    return [rect.minX, rect.minY, bounds.height-rect.maxY, bounds.width-rect.maxX]
   }
   #endif
 }

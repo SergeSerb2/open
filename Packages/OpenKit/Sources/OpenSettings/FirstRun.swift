@@ -347,8 +347,9 @@ public struct FirstRunView:View {
     private var reportRows:[ReportRow] {
         let categories=model.wizard.displayedReportCategories.map {name->ReportRow in
             let value=model.reportValue(name)
-            // A long failure sentence is shown once below the table; the row stays one short word.
-            if let failure=model.outcome?.failures[name] {return ReportRow(title:ImportCountCopy.displayCategory(name),value:failure.count > 24 ? "Not imported":failure,ink:.failure)}
+            // A long failure sentence would truncate in a one-line row: the row says "Not imported" and the
+            // sentence is shown once below the table (reportFailureNotes, or the passwords line).
+            if let failure=model.outcome?.failures[name] {return ReportRow(title:ImportCountCopy.displayCategory(name),value:name == "Passwords and cookies" || failure.count > 24 ? "Not imported":failure,ink:.failure)}
             return ReportRow(title:ImportCountCopy.displayCategory(name),value:value,ink:value.contains("Not ") ? .dim:.normal)
         }
         let secrets=model.wizard.secretsReportRows.map {ReportRow(title:$0.title,value:model.wizard.secretsReportValue($0),ink:$0.noneFound ? .dim:.normal)}
@@ -356,6 +357,13 @@ public struct FirstRunView:View {
     }
     private func ink(_ value:ReportRow.Ink)->Color {
         switch value {case .failure:Color.red;case .dim:embeddedImport ? Color(nsColor:.tertiaryLabelColor):secondary;case .normal:Color.primary}
+    }
+    /// Long failure sentences shortened in their rows, other than the passwords one (it has its own line).
+    private var reportFailureNotes:[String] {
+        model.wizard.displayedReportCategories.compactMap {name in
+            guard name != "Passwords and cookies",let failure=model.outcome?.failures[name],failure.count > 24 else {return nil}
+            return ImportCountCopy.displayCategory(name)+": "+failure
+        }
     }
     /// The table already lists every count, so the headline only says how the import ended.
     private var reportHeadline:String {model.outcome?.failures.isEmpty == false || model.errorText != nil ? "Import finished.":"Import complete."}
@@ -388,6 +396,7 @@ public struct FirstRunView:View {
             }}
             }
             let noteFont:Font=embeddedImport ? .system(size:12):section
+            ForEach(reportFailureNotes, id: \.self) { Text($0).font(noteFont).foregroundStyle(Color.red).fixedSize(horizontal:false,vertical:true) }
             ForEach(model.wizard.secretsReportNotes, id: \.self) { Text($0).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }
             if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }
             if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).font(noteFont).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true) }

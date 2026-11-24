@@ -49,8 +49,10 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   private var nextContent: NSViewController?
   private var lifecycle: [Task<Void, Never>] = []
   private let residentBaseline: UInt64
+  #if OPEN_AUTOMATION
   /// The screen area the window was sized and placed in (state only).
   private let placementArea: NSRect
+  #endif
   private var residentAtThree: Int64?
   private var residentAfterHandoff: Int64?
   #if OPEN_AUTOMATION
@@ -80,7 +82,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
       }
     }
     #endif
+    #if OPEN_AUTOMATION
     placementArea = area
+    #endif
     var size = OnboardingTokens.windowSize
     size.width = min(size.width, max(1, area.width-48))
     size.height = min(size.height, max(1, area.height-48))
@@ -345,9 +349,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     state["sound"] = sound.state; state["replay"] = replay
     state["window"] = window?.windowNumber ?? 0
     state["frameSize"] = [window?.frame.width ?? 0, window?.frame.height ?? 0]
+    #if OPEN_AUTOMATION
     let frame = window?.frame ?? .zero
     state["windowFrame"] = [frame.minX, frame.minY, frame.width, frame.height]
     state["placementArea"] = [placementArea.minX, placementArea.minY, placementArea.width, placementArea.height]
+    #endif
     state["dim"] = ["exists": dim.isVisible, "alpha": dimView.layer?.presentation()?.opacity ?? dimView.layer?.opacity ?? 0, "ignoresMouseEvents": dim.ignoresMouseEvents, "child": dim.parent === window]
     #if OPEN_AUTOMATION
     state["artwork"] = steps?.preview.artworkState as Any? ?? NSNull()
