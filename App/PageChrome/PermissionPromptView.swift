@@ -32,6 +32,11 @@ final class PermissionPromptView: PageChromePopoverView {
     question.font = .systemFont(ofSize: 13, weight: .semibold); question.maximumNumberOfLines = 3
     help.font = .systemFont(ofSize: 11); help.textColor = .secondaryLabelColor; help.maximumNumberOfLines = 2
     for child in [symbol, question, help, notNow, allow] { addSubview(child) }
+    // Allow looks like the default button from the start (UXC-W2-S7). Return and Escape still
+    // answer only once the prompt has the keyboard (bug sweep r6 V-05): see `hasKeyboard`.
+    allow.bezelColor = .controlAccentColor
+    allow.attributedTitle = NSAttributedString(string: allow.title, attributes: [
+      .foregroundColor: NSColor.white, .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)])
     onReturn = { [weak self] in if self?.hasKeyboard == true { self?.allow.performClick(nil) } }
     onEscape = { [weak self] in if self?.hasKeyboard == true { self?.notNow.performClick(nil) } }
   }

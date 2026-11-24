@@ -101,7 +101,8 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         app.call('menu-perform', id='check-for-updates')
         s = app.call('settings-state')
         results['settings_general_action_error'] = {'ok': s['pane'] == 'general'
-            and s['generalError'] == 'Updates are not set up in this build.', 'error': s['generalError']}
+            and s['generalUpdateMessage'] == 'Updates are not set up in this build.' and s['generalError'] == '',
+            'error': s['generalError'], 'updateMessage': s['generalUpdateMessage']}
         library_before = app.call('library-section')
         before_boosts = app.call('settings-state')
         app.call('menu-perform', id='view-boosts')

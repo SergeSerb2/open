@@ -8,6 +8,8 @@ import OpenOnboarding
 @MainActor @Observable public final class GeneralViewModel {
     unowned let root: SettingsViewModel
     public var errorText = ""
+    /// Update status or error, shown inside the Updates card (UXC-W2-S9).
+    public var updateMessage = ""
     public var isDefault: Bool
     public init(root: SettingsViewModel) { self.root = root; isDefault = root.actions.isDefaultBrowser() }
     public var updates: Bool { get { root.bool("open.general.automaticallyUpdate") } set { root.set(newValue, for: "open.general.automaticallyUpdate") } }
@@ -31,8 +33,16 @@ public struct GeneralPane: View {
                 .accessibilityIdentifier("warnBeforeQuitPreference")
         }
         OpenSettingsGroup("Updates") {
-            OpenSettingsRow(root: model.root, id: "general/automatic-updates", title: "Update Open automatically", help: "Keep Open up to date.", changed: !model.updates, last: true, reset: { model.updates = true }, helpAction: { model.openUpdatesHelp() }) {
+            OpenSettingsRow(root: model.root, id: "general/automatic-updates", title: "Update Open automatically", help: "Keep Open up to date.", changed: !model.updates, last: model.updateMessage.isEmpty, reset: { model.updates = true }, helpAction: { model.openUpdatesHelp() }) {
                 Toggle("Update Open automatically", isOn: $model.updates).toggleStyle(OpenSettingsSwitchStyle(accent: Color(nsColor: SettingsStyle.accessibleAccent(model.root.settingsAccentSource, dark: scheme == .dark)), label: "Update Open automatically"))
+            }
+            if !model.updateMessage.isEmpty {
+                HStack(alignment: .top, spacing: 7) {
+                    Image(systemName: "info.circle").accessibilityHidden(true)
+                    Text(model.updateMessage).fixedSize(horizontal: false, vertical: true)
+                }.font(.system(size: 11.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 12)
+                    .accessibilityElement(children: .combine).accessibilityIdentifier("general/update-status")
             }
         }
         OpenSettingsGroup("Move in") {

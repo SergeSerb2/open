@@ -848,6 +848,15 @@ def run(factory, results, tmp, h):
             return check(len(rows) == 3 and all(r['inside'] and r['toolbarSet'] and r['anchorExpected'] for r in rows), rows=rows)
         gate('permission_prompt_inside_window', inside_window)
 
+        # UXC-W2-S7: the prompt is opaque (not the themed sidebar through NSPopover's material) and
+        # Allow looks like the default button; Return still waits for a click into the prompt (V-05).
+        def prompt_style():
+            permission_page('style'); perm(); state = visible(ps)
+            app.call('permission-prompt', answer='notnow')
+            return check(state.get('allowAccent') is True and state.get('opaqueBackdrop') is True
+                         and not state.get('promptHasKeyboard'), state={k: state.get(k) for k in ('allowAccent', 'opaqueBackdrop', 'promptHasKeyboard')})
+        gate('permission_prompt_default_and_opaque', prompt_style)
+
         def midi():
             page('http://midi.localhost:%d/midi' % port); perm('midi'); state=visible(ps)
             app.call('permission-prompt',answer='notnow')
