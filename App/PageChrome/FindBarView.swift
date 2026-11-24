@@ -50,6 +50,7 @@ class FindBarView: NSView, NSTextFieldDelegate {
     field.setAccessibilityLabel("Find in page")
     search.image = FindBarResources.search
     search.imageScaling = .scaleNone
+    search.setAccessibilityElement(false); search.cell?.setAccessibilityElement(false)  // decoration beside the labelled field (K9)
     for view in [search, field, close] { view.wantsLayer = true; addSubview(view) }
     close.onPress = { [weak self] in self?.onClose?() }
     update(active: 0, total: 0, final: false)

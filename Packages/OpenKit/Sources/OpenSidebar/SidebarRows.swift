@@ -210,12 +210,21 @@ final class SidebarRowView: NSTableRowView {
     var showsDeveloperOutline: Bool { developerOutline.first.map { !$0.isHidden } ?? false }
 
     override func isAccessibilityElement() -> Bool { itemID(of: representedItem) != nil || representedItem is NewTabItem || representedItem is LiveFolderMoreItem }
+    // The attribute-based override below makes the AX server ask this old-style question too; an
+    // NSTableRowView is ignored there by default, which hid every sidebar row from VoiceOver
+    // (AXOutline children 0, UX round 1 wave 2 K6). Answer it from isAccessibilityElement.
+    @available(macOS, deprecated: 10.10)
+    override func accessibilityIsIgnored() -> Bool { MainActor.assumeIsolated { !isAccessibilityElement() } }
+    // AppKit makes an internal NSTableRow proxy this row's accessibility parent, while the outline
+    // lists the row itself as its child; the system API drops a child whose parent differs, so
+    // VoiceOver saw no rows at all (AXOutline children 0, UX round 1 wave 2 K6).
+    override func accessibilityParent() -> Any? { superview as? NSOutlineView ?? super.accessibilityParent() }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func accessibilityLabel() -> String? {
         switch representedItem {
-        case let tab as Tab: tab.displayTitle
+        case let tab as Tab: tab.voiceOverTitle
         case let folder as Folder: folder.title
-        case let split as Split: "Split View: " + (split.isCustomized ? split.displayTitle : split.panes.map(\.displayTitle).joined(separator: ", "))
+        case let split as Split: "Split View: " + (split.isCustomized ? split.displayTitle : split.panes.map(\.voiceOverTitle).joined(separator: ", "))
         case is NewTabItem: "New Tab"
         case is LiveFolderMoreItem: "Show More"
         default: nil
@@ -1480,5 +1489,15 @@ enum SidebarDeveloperMode {
     }
     static func hostAndPort(_ url: URL) -> String {
         (url.host() ?? "") + (url.port.map { ":\($0)" } ?? "")
+    }
+}
+
+extension Tab {
+    /// What VoiceOver says for a tab: its title, or, before the page has one, its host, or
+    /// "Untitled Tab"; never an empty string (UX round 1 wave 2 K7).
+    var voiceOverTitle: String {
+        if !displayTitle.isEmpty { return displayTitle }
+        if let host = url.host(), !host.isEmpty { return host }
+        return "Untitled Tab"
     }
 }

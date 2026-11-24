@@ -31,8 +31,9 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate, NSDraggingSour
     var latestName: String? { previous?.files.first?.name }
     private let track = CAShapeLayer()
     private let ring = CAShapeLayer()
-    private let check = NSImageView()
-    private let arrow = NSImageView()
+    // Decorative download-state glyphs: the button's own label and value speak for them (K8).
+    private let check = HiddenFromAccessibilityImageView()
+    private let arrow = HiddenFromAccessibilityImageView()
     private var previous: DownloadBadgeState?
     private(set) var completionCount = 0
     private(set) var completing = false
@@ -231,4 +232,15 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate, NSDraggingSour
          "completions": completionCount, "animations": [track, ring, check.layer, glyphView.layer].compactMap { $0 }.reduce(0) { $0 + ($1.animationKeys()?.count ?? 0) },
          "trackOpacity": track.opacity, "ringOpacity": ring.opacity, "checkOpacity": check.layer?.opacity ?? 0, "homeOpacity": glyphView.layer?.opacity ?? 1]
     }
+}
+
+/// An image view VoiceOver skips (decoration inside a labelled control).
+@MainActor final class HiddenFromAccessibilityImageView: NSImageView {
+    // AppKit exposes the image cell as the AXImage, so the cell is hidden as well as the view.
+    override init(frame: NSRect) { super.init(frame: frame); cell?.setAccessibilityElement(false) }
+    required init?(coder: NSCoder) { super.init(coder: coder); cell?.setAccessibilityElement(false) }
+    override func accessibilityChildren() -> [Any]? { [] }
+    override func isAccessibilityElement() -> Bool { false }
+    @available(macOS, deprecated: 10.10)
+    override func accessibilityIsIgnored() -> Bool { true }
 }
