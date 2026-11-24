@@ -80,12 +80,13 @@ final class SpacePagerView: NSView {
         placeStrip()
     }
 
-    /// Each page's strip position lives in its layer's x translation. When AppKit rebuilds the layer
-    /// tree after a subview change (`-[NSView _updateLayerGeometryFromView]` inside
+    /// Each page's strip position, and the strip's offset, live in view layers' x translations. When
+    /// AppKit rebuilds the layer tree (`-[NSView _updateLayerGeometryFromView]` inside
     /// `-[NSWindow displayIfNeeded]`), it sets a view layer's transform from the view's own geometry,
     /// which is identity. A page built for a Space switch then sat at x 0, off screen, and the new
-    /// Space showed a blank list (UX round 1, B7). The pager keeps the translation it wants per layer
-    /// and puts it back in the same pass, before the frame renders.
+    /// Space showed a blank list (UX round 1, B7); an offscreen render resets the strip as well. The
+    /// pager keeps the translation it wants per layer (pages and strip) and puts it back in the same
+    /// pass, before the frame renders.
     private var translations: [ObjectIdentifier: CGFloat] = [:]
     private var translationWatches: [ObjectIdentifier: NSKeyValueObservation] = [:]
     private(set) var translationRestores = 0
@@ -143,7 +144,7 @@ final class SpacePagerView: NSView {
     private func placeStrip() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if strip.frame != bounds { strip.frame = bounds }
-        strip.layer?.setValue(-offset, forKeyPath: "transform.translation.x")
+        setTranslation(-offset, of: strip)
         CATransaction.commit()
     }
 
