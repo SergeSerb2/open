@@ -1683,6 +1683,14 @@
           "paneBackgrounds": controller.container.slots.map { ["tab": $0.tabID.description,
             "color": colorComponents($0.paneChrome?.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) })] as [String: Any] },
           "shownPages": w.contents.filter { $0.value.view.window === win && !$0.value.view.isHiddenOrHasHiddenAncestor }.keys.map(\.description)] as [String: Any]
+      case "increase-contrast":
+        // Automation stand-in for macOS Increase Contrast in every browser window, through the same
+        // path as the system notification (context flag + refresh). The system setting is untouched.
+        guard let on = a["on"] as? Bool else { throw Failure(message: "missing on") }
+        for controller in app.windowControllers where controller.context.increaseContrast != on {
+          controller.context.increaseContrast = on; controller.refresh()
+        }
+        return on
       case "appearance":
         // Open's own appearance only (light, dark, or nil for the system's); the
         // system setting is untouched.
