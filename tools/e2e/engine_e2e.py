@@ -5244,6 +5244,7 @@ def sidebar_checks(factory, results, tmp):
                 while time.monotonic() < end:
                     page = ux_page(); ux_samples.append({k: page.get(k) for k in ("phase", "coverFading", "containerHidden", "emptyPanelHidden")})
                     if page["phase"] == "idle" and not page["coverFading"] and len(ux_samples) > 2: break
+                    time.sleep(.01)  # keep the main thread free for the fade's completion
                 time.sleep(.3)
                 settled = ux_page()
                 back_before = settled["coverFades"]
