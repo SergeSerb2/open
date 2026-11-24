@@ -536,20 +536,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       "nameTextInsets": (nameField as? OnboardingNameField)?.textInsets ?? [],
       "nameEditing": nameField?.currentEditor() != nil,
       "artwork": preview.layoutFrames.mapValues { frame(preview, $0) },
-      "reportText": host.map { Self.accessibleText($0.view) } ?? [],
       "nameFieldFrame": nameField.map { frame($0) } ?? []]
-  }
-  /// Text the hosted SwiftUI import view exposes to accessibility: what it draws, not the model.
-  private static func accessibleText(_ root: Any) -> [String] {
-    var out: [String] = []
-    func walk(_ element: Any, _ depth: Int) {
-      guard depth < 40, out.count < 400, let element = element as? NSAccessibilityProtocol else { return }
-      for text in [element.accessibilityLabel(), element.accessibilityValue() as? String] {
-        if let text, !text.isEmpty { out.append(text) }
-      }
-      for child in element.accessibilityChildren() ?? [] { walk(child, depth+1) }
-    }
-    walk(root, 0); return out
   }
   #endif
   private var baseState: [String: Any] { ["screen": step.rawValue, "favoritePreview": preview.favoriteState, "favoriteCountLabel": favoriteCounter?.stringValue ?? "", "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }

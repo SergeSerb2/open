@@ -834,9 +834,10 @@ def run_layout_rows(factory, results, tmp, h):
         until(lambda: app.call('first-run')['step'] == 'report', timeout=60); reported = record('report')
         report = app.call('first-run')
         rows = dict(map(tuple, report.get('secretsReportRows') or []))
-        # What the hosted SwiftUI report exposes to accessibility, i.e. what it drew: the row value is
-        # there, the old plain "Passwords: 0 imported, 0 already in Open" line is not.
-        drawn = (reported.get('layout') or {}).get('reportText') or []
+        # What the onboarding window's views expose to accessibility (SwiftUI builds that tree only for an
+        # accessibility client, so `windows accessibility=True` turns AXEnhancedUserInterface on): the row
+        # value is drawn, the old plain "Passwords: 0 imported, 0 already in Open" line is not.
+        drawn = next((w.get('text') or [] for w in app.call('windows', accessibility=True) if w.get('class') == 'OnboardingWindow'), [])
         results['steps_secrets_report_rows'] = dict(ok=rows.get('Passwords') == 'None found in Arc'
             and all(rows.get(k, ' ')[0].isdigit() for k in ('Cookies', 'Addresses', 'Cards'))
             and 'None found in Arc' in drawn and 'Passwords' in drawn and not any('already in Open' in t and ':' in t for t in drawn),
