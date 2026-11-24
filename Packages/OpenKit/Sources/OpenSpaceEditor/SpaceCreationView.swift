@@ -45,10 +45,12 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     public var systemAppearance: ContentAppearance = .dark
     private var creatingProfile = false
     private var entered = false
+    #if DEBUG || OPEN_AUTOMATION
     /// Whether each label's text fits its frame (no clipped line, no wrap): automation and checks.
     /// Measured without the label's line limit, so a cut last line counts as not fitting.
     public var textFit: [String: Bool] {
-        let subtitleNeeded = ceil(subtitle.attributedStringValue.boundingRect(with: CGSize(width: subtitle.frame.width, height: .greatestFiniteMagnitude),
+        let subtitleNeeded = ceil(subtitle.attributedStringValue.boundingRect(with: CGSize(width: subtitle.cell?.titleRect(forBounds: subtitle.bounds).width ?? subtitle.frame.width,
+                                height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
         let theme = themeTitleWidths
         return ["subtitle": subtitleNeeded <= subtitle.frame.height + 0.5, "themeTitle": theme.needed <= theme.available + 0.5]
@@ -57,6 +59,7 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         (ceil((themeButton.title as NSString).size(withAttributes: [.font: themeButton.font as Any]).width),
          themeButton.cell?.titleRect(forBounds: themeButton.bounds).width ?? 0)
     }
+    #endif
     public var cardFrames: [String: CGRect] {
         ["header": header.frame, "name": nameCard.frame, "theme": themeCard.frame, "profile": profileCard.frame,
          "create": convert(createButton.bounds, from: createButton)]
@@ -244,9 +247,10 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     }
     public override func cancelOperation(_ sender: Any?) { onCancel?() }
     public func controlTextDidChange(_ notification: Notification) { refreshSubmitState() }
-    /// Arc keeps Create Space disabled while the name is empty (§20.8, `spaceCreationCreateSpaceButton`).
+    /// Arc keeps Create Space disabled while the name is empty (§20.8, `spaceCreationCreateSpaceButton`); spaces alone count as empty.
     public func refreshSubmitState() {
-        let enabled = !nameField.stringValue.isEmpty
+        // The model trims the title, so a whitespace-only name would create an untitled Space.
+        let enabled = !nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         guard createButton.isEnabled != enabled || createButton.alphaValue != (enabled ? 1 : 0.45) else { return }
         createButton.isEnabled = enabled; createButton.alphaValue = enabled ? 1 : 0.45
     }

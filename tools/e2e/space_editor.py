@@ -494,7 +494,7 @@ def creation_keeps_focus_after_space_switch(factory, results, tmp, harness):
 
 
 def spaces_polish_rows(factory, results, tmp, harness):
-    """UX round 1 C3-C5 and the narrow New Space form, in the real App with no key window.
+    """UX round 1 C3-C6 and the narrow New Space form, in the real App (keys go through the App's own path).
 
     C3: on header hover, a truncated title ends at least 6 pt before the options button.
     C4: the theme editor opens with no focus ring on the pad (state and pixels).
@@ -516,6 +516,30 @@ def spaces_polish_rows(factory, results, tmp, harness):
             state = app.call('creation-state')
             row('creation_create_disabled_when_empty_w%d' % width, state['name'] == '' and state.get('createEnabled') is False,
                 spaceName=state['name'], createEnabled=state.get('createEnabled'))
+            if width == 228:
+                # Return with an empty and a spaces-only name keeps the form and creates nothing; a real
+                # name enables Create, and clearing it disables Create again.
+                def key(name, mods=()): app.call('key', key=name, modifiers=list(mods), route='app')
+                count = len(app.call('spaces'))
+                key('return'); time.sleep(.3)
+                empty = app.call('creation-state')
+                app.call('type', text='   '); time.sleep(.2)
+                spaces_only = app.call('creation-state')
+                key('return'); time.sleep(.3)
+                after_spaces = app.call('creation-state')
+                key('a', ['cmd']); key('delete'); app.call('type', text='Named'); time.sleep(.2)
+                named = app.call('creation-state')
+                key('a', ['cmd']); key('delete'); time.sleep(.2)
+                cleared = app.call('creation-state')
+                row('creation_return_refused_when_empty', empty['open'] and spaces_only['open'] and after_spaces['open']
+                    and spaces_only['name'] == '   ' and spaces_only.get('createEnabled') is False
+                    and len(app.call('spaces')) == count and named.get('createEnabled') is True
+                    and cleared['name'] == '' and cleared.get('createEnabled') is False,
+                    empty=empty['open'], spacesOnly=[spaces_only['name'], spaces_only.get('createEnabled'), after_spaces['open']],
+                    named=named.get('createEnabled'), cleared=[cleared['name'], cleared.get('createEnabled')])
+                # C6: Choose a Theme targets the form itself, not whatever holds the keyboard.
+                row('creation_theme_button_targets_form', cleared.get('themeButtonTargetsForm') is True,
+                    themeButtonTargetsForm=cleared.get('themeButtonTargetsForm'))
             row('creation_text_fits_w%d' % width, state.get('textFit') == {'subtitle': True, 'themeTitle': True},
                 textFit=state.get('textFit'), widthClass=state.get('widthClass'))
             app.call('editor-close'); harness.wait_until(lambda: not app.call('creation-state').get('open'), timeout=5, step=.05)
@@ -538,6 +562,14 @@ def spaces_polish_rows(factory, results, tmp, harness):
                 blue += is_blue(x0 + t, y0 + d) + is_blue(x0 + t, y1 - 1 + d) + is_blue(x0 + d, y0 + t) + is_blue(x1 - 1 + d, y0 + t)
         row('theme_editor_pad_no_ring_at_open', editor.get('padFirstResponder') is True and editor.get('padShowsFocusRing') is False and blue == 0,
             padFirstResponder=editor.get('padFirstResponder'), padShowsFocusRing=editor.get('padShowsFocusRing'), bluePixels=blue, snapshot=shot)
+        # Keyboard focus still shows: Tab away and Shift-Tab back onto the pad turns the ring on.
+        app.call('editor-act', action='key', key='tab'); time.sleep(.2)
+        away = app.call('editor-state')
+        app.call('editor-act', action='key', key='tab', modifiers=['shift']); time.sleep(.2)
+        back = app.call('editor-state')
+        row('theme_editor_pad_ring_on_keyboard_focus', away.get('padFirstResponder') is False and away.get('padShowsFocusRing') is False
+            and back.get('padFirstResponder') is True and back.get('padShowsFocusRing') is True,
+            away=[away.get('padFirstResponder'), away.get('padShowsFocusRing')], back=[back.get('padFirstResponder'), back.get('padShowsFocusRing')])
         app.call('editor-close'); time.sleep(.3)
         # C3: hover gap between a truncated title and the options button.
         app.call('space-create', title='Studio projects and long research notes'); time.sleep(.8)

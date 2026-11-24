@@ -51,6 +51,7 @@ extension AutomationController {
         },
         "nameFocused": form.nameField.currentEditor() != nil,
         "createEnabled": form.createButton.isEnabled, "textFit": form.textFit,
+        "themeButtonTargetsForm": form.themeButton.target === form && form.themeButton.action == NSSelectorFromString("pickTheme"),
         "themeTitleWidths": [form.themeTitleWidths.needed, form.themeTitleWidths.available],
         // What the window server composites: the form's rect through the presentation layer tree
         // (page strips move pages by layer translation, so native frames alone cannot see it).

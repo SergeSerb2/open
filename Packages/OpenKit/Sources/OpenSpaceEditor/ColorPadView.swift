@@ -30,6 +30,17 @@ public final class ColorPadView: OpenDesign.ColorPadView {
         refreshAppearance()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    /// Tab / Shift-Tab onto the pad shows the ring; a click or the editor's own focus on open does not.
+    public override func becomeFirstResponder() -> Bool {
+        guard super.becomeFirstResponder() else { return false }
+        showsKeyboardFocus = (window?.keyViewSelectionDirection ?? .direct) != .direct
+        return true
+    }
+    public override func resignFirstResponder() -> Bool {
+        guard super.resignFirstResponder() else { return false }
+        showsKeyboardFocus = false
+        return true
+    }
     public override func layout() {
         super.layout()
         let height = ceil(emptyLabel.cell?.cellSize(forBounds: CGRect(x: 0,y: 0,width: 220,height: 40)).height ?? 18)
