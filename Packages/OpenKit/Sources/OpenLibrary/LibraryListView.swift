@@ -649,6 +649,12 @@ private final class LibraryItemView: NSView {
         if icon.borderWidth != width { icon.borderWidth = width }
     }
     override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); needsLayout = true }
+    /// A row prepared detached (overscan) and re-attached to a window of the same scale gets no
+    /// backing change and may not lay out again: refresh the hairline here, without a layout pass.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { CATransaction.begin(); CATransaction.setDisableActions(true); applyHairline(); CATransaction.commit() }
+    }
     override func updateLayer() {
         plate.backgroundColor = overlay.withAlphaComponent(hovered || selected ? 0.105 : gallery ? 0.045 : 0).cgColor
         let progress = item?.progress

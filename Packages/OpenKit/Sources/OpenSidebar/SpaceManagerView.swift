@@ -314,10 +314,8 @@ private final class SpaceManagerColumn: NSView {
         page.displaysHeader = false
         self.page = page; content.addSubview(page)
         if manager.libraryLayout {
-            // The last row can scroll fully clear of the bottom fade (UXE E11).
-            page.scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: Self.fade, right: 0)
-            // The fade shows only while the list overflows: re-check when its height changes
-            // (rows added or removed), never per scroll.
+            // The fade and its bottom inset exist only while the list overflows: re-check when
+            // the list height changes (rows added or removed), never per scroll (UXE E11).
             page.outline.postsFrameChangedNotifications = true
             NotificationCenter.default.addObserver(self, selector: #selector(listHeightChanged), name: NSView.frameDidChangeNotification, object: page.outline)
         }
@@ -376,11 +374,15 @@ private final class SpaceManagerColumn: NSView {
     private func fadeBottom(of page: SpacePageView) {
         page.wantsLayer = true
         guard let layer = page.layer, layer.bounds.height > 0 else { return }
-        // Overflow: at the top of the list, the rows reach into the fade zone. The outline's own
-        // frame is at least the clip height, so measure the last row, not the frame.
+        // Overflow: the rows end below the list area. The outline's own frame is at least the
+        // clip height, so measure the last row, not the frame. The page layer's height is current
+        // here (page.frame was just set); the scroll view inside it is laid out later.
         let rows = page.outline.numberOfRows
         let rowsBottom = rows > 0 ? page.outline.rect(ofRow: rows - 1).maxY : 0
-        let overflows = rowsBottom > page.scroll.frame.height - Self.fade
+        let overflows = rowsBottom > layer.bounds.height
+        // While it overflows, a 20 pt bottom inset lets the last row scroll fully clear of the fade.
+        let inset: CGFloat = overflows ? Self.fade : 0
+        if page.scroll.contentInsets.bottom != inset { page.scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: inset, right: 0) }
         guard overflows else {
             if layer.mask != nil { CATransaction.begin(); CATransaction.setDisableActions(true); layer.mask = nil; CATransaction.commit() }
             return
