@@ -159,6 +159,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         }
         boostList.identifier = .init("boosts.layout.list"); boostGallery.identifier = .init("boosts.layout.gallery")
         boostsProfile.identifier = .init("boosts.profile"); boostsProfile.setAccessibilityLabel("Boosts Profile")
+        boostsProfile.showsPopUpChevron = true; boostsProfile.setAccessibilityRole(.popUpButton)
         boostList.onPress = { [weak self] in self?.setBoostLayout("List") }
         boostGallery.onPress = { [weak self] in self?.setBoostLayout("Gallery") }
         boostsProfile.onPress = { [weak self] in self?.showBoostProfiles() }
@@ -384,14 +385,14 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         railTint.frame = CGRect(x:0,y:0,width:112,height:height)
         railShadow.frame = CGRect(x:112,y:0,width:10,height:height)
         rail.frame = CGRect(x:0,y:52,width:112,height:max(0,height-108))
-        let pitch = min(100,max(72,floor((height-108)/CGFloat(max(1,sections.count)))))
-        let extent = CGFloat(max(0,sections.count-1))*pitch+80
+        let (pitch,tileHeight) = Self.railMetrics(viewport:height-108,count:sections.count)
+        let extent = CGFloat(max(0,sections.count-1))*pitch+tileHeight
         let documentHeight = max(rail.bounds.height,extent)
         railDocument.frame = CGRect(x:0,y:0,width:112,height:documentHeight)
         // Lead 00:00: the tile block's center is H/2 - 5, then clamp to the
         // 52 ... H-56 rail viewport. An overfull minimum-pitch rail scrolls.
         let start = max(0,min(documentHeight-extent,(documentHeight-extent)/2-3))
-        for (index,candidate) in sections.enumerated() { tiles[candidate]?.frame=CGRect(x:8,y:start+CGFloat(index)*pitch,width:97,height:80) }
+        for (index,candidate) in sections.enumerated() { tiles[candidate]?.frame=CGRect(x:8,y:start+CGFloat(index)*pitch,width:97,height:tileHeight) }
         back.frame = CGRect(x:8,y:height-40,width:32,height:32)
         let headerFrame = CGRect(x:120,y:10,width:section.hasFilter ? 212 : 289,height:36)
         if header.frame != headerFrame { header.frame = headerFrame }
@@ -423,6 +424,17 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyBody.frame=frame(centerX-118,top+92,236,max(56,lines))
         let buttonWidth = (emptyButton.title as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:13,weight:.semibold)]).width+24
         emptyButton.frame=frame(centerX-buttonWidth/2,top+92+max(17,lines)+14,buttonWidth,28)
+    }
+    /// Rail tile pitch and height for a rail viewport. Arc: 97×80 tiles at a 100 pt pitch
+    /// (library-overlay.md). A shorter window first closes the gaps, then shortens the tiles
+    /// (never below 44 pt) so every tile fits whole; only below that does the rail scroll.
+    /// The old rule kept 80 pt tiles at a 72 pt minimum pitch, so a window under about 620 pt
+    /// cut the last tile in half (UXE E1).
+    static func railMetrics(viewport: CGFloat, count: Int) -> (pitch: CGFloat, tile: CGFloat) {
+        let fill = floor(viewport/CGFloat(max(1,count)))
+        if fill >= 84 { return (min(100,fill),80) }
+        let tile = max(44,fill-4)
+        return (tile+4,tile)
     }
     func layoutActiveList() {
         let top:CGFloat = filterOpen ? filterEditor.contentHeight : section == .boosts ? (boostTurnOn.isHidden ? 92 : 132)

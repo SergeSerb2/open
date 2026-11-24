@@ -140,6 +140,7 @@ extension AutomationController {
       "heading": rect(page.heading.frame), "subheading": rect(page.subheading.frame),
       "column": rect(page.metrics.column), "clip": rect(page.clipPanel.frame), "clipShown": rect(page.metrics.clipShown),
       "clipWindowFrame": inWindow(page.clipPanel),
+      "edgeFade": ["frame": rect(page.edgeFade.frame), "hidden": page.edgeFade.isHidden, "window": inWindow(page.edgeFade)],
       "replayAll": inWindow(page.clipPanel.replayAll),
       "footer": rect(page.footerFrame),
       "background": components(page.backgroundTop),

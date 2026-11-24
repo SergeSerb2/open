@@ -410,7 +410,8 @@ final class FavoriteTileView: NSView {
             badge.app = FavoriteApp.match(url: url)
             needsLayout = true
         }
-        if liveSubtitle.text != live?.subtitle || liveSubtitle.isHidden != (live == nil) || liveSubtitle.selected != selected {
+        if liveSubtitle.text != live?.subtitle || liveSubtitle.isHidden != (live == nil) || liveSubtitle.selected != selected
+            || liveSubtitle.dark != (appearance == .dark) {
             liveSubtitle.text = live?.subtitle ?? ""; liveSubtitle.isHidden = live == nil
             liveSubtitle.selected = selected; liveSubtitle.dark = appearance == .dark
             needsLayout = true

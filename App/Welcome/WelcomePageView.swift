@@ -27,6 +27,11 @@ final class WelcomePageView: NSScrollView {
   var openHelp: (() -> Void)?
   let canvas = WelcomeCanvas()
   private let backdrop = WelcomeBackdropView()
+  /// The clip deliberately runs past the page's right edge. This strip is the same backdrop, laid out as
+  /// if it covered the whole page, under a static left-to-right mask, so the clip fades into the page.
+  /// Rasterized once (72 pt wide), so a playing clip only costs a plain blend.
+  let edgeFade = WelcomeBackdropView()
+  private let edgeMask = CAGradientLayer()
   private let mark = WelcomeMarkView()
   let heading = NSTextField(labelWithString: "You're all set.")
   let subheading = NSTextField(labelWithString: "Here are the basics.")
@@ -85,6 +90,11 @@ final class WelcomePageView: NSScrollView {
       canvas.addSubview(label)
     }
     canvas.addSubview(clipPanel)
+    canvas.addSubview(edgeFade)
+    edgeFade.layer?.masksToBounds = true; edgeFade.setAccessibilityElement(false)
+    edgeMask.startPoint = CGPoint(x: 0, y: 0.5); edgeMask.endPoint = CGPoint(x: 1, y: 0.5)
+    edgeMask.colors = [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.cgColor]
+    edgeFade.layer?.mask = edgeMask; edgeFade.layer?.shouldRasterize = true
     for (i, copy) in Self.steps.enumerated() {
       let card = WelcomeStepView(index: i, copy: copy)
       card.press = { [weak self] in self?.replay(card: i) }
@@ -160,6 +170,12 @@ final class WelcomePageView: NSScrollView {
     return m
   }
 
+  override func viewDidChangeBackingProperties() {
+    super.viewDidChangeBackingProperties()
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    edgeFade.layer?.rasterizationScale = window?.backingScaleFactor ?? 2
+    CATransaction.commit()
+  }
   override func layout() {
     super.layout()
     let m = computeMetrics(width: contentSize.width, height: contentSize.height)
@@ -170,6 +186,19 @@ final class WelcomePageView: NSScrollView {
     heading.frame = m.heading; subheading.frame = m.subheading
     clipPanel.shownRect = m.clipShown
     clipPanel.frame = m.clip
+    // Shadow room above and below the clip; the strip ends at the page's right edge.
+    // Up to 72 pt, and at most a fifth of the visible clip, so Replay All (centred) stays clear of it.
+    let fadeWidth: CGFloat = min(72, floor(m.clipShown.width * 0.2))
+    if m.clipShown.width < m.clip.width - 1 {
+      let edge = m.clip.minX + m.clipShown.width
+      edgeFade.frame = CGRect(x: edge - fadeWidth, y: max(0, m.clip.minY - 40), width: fadeWidth,
+                              height: min(m.document.height, m.clip.maxY + 40) - max(0, m.clip.minY - 40))
+      edgeFade.isHidden = false
+      edgeFade.canvasRect = CGRect(x: -edgeFade.frame.minX, y: -edgeFade.frame.minY, width: canvas.bounds.width, height: canvas.bounds.height)
+      CATransaction.begin(); CATransaction.setDisableActions(true)
+      edgeMask.frame = edgeFade.bounds; edgeFade.layer?.rasterizationScale = window?.backingScaleFactor ?? 2
+      CATransaction.commit()
+    } else { edgeFade.isHidden = true }
     let linkTop: CGFloat = 23.5
     let helpSize = help.intrinsicContentSize, shortcutSize = shortcuts.intrinsicContentSize
     help.frame = CGRect(x: m.document.width - 23.5 - helpSize.width, y: linkTop, width: helpSize.width, height: 42)
@@ -416,14 +445,17 @@ final class WelcomeBackdropView: NSView {
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   override var isFlipped: Bool { true }
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  /// The whole backdrop's rectangle in this view's coordinates (a strip copy lays out the full page's
+  /// gradients, offset); nil means this view is the whole backdrop.
+  var canvasRect: CGRect? { didSet { if canvasRect != oldValue { needsLayout = true } } }
   override func layout() {
     super.layout()
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    let b = bounds
+    let b = canvasRect ?? bounds
     base.frame = b
-    cool.frame = CGRect(x: -b.width * 0.25, y: b.height * 0.45, width: b.width * 0.9, height: b.height * 0.9)
-    warm.frame = CGRect(x: b.width * 0.45, y: b.height * 0.55, width: b.width * 0.9, height: b.height * 0.8)
-    haze.frame = CGRect(x: b.width * 0.35, y: -b.height * 0.45, width: b.width * 0.9, height: b.height * 0.9)
+    cool.frame = CGRect(x: b.minX - b.width * 0.25, y: b.minY + b.height * 0.45, width: b.width * 0.9, height: b.height * 0.9)
+    warm.frame = CGRect(x: b.minX + b.width * 0.45, y: b.minY + b.height * 0.55, width: b.width * 0.9, height: b.height * 0.8)
+    haze.frame = CGRect(x: b.minX + b.width * 0.35, y: b.minY - b.height * 0.45, width: b.width * 0.9, height: b.height * 0.9)
     CATransaction.commit()
   }
 }

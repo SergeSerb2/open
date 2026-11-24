@@ -506,11 +506,20 @@ private final class LibraryItemView: NSView {
     required init?(coder:NSCoder) { fatalError() }
     func configure(_ item:LibraryRowItem,foreground:NSColor,overlay:NSColor,gallery:Bool,text:LibraryPreparedText? = nil) {
         self.item = item; self.foreground = foreground; self.overlay = overlay; self.gallery = gallery
+        preview = item.kind == "media" || item.kind == "capture"
         LibraryIdleWork.measure("text.layout") {
             title.string = text?.title ?? LibraryText.value(item.title,size:15,weight:.medium,color:foreground)
             subtitle.string = text?.subtitle ?? LibraryText.value(item.subtitle,size:13,weight:.regular,color:foreground.withAlphaComponent(0.68))
         }
         setIcon(item.image); iconLoaded = false
+        // An off Boost in the List layout reads as off, like Site Control's off rows; the Gallery
+        // card already shows its On/Off button (UXE E8). Reused rows always reset the opacity.
+        let dimmed: Float = item.kind == "boost" && item.isOn == false && !gallery ? 0.5 : 1
+        if title.opacity != dimmed {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            title.opacity = dimmed; subtitle.opacity = dimmed; icon.opacity = dimmed
+            CATransaction.commit()
+        }
         LibraryIdleWork.measure("favicon.request") { item.loadImage? { [weak self] image in
             guard let self, self.item?.id == item.id, let image else { return }
             LibraryIdleWork.measure("favicon.decode") { self.setIcon(image) }; self.iconLoaded = true
@@ -579,6 +588,7 @@ private final class LibraryItemView: NSView {
         icon.frame = CGRect(x:tabIcon ? 20 : 18,y:top+(tabIcon ? 7 : 5),width:tabIcon ? 20 : 24,height:tabIcon ? 20 : 24)
         let trailing:CGFloat = !gallery && hovered ? CGFloat(buttons.count)*34+8 : 20
         title.contentsScale = window?.backingScaleFactor ?? 2; subtitle.contentsScale = title.contentsScale
+        CATransaction.begin(); CATransaction.setDisableActions(true); applyHairline(); CATransaction.commit()
         title.frame = CGRect(x:leading,y:top,width:max(0,bounds.width-leading-trailing),height:19)
         subtitle.frame = CGRect(x:leading,y:top+20,width:title.frame.width,height:17)
         plate.frame = CGRect(x:8,y:gallery ? 4 : 0,width:max(0,bounds.width-15),height:bounds.height-(gallery ? 8 : 0))
@@ -613,8 +623,37 @@ private final class LibraryItemView: NSView {
         return ["row": [frame.minX, frame.minY, frame.width, frame.height], "hovered": hovered,
                 "windowScale": window?.backingScaleFactor ?? 0, "title": describe(title), "subtitle": describe(subtitle)]
     }
+    /// Media and capture rows show their picture, not a file icon.
+    private var preview = false
+    /// The icon layer currently shows a picture (a QuickLook thumbnail), drawn as a preview square.
+    private var showsPicture = false
     private func setIcon(_ image:NSImage?) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         icon.contents = LibraryImages.icon(image,foreground:foreground)
+        // A picture fills a square with a 4 pt radius and a hairline edge, so a tall, wide,
+        // white or black image still reads as one 24 pt preview (UXE E4; Arc's populated Media
+        // is not captured: interim design, request UXE-C2). Only a real thumbnail is a picture:
+        // the loading "doc" glyph and Finder file icons (movies, failed thumbnails) keep fit.
+        showsPicture = preview && image.map { !$0.isTemplate } == true
+            && item?.fileURL.map { FilePreviewCache.shared.isThumbnail(for:$0) } == true
+        icon.contentsGravity = showsPicture ? .resizeAspectFill : .resizeAspect
+        icon.masksToBounds = showsPicture; icon.cornerRadius = showsPicture ? 4 : 0; icon.cornerCurve = .continuous
+        icon.borderColor = foreground.withAlphaComponent(0.18).cgColor
+        applyHairline()
+        CATransaction.commit()
+    }
+    /// One device pixel at the window's current backing scale. Rows are configured before they
+    /// have a window (new and prefetched cells), so layout and backing changes refresh it.
+    private func applyHairline() {
+        let width = showsPicture ? 1/(window?.backingScaleFactor ?? 2) : 0
+        if icon.borderWidth != width { icon.borderWidth = width }
+    }
+    override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); needsLayout = true }
+    /// A row prepared detached (overscan) and re-attached to a window of the same scale gets no
+    /// backing change and may not lay out again: refresh the hairline here, without a layout pass.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { CATransaction.begin(); CATransaction.setDisableActions(true); applyHairline(); CATransaction.commit() }
     }
     override func updateLayer() {
         plate.backgroundColor = overlay.withAlphaComponent(hovered || selected ? 0.105 : gallery ? 0.045 : 0).cgColor

@@ -7748,9 +7748,10 @@ def sleep_checks(factory, results, tmp, style):
             # A repeated switch takes its last value (base::CommandLine).
             found = re.findall(r"--%s=(\S+)" % flag, cmd)
             return set(found[-1].split(",")) if found else set()
+        # AsyncDns: automation and Debug builds only (App/main.swift); this suite runs those builds.
         off = {"OptimizationHints", "OptimizationTargetPrediction", "OptimizationGuidePageContentExtraction",
                "OptimizationGuideModelExecution", "SegmentationPlatform", "SegmentationPlatformUkmEngine", "MediaRouter",
-               "TranslateRankerQuery", "TranslateRankerEnforcement"}
+               "TranslateRankerQuery", "TranslateRankerEnforcement", "AsyncDns"}
         results["sleep_f0_switches"] = {"ok": "WebContentsDiscard" in feature_list("enable-features") and off <= feature_list("disable-features"),
                                         "enabled": sorted(feature_list("enable-features")), "disabledMissing": sorted(off - feature_list("disable-features"))}
 
@@ -15498,11 +15499,15 @@ def main():
                     results[opts.only]['app_icons_' + row] = value
         elif opts.only == "space-editor":
             results[opts.only] = CheckedResults(tracker)
-            space_editor_creation_checks(factory, results[opts.only], tmp)
-            runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
-                sys.modules[__name__], factory, results[opts.only], tmp)
             import space_editor
-            space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
+            # First, and focus-free: the New Space form is on screen (UX round 1 C1).
+            space_editor.creation_form_pixels(factory, results[opts.only], tmp, sys.modules[__name__])
+            space_editor.creation_keeps_focus_after_space_switch(factory, results[opts.only], tmp, sys.modules[__name__])
+            if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
+                space_editor_creation_checks(factory, results[opts.only], tmp)
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
+                    sys.modules[__name__], factory, results[opts.only], tmp)
+                space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
@@ -15588,10 +15593,15 @@ def main():
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
             # OPEN_LIBRARY_R7_ONLY=1 runs only the bug sweep r7 Library and Spaces rows (tools/e2e/library_r7.py).
-            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1":
+            # OPEN_LIBRARY_UX1_ONLY=1 runs only the UX round 1 Library rows (tools/e2e/library_ux1.py).
+            ux1_only = os.environ.get("OPEN_LIBRARY_UX1_ONLY") == "1"
+            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1" and not ux1_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
                     factory, results["history"], tmp, wait_until, _restore_defaults)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/library_r7.py"))["run"](factory, results["history"], tmp, wait_until)
+            if not ux1_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/library_r7.py"))["run"](factory, results["history"], tmp, wait_until)
+            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/library_ux1.py"))["run"](factory, results["history"], tmp, wait_until)
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)

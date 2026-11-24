@@ -2462,8 +2462,14 @@
         return controller.contentView.convert(tile.bounds, from: tile).contains(point)
       }), let tile = badge.superview else { throw Failure(message: "no Favorite tile at that node") }
       let subtitle = tile.subviews.first { $0.accessibilityIdentifier() == "favoriteMeetingSubtitle" }
+      // The countdown plate in window points from the top-left (snapshot pixel space / scale).
+      let plate = subtitle.flatMap { view -> [Double]? in
+        guard let window = view.window else { return nil }
+        let r = view.convert(view.bounds, to: nil)
+        return [r.minX, window.frame.height - r.maxY, r.width, r.height].map(Double.init)
+      }
       return ["shown": !badge.isHidden && !(badge.accessibilityValue() as? String ?? "").isEmpty,
-        "subtitleShown": subtitle.map { !$0.isHidden } ?? false,
+        "subtitleShown": subtitle.map { !$0.isHidden } ?? false, "subtitleWindowFrame": plate ?? [],
         "text": badge.accessibilityValue() as? String ?? "",
         "frame": [badge.frame.minX, badge.frame.minY, badge.frame.width, badge.frame.height],
         "tile": [tile.bounds.width, tile.bounds.height]] as [String: Any]
