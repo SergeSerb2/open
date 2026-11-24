@@ -459,6 +459,7 @@ public final class SidebarView: NSView {
     /// Scrolls the focused page so the node's row is visible.
     public func reveal(nodeID: ItemID) {
         guard let page = pager.currentPage, let obj = context.model.node(id: nodeID)?.object else { return }
+        page.ensureNodeInOutline(obj)
         let row = page.outline.row(forItem: obj)
         if row >= 0 { page.outline.scrollRowToVisible(row) }
     }
@@ -480,6 +481,15 @@ public final class SidebarView: NSView {
         let row = page.outline.row(forItem: page.newTab)
         guard row >= 0 else { return nil }
         return convert(page.outline.rect(ofRow: row), from: page.outline)
+    }
+
+    /// The focused page's "New Folder" button on the "New Tab" row, in this view.
+    public var newFolderButtonFrame: CGRect? {
+        guard let page = pager.currentPage else { return nil }
+        let row = page.outline.row(forItem: page.newTab)
+        guard row >= 0, let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? NewTabCellView,
+              !cell.newFolderButton.isHidden else { return nil }
+        return convert(cell.newFolderButton.bounds, from: cell.newFolderButton)
     }
 
     /// Actual current-row highlight state, without creating an offscreen row.

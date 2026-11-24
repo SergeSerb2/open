@@ -846,9 +846,17 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         beginRename(item: item as AnyObject)
     }
 
+    func ensureNodeInOutline(_ obj: AnyObject) {
+        if outline.row(forItem: obj) < 0 {
+            if rootPinnedCollapsed != space.isPinnedCollapsed { syncRoot() }
+            syncExpansion(animated: false)
+        }
+    }
+
     func beginRename(nodeID: ItemID?) {
         guard let nodeID else { header.beginRename(); return }
         guard let obj = context.model.node(id: nodeID)?.object else { return }
+        ensureNodeInOutline(obj)
         let row = outline.row(forItem: obj)
         if row >= 0 { outline.scrollRowToVisible(row) }
         beginRename(item: obj)

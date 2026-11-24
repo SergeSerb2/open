@@ -798,9 +798,11 @@ def context_menu_checks(factory, results, tmp, h):
                 items = lambda node, **kw: app.call('sidebar-menu-items', **({'node': node} if node else {}), **kw)
                 # Drawn items (capture session 8): the ⌥ alternates Archive Other Tabs / Archive Tabs Above are hidden.
                 today_expected = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', '—', 'Open in Split View',
-                                  'Duplicate', 'Move to ▸', '—', 'Archive Tab', 'Archive Tabs Below']
+                                  'Duplicate', 'Move to ▸', 'New Folder with Tab', '—', 'Archive Tab', 'Archive Tabs Below']
+                favorite_head = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
+                                 'Open in Split View', 'Duplicate', 'Move to ▸', '—']
                 pinned_head = ['Copy Link', 'Share ▸', '—', 'Change Icon…', 'Rename…', 'Mute', 'Edit Pinned Page ▸', '—',
-                               'Open in Split View', 'Duplicate', 'Move to ▸', '—']
+                               'Open in Split View', 'Duplicate', 'Move to ▸', 'New Folder with Tab', '—']
                 # Pin, favourite and folder moves animate the outline; a row's menu is found by its
                 # on-screen position, so wait until the first row answers with a tab menu twice in a row.
                 def settled():
@@ -817,7 +819,7 @@ def context_menu_checks(factory, results, tmp, h):
                     'move_to_current_checked': (h._try(lambda: app.call('sidebar-menu-state', node=today_ids[0], item='Move to/Menu order')) or {}).get('checked') is True,
                     'today_silent_mute_disabled': 'Mute' in first['disabled'],
                     'pinned': items(pinned)['items'] == pinned_head + ['Remove Pin'],
-                    'favorite': items(favorite)['items'] == pinned_head + ['Remove Favorite'],
+                    'favorite': items(favorite)['items'] == favorite_head + ['Remove Favorite'],
                     'folder_empty': items(empty)['items'] == ['Share Folder…', '—', 'New Nested Folder…', 'Turn “Menu Empty” into Space',
                                                               '—', 'Change Icon…', 'Rename…', '—', 'Duplicate', 'Move to ▸', '—', 'Delete'],
                     'space': items(None)['items'][:9] == ['Change Space Icon…', 'Rename Space…', 'Edit Theme Color…', 'Set Profile ▸',
@@ -913,10 +915,10 @@ def context_menu_checks(factory, results, tmp, h):
                 panes = [t for t in listed['items'] if t.endswith(' ▸') and t not in ('Move to ▸',)]
                 pane = app.call('sidebar-menu-items', node=split_id, path=panes[0][:-2]) if panes else {'items': []}
                 head = ['Share Split View…', '—', 'Separate All Tabs', 'Add Tab…', 'Convert to Vertical Split View', '—', 'Tab Options']
-                tail = ['—', 'Change Icon…', 'Rename…', '—', 'Duplicate', 'Move to ▸', '—', 'Archive Item']
+                tail = ['—', 'Change Icon…', 'Rename…', '—', 'Duplicate', 'Move to ▸', 'New Folder with Split View', '—', 'Archive Item']
                 items = listed['items']
                 rows = {'head': items[:7] == head, 'two_panes': len(panes) == 2,
-                        'tail': items[9:17] == tail and items[17:] in ([], ['Archive Tabs Below']),
+                        'tail': items[9:18] == tail and items[18:] in ([], ['Archive Tabs Below']),
                         'tab_options_header': 'Tab Options' in listed['disabled'],
                         'pane': pane['items'] == ['Separate from Split View', '—', 'Share ▸', 'Mute', 'Copy Link', 'Copy link as Markdown', '—', 'Archive Item']}
                 return {'ok': all(rows.values()), 'rows': rows, 'listed': listed, 'pane': pane}
@@ -954,7 +956,10 @@ def context_menu_checks(factory, results, tmp, h):
                     listed = wait(lambda: app.call('sidebar-menu-items', node=node, path='Move to'), timeout=5)
                     states = [app.call('sidebar-menu-state', node=node, item='Move to/' + s['title']) for s in spaces]
                     new = app.call('sidebar-menu-state', node=node, item='Move to/New Space…')
-                    rows[name] = (listed['items'] == expected and not listed['disabled']
+                    expect_folders = name in ('today', 'pin', 'split')
+                    want_items = expected + (['—', 'Folders', 'Matrix Folder'] if expect_folders else [])
+                    want_disabled = ['Folders'] if expect_folders else []
+                    rows[name] = (listed['items'] == want_items and listed['disabled'] == want_disabled
                                   and all(s['enabled'] and s['checked'] == (dest['id'] == current)
                                           for s, dest in zip(states, spaces)) and new['enabled'])
                     menus[name] = {'listed': listed, 'states': states, 'new': new}
@@ -995,6 +1000,58 @@ def context_menu_checks(factory, results, tmp, h):
                     h._try(lambda t=tab_id: app.call('close', tab=t))
                 h._try(focus)
         run('cm_selection_menu_order', selection_menu_order)
+        # Easy sidebar folder workflows: single-tab "New Folder with Tab", "Move to ▸" existing folder,
+        # and the visible New Folder button on the New Tab row (all with auto-rename and one-step Undo).
+        def sidebar_folder_quick_actions():
+            focus()
+            app.call('space', space=app.call('space-create', title='Quick folders', profile='Default'))
+            made = [app.call('open', url=origin + '/target.html?qf=%d' % i, background=True)['id'] for i in range(2)]
+            try:
+                tab_a, tab_b = made
+                app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+                # 1. Single-tab right-click -> New Folder with Tab wraps the tab in place and opens inline rename.
+                app.call('sidebar-menu', node=tab_a, item='New Folder with Tab')
+                editor = wait(lambda: (lambda f: f if f.get('owner') == 'sidebar' and 'Text' in f.get('responder', '') else None)(app.call('focus-state')), timeout=3)
+                app.call('key', key='a', modifiers=['cmd'], route='app')
+                app.call('key', text='Work')
+                app.call('key', key='return', route='app')
+                created = wait(lambda: next((n for n in app.call('sidebar-tree')['today']
+                                             if n['kind'] == 'folder' and n['title'] == 'Work'
+                                             and [c['id'] for c in n.get('children', [])] == [tab_a]), None), timeout=3)
+                # 2. Single-tab right-click -> Move to -> existing folder moves tab_b into Work.
+                move_items = app.call('sidebar-menu-items', node=tab_b, path='Move to')
+                app.call('sidebar-menu', node=tab_b, item='Move to/Work')
+                moved = wait(lambda: next((n for n in app.call('sidebar-tree')['today']
+                                           if n['kind'] == 'folder' and n['title'] == 'Work'
+                                           and [c['id'] for c in n.get('children', [])] == [tab_a, tab_b]), None), timeout=3)
+                # 3. Visible New Folder button on the New Tab row creates a pinned folder and opens inline rename.
+                btn = app.call('basics-demo', op='targets').get('newFolderButton') or []
+                pinned_before = len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder'])
+                btn_editor = None
+                btn_made = False
+                if len(btn) == 4 and btn[2] > 0 and btn[3] > 0:
+                    app.call('mouse', action='click', x=btn[0] + btn[2] / 2, y=btn[1] + btn[3] / 2)
+                    btn_made = wait(lambda: len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']) == pinned_before + 1, timeout=3) is True
+                    btn_editor = wait(lambda: (lambda f: f if f.get('owner') == 'sidebar' and 'Text' in f.get('responder', '') else None)(app.call('focus-state')), timeout=3)
+                    app.call('key', key='escape', route='app')
+                    app.call('key', key='z', modifiers=['command'], route='app')
+                btn_undone = wait(lambda: len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']) == pinned_before, timeout=3) is True
+                rows = {
+                    'single_tab_rename_editor': bool(editor),
+                    'single_tab_wrapped_and_renamed': bool(created),
+                    'move_to_lists_folder': 'Folders' in move_items['items'] and 'Work' in move_items['items'],
+                    'move_to_folder_moves_tab': bool(moved),
+                    'button_visible': len(btn) == 4 and btn[2] > 0 and btn[3] > 0,
+                    'button_creates_folder': btn_made,
+                    'button_opens_rename': bool(btn_editor),
+                    'button_undone': btn_undone,
+                }
+                return {'ok': all(rows.values()), 'rows': rows, 'button': btn, 'moveTo': move_items}
+            finally:
+                for tab_id in made:
+                    h._try(lambda t=tab_id: app.call('close', tab=t))
+                h._try(focus)
+        run('cm_sidebar_folder_quick_actions', sidebar_folder_quick_actions)
         # C12-D2-3: real row menus, process restore and the existing native Boost editor.
         def customize_page_matrix():
             nonlocal app

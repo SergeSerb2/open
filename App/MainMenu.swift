@@ -450,8 +450,16 @@ extension EngineWebContentHostFactory {
       app.settingsPresenter.requestClearArchive()
     case "new-space": return controller?.beginSpaceCreation() == true
     case "new-folder":
-      guard !isBlankWindow else { return false }
-      if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
+      guard !isBlankWindow, let space = focusedSpace else { return false }
+      if let controller, windowState.sidebarMode != .hidden, !controller.isLibraryOpen {
+        guard controller.sidebar.perform(.newFolder(in: .spacePinned(space.id))) else { return false }
+      } else {
+        guard model.asOneUndoStep({
+          guard model.createFolder(in: .spacePinned(space.id)) != nil else { return false }
+          if space.isPinnedCollapsed { model.setPinnedSectionCollapsed(spaceID: space.id, collapsed: false) }
+          return true
+        }) else { return false }
+      }
     case "new-easel": return EaselTab.create(in: self) != nil
     case "reload": selectedContent?.reload()
     case "force-reload": selectedContent?.reloadIgnoringCache()

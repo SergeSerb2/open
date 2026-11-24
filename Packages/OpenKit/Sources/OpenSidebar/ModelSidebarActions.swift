@@ -42,12 +42,19 @@ public struct ModelSidebarActions {
         case .splitNodes(let ids):
             return model.makeSplit(tabIDs: ids) != nil
         case .newFolderFromSelection(let ids):
-            guard let first = ids.first, let parent = model.parent(of: first),
-                  let index = siblings(in: parent).firstIndex(where: { $0.id == first }),
-                  let folder = model.createFolder(in: parent, at: index, withNodes: ids) else { return false }
-            context.sidebar?.renameInsertedNode(folder.id)
-            context.manager?.renameInsertedNode(folder.id)
-            return true
+            guard let first = ids.first, let originalParent = model.parent(of: first) else { return false }
+            let targetParent: NodeParent
+            let targetIndex: Int
+            if case .folder(let folderID) = originalParent, model.node(id: folderID)?.folder?.live != nil,
+               let liveParent = model.parent(of: folderID),
+               let liveIndex = siblings(in: liveParent).firstIndex(where: { $0.id == folderID }) {
+                targetParent = liveParent
+                targetIndex = liveIndex
+            } else if let index = siblings(in: originalParent).firstIndex(where: { $0.id == first }) {
+                targetParent = originalParent
+                targetIndex = index
+            } else { return false }
+            return createAndRenameFolder(in: targetParent, at: targetIndex, withNodes: ids)
         case .setPinned(let ids, let pinned):
             return model.setPinned(ids: ids, pinned: pinned) > 0
         case .duplicateNodes(let ids):
@@ -98,9 +105,9 @@ public struct ModelSidebarActions {
         case .deleteFolder(let id):
             model.closeTab(id: id)
         case .newFolder(let parent):
-            return model.createFolder(in: parent) != nil
+            return createAndRenameFolder(in: parent)
         case .newNestedFolder(let parent):
-            return model.createFolder(in: .folder(parent)) != nil
+            return createAndRenameFolder(in: .folder(parent))
         case .separateSplit(let id):
             model.unsplit(splitID: id)
         case .separatePane(let split, let tab):
@@ -145,6 +152,29 @@ public struct ModelSidebarActions {
         default:
             return false
         }
+        return true
+    }
+
+    private func createAndRenameFolder(in parent: NodeParent, at index: Int? = nil, withNodes ids: [ItemID] = []) -> Bool {
+        let folder: Folder? = model.asOneUndoStep {
+            guard let created = model.createFolder(in: parent, at: index, withNodes: ids) else { return nil }
+            switch parent {
+            case .spacePinned(let spaceID):
+                if model.space(id: spaceID)?.isPinnedCollapsed == true {
+                    model.setPinnedSectionCollapsed(spaceID: spaceID, collapsed: false)
+                }
+            case .folder(let parentID):
+                if let container = model.node(id: parentID)?.folder, container.expansion != .expanded {
+                    model.setFolderExpansion(folderID: parentID, .expanded)
+                }
+            default:
+                break
+            }
+            return created
+        }
+        guard let folder else { return false }
+        context.sidebar?.renameInsertedNode(folder.id)
+        context.manager?.renameInsertedNode(folder.id)
         return true
     }
 
