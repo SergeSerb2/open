@@ -106,7 +106,7 @@ public final class SpaceCreationController {
         localUndoManager.removeAllActions(); onFinish?(nil)
     }
     public func submit() {
-        guard !isFinished, creationView.createButton.isEnabled,
+        guard !isFinished,
               model.canCreateSpace(at: options.insertionIndex, moving: options.moving, removingEmptyFolder: options.removingEmptyFolder),
               model.windows.contains(where: { $0.id == windowID }) else { return }
         themeEditor?.close(); themeEditor = nil
