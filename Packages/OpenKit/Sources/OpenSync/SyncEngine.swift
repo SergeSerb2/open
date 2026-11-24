@@ -93,8 +93,9 @@ public struct SyncRemoteBundle: Sendable {
 }
 
 public enum SyncApplyMode: String, Sendable {
-    /// Replace local data of each collection present in the bundle with the bundle's records.
-    /// Collections with no cloud records stay as they are.
+    /// Replace local data with the bundle's records. With `isFullSnapshot` (always the case
+    /// today), the bundle is the whole cloud: an enabled collection with no cloud records is
+    /// cleared on every local Profile.
     case replaceLocal
     /// Upsert and delete the bundle's records over local data. With `isFullSnapshot`, this is
     /// the first-sign-in merge: keep local-only items.
@@ -140,6 +141,8 @@ public final class SyncEngine {
     private let credentialStore: any SyncCredentialStoring
     private let preferredDeviceName: String?
     private let stateWriter = SyncStateWriter()
+    /// Serializes Keychain/file writes of the secrets off the main actor, in call order.
+    private let credentialWriter = SyncCredentialWriter()
 
     @ObservationIgnored private var state: SyncPersistedState?
     @ObservationIgnored private var credentials: SyncCredentials?
@@ -154,6 +157,7 @@ public final class SyncEngine {
     @ObservationIgnored private var started = false
     @ObservationIgnored private var sessionGeneration = 0
     @ObservationIgnored private var stateSequence = 0
+    @ObservationIgnored private var credentialSequence = 0
     @ObservationIgnored private var currentSync: Task<Void, any Error>?
     @ObservationIgnored private var currentSyncID = 0
     @ObservationIgnored private var followUpRequested = false
@@ -203,8 +207,9 @@ public final class SyncEngine {
     private func resume(state loaded: SyncPersistedState?, credentials: SyncCredentials?, loadError: String?) {
         if let loadError { setStatus(.error(loadError)); return }
         guard let loaded, let accountId = loaded.accountId, !accountId.isEmpty else { return }
-        guard let credentials, let vaultKey = Data(base64Encoded: credentials.vaultKeyBase64),
-              let keys = try? SyncCrypto.VaultKeys(vaultKey: vaultKey) else {
+        var vaultKey = credentials.flatMap { Data(base64Encoded: $0.vaultKeyBase64) } ?? Data()
+        defer { SyncCrypto.zeroData(&vaultKey) }
+        guard let credentials, let keys = try? SyncCrypto.VaultKeys(vaultKey: vaultKey) else {
             lastReauthEmail = loaded.email
             state = loaded
             setStatus(.needsReauth("Sign in to Open Sync again to keep syncing."))
@@ -239,13 +244,14 @@ public final class SyncEngine {
         if isSignedIn || state != nil { await clearLocalSession(status: .signedOut) }
         let deviceId = UUID().uuidString.lowercased()
         let client = try SyncClient(serverURL: serverURL, deviceId: deviceId)
-        let deviceName = resolvedDeviceName()
+        let deviceName = await resolvedDeviceName()
         setBusy("Creating your account…")
         defer { publish() }
-        let material = try await Self.offMain { () -> SignUpMaterial in
+        var material = try await Self.offMain { () -> SignUpMaterial in
             let params = try SyncKDFParams.generate()
             let vaultKey = try SyncCrypto.randomBytes(SyncCrypto.keyByteCount)
-            let recovery = try SyncCrypto.generateRecoveryKey()
+            var recovery = try SyncCrypto.generateRecoveryKey()
+            defer { SyncCrypto.zeroData(&recovery.rawBytes) }
             let passwordKeys = try SyncCrypto.derivePasswordKeys(email: normalized, password: password, kdfParams: params)
             let recoveryKeys = SyncCrypto.deriveRecoveryKeys(recoveryKeyBytes: recovery.rawBytes)
             return SignUpMaterial(
@@ -254,6 +260,7 @@ public final class SyncEngine {
                 wrappedByPassword: try SyncCrypto.wrapVaultKey(vaultKey, wrapKey: passwordKeys.passwordWrapKey, kind: .password, email: normalized),
                 wrappedByRecovery: try SyncCrypto.wrapVaultKey(vaultKey, wrapKey: recoveryKeys.recoveryWrapKey, kind: .recovery, email: normalized))
         }
+        defer { material.zero() }
         let name = Self.truncated(displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "", toScalars: SyncLimits.maxDisplayNameLength)
         let response: SyncAuthResponse
         do {
@@ -282,17 +289,19 @@ public final class SyncEngine {
         if isSignedIn || state != nil { await clearLocalSession(status: .signedOut) }
         let deviceId = UUID().uuidString.lowercased()
         let client = try SyncClient(serverURL: serverURL, deviceId: deviceId)
-        let deviceName = resolvedDeviceName()
+        let deviceName = await resolvedDeviceName()
         setBusy("Signing in…")
         defer { publish() }
         do {
             let params = try await client.kdfParams(email: normalized)
-            let derived = try await Self.offMain { () -> DerivedPassword in
+            var derived = try await Self.offMain { () -> DerivedPassword in
                 let keys = try SyncCrypto.derivePasswordKeys(email: normalized, password: password, kdfParams: params)
                 return DerivedPassword(authVerifier: keys.authVerifier, wrapKey: SyncCrypto.keyData(keys.passwordWrapKey))
             }
+            defer { derived.zero() }
             let response = try await client.login(email: normalized, authVerifier: derived.authVerifier, deviceName: deviceName)
-            let vaultKey = try Self.unwrap(response.wrappedVaultKeyByPassword, wrapKey: derived.wrapKey, kind: .password, email: normalized)
+            var vaultKey = try Self.unwrap(response.wrappedVaultKeyByPassword, wrapKey: derived.wrapKey, kind: .password, email: normalized)
+            defer { SyncCrypto.zeroData(&vaultKey) }
             try await establishSession(response: response, email: normalized, serverURL: serverURL, client: client,
                                        vaultKey: vaultKey, deviceName: deviceName)
             return try await finishSignIn(summary: response.cloudSummary, initialStrategy: initialStrategy)
@@ -307,21 +316,28 @@ public final class SyncEngine {
                                initialStrategy: FirstSyncStrategy? = nil) async throws -> (recoveryKey: String, outcome: SyncSignInOutcome) {
         let normalized = try validatedEmail(email)
         try validateNewPassword(newPassword)
-        let recoveryBytes = try SyncCrypto.parseRecoveryKey(recoveryKey)
+        var recoveryBytes = try SyncCrypto.parseRecoveryKey(recoveryKey)
+        defer { SyncCrypto.zeroData(&recoveryBytes) }
         if isSignedIn || state != nil { await clearLocalSession(status: .signedOut) }
         let deviceId = UUID().uuidString.lowercased()
         let client = try SyncClient(serverURL: serverURL, deviceId: deviceId)
-        let deviceName = resolvedDeviceName()
+        let deviceName = await resolvedDeviceName()
         setBusy("Recovering your account…")
         defer { publish() }
         do {
             let oldKeys = SyncCrypto.deriveRecoveryKeys(recoveryKeyBytes: recoveryBytes)
-            let challenge = try await client.recoveryChallenge(email: normalized, recoveryAuthVerifier: oldKeys.recoveryAuthVerifier)
+            var oldVerifier = oldKeys.recoveryAuthVerifier
+            defer { SyncCrypto.zeroData(&oldVerifier) }
+            let challenge = try await client.recoveryChallenge(email: normalized, recoveryAuthVerifier: oldVerifier)
             guard let wrapped = Data(base64Encoded: challenge.wrappedVaultKeyByRecovery) else { throw SyncError.invalidRecoveryKey }
-            let vaultKey = try SyncCrypto.unwrapVaultKey(wrapped, wrapKey: oldKeys.recoveryWrapKey, kind: .recovery, email: normalized)
-            let material = try await Self.offMain { () -> RecoveryMaterial in
+            var vaultKey = try SyncCrypto.unwrapVaultKey(wrapped, wrapKey: oldKeys.recoveryWrapKey, kind: .recovery, email: normalized)
+            defer { SyncCrypto.zeroData(&vaultKey) }
+            let currentVaultKey = vaultKey
+            var material = try await Self.offMain { () -> RecoveryMaterial in
+                let vaultKey = currentVaultKey
                 let params = try SyncKDFParams.generate()
-                let recovery = try SyncCrypto.generateRecoveryKey()
+                var recovery = try SyncCrypto.generateRecoveryKey()
+                defer { SyncCrypto.zeroData(&recovery.rawBytes) }
                 let passwordKeys = try SyncCrypto.derivePasswordKeys(email: normalized, password: newPassword, kdfParams: params)
                 let recoveryKeys = SyncCrypto.deriveRecoveryKeys(recoveryKeyBytes: recovery.rawBytes)
                 return RecoveryMaterial(
@@ -330,6 +346,7 @@ public final class SyncEngine {
                     wrappedByPassword: try SyncCrypto.wrapVaultKey(vaultKey, wrapKey: passwordKeys.passwordWrapKey, kind: .password, email: normalized),
                     wrappedByRecovery: try SyncCrypto.wrapVaultKey(vaultKey, wrapKey: recoveryKeys.recoveryWrapKey, kind: .recovery, email: normalized))
             }
+            defer { material.zero() }
             let response = try await client.recover(SyncRecoverRequest(
                 email: normalized, recoveryTicket: challenge.recoveryTicket, newKdfParams: material.params,
                 newAuthVerifier: material.authVerifier.base64EncodedString(),
@@ -391,20 +408,29 @@ public final class SyncEngine {
         try await task.value
         guard sessionGeneration == generation else { return }
         startWebSocket()
+        // A sync requested while the first sync ran (or deferred attachments) runs now.
+        if followUpRequested {
+            followUpRequested = false
+            requestSync()
+        }
     }
 
     public func changePassword(currentPassword: String, newPassword: String, revokeOtherSessions: Bool) async throws {
         guard let client, let email = state?.email, let credentials,
-              let vaultKey = Data(base64Encoded: credentials.vaultKeyBase64) else { throw SyncError.notSignedIn }
+              var vaultKey = Data(base64Encoded: credentials.vaultKeyBase64) else { throw SyncError.notSignedIn }
+        defer { SyncCrypto.zeroData(&vaultKey) }
         try validateNewPassword(newPassword)
         let params = try await client.kdfParams(email: email)
-        let material = try await Self.offMain { () -> PasswordChangeMaterial in
+        let currentVaultKey = vaultKey
+        var material = try await Self.offMain { () -> PasswordChangeMaterial in
+            let vaultKey = currentVaultKey
             let current = try SyncCrypto.derivePasswordKeys(email: email, password: currentPassword, kdfParams: params)
             let newParams = try SyncKDFParams.generate()
             let fresh = try SyncCrypto.derivePasswordKeys(email: email, password: newPassword, kdfParams: newParams)
             return PasswordChangeMaterial(currentAuthVerifier: current.authVerifier, params: newParams, authVerifier: fresh.authVerifier,
                                           wrapped: try SyncCrypto.wrapVaultKey(vaultKey, wrapKey: fresh.passwordWrapKey, kind: .password, email: email))
         }
+        defer { material.zero() }
         _ = try await client.changePassword(SyncChangePasswordRequest(
             currentAuthVerifier: material.currentAuthVerifier.base64EncodedString(), newKdfParams: material.params,
             newAuthVerifier: material.authVerifier.base64EncodedString(),
@@ -460,9 +486,10 @@ public final class SyncEngine {
     public func deleteAccount(password: String) async throws {
         guard let client, let email = state?.email else { throw SyncError.notSignedIn }
         let params = try await client.kdfParams(email: email)
-        let auth = try await Self.offMain { () -> Data in
+        var auth = try await Self.offMain { () -> Data in
             try SyncCrypto.derivePasswordKeys(email: email, password: password, kdfParams: params).authVerifier
         }
+        defer { SyncCrypto.zeroData(&auth) }
         try await client.deleteAccount(authVerifier: auth)
         sessionGeneration &+= 1
         cancelWork()
@@ -546,8 +573,8 @@ public final class SyncEngine {
         let keys = try SyncCrypto.VaultKeys(vaultKey: vaultKey)
         let credentials = SyncCredentials(accessToken: response.accessToken, refreshToken: response.refreshToken,
                                           accessTokenExpiresAt: response.accessTokenExpiresAt, vaultKeyBase64: vaultKey.base64EncodedString())
-        let store = credentialStore
-        try await Self.offMain { try store.save(credentials) }
+        credentialSequence &+= 1
+        try await credentialWriter.save(credentials, store: credentialStore, sequence: credentialSequence)
         let categories = state?.categories ?? snapshot.categories
         let normalizedURL = (try? SyncClient.validatedBaseURL(serverURL).absoluteString) ?? serverURL
         let fresh = SyncPersistedState(serverURL: normalizedURL, accountId: response.accountId, email: response.email.isEmpty ? email : response.email,
@@ -571,19 +598,27 @@ public final class SyncEngine {
         self.credentials = credentials
     }
 
+    /// Bound to the current session: a refresh that ends after sign-out or an account switch
+    /// never writes its tokens over the next session's secrets.
     private func tokenUpdateHandler() -> @Sendable (SyncTokens) async -> Void {
-        { [weak self] tokens in await self?.persistRotatedTokens(tokens) }
+        let generation = sessionGeneration
+        return { [weak self] tokens in await self?.persistRotatedTokens(tokens, generation: generation) }
     }
 
     /// Saves a rotated token pair before the client uses it: the old refresh token is spent.
-    private func persistRotatedTokens(_ tokens: SyncTokens) {
-        guard var credentials else { return }
+    /// The Keychain write runs off the main actor, in order with every other secrets write.
+    private func persistRotatedTokens(_ tokens: SyncTokens, generation: Int) async {
+        guard generation == sessionGeneration, var credentials else { return }
         credentials.accessToken = tokens.accessToken
         credentials.refreshToken = tokens.refreshToken
         credentials.accessTokenExpiresAt = tokens.accessTokenExpiresAt
         self.credentials = credentials
-        do { try credentialStore.save(credentials) }
-        catch { appendWarning("Could not save the refreshed sync session: \(SyncError.wrap(error).localizedDescription)") }
+        credentialSequence &+= 1
+        do { try await credentialWriter.save(credentials, store: credentialStore, sequence: credentialSequence) }
+        catch {
+            guard generation == sessionGeneration else { return }
+            appendWarning("Could not save the refreshed sync session: \(SyncError.wrap(error).localizedDescription)")
+        }
     }
 
     private func startWebSocket() {
@@ -635,8 +670,10 @@ public final class SyncEngine {
     private func clearLocalSession(status newStatus: SyncStatus) async {
         sessionGeneration &+= 1
         cancelWork()
-        let store = credentialStore
-        try? await Self.offMain { try store.clear() }
+        // Signed out: a refresh in flight must not save tokens or call back.
+        if let oldClient = client { await oldClient.setTokens(nil) }
+        credentialSequence &+= 1
+        try? await credentialWriter.clear(store: credentialStore, sequence: credentialSequence)
         stateSequence &+= 1
         await stateWriter.delete(store: stateStore, sequence: stateSequence)
         let categories = state?.categories ?? snapshot.categories
@@ -715,7 +752,67 @@ public final class SyncEngine {
         return Context(client: client, keys: vaultKeys, accountId: accountId, adapter: adapter)
     }
 
-    /// One normal pass, with up to two extra rounds when the server reports push conflicts.
+    /// Pull from the cursor. A cloud reset since the last pull takes the whole account again.
+    private func pullForPass(_ ctx: Context, current: SyncPersistedState) async throws -> (pull: PullResult, fullReset: Bool) {
+        let pull = try await pullAll(ctx, since: current.lastPulledRevision, collections: nil)
+        if !pull.fullResync, pull.resetRevision > current.lastResetRevision, current.lastPulledRevision > 0 {
+            // The cloud was replaced since the last pull.
+            return (try await pullAll(ctx, since: 0, collections: nil), true)
+        }
+        return (pull, pull.fullResync)
+    }
+
+    /// The newest revision of each record, in first-seen order.
+    private static func mergeNewest(_ base: [SyncRemoteRecord], _ extra: [SyncRemoteRecord]) -> [SyncRemoteRecord] {
+        guard !extra.isEmpty else { return base }
+        var byKey: [String: SyncRemoteRecord] = [:]
+        var order: [String] = []
+        for record in base + extra {
+            let key = SyncPersistedState.mirrorKey(record.collection, record.recordId)
+            if let existing = byKey[key] {
+                if existing.revision < record.revision { byKey[key] = record }
+            } else {
+                byKey[key] = record
+                order.append(key)
+            }
+        }
+        return order.compactMap { byKey[$0] }
+    }
+
+    /// Keys `pushDiff` would send for `local`: changed or new records, and tombstones for
+    /// mirrored records that a complete collection no longer lists.
+    private static func dirtyKeys(_ local: HashedBundle, mirror: [String: SyncRecordMirror]) -> Set<String> {
+        var dirty = Set<String>()
+        for (key, item) in local.records {
+            if let known = mirror[key], !known.deleted, known.payloadHash == item.hash { continue }
+            dirty.insert(key)
+        }
+        for (key, known) in mirror where !known.deleted && local.records[key] == nil {
+            if let parsed = SyncPersistedState.parseMirrorKey(key), local.completeCollections.contains(parsed.collection) { dirty.insert(key) }
+        }
+        return dirty
+    }
+
+    /// Records left for later: the next pass pulls their collections again from revision 0
+    /// (their mirror entries stay unset, so they count as changed).
+    private func deferRecords(_ keys: Set<String>, warnings: inout [String]) {
+        guard !keys.isEmpty else { return }
+        let categories = Set(keys.compactMap { SyncPersistedState.parseMirrorKey($0)?.collection.category })
+        mutateState { state in
+            for category in categories.sorted(by: { $0.rawValue < $1.rawValue }) where !state.pendingBackfillCategories.contains(category) {
+                state.pendingBackfillCategories.append(category)
+            }
+        }
+        saveStateInBackground()
+        followUpRequested = true
+        warnings.append("Some attachments are still downloading; their Easels and Notes follow in the next sync pass.")
+    }
+
+    /// One normal pass. Local edits made since the last pass are pushed before remote changes
+    /// are applied: the server keeps the copy with the newer `clientUpdatedAt` (last writer
+    /// wins), so an older remote copy never overwrites a newer local edit. When this Mac has no
+    /// local edits (an idle wakeup), the pass only pulls and applies. Up to two extra rounds run
+    /// when the final push reports conflicts.
     private func runPass(generation: Int) async throws {
         var passWarnings: [String] = []
         for _ in 0..<3 {
@@ -725,27 +822,62 @@ public final class SyncEngine {
             let enabled = categories.enabledCollections
 
             setStatus(.syncing("Checking for changes…"))
-            var pull = try await pullAll(ctx, since: current.lastPulledRevision, collections: nil)
+            var (pull, fullReset) = try await pullForPass(ctx, current: current)
             _ = try context(generation)
-            var fullReset = pull.fullResync
-            if !fullReset, pull.resetRevision > current.lastResetRevision, current.lastPulledRevision > 0 {
-                // The cloud was replaced since the last pull: take the whole account again.
-                pull = try await pullAll(ctx, since: 0, collections: nil)
-                fullReset = true
-            }
             let backfill = current.pendingBackfillCategories.filter { categories.isEnabled($0) }
+            let backfillCollections = Set(backfill.flatMap(\.collections))
+            var backfillRecords: [SyncRemoteRecord] = []
             if !fullReset, !backfill.isEmpty {
                 let extra = try await pullAll(ctx, since: 0, collections: backfill.flatMap(\.collections))
-                var byKey = Dictionary(pull.records.map { (SyncPersistedState.mirrorKey($0.collection, $0.recordId), $0) }, uniquingKeysWith: { _, new in new })
-                for record in extra.records where byKey[SyncPersistedState.mirrorKey(record.collection, record.recordId)] == nil {
-                    byKey[SyncPersistedState.mirrorKey(record.collection, record.recordId)] = record
-                }
-                pull.records = Array(byKey.values)
+                passWarnings += extra.warnings
+                backfillRecords = extra.records
+                pull.records = Self.mergeNewest(pull.records, backfillRecords)
             }
             _ = try context(generation)
             passWarnings += pull.warnings
 
-            let remote = pull.records.filter { enabled.contains($0.collection) }
+            // Local state before any remote record is applied.
+            var preApplyLocal: HashedBundle?
+            var dirtyBeforeApply = Set<String>()
+            var pushedFirst = Set<String>()
+            var cursorAfterPush: Int?
+            if !fullReset {
+                let local = try await collectHashed(ctx, categories: categories)
+                _ = try context(generation)
+                passWarnings += local.warnings
+                preApplyLocal = local
+                dirtyBeforeApply = Self.dirtyKeys(local, mirror: current.mirror)
+                // A category switched on merges with its cloud copy first, so it is not pushed first.
+                let first = local.excluding(backfillCollections)
+                if !Self.dirtyKeys(first, mirror: current.mirror).isEmpty {
+                    setStatus(.syncing("Uploading changes…"))
+                    let early = try await pushDiff(ctx, local: first, mode: .delta, generation: generation,
+                                                   cursorBase: pull.currentRevision, warnings: &passWarnings)
+                    guard let afterPush = state else { throw SyncError.notSignedIn }
+                    let stillDirty = Self.dirtyKeys(local, mirror: afterPush.mirror)
+                    // Accepted: these keys now hold this Mac's copy, which supersedes the pulled one.
+                    pushedFirst = dirtyBeforeApply.subtracting(stillDirty)
+                    dirtyBeforeApply = stillDirty
+                    current = afterPush
+                    cursorAfterPush = early.cleanCursor
+                    if early.hadConflicts {
+                        // The server holds strictly newer copies of some records: pull them; they win.
+                        setStatus(.syncing("Checking for changes…"))
+                        let again = try await pullForPass(ctx, current: current)
+                        _ = try context(generation)
+                        passWarnings += again.pull.warnings
+                        pull = again.pull
+                        fullReset = again.fullReset
+                        if !fullReset { pull.records = Self.mergeNewest(pull.records, backfillRecords) }
+                        cursorAfterPush = nil
+                    }
+                }
+            }
+            if fullReset { preApplyLocal = nil; dirtyBeforeApply = []; pushedFirst = [] }
+
+            let remote = pull.records.filter {
+                enabled.contains($0.collection) && !pushedFirst.contains(SyncPersistedState.mirrorKey($0.collection, $0.recordId))
+            }
             var changed: [SyncRemoteRecord] = []
             if fullReset {
                 current.mirror = current.mirror.filter { key, _ in
@@ -764,18 +896,15 @@ public final class SyncEngine {
 
             var echoCandidates = Set<String>()
             var newPending: [SyncPendingExtension] = []
+            var deferred = Set<String>()
             if !changed.isEmpty {
                 setStatus(.syncing("Applying changes…"))
-                var dirtyBeforeApply = Set<String>()
-                if !fullReset {
-                    let before = try await collectHashed(ctx, categories: categories)
-                    _ = try context(generation)
-                    for (key, local) in before.records where current.mirror[key]?.payloadHash != local.hash { dirtyBeforeApply.insert(key) }
-                }
-                let blobs = try await downloadBlobs(ctx, for: changed, warnings: &passWarnings)
+                let download = try await downloadBlobs(ctx, for: changed, warnings: &passWarnings)
                 _ = try context(generation)
+                deferred = download.deferredKeys
+                changed.removeAll { deferred.contains(SyncPersistedState.mirrorKey($0.collection, $0.recordId)) }
                 if fullReset { try await ctx.adapter.prepareLocalBackup(root: dataRoot) }
-                let bundle = SyncRemoteBundle(records: changed, blobs: blobs, isFullSnapshot: fullReset)
+                let bundle = SyncRemoteBundle(records: changed, blobs: download.blobs, isFullSnapshot: fullReset)
                 let outcome = try await applyRemote(ctx, bundle: bundle, mode: fullReset ? .replaceLocal : .mergeOrDelta, categories: categories)
                 _ = try context(generation)
                 passWarnings += outcome.warnings
@@ -783,23 +912,34 @@ public final class SyncEngine {
                 for record in changed {
                     let key = SyncPersistedState.mirrorKey(record.collection, record.recordId)
                     current.mirror[key] = SyncRecordMirror(payloadHash: record.payloadHash, clientUpdatedAt: record.clientUpdatedAt, deleted: record.deleted)
+                    // A local edit the server refused (it had a newer copy) or a backfill merge is
+                    // pushed again after the apply when the merged result differs.
                     if !dirtyBeforeApply.contains(key) { echoCandidates.insert(key) }
                 }
-                for id in blobs.keys where !current.uploadedBlobIDs.contains(id) { current.uploadedBlobIDs.append(id) }
+                for id in download.blobs.keys where !current.uploadedBlobIDs.contains(id) { current.uploadedBlobIDs.append(id) }
             }
             // Tombstones the server sent for records this device never had.
             for record in remote where record.deleted && current.mirror[SyncPersistedState.mirrorKey(record.collection, record.recordId)] == nil {
                 current.mirror[SyncPersistedState.mirrorKey(record.collection, record.recordId)] =
                     SyncRecordMirror(payloadHash: record.payloadHash, clientUpdatedAt: record.clientUpdatedAt, deleted: true)
             }
-            current.lastPulledRevision = pull.currentRevision
+            current.lastPulledRevision = max(pull.currentRevision, cursorAfterPush ?? 0)
             current.lastResetRevision = max(current.lastResetRevision, pull.resetRevision)
+            if pull.truncated { followUpRequested = true }
             commitSyncFields(current, processedBackfill: backfill, newPending: newPending)
+            deferRecords(deferred, warnings: &passWarnings)
 
+            // Nothing arrived and the first push covered every collection: nothing is left to send.
+            if changed.isEmpty, preApplyLocal != nil, backfillCollections.isEmpty { break }
             setStatus(.syncing("Uploading changes…"))
-            let local = try await collectHashed(ctx, categories: categories)
-            _ = try context(generation)
-            passWarnings += local.warnings
+            let local: HashedBundle
+            if changed.isEmpty, let preApplyLocal {
+                local = preApplyLocal
+            } else {
+                local = try await collectHashed(ctx, categories: categories)
+                _ = try context(generation)
+                passWarnings += local.warnings
+            }
             guard var afterApply = state else { throw SyncError.notSignedIn }
             suppressEchoes(echoCandidates, local: local, state: &afterApply)
             commitState(afterApply)
@@ -826,39 +966,49 @@ public final class SyncEngine {
             let pull = try await pullAll(ctx, since: 0, collections: nil)
             _ = try context(generation)
             passWarnings += pull.warnings
-            let remote = pull.records.filter { enabled.contains($0.collection) && !$0.deleted }
-            let blobs = try await downloadBlobs(ctx, for: remote, warnings: &passWarnings)
+            var remote = pull.records.filter { enabled.contains($0.collection) && !$0.deleted }
+            let download = try await downloadBlobs(ctx, for: remote, warnings: &passWarnings)
             _ = try context(generation)
+            let deferred = download.deferredKeys
+            remote.removeAll { deferred.contains(SyncPersistedState.mirrorKey($0.collection, $0.recordId)) }
             let replace = strategy == .replaceLocalWithCloud
             setStatus(.syncing(replace ? "Replacing this Mac's data…" : "Merging…"))
             if replace { try await ctx.adapter.prepareLocalBackup(root: dataRoot) }
-            let outcome = try await applyRemote(ctx, bundle: SyncRemoteBundle(records: remote, blobs: blobs, isFullSnapshot: true),
+            let outcome = try await applyRemote(ctx, bundle: SyncRemoteBundle(records: remote, blobs: download.blobs, isFullSnapshot: true),
                                                 mode: replace ? .replaceLocal : .mergeOrDelta, categories: categories)
             _ = try context(generation)
             passWarnings += outcome.warnings
             var applied = Set<String>()
             for record in pull.records where enabled.contains(record.collection) {
                 let key = SyncPersistedState.mirrorKey(record.collection, record.recordId)
+                guard !deferred.contains(key) else { continue }
                 current.mirror[key] = SyncRecordMirror(payloadHash: record.payloadHash, clientUpdatedAt: record.clientUpdatedAt, deleted: record.deleted)
                 if !record.deleted { applied.insert(key) }
             }
-            for id in blobs.keys where !current.uploadedBlobIDs.contains(id) { current.uploadedBlobIDs.append(id) }
+            for id in download.blobs.keys where !current.uploadedBlobIDs.contains(id) { current.uploadedBlobIDs.append(id) }
             current.lastPulledRevision = pull.currentRevision
             current.lastResetRevision = pull.resetRevision
             commitSyncFields(current, processedBackfill: SyncCategory.allCases, newPending: outcome.pendingExtensionInstalls)
+            deferRecords(deferred, warnings: &passWarnings)
 
-            setStatus(.syncing("Uploading this Mac's data…"))
+            setStatus(.syncing(replace ? "Finishing…" : "Uploading this Mac's data…"))
             let local = try await collectHashed(ctx, categories: categories)
             _ = try context(generation)
             passWarnings += local.warnings
             guard var afterApply = state else { throw SyncError.notSignedIn }
-            // Replace: what this Mac now holds is the cloud copy. Merge: push the merged result.
-            if replace { suppressEchoes(applied, local: local, state: &afterApply) }
-            commitState(afterApply)
-            let result = try await pushDiff(ctx, local: local, mode: .delta, generation: generation, warnings: &passWarnings)
-            if result.hadConflicts {
-                mutateState { $0.awaitingInitialChoice = nil }
-                try await runPass(generation: generation)
+            if replace {
+                // This Mac now holds the cloud copy. Record the local form of what was applied and
+                // upload nothing: local items the cloud did not have were meant to be replaced.
+                suppressEchoes(applied, local: local, state: &afterApply)
+                commitState(afterApply)
+            } else {
+                // Merge: push the merged result.
+                commitState(afterApply)
+                let result = try await pushDiff(ctx, local: local, mode: .delta, generation: generation, warnings: &passWarnings)
+                if result.hadConflicts {
+                    mutateState { $0.awaitingInitialChoice = nil }
+                    try await runPass(generation: generation)
+                }
             }
 
         case .replaceCloudWithLocal:
@@ -868,14 +1018,15 @@ public final class SyncEngine {
             passWarnings += local.warnings
             current.mirror = [:]
             commitSyncFields(current, processedBackfill: SyncCategory.allCases)
-            _ = try await pushDiff(ctx, local: local, mode: .replaceCloud, generation: generation, warnings: &passWarnings)
-            // Catch up past this device's own records (they match the mirror and are skipped).
-            guard var caughtUp = state else { throw SyncError.notSignedIn }
-            let pull = try await pullAll(ctx, since: 0, collections: nil)
+            let result = try await pushDiff(ctx, local: local, mode: .replaceCloud, generation: generation, warnings: &passWarnings)
             _ = try context(generation)
-            caughtUp.lastPulledRevision = pull.currentRevision
-            caughtUp.lastResetRevision = max(caughtUp.lastResetRevision, pull.resetRevision)
-            commitState(caughtUp)
+            // After the reset only this Mac's records exist: skip past them. If another device
+            // pushed between batches, read again from the reset (own records match the mirror).
+            mutateState { state in
+                state.lastResetRevision = max(state.lastResetRevision, result.resetRevision)
+                state.lastPulledRevision = result.cleanCursor ?? result.resetRevision
+            }
+            saveStateInBackground()
         }
 
         mutateState { state in
@@ -895,14 +1046,27 @@ public final class SyncEngine {
         var resetRevision: Int
         var fullResync: Bool
         var warnings: [String]
+        /// A delta pull stopped at a cap; `currentRevision` is where the next pass continues.
+        var truncated = false
     }
 
+    /// Bounds on what one pull holds in memory.
+    static let maxPulledRecords = 20_000
+    static let maxPulledCiphertextBytes = 64 * 1024 * 1024
+    /// Bounds on the attachments one pass downloads.
+    static let maxBlobsPerPass = 256
+    static let maxTotalBlobBytesPerPass = 64 * 1024 * 1024
+
+    /// Pulls every page. A delta pull that reaches a cap stops after a whole page and continues
+    /// in a follow-up pass; a full snapshot over a cap fails, because a partial snapshot would
+    /// look like deletions.
     private func pullAll(_ ctx: Context, since start: Int, collections: [SyncCollection]?) async throws -> PullResult {
         var since = start
         var byKey: [String: SyncRemoteRecord] = [:]
         var order: [String] = []
         var result = PullResult(records: [], currentRevision: start, resetRevision: state?.lastResetRevision ?? 0, fullResync: false, warnings: [])
         var pages = 0
+        var ciphertextBytes = 0
         while true {
             pages += 1
             if pages > 100_000 { throw SyncError.decoding("The server kept sending change pages.") }
@@ -914,7 +1078,9 @@ public final class SyncEngine {
             if restarted {
                 result.fullResync = true
                 byKey.removeAll(); order.removeAll()
+                ciphertextBytes = 0
             }
+            ciphertextBytes += page.records.reduce(0) { $0 + $1.ciphertext.utf8.count }
             let keys = ctx.keys, accountId = ctx.accountId, wire = page.records
             let decrypted = try await Self.offMain { Self.decrypt(wire, keys: keys, accountId: accountId) }
             result.warnings += decrypted.warnings
@@ -932,6 +1098,16 @@ public final class SyncEngine {
                 throw SyncError.decoding("The server's change cursor did not advance.")
             }
             since = page.nextSince
+            if byKey.count >= Self.maxPulledRecords || ciphertextBytes >= Self.maxPulledCiphertextBytes {
+                guard start > 0, !result.fullResync, collections == nil else {
+                    throw SyncError.payloadTooLarge("The cloud data (more than \(Self.maxPulledRecords) records or 64 MB in one sync)")
+                }
+                // Everything up to `nextSince` is held; the rest arrives in the next pass.
+                result.currentRevision = since
+                result.truncated = true
+                result.warnings.append("Open Sync received many changes at once; the rest follows in the next sync pass.")
+                break
+            }
         }
         result.records = order.compactMap { byKey[$0] }
         return result
@@ -963,35 +1139,77 @@ public final class SyncEngine {
         return (records, warnings)
     }
 
-    private func downloadBlobs(_ ctx: Context, for records: [SyncRemoteRecord], warnings: inout [String]) async throws -> [String: Data] {
-        var refs: [String: SyncedAssetRef] = [:]
-        for record in records where record.collection.carriesAssets && !record.deleted {
-            guard let payload = record.payload, let probe = try? JSONDecoder().decode(SyncedAssetsProbe.self, from: payload) else { continue }
-            for ref in probe.assets ?? [] where SyncCrypto.isValidBlobID(ref.blobId) { refs[ref.blobId] = ref }
+    /// Valid attachment references of one asset-carrying record.
+    private static func assetRefs(_ record: SyncRemoteRecord) -> [SyncedAssetRef] {
+        guard record.collection.carriesAssets, !record.deleted, let payload = record.payload,
+              let probe = try? JSONDecoder().decode(SyncedAssetsProbe.self, from: payload) else { return [] }
+        return (probe.assets ?? []).filter { SyncCrypto.isValidBlobID($0.blobId) }
+    }
+
+    /// Downloads and verifies the attachments `records` reference: at most `maxBlobsPerPass`
+    /// files and about `maxTotalBlobBytesPerPass` bytes. It plans whole records, so a record is
+    /// applied with all of its files or left for a later pass (`deferredKeys`). The first record
+    /// with files always goes ahead, so every pass makes progress.
+    private func downloadBlobs(_ ctx: Context, for records: [SyncRemoteRecord],
+                               warnings: inout [String]) async throws -> (blobs: [String: Data], deferredKeys: Set<String>) {
+        var planned: [[SyncedAssetRef]] = []
+        var plannedIDs = Set<String>()
+        var plannedBytes = 0
+        var capSkippedIDs = Set<String>()
+        for record in records {
+            var fresh: [SyncedAssetRef] = []
+            var freshIDs = Set<String>()
+            for ref in Self.assetRefs(record) where !plannedIDs.contains(ref.blobId) && freshIDs.insert(ref.blobId).inserted { fresh.append(ref) }
+            guard !fresh.isEmpty else { continue }
+            let bytes = fresh.reduce(0) { $0 + max(0, $1.byteLength) + 28 }
+            if !planned.isEmpty, plannedIDs.count + fresh.count > Self.maxBlobsPerPass || plannedBytes + bytes > Self.maxTotalBlobBytesPerPass {
+                capSkippedIDs.formUnion(freshIDs); continue
+            }
+            planned.append(fresh); plannedIDs.formUnion(freshIDs); plannedBytes += bytes
         }
-        guard !refs.isEmpty else { return [:] }
+        guard !planned.isEmpty else { return ([:], []) }
         setStatus(.syncing("Downloading attachments…"))
         var blobs: [String: Data] = [:]
-        for (blobId, ref) in refs.sorted(by: { $0.key < $1.key }) {
-            try Task.checkCancellation()
-            let ciphertext: Data
-            do { ciphertext = try await ctx.client.downloadBlob(blobId: blobId) }
-            catch let error as SyncError {
-                if error.requiresReauthentication { throw handleAuthError(error) }
-                if case .cancelled = error { throw error }
-                warnings.append("Could not download \(ref.filename): \(error.localizedDescription)"); continue
+        var attemptedIDs = Set<String>()
+        var totalBytes = 0
+        for (index, refs) in planned.enumerated() {
+            if index > 0, totalBytes >= Self.maxTotalBlobBytesPerPass {
+                // The files were larger than their records said: leave the rest for later.
+                for later in planned[index...] { capSkippedIDs.formUnion(later.map(\.blobId)) }
+                break
             }
-            let keys = ctx.keys, accountId = ctx.accountId
-            let plaintext = try await Self.offMain { () -> Data? in
-                guard let plain = try? SyncCrypto.openBlob(ciphertext, keys: keys, accountId: accountId, blobId: blobId),
-                      SyncCrypto.computeBlobID(plain, keys: keys) == blobId,
-                      SyncCrypto.sha256Hex(plain) == ref.sha256 else { return nil }
-                return plain
+            for ref in refs {
+                let blobId = ref.blobId
+                try Task.checkCancellation()
+                attemptedIDs.insert(blobId)
+                let ciphertext: Data
+                do { ciphertext = try await ctx.client.downloadBlob(blobId: blobId) }
+                catch let error as SyncError {
+                    if error.requiresReauthentication { throw handleAuthError(error) }
+                    if case .cancelled = error { throw error }
+                    warnings.append("Could not download \(ref.filename): \(error.localizedDescription)"); continue
+                }
+                totalBytes += ciphertext.count
+                let keys = ctx.keys, accountId = ctx.accountId
+                let plaintext = try await Self.offMain { () -> Data? in
+                    guard let plain = try? SyncCrypto.openBlob(ciphertext, keys: keys, accountId: accountId, blobId: blobId),
+                          SyncCrypto.computeBlobID(plain, keys: keys) == blobId,
+                          SyncCrypto.sha256Hex(plain) == ref.sha256 else { return nil }
+                    return plain
+                }
+                if let plaintext { blobs[blobId] = plaintext }
+                else { warnings.append("Skipped \(ref.filename): the attachment failed verification.") }
             }
-            if let plaintext { blobs[blobId] = plaintext }
-            else { warnings.append("Skipped \(ref.filename): the attachment failed verification.") }
         }
-        return blobs
+        // A record waits when any of its files was left out by the cap (not when one failed).
+        let missing = capSkippedIDs.subtracting(attemptedIDs)
+        var deferredKeys = Set<String>()
+        if !missing.isEmpty {
+            for record in records where Self.assetRefs(record).contains(where: { missing.contains($0.blobId) }) {
+                deferredKeys.insert(SyncPersistedState.mirrorKey(record.collection, record.recordId))
+            }
+        }
+        return (blobs, deferredKeys)
     }
 
     private func applyRemote(_ ctx: Context, bundle: SyncRemoteBundle, mode: SyncApplyMode, categories: SyncCategorySettings) async throws -> SyncApplyOutcome {
@@ -1012,6 +1230,13 @@ public final class SyncEngine {
         var blobs: [SyncLocalBlob]
         var completeCollections: Set<SyncCollection>
         var warnings: [String]
+
+        /// The bundle without `collections` (no records, no tombstones for them).
+        func excluding(_ collections: Set<SyncCollection>) -> HashedBundle {
+            guard !collections.isEmpty else { return self }
+            return HashedBundle(records: records.filter { !collections.contains($0.value.record.collection) }, blobs: blobs,
+                                completeCollections: completeCollections.subtracting(collections), warnings: warnings)
+        }
     }
 
     private func collectHashed(_ ctx: Context, categories: SyncCategorySettings) async throws -> HashedBundle {
@@ -1066,10 +1291,26 @@ public final class SyncEngine {
         var base64Bytes: Int { wire.ciphertext.utf8.count }
     }
 
-    private struct PushResult { var hadConflicts: Bool }
+    private struct PushResult {
+        var hadConflicts: Bool
+        /// The server revision after the last batch.
+        var currentRevision: Int
+        var resetRevision: Int
+        var acceptedCount: Int
+        /// The revision the pull cursor may move to: set only when every batch advanced the
+        /// server by this Mac's own mutations alone (nothing from another device in between).
+        var cleanCursor: Int?
+    }
 
-    private func pushDiff(_ ctx: Context, local: HashedBundle, mode: SyncPushMode, generation: Int, warnings: inout [String]) async throws -> PushResult {
+    /// Pushes what `local` changed against the mirror.
+    /// - Parameter cursorBase: nil moves `state.lastPulledRevision` past clean batches (the
+    ///   pass already applied everything up to it). Otherwise the cursor stays, and
+    ///   `cleanCursor` is computed from this revision for the caller to commit after its apply.
+    private func pushDiff(_ ctx: Context, local: HashedBundle, mode: SyncPushMode, generation: Int,
+                          cursorBase: Int? = nil, warnings: inout [String]) async throws -> PushResult {
         guard let current = state else { throw SyncError.notSignedIn }
+        let nothingSent = PushResult(hadConflicts: false, currentRevision: current.lastPulledRevision, resetRevision: current.lastResetRevision,
+                                     acceptedCount: 0, cleanCursor: cursorBase ?? current.lastPulledRevision)
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         var plans: [PlannedMutation] = []
         for (key, item) in local.records.sorted(by: { $0.key < $1.key }) {
@@ -1088,7 +1329,7 @@ public final class SyncEngine {
                                              clientUpdatedAt: max(now, known.clientUpdatedAt + 1)))
             }
         }
-        guard !plans.isEmpty || mode == .replaceCloud else { return PushResult(hadConflicts: false) }
+        guard !plans.isEmpty || mode == .replaceCloud else { return nothingSent }
 
         // Upload the blobs that dirty Easels and Notes reference.
         try await uploadBlobs(ctx, local: local, plans: plans, mode: mode, generation: generation, warnings: &warnings)
@@ -1122,42 +1363,57 @@ public final class SyncEngine {
         if !batch.isEmpty { batches.append(batch) }
         // A cloud replacement wipes the account even when this Mac has nothing to send.
         if batches.isEmpty, mode == .replaceCloud { batches.append([]) }
-        guard !batches.isEmpty else { return PushResult(hadConflicts: false) }
+        guard !batches.isEmpty else { return nothingSent }
 
         var hadConflicts = false
         var nextMode = mode
+        var chain: Int? = cursorBase ?? current.lastPulledRevision
+        var lastRevision = current.lastPulledRevision, lastReset = current.lastResetRevision, accepted = 0
         for (index, batch) in batches.enumerated() {
             _ = try context(generation)
             if batches.count > 1 { setStatus(.syncing("Uploading changes (\(index + 1) of \(batches.count))…")) }
             let base = state?.lastPulledRevision ?? 0
+            let knownReset = state?.lastResetRevision ?? 0
             let response: SyncPushResponse
             do { response = try await ctx.client.pushMutations(mode: nextMode, baseRevision: base, mutations: batch.map(\.wire)) }
             catch { throw handleAuthError(error) }
             _ = try context(generation)
             let conflicted = Set(response.conflicts.map { "\($0.collection)|\($0.recordId)" })
             if !conflicted.isEmpty { hadConflicts = true }
+            lastRevision = response.currentRevision
+            lastReset = response.resetRevision
+            accepted += response.acceptedCount
+            let wasReplace = nextMode == .replaceCloud
+            // The cursor may pass this batch only when the server revision grew by our own
+            // mutations alone (a reset counts from the new reset revision).
+            let start: Int? = wasReplace ? Optional(response.resetRevision) : (response.resetRevision == knownReset ? chain : nil)
+            if let start, conflicted.isEmpty, response.currentRevision >= start, response.currentRevision <= start + response.acceptedCount {
+                chain = response.currentRevision
+            } else {
+                chain = nil
+            }
+            let advance = chain
             mutateState { state in
                 for mutation in batch where !conflicted.contains(mutation.plan.key) {
                     state.mirror[mutation.plan.key] = SyncRecordMirror(payloadHash: mutation.plan.hash,
                                                                        clientUpdatedAt: mutation.plan.clientUpdatedAt,
                                                                        deleted: mutation.plan.deleted)
                 }
-                if nextMode == .replaceCloud {
+                guard cursorBase == nil else { return }
+                if wasReplace {
                     state.lastResetRevision = response.resetRevision
-                    state.lastPulledRevision = 0
-                } else if conflicted.isEmpty,
-                          response.resetRevision == state.lastResetRevision,
-                          response.currentRevision >= base,
-                          response.currentRevision <= base + response.acceptedCount {
-                    // Only our own mutations advanced the server revision: advance the cursor past them.
-                    state.lastPulledRevision = response.currentRevision
+                    // Everything after the reset is read again unless only our records follow it.
+                    state.lastPulledRevision = advance ?? response.resetRevision
+                } else if let advance {
+                    state.lastPulledRevision = max(state.lastPulledRevision, advance)
                 }
             }
             saveStateInBackground()
             // A multi-batch cloud replacement wipes once, then continues as delta.
             nextMode = .delta
         }
-        return PushResult(hadConflicts: hadConflicts)
+        return PushResult(hadConflicts: hadConflicts, currentRevision: lastRevision, resetRevision: lastReset,
+                          acceptedCount: accepted, cleanCursor: chain)
     }
 
     private func uploadBlobs(_ ctx: Context, local: HashedBundle, plans: [PlannedMutation], mode: SyncPushMode,
@@ -1296,8 +1552,15 @@ public final class SyncEngine {
         }
     }
 
-    private func resolvedDeviceName() -> String {
-        let raw = preferredDeviceName ?? state?.deviceName ?? Host.current().localizedName ?? "Mac"
+    /// `Host.current()` can block on name resolution, so it runs off the main actor.
+    private func resolvedDeviceName() async -> String {
+        let raw: String
+        if let known = preferredDeviceName ?? state?.deviceName {
+            raw = known
+        } else {
+            let hostName = try? await Self.offMain { () -> String? in Host.current().localizedName }
+            raw = hostName ?? "Mac"
+        }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return Self.truncated(trimmed.isEmpty ? "Mac" : trimmed, toScalars: SyncLimits.maxDeviceNameLength)
     }
@@ -1342,35 +1605,53 @@ public final class SyncEngine {
 
 // MARK: - Private support types
 
+// Each holder of key material zeroes its buffers with `zero()` when the caller is done.
+
 private struct DerivedPassword: Sendable {
-    let authVerifier: Data
-    let wrapKey: Data
+    var authVerifier: Data
+    var wrapKey: Data
+
+    mutating func zero() {
+        SyncCrypto.zeroData(&authVerifier); SyncCrypto.zeroData(&wrapKey)
+    }
 }
 
 private struct SignUpMaterial: Sendable {
     let params: SyncKDFParams
-    let vaultKey: Data
+    var vaultKey: Data
     let recoveryFormatted: String
-    let authVerifier: Data
-    let recoveryAuthVerifier: Data
+    var authVerifier: Data
+    var recoveryAuthVerifier: Data
     let wrappedByPassword: Data
     let wrappedByRecovery: Data
+
+    mutating func zero() {
+        SyncCrypto.zeroData(&vaultKey); SyncCrypto.zeroData(&authVerifier); SyncCrypto.zeroData(&recoveryAuthVerifier)
+    }
 }
 
 private struct RecoveryMaterial: Sendable {
     let params: SyncKDFParams
     let recoveryFormatted: String
-    let authVerifier: Data
-    let recoveryAuthVerifier: Data
+    var authVerifier: Data
+    var recoveryAuthVerifier: Data
     let wrappedByPassword: Data
     let wrappedByRecovery: Data
+
+    mutating func zero() {
+        SyncCrypto.zeroData(&authVerifier); SyncCrypto.zeroData(&recoveryAuthVerifier)
+    }
 }
 
 private struct PasswordChangeMaterial: Sendable {
-    let currentAuthVerifier: Data
+    var currentAuthVerifier: Data
     let params: SyncKDFParams
-    let authVerifier: Data
+    var authVerifier: Data
     let wrapped: Data
+
+    mutating func zero() {
+        SyncCrypto.zeroData(&currentAuthVerifier); SyncCrypto.zeroData(&authVerifier)
+    }
 }
 
 @MainActor
@@ -1379,6 +1660,24 @@ private final class TimeoutGate {
     func finish() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+/// Serializes secrets writes off the main actor; an older write never lands after a newer
+/// one (for example a rotated token pair after sign-out cleared the store).
+actor SyncCredentialWriter {
+    private var lastSequence = 0
+
+    func save(_ credentials: SyncCredentials, store: any SyncCredentialStoring, sequence: Int) throws {
+        guard sequence > lastSequence else { return }
+        lastSequence = sequence
+        try store.save(credentials)
+    }
+
+    func clear(store: any SyncCredentialStoring, sequence: Int) throws {
+        guard sequence > lastSequence else { return }
+        lastSequence = sequence
+        try store.clear()
     }
 }
 

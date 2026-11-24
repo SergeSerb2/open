@@ -717,7 +717,11 @@ public final class BrowserModel {
         rebuildIndex()
         for window in windows {
             if space(id: window.focusedSpaceID) == nil, let first = spaces.first { window.focusedSpaceID = first.id }
-            window.selectedNodeBySpace = window.selectedNodeBySpace.filter { space(id: $0.key) != nil && node(id: $0.value) != nil }
+            // A tab can move to another Space's sections or another Profile's Favorites in a sync:
+            // keep a remembered selection only where that Space still shows it.
+            window.selectedNodeBySpace = window.selectedNodeBySpace.filter { entry in
+                space(id: entry.key).map { isSelectable(entry.value, in: $0) } ?? false
+            }
         }
         var reloadedProfiles = Set<ProfileID>()
         for profile in oldProfiles + profiles where reloadedProfiles.insert(profile.id).inserted {

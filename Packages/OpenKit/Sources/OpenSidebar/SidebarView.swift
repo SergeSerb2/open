@@ -1242,6 +1242,12 @@ extension SidebarView {
         }
         guard let shown = activeBanner else { return }
         presentedBanner = wanted ? shown : nil
+        // An interrupted show or hide continues from where it is on screen, so read the
+        // presentation layer before the running animation is removed.
+        let interrupted = shown.layer?.animation(forKey: "banner") != nil
+        let presentation = interrupted ? shown.layer?.presentation() : nil
+        let currentOpacity = presentation.map { Double($0.opacity) }
+        let currentOffset = (presentation?.value(forKeyPath: "transform.translation.y") as? NSNumber)?.doubleValue
         shown.layer?.removeAllAnimations()
         if wanted {
             shown.isHidden = false
@@ -1250,12 +1256,12 @@ extension SidebarView {
         guard animatesSidebarChanges else { shown.isHidden = !wanted; return }
         let duration = wanted ? Motion.bannerIn : Motion.bannerOut
         let opacity = CABasicAnimation(keyPath: "opacity")
-        opacity.fromValue = wanted ? 0 : 1; opacity.toValue = wanted ? 1 : 0; opacity.duration = duration
+        opacity.fromValue = currentOpacity ?? (wanted ? 0 : 1); opacity.toValue = wanted ? 1 : 0; opacity.duration = duration
         let group = CAAnimationGroup(); group.animations = [opacity]; group.duration = duration
         group.timingFunction = CAMediaTimingFunction(name: .easeOut)
         if !Motion.reducesMotion {
             let slide = CABasicAnimation(keyPath: "transform.translation.y")
-            slide.fromValue = wanted ? 12 : 0; slide.toValue = wanted ? 0 : 12; slide.duration = duration
+            slide.fromValue = currentOffset ?? (wanted ? 12 : 0); slide.toValue = wanted ? 0 : 12; slide.duration = duration
             group.animations?.append(slide)
         }
         CATransaction.begin()

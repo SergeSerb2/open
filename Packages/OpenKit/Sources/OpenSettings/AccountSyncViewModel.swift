@@ -30,7 +30,9 @@ import OpenSync
     unowned let root: SettingsViewModel
 
     // MARK: Signed-out form
-    public var mode: Mode = .signIn { didSet { if mode != oldValue { errorText = ""; password = ""; newPassword = ""; confirmPassword = "" } } }
+    public var mode: Mode = .signIn {
+        didSet { if mode != oldValue { errorText = ""; password = ""; newPassword = ""; confirmPassword = ""; recoveryKeyInput = "" } }
+    }
     public var serverURL = SyncDefaults.serverURL { didSet { serverEdited = true } }
     public var email = ""
     public var password = ""
@@ -211,7 +213,7 @@ import OpenSync
                   "You need this key to reset your password. Without it, a forgotten password means your synced data cannot be decrypted.",
                   "Keep this file somewhere safe and private.", ""]
         do {
-            try Data(lines.joined(separator: "\n").utf8).write(to: url, options: [.atomic])
+            try Self.writePrivateFile(Data(lines.joined(separator: "\n").utf8), to: url)
             recoveryKeyStatus = "Saved to “\(url.lastPathComponent)”."
         } catch {
             recoveryKeyStatus = "Could not save the file. \(error.localizedDescription)"
@@ -219,6 +221,24 @@ import OpenSync
     }
 
     public func dismissRecoveryKey() { recoveryKey = nil; recoveryKeyCopied = false; recoveryKeyStatus = "" }
+
+    /// Writes `data` readable by the user only (0600) and replaces `url` atomically. The file
+    /// never exists with wider permissions, not even briefly.
+    private static func writePrivateFile(_ data: Data, to url: URL) throws {
+        let temp = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
+        let fd = open(temp.path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        do {
+            try handle.write(contentsOf: data)
+            try handle.synchronize()
+            try handle.close()
+            guard rename(temp.path, url.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        } catch {
+            unlink(temp.path)
+            throw error
+        }
+    }
 
     // MARK: First sync
 
@@ -265,6 +285,8 @@ import OpenSync
         currentPassword = ""; changedPassword = ""; changedPasswordConfirmation = ""; deletePassword = ""
         securityError = ""; securityStatus = ""; devicesError = ""; extensionsStatus = ""
         lastDevicesRefresh = nil
+        // The recovery key must not stay in memory or on screen for the next account.
+        recoveryKey = nil; recoveryKeyCopied = false; recoveryKeyStatus = ""
     }
 
     // MARK: Devices

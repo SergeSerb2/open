@@ -140,13 +140,17 @@ final class AppSyncDataAdapter: SyncDataAdapter {
     }
     var profilesDTO: [String: SyncedAdBlockProfile] = [:]
     var warnings: [String] = []
+    var allOpened = true
     for profile in profiles {
       guard await openAdBlockProfile(store, profile) else {
+        allOpened = false
         warnings.append("Ad blocking settings of the Profile “\(profile.name)” were not synced."); continue
       }
       profilesDTO[profile.id.rawValue.uuidString] = SyncedAdBlockProfile(
         enabledListIDs: store.enabledListIDs(for: profile.id), excludedDomains: store.excludedDomains(for: profile.id))
     }
+    // One record holds every Profile: a partial read would drop the others' settings everywhere.
+    guard allOpened else { return SyncBundlePart(warnings: warnings) }
     do {
       let record = try SyncLocalRecord(collection: .adblockConfig, recordId: "global",
                                        value: SyncedAdBlockConfigDTO(globalEnabled: store.isEnabled, profiles: profilesDTO))
@@ -159,13 +163,16 @@ final class AppSyncDataAdapter: SyncDataAdapter {
   private func collectBoosts() throws -> SyncBundlePart {
     var part = SyncBundlePart()
     let boosts = app.stores.boosts
-    for profile in profiles where !boosts.isRetired(profile.id) {
+    var complete = true
+    for profile in profiles {
+      // A skipped Profile's Boosts must not become tombstones on other Macs.
+      guard !boosts.isRetired(profile.id) else { complete = false; continue }
       for boost in boosts.store(for: profile.id).allBoosts() {
         let dto = SyncedBoostDTO(profileID: profile.id.rawValue, boost: boost)
         part.records.append(try SyncLocalRecord(collection: .boostItem, recordId: dto.recordID, value: dto))
       }
     }
-    part.complete.insert(.boostItem)
+    if complete { part.complete.insert(.boostItem) }
     return part
   }
 
@@ -417,24 +424,28 @@ final class AppSyncDataAdapter: SyncDataAdapter {
   func applyRemoteData(_ bundle: SyncRemoteBundle, mode: SyncApplyMode, categories: SyncCategorySettings) async throws -> SyncApplyOutcome {
     guard app.model != nil, app.directories != nil else { throw SyncError.noDataAdapter }
     var outcome = SyncApplyOutcome()
+    // A full cloud replacement is the whole account: a collection with no cloud records is
+    // empty in the cloud, so its local data is cleared too (on every local Profile).
+    let fullReplace = mode == .replaceLocal && bundle.isFullSnapshot
+    func applies(_ collection: SyncCollection) -> Bool { fullReplace || bundle.contains(collection) }
     // Profiles first: every other collection refers to them.
     try applyWorkspace(bundle, mode: mode, categories: categories)
-    if categories.isEnabled(.archive), bundle.contains(.archiveProfile) {
+    if categories.isEnabled(.archive), applies(.archiveProfile) {
       outcome.warnings += await applyArchive(bundle, mode: mode)
     }
     if categories.isEnabled(.settingsAndShortcuts) {
-      try applyPreferences(bundle, mode: mode)
-      outcome.warnings += applyKeyBindings(bundle)
+      if applies(.settingsPreferences) { try applyPreferences(bundle, mode: mode) }
+      if applies(.settingsKeybindings) { outcome.warnings += applyKeyBindings(bundle, mode: mode) }
     }
-    if categories.isEnabled(.adBlocking), bundle.contains(.adblockConfig) {
+    if categories.isEnabled(.adBlocking), applies(.adblockConfig) {
       outcome.warnings += await applyAdBlock(bundle, mode: mode)
     }
     if categories.isEnabled(.boostsEaselsNotes) {
-      if bundle.contains(.boostItem) { outcome.warnings += applyBoosts(bundle, mode: mode) }
-      if bundle.contains(.easelDocument) { outcome.warnings += applyEasels(bundle, mode: mode) }
-      if bundle.contains(.noteDocument) { outcome.warnings += applyNotes(bundle, mode: mode) }
+      if applies(.boostItem) { outcome.warnings += applyBoosts(bundle, mode: mode) }
+      if applies(.easelDocument) { outcome.warnings += applyEasels(bundle, mode: mode) }
+      if applies(.noteDocument) { outcome.warnings += applyNotes(bundle, mode: mode) }
     }
-    if categories.isEnabled(.history), bundle.contains(.historyProfile) {
+    if categories.isEnabled(.history), applies(.historyProfile) {
       outcome.warnings += await applyHistory(bundle, mode: mode)
     }
     if categories.isEnabled(.extensions), bundle.contains(.extensionsProfile) {
@@ -443,10 +454,22 @@ final class AppSyncDataAdapter: SyncDataAdapter {
       outcome.warnings += result.warnings
     }
     if categories.isEnabled(.credentialsAndPermissions) {
-      if bundle.contains(.sitePermissionsProfile) { outcome.warnings += applySitePermissions(bundle, mode: mode) }
+      if applies(.sitePermissionsProfile) { outcome.warnings += applySitePermissions(bundle, mode: mode) }
       if bundle.contains(.credentialsProfile) { outcome.warnings += await applyCredentials(bundle) }
     }
     return outcome
+  }
+
+  /// Like `profileRecords`, and in a full cloud replacement also every local Profile the cloud
+  /// has no record for, with the `empty` value (its local data is then cleared).
+  private func profileRecords<T: Decodable>(_ bundle: SyncRemoteBundle, _ collection: SyncCollection, as type: T.Type,
+                                            mode: SyncApplyMode, empty: (Profile) -> T,
+                                            warnings: inout [String]) -> [(profile: Profile, value: T?)] {
+    var result = profileRecords(bundle, collection, as: type, warnings: &warnings)
+    guard mode == .replaceLocal, bundle.isFullSnapshot else { return result }
+    let present = Set(result.map { $0.profile.id })
+    for profile in profiles where !present.contains(profile.id) { result.append((profile: profile, value: empty(profile))) }
+    return result
   }
 
   /// Record IDs of one per-Profile collection that this Mac has a Profile for.
@@ -462,7 +485,8 @@ final class AppSyncDataAdapter: SyncDataAdapter {
   }
 
   private func applyWorkspace(_ bundle: SyncRemoteBundle, mode: SyncApplyMode, categories: SyncCategorySettings) throws {
-    guard !bundle.collections.isDisjoint(with: SyncWorkspaceCodec.collections) else { return }
+    let clearsToday = mode == .replaceLocal && bundle.isFullSnapshot && categories.isEnabled(.todayTabs)
+    guard clearsToday || !bundle.collections.isDisjoint(with: SyncWorkspaceCodec.collections) else { return }
     guard let model = app.model else { return }
     var changed = false
     if categories.isEnabled(.workspace), let record = bundle.records(in: .workspaceWindowLayout).last(where: { !$0.deleted }),
@@ -470,7 +494,13 @@ final class AppSyncDataAdapter: SyncDataAdapter {
       for window in model.windows where window.style == .standard { SyncWorkspaceCodec.applyWindowLayout(layout, to: window) }
       changed = true
     }
-    if let resolved = try SyncWorkspaceCodec.resolveWorkspace(current: model, bundle: bundle, mode: mode, categories: categories) {
+    // A new Profile must not take a folder that exists under Profiles/ or Engine/, a retired
+    // name, or a current Profile's name (APFS ignores case; the codec lowercases).
+    var reserved = Set(model.profiles.map { $0.dataDirectoryName.lowercased() })
+    do { reserved.formUnion(try app.directories.unavailableDirectoryNames()) }
+    catch { throw SyncError.storage("The Profile folders could not be listed: \(error.localizedDescription)") }
+    if let resolved = try SyncWorkspaceCodec.resolveWorkspace(current: model, bundle: bundle, mode: mode, categories: categories,
+                                                              reservedDirectoryNames: reserved) {
       // Every Profile's folders exist before its Spaces or tabs can make an engine context.
       for profile in resolved.profiles { try app.directories.ensureProfileDirectories(for: profile) }
       model.applySyncedWorkspace(profiles: resolved.profiles, spaces: resolved.spaces,
@@ -490,13 +520,15 @@ final class AppSyncDataAdapter: SyncDataAdapter {
 
   private func applyArchive(_ bundle: SyncRemoteBundle, mode: SyncApplyMode) async -> [String] {
     var warnings: [String] = []
-    for (profile, dto) in profileRecords(bundle, .archiveProfile, as: SyncedArchiveProfileDTO.self, warnings: &warnings) {
+    for (profile, dto) in profileRecords(bundle, .archiveProfile, as: SyncedArchiveProfileDTO.self, mode: mode,
+                                         empty: { SyncedArchiveProfileDTO(profileID: $0.id.rawValue, records: []) }, warnings: &warnings) {
       guard let dto else { continue }
       let store = app.archiveSink.store(for: profile.id)
       do {
         if mode == .replaceLocal { try await store.deleteAll() }
         // Stored IDs count as duplicates and keep their rows: applying the same record twice is a no-op.
-        _ = try await store.importRecordsWithUndo(dto.records.compactMap(\.archivedTabRecord))
+        let rows = dto.records.compactMap(\.archivedTabRecord)
+        if !rows.isEmpty { _ = try await store.importRecordsWithUndo(rows) }
       } catch {
         warnings.append("Archived tabs of the Profile “\(profile.name)” could not be updated.")
       }
@@ -506,8 +538,16 @@ final class AppSyncDataAdapter: SyncDataAdapter {
   }
 
   private func applyPreferences(_ bundle: SyncRemoteBundle, mode: SyncApplyMode) throws {
-    guard let record = bundle.records(in: .settingsPreferences).last,
-          let dto = try record.decode(SyncedPreferencesDTO.self) else { return }
+    let dto: SyncedPreferencesDTO
+    if let record = bundle.records(in: .settingsPreferences).last {
+      guard let decoded = try record.decode(SyncedPreferencesDTO.self) else { return }
+      dto = decoded
+    } else if mode == .replaceLocal, bundle.isFullSnapshot {
+      // The cloud holds no settings: replacing local data removes this Mac's portable values.
+      dto = SyncedPreferencesDTO(values: [:])
+    } else {
+      return
+    }
     let defaults = UserDefaults.standard
     let local = Self.portablePreferences()
     var changed = Set<String>()
@@ -539,8 +579,15 @@ final class AppSyncDataAdapter: SyncDataAdapter {
     app.scheduleMenuRebuild()
   }
 
-  private func applyKeyBindings(_ bundle: SyncRemoteBundle) -> [String] {
-    guard let record = bundle.records(in: .settingsKeybindings).last else { return [] }
+  private func applyKeyBindings(_ bundle: SyncRemoteBundle, mode: SyncApplyMode) -> [String] {
+    // No cloud record in a full replacement means the cloud has no custom shortcuts.
+    guard let record = bundle.records(in: .settingsKeybindings).last else {
+      guard mode == .replaceLocal, bundle.isFullSnapshot, FileManager.default.fileExists(atPath: keyBindingsFile.path) else { return [] }
+      do { try FileManager.default.removeItem(at: keyBindingsFile) }
+      catch { return ["Synced keyboard shortcuts could not be saved: \(error.localizedDescription)"] }
+      if app.commandServicesPrepared { app.reloadKeyBindings() }
+      return []
+    }
     let file = keyBindingsFile
     do {
       if record.deleted {
@@ -567,16 +614,39 @@ final class AppSyncDataAdapter: SyncDataAdapter {
   }
 
   private func applyAdBlock(_ bundle: SyncRemoteBundle, mode: SyncApplyMode) async -> [String] {
-    guard let record = bundle.records(in: .adblockConfig).last else { return [] }
-    let dto: SyncedAdBlockConfigDTO
-    do {
-      guard let decoded = try record.decode(SyncedAdBlockConfigDTO.self) else { return [] }
-      dto = decoded
-    } catch { return [error.localizedDescription] }
+    let fullReplace = mode == .replaceLocal && bundle.isFullSnapshot
+    let record = bundle.records(in: .adblockConfig).last
+    guard record != nil || fullReplace else { return [] }
+    var remoteConfig: SyncedAdBlockConfigDTO?
+    if let record {
+      do {
+        guard let decoded = try record.decode(SyncedAdBlockConfigDTO.self) else { return [] }
+        remoteConfig = decoded
+      } catch { return [error.localizedDescription] }
+    }
     guard let store = await adBlockStore() else { return ["Ad blocking settings could not be applied: the store could not be opened."] }
     var warnings: [String] = []
-    do { if store.isEnabled != dto.globalEnabled { try store.setEnabled(dto.globalEnabled) } }
-    catch { warnings.append("Ad blocking could not be switched \(dto.globalEnabled ? "on" : "off").") }
+    if let dto = remoteConfig {
+      do { if store.isEnabled != dto.globalEnabled { try store.setEnabled(dto.globalEnabled) } }
+      catch { warnings.append("Ad blocking could not be switched \(dto.globalEnabled ? "on" : "off").") }
+    }
+    if fullReplace {
+      // A local Profile the cloud has no settings for goes back to the default lists and no allowed sites.
+      let listed = Set((remoteConfig?.profiles ?? [:]).keys.compactMap { UUID(uuidString: $0) })
+      for profile in profiles where !listed.contains(profile.id.rawValue) {
+        guard await openAdBlockProfile(store, profile) else {
+          warnings.append("Ad blocking settings of the Profile “\(profile.name)” could not be reset."); continue
+        }
+        do {
+          for domain in store.excludedDomains(for: profile.id).sorted() { try store.setExcluded(domain, excluded: false, profile: profile.id) }
+          try await store.resetListChoices(profile: profile.id)
+        } catch { warnings.append("Ad blocking settings of the Profile “\(profile.name)” could not be reset.") }
+      }
+    }
+    guard let dto = remoteConfig else {
+      app.settingsPresenter.refreshProfilesIfLoaded()
+      return warnings
+    }
     let removes = mode == .replaceLocal || !bundle.isFullSnapshot
     for (key, remote) in dto.profiles.sorted(by: { $0.key < $1.key }) {
       guard let uuid = UUID(uuidString: key), let profile = app.model.profile(id: ProfileID(rawValue: uuid)) else { continue }
@@ -767,7 +837,8 @@ final class AppSyncDataAdapter: SyncDataAdapter {
 
   private func applyHistory(_ bundle: SyncRemoteBundle, mode: SyncApplyMode) async -> [String] {
     var warnings: [String] = []
-    for (profile, dto) in profileRecords(bundle, .historyProfile, as: SyncedHistoryProfileDTO.self, warnings: &warnings) {
+    for (profile, dto) in profileRecords(bundle, .historyProfile, as: SyncedHistoryProfileDTO.self, mode: mode,
+                                         empty: { SyncedHistoryProfileDTO(profileID: $0.id.rawValue, entries: []) }, warnings: &warnings) {
       guard let dto, let store = app.stores.history(for: profile.id) else { continue }
       do {
         var known: [String: Double] = [:]
@@ -875,7 +946,9 @@ final class AppSyncDataAdapter: SyncDataAdapter {
   private func applySitePermissions(_ bundle: SyncRemoteBundle, mode: SyncApplyMode) -> [String] {
     var warnings: [String] = []
     let removes = mode == .replaceLocal || !bundle.isFullSnapshot
-    for (profile, dto) in profileRecords(bundle, .sitePermissionsProfile, as: SyncedSitePermissionsProfileDTO.self, warnings: &warnings) {
+    for (profile, dto) in profileRecords(bundle, .sitePermissionsProfile, as: SyncedSitePermissionsProfileDTO.self, mode: mode,
+                                         empty: { SyncedSitePermissionsProfileDTO(profileID: $0.id.rawValue, permissions: [], siteSettings: []) },
+                                         warnings: &warnings) {
       guard let dto else { continue }
       guard let context = liveContext(for: profile) else {
         warnings.append("Site permissions of the Profile “\(profile.name)” were not updated: the browser engine is not ready."); continue
@@ -915,9 +988,19 @@ final class AppSyncDataAdapter: SyncDataAdapter {
       let base = "Profiles/\(profile.dataDirectoryName)/"
       relative += [base + "Boosts/boosts.json", base + "AdBlock/catalog-state.json", base + "AdBlock/exclusions.json"]
     }
-    let paths = relative
+    // During first run (for example right after an import) the snapshot is not written yet:
+    // back up the live workspace instead, so a cloud replacement can be undone.
+    var liveSnapshot: Data?
+    if let model = app.model, !FileManager.default.fileExists(atPath: root.appendingPathComponent("State/browser.json").path) {
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.sortedKeys]
+      liveSnapshot = try encoder.encode(SnapshotMapper.dto(from: model))
+      relative.removeAll { $0 == "State/browser.json" }
+    }
+    let paths = relative, snapshot = liveSnapshot
     try await Task.detached(priority: .userInitiated) {
       var files: [(relativePath: String, data: Data)] = []
+      if let snapshot { files.append(("State/browser.json", snapshot)) }
       for path in paths {
         let url = root.appendingPathComponent(path)
         guard FileManager.default.fileExists(atPath: url.path), let data = try? Data(contentsOf: url) else { continue }

@@ -292,6 +292,10 @@ public actor SyncClient {
     private var tokens: SyncTokens?
     private var refreshTask: Task<SyncTokens, any Error>?
     private var onTokensUpdated: (@Sendable (SyncTokens) async -> Void)?
+    /// Changes on every `setTokens`, so a refresh started for an older session cannot write back.
+    private var tokenEpoch = 0
+    /// Bound for small JSON replies (blob upload, `HEAD`).
+    static let smallResponseBytes = 65_536
 
     public init(serverURL: String, deviceId: String, tokens: SyncTokens? = nil, session: URLSession? = nil) throws {
         self.baseURL = try Self.validatedBaseURL(serverURL)
@@ -325,7 +329,15 @@ public actor SyncClient {
         return url
     }
 
-    public func setTokens(_ tokens: SyncTokens?) { self.tokens = tokens }
+    public func setTokens(_ tokens: SyncTokens?) {
+        tokenEpoch &+= 1
+        self.tokens = tokens
+        guard tokens == nil else { return }
+        // Signed out: a refresh in flight must not save its tokens or reach the old handler.
+        refreshTask?.cancel()
+        refreshTask = nil
+        onTokensUpdated = nil
+    }
     public func currentTokens() -> SyncTokens? { tokens }
     public func setTokenUpdateHandler(_ handler: (@Sendable (SyncTokens) async -> Void)?) { onTokensUpdated = handler }
 
@@ -439,8 +451,10 @@ public actor SyncClient {
             var request = try self.request(method: "PUT", path: "/v1/blobs/\(blobId)", query: [], token: token)
             request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
             request.setValue(String(ciphertext.count), forHTTPHeaderField: "Content-Length")
-            let (data, response) = try await self.session.upload(for: request, from: ciphertext)
-            return try Self.decodeJSON(data: data, response: response, limit: SyncLimits.maxJSONResponseBytes)
+            request.httpBody = ciphertext
+            // The reply is a small JSON object; a larger one is cut off.
+            let (data, response) = try await Self.limitedData(session: self.session, for: request, limit: Self.smallResponseBytes)
+            return try Self.decodeJSON(data: data, response: response, limit: Self.smallResponseBytes)
         }
     }
 
@@ -459,7 +473,7 @@ public actor SyncClient {
         guard SyncCrypto.isValidBlobID(blobId) else { throw SyncError.transport("Invalid blob ID.") }
         return try await perform(authenticated: true) { token in
             let request = try self.request(method: "HEAD", path: "/v1/blobs/\(blobId)", query: [], token: token)
-            let (data, response) = try await self.session.data(for: request)
+            let (data, response) = try await Self.limitedData(session: self.session, for: request, limit: Self.smallResponseBytes)
             guard let http = response as? HTTPURLResponse else { throw SyncError.transport("No HTTP response.") }
             if http.statusCode == 404 { return false }
             try Self.checkStatus(data: data, response: response)
@@ -514,16 +528,22 @@ public actor SyncClient {
     /// One refresh at a time. A caller whose token was already replaced reuses the new one.
     private func refreshTokens(replacing usedAccessToken: String) async throws -> SyncTokens {
         if let current = tokens, current.accessToken != usedAccessToken, !usedAccessToken.isEmpty { return current }
-        if let refreshTask { return try await refreshTask.value }
+        if let refreshTask {
+            let joinedEpoch = tokenEpoch
+            let fresh: SyncTokens
+            do { fresh = try await refreshTask.value } catch { throw SyncError.wrap(error) }
+            guard tokens != nil, joinedEpoch == tokenEpoch else { throw SyncError.notSignedIn }
+            return fresh
+        }
         guard let current = tokens else { throw SyncError.notSignedIn }
-        let session = self.session, base = baseURL, device = deviceId
+        let session = self.session, base = baseURL, device = deviceId, epoch = tokenEpoch
         let task = Task<SyncTokens, any Error> {
             var request = URLRequest(url: base.appendingPathComponent("v1/auth/refresh"))
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.httpBody = try JSONEncoder().encode(SyncRefreshRequest(refreshToken: current.refreshToken, deviceId: device))
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await Self.limitedData(session: session, for: request, limit: SyncLimits.maxJSONResponseBytes)
             let decoded: SyncTokenRefreshResponse
             do {
                 decoded = try Self.decodeJSON(data: data, response: response, limit: SyncLimits.maxJSONResponseBytes)
@@ -535,9 +555,11 @@ public actor SyncClient {
                               accessTokenExpiresAt: decoded.accessTokenExpiresAt ?? 0)
         }
         refreshTask = task
-        defer { refreshTask = nil }
+        defer { if refreshTask == task { refreshTask = nil } }
         let fresh: SyncTokens
         do { fresh = try await task.value } catch { throw SyncError.wrap(error) }
+        // Signed out or switched sessions while the request ran: drop the result.
+        guard tokens != nil, epoch == tokenEpoch else { throw SyncError.notSignedIn }
         tokens = fresh
         // Save the rotated refresh token before anything else can fail: the old one is now spent.
         await onTokensUpdated?(fresh)
@@ -559,6 +581,10 @@ public actor SyncClient {
 
     /// Reads at most `limit` bytes; larger responses are cancelled.
     private func limitedData(for request: URLRequest, limit: Int) async throws -> (Data, URLResponse) {
+        try await Self.limitedData(session: session, for: request, limit: limit)
+    }
+
+    private static func limitedData(session: URLSession, for request: URLRequest, limit: Int) async throws -> (Data, URLResponse) {
         let (bytes, response) = try await session.bytes(for: request)
         if response.expectedContentLength > Int64(limit) {
             bytes.task.cancel()
@@ -704,14 +730,18 @@ public actor SyncWebSocketClient {
             }
             pinger.cancel()
             if task === socket { task = nil }
+            // Read the server's close frame and HTTP status before our own cancel replaces them.
+            let closeCode = socket.closeCode
+            let closeReason = socket.closeReason
+            let httpStatus = (socket.response as? HTTPURLResponse)?.statusCode
             socket.cancel(with: .goingAway, reason: nil)
             guard !Task.isCancelled, generation == current else { break }
-            let reason = socket.closeReason.map { String(decoding: $0, as: UTF8.self) }
-            if socket.closeCode.rawValue == Self.sessionRevokedCloseCode || reason == "session_revoked" {
+            let reason = closeReason.map { String(decoding: $0, as: UTF8.self) }
+            if closeCode.rawValue == Self.sessionRevokedCloseCode || reason == "session_revoked" {
                 await handlers.onSessionRevoked()
                 break
             }
-            if let http = socket.response as? HTTPURLResponse, http.statusCode == 401 { forceRefresh = true }
+            if httpStatus == 401 { forceRefresh = true }
             // Jitter keeps many devices from reconnecting in step after a server restart.
             guard await sleep(seconds: backoff * Double.random(in: 0.8...1.2)) else { break }
             backoff = min(backoff * 2, Self.maximumBackoff)
@@ -745,7 +775,8 @@ public actor SyncWebSocketClient {
         case "connected":
             await handlers.onConnected(frame.serverRevision ?? 0, frame.resetRevision ?? 0)
         case "sync_available":
-            guard frame.sourceDeviceId != deviceId else { return }
+            // Device IDs are UUIDs; compare without case so this Mac's own pushes never wake it.
+            if let source = frame.sourceDeviceId, source.lowercased() == deviceId.lowercased() { return }
             await handlers.onWakeup(frame.revision ?? 0, frame.resetRevision ?? 0, frame.sourceDeviceId)
         default:
             break

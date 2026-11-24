@@ -183,10 +183,8 @@ extension AppSyncDataAdapter {
       } catch {
         warnings.append("Some passwords or cards of the Profile “\(profile.name)” could not be saved.")
       }
-      // Open pages of the Profile see the new autofill data after a reload, as after an import.
-      for factory in app.hostFactories.values where !factory.isIncognito {
-        for host in factory.hosts.values where host.profileID == profile.id && !host.closed { host.reload() }
-      }
+      // No reload of open pages: a background sync must never discard form input or end a call.
+      // Autofill reads the new data on the next form focus or navigation.
     }
     return warnings
   }

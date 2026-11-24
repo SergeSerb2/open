@@ -6,11 +6,13 @@ export class SlidingWindowLimiter {
   private readonly limit: number;
   private readonly windowMs: number;
   private readonly hits = new Map<string, number[]>();
+  private readonly maxEntries: number;
   private readonly sweeper: NodeJS.Timeout;
 
-  constructor(limit: number, windowMs = 60_000) {
+  constructor(limit: number, windowMs = 60_000, maxEntries = 50_000) {
     this.limit = limit;
     this.windowMs = windowMs;
+    this.maxEntries = Math.max(1, maxEntries);
     this.sweeper = setInterval(() => this.sweep(Date.now()), Math.min(windowMs, 60_000));
     this.sweeper.unref();
   }
@@ -25,6 +27,15 @@ export class SlidingWindowLimiter {
     const cutoff = now - this.windowMs;
     let stamps = this.hits.get(key);
     if (stamps === undefined) {
+      if (this.hits.size >= this.maxEntries) {
+        this.sweep(now);
+        // Still full: evict the oldest key (Map insertion order) so memory stays bounded.
+        while (this.hits.size >= this.maxEntries) {
+          const oldest = this.hits.keys().next();
+          if (oldest.done) break;
+          this.hits.delete(oldest.value);
+        }
+      }
       stamps = [];
       this.hits.set(key, stamps);
     }

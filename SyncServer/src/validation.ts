@@ -216,12 +216,12 @@ export function readUuid(obj: JsonObject, key: string): string {
   if (typeof value !== "string" || !UUID_RE.test(value)) {
     throw validationError(`"${key}" must be a UUID string.`);
   }
-  return value;
+  return value.toLowerCase();
 }
 
 export function parseUuidParam(value: string, key: string): string {
   if (!UUID_RE.test(value)) throw validationError(`"${key}" must be a UUID string.`);
-  return value;
+  return value.toLowerCase();
 }
 
 export function readDeviceName(obj: JsonObject): string {

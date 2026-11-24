@@ -166,7 +166,7 @@ export function startServer(config: Config): Promise<RunningServer> {
       const method = req.method ?? "GET";
       const pathname = url.pathname;
 
-      if (pathname.startsWith("/v1/auth/")) {
+      if (pathname.startsWith("/v1/auth/") || (pathname === "/v1/account" && method === "DELETE")) {
         const verdict = authLimiter.hit(ip);
         if (!verdict.allowed) {
           throw new ApiError(429, "RATE_LIMITED", "Too many authentication requests; slow down.", {
@@ -223,9 +223,15 @@ export function startServer(config: Config): Promise<RunningServer> {
 
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     socket.on("error", () => socket.destroy());
-    const pathname = (req.url ?? "").split("?")[0];
+    const rawTarget = req.url ?? "";
+    const queryAt = rawTarget.indexOf("?");
+    const pathname = queryAt < 0 ? rawTarget : rawTarget.slice(0, queryAt);
     if (pathname !== "/v1/sync/ws") {
       rejectUpgrade(socket, 404, "Not Found", "NOT_FOUND", "No such endpoint.");
+      return;
+    }
+    if (queryAt >= 0) {
+      rejectUpgrade(socket, 400, "Bad Request", "VALIDATION_ERROR", "The WebSocket endpoint takes no query parameters.");
       return;
     }
     const handshake = checkHandshake(req);

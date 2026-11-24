@@ -433,7 +433,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     next()
   }
   func back() {
-    guard !firstRun.busy, !defaultPending, !finishing else { return }
+    guard !firstRun.busy, !defaultPending, !finishing, !accountBusy else { return }
     if step == .importData && firstRun.step == .secretsConsent { firstRun.cancelPasswords(); return }
     guard let previous = entered.popLast() else { return }; go(previous, back: true)
   }
@@ -513,7 +513,9 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     accountServerField?.stringValue = accountServer
   }
   /// Signs in or creates the account. Sign-in with cloud data takes the cloud setup (a backup of
-  /// this Mac's files is kept); a new account uploads this Mac's setup.
+  /// this Mac's files is kept), unless this onboarding already imported browser data: then the
+  /// import and the cloud setup are merged, so the fresh import is not overwritten. A new
+  /// account uploads this Mac's setup.
   func submitAccount() {
     guard step == .account, !accountBusy, !finishing, !accountSignedIn else { return }
     captureAccountFields()
@@ -524,6 +526,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       accountStatus = "Enter your email and password."; accountStatusIsError = true; render(direction: 0); return
     }
     let password = accountPassword, creating = accountCreating, displayName = name
+    let keepsImport = firstRun.outcome?.didImportAnything == true
     accountBusy = true; accountStatusIsError = false
     accountStatus = creating ? "Creating your account…":"Signing in…"
     render(direction: 0)
@@ -538,8 +541,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
         } else {
           switch try await engine.signIn(serverURL: server, email: email, password: password) {
           case .needsInitialChoice:
-            try await engine.completeInitialSync(strategy: .replaceLocalWithCloud)
-            status = "Synced your Open setup from the cloud."
+            try await engine.completeInitialSync(strategy: keepsImport ? .mergeLocalAndCloud:.replaceLocalWithCloud)
+            status = keepsImport ? "Merged your imported data with your Open setup from the cloud.":"Synced your Open setup from the cloud."
           case .synced:
             status = "Signed in. This Mac's setup is now in your Open account."
           }

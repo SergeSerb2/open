@@ -12,6 +12,8 @@ import type { Socket } from "node:net";
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 export const MAX_CLIENT_PAYLOAD = 65_536;
+/** Max fragments per client message; stops floods of zero-byte continuation frames. */
+export const MAX_CLIENT_FRAGMENTS = 64;
 export const CLOSE_SESSION_REVOKED = 4001;
 
 const OP_CONT = 0x0;
@@ -93,6 +95,7 @@ export class WsConnection {
   private buffer: Buffer = Buffer.alloc(0);
   private fragments: Buffer[] = [];
   private fragmentBytes = 0;
+  private fragmentCount = 0;
   private fragmentOpcode = 0;
   private closeTimer: NodeJS.Timeout | undefined;
   private reported = false;
@@ -182,6 +185,10 @@ export class WsConnection {
   feed(chunk: Buffer): void {
     if (this.isClosed) return;
     this.alive = true;
+    // A single frame is at most header (14) + payload; refuse chunks that would exceed that bound.
+    if (this.buffer.length + chunk.length > MAX_CLIENT_PAYLOAD * 2 + 128) {
+      return this.failProtocol(1009, "message_too_big");
+    }
     this.buffer = this.buffer.length === 0 ? chunk : Buffer.concat([this.buffer, chunk]);
     // Bound memory: a single frame is at most header (14) + 64 KiB payload.
     for (;;) {
@@ -257,13 +264,16 @@ export class WsConnection {
 
     this.fragmentBytes += payload.length;
     if (this.fragmentBytes > MAX_CLIENT_PAYLOAD) return this.failProtocol(1009, "message_too_big");
-    this.fragments.push(payload);
+    if (payload.length > 0) this.fragments.push(payload);
+    this.fragmentCount += 1;
+    if (this.fragmentCount > MAX_CLIENT_FRAGMENTS) return this.failProtocol(1009, "too_many_fragments");
     if (!fin) return;
 
     const message = Buffer.concat(this.fragments);
     const messageOpcode = this.fragmentOpcode;
     this.fragments = [];
     this.fragmentBytes = 0;
+    this.fragmentCount = 0;
     this.fragmentOpcode = 0;
 
     if (messageOpcode === OP_BINARY) return this.failProtocol(1003, "binary_not_supported");
@@ -371,11 +381,19 @@ export class WsHub {
     try {
       message = JSON.parse(text);
     } catch {
+      conn.close(1008, "invalid_message");
       return;
     }
-    if (typeof message === "object" && message !== null && (message as { type?: unknown }).type === "ping") {
-      conn.sendJson({ type: "pong" });
+    if (typeof message !== "object" || message === null || Array.isArray(message)) {
+      conn.close(1008, "invalid_message");
+      return;
     }
+    const keys = Object.keys(message);
+    if (keys.length !== 1 || keys[0] !== "type" || (message as { type?: unknown }).type !== "ping") {
+      conn.close(1008, "invalid_message");
+      return;
+    }
+    conn.sendJson({ type: "pong" });
   }
 
   /** Wakes every connection of the account except those of the source device. */

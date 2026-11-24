@@ -281,7 +281,8 @@ class Device {
   constructor(label, server) {
     this.label = label;
     this.server = server;
-    this.deviceId = crypto.randomUUID().toUpperCase(); // Swift's UUID().uuidString casing
+    this.wireId = crypto.randomUUID().toUpperCase(); // what the client sends: Swift's UUID().uuidString casing
+    this.deviceId = this.wireId.toLowerCase(); // what the server stores and returns (canonical lowercase)
     this.deviceName = `${label} (e2e)`;
   }
   get auth() {
@@ -304,7 +305,7 @@ class Device {
         recoveryAuthVerifier: b64(material.recoveryAuthKey),
         wrappedVaultKeyByPassword: b64(material.wrappedByPassword),
         wrappedVaultKeyByRecovery: b64(material.wrappedByRecovery),
-        deviceId: this.deviceId,
+        deviceId: this.wireId,
         deviceName: this.deviceName,
         platform: "macos",
       },
@@ -322,7 +323,7 @@ class Device {
       body: {
         email,
         authVerifier: b64(keys.authKey),
-        deviceId: this.deviceId,
+        deviceId: this.wireId,
         deviceName: this.deviceName,
         platform: "macos",
       },
@@ -358,7 +359,7 @@ class Device {
   push(mutations, { mode = "delta", baseRevision = 0, extra = {} } = {}) {
     return api(this.server, "POST", "/v1/sync/push", {
       ...this.auth,
-      body: { deviceId: this.deviceId, mode, baseRevision, mutations, ...extra },
+      body: { deviceId: this.wireId, mode, baseRevision, mutations, ...extra },
     });
   }
   changes(query = "") {
@@ -386,7 +387,7 @@ class Device {
 // ---------------------------------------------------------------------------
 function openWs(server, device, { token = device.accessToken, headers = {} } = {}) {
   const ws = new WebSocket(`ws://${server.host}:${server.port}/v1/sync/ws`, {
-    headers: { Authorization: `Bearer ${token}`, "X-Open-Device-Id": device.deviceId, ...headers },
+    headers: { Authorization: `Bearer ${token}`, "X-Open-Device-Id": device.wireId ?? device.deviceId, ...headers },
   });
   const messages = [];
   let notify = () => {};
@@ -434,7 +435,7 @@ function openWs(server, device, { token = device.accessToken, headers = {} } = {
 }
 
 /** Hand-rolled RFC 6455 client over a raw TCP socket, for protocol edge cases. */
-async function rawWs(server, { token, deviceId, key, extraHeaders = [], version = "13" } = {}) {
+async function rawWs(server, { token, deviceId, key, extraHeaders = [], version = "13", path: wsPath = "/v1/sync/ws" } = {}) {
   const socket = net.connect(server.port, server.host);
   await new Promise((resolve, reject) => {
     socket.once("connect", resolve);
@@ -442,7 +443,7 @@ async function rawWs(server, { token, deviceId, key, extraHeaders = [], version 
   });
   const clientKey = key ?? crypto.randomBytes(16).toString("base64");
   const lines = [
-    "GET /v1/sync/ws HTTP/1.1",
+    `GET ${wsPath} HTTP/1.1`,
     `Host: ${server.host}:${server.port}`,
     "Upgrade: websocket",
     "Connection: Upgrade",
@@ -653,7 +654,8 @@ async function run() {
     );
     assert.equal(j.email, EMAIL, "server returns the normalized email");
     assert.equal(j.displayName, "Alex");
-    assert.equal(j.deviceId, d1.deviceId, "deviceId echoed verbatim (case preserved)");
+    assert.equal(j.deviceId, d1.deviceId, "deviceId is canonicalized to lowercase (client sent uppercase)");
+    assert.notEqual(d1.wireId, d1.deviceId);
     assert.equal(j.serverRevision, 0);
     assert.equal(j.resetRevision, 0);
     assert.equal(j.hasCloudData, false);
@@ -1144,7 +1146,7 @@ async function run() {
       if (f.opcode === 0xa) { assert.equal(f.payload.toString(), "hb-1"); break; }
     }
     // app-level ping, 126-byte-plus extended length payload via padding field
-    c.sendText(JSON.stringify({ type: "ping", pad: "p".repeat(300) }));
+    c.sendText(`{"type":"ping"}${" ".repeat(300)}`);
     let f = await c.nextDataFrame();
     assert.deepEqual(JSON.parse(f.payload.toString()), { type: "pong" });
     // fragmented text message: "{"type":"ping"}" split in 3 frames
@@ -1192,10 +1194,15 @@ async function run() {
     c.destroy();
 
     c = await connect();
-    c.send(0x1, Buffer.alloc(65_536, 0x61)); // exactly 64 KiB of 'a' is accepted (ignored as non-JSON)
-    c.sendText('{"type":"ping"}');
-    const pong = await c.nextDataFrame();
-    assert.deepEqual(JSON.parse(pong.payload.toString()), { type: "pong" });
+    c.send(0x1, Buffer.alloc(65_536, 0x20)); // exactly 64 KiB (whitespace) is accepted by the framing layer...
+    close = await c.nextDataFrame();
+    assert.equal(closeCodeOf(close), 1008, "...and then rejected as a non-JSON message");
+    c.destroy();
+
+    c = await connect();
+    c.send(0x1, Buffer.alloc(65_536, 0x61));
+    close = await c.nextDataFrame();
+    assert.equal(closeCodeOf(close), 1008, "64 KiB of non-JSON text");
     c.destroy();
 
     c = await connect();
@@ -1228,6 +1235,82 @@ async function run() {
     assert.equal(c.status, 101);
     assert.ok(await c.waitEnded(4000), "server dropped the unresponsive connection");
     c.destroy();
+  });
+
+  await step("hardening: >64 fragments (zero-byte CONT floods) -> 1009; query string on upgrade -> 400; invalid/unknown WS messages -> 1008", async () => {
+    const connect = async () => {
+      const c = await rawWs(main, { token: d1.accessToken, deviceId: d1.deviceId });
+      assert.equal(c.status, 101);
+      await c.nextDataFrame(); // connected
+      return c;
+    };
+    // Exactly 64 fragments is fine; the 65th is not.
+    let c = await connect();
+    const ping = utf8('{"type":"ping"}');
+    c.send(0x1, ping.subarray(0, 1), { fin: false });
+    for (let i = 0; i < 62; i += 1) c.send(0x0, Buffer.alloc(0), { fin: false });
+    c.send(0x0, ping.subarray(1), { fin: true }); // 64th fragment
+    let f = await c.nextDataFrame();
+    assert.deepEqual(JSON.parse(f.payload.toString()), { type: "pong" }, "64 fragments are accepted");
+    c.destroy();
+
+    c = await connect();
+    c.send(0x1, Buffer.alloc(0), { fin: false });
+    for (let i = 0; i < 70; i += 1) c.send(0x0, Buffer.alloc(0), { fin: false });
+    let close = await c.nextDataFrame();
+    assert.equal(close.opcode, 0x8);
+    assert.equal(closeCodeOf(close), 1009, "zero-byte continuation flood");
+    assert.equal(close.payload.subarray(2).toString(), "too_many_fragments");
+    c.destroy();
+
+    // A single TCP chunk carrying a huge pile of tiny frames is cut off too.
+    c = await connect();
+    const chunk = Buffer.concat([
+      Buffer.from([0x01, 0x80, 0, 0, 0, 0]),
+      ...Array.from({ length: 40_000 }, () => Buffer.from([0x00, 0x80, 0, 0, 0, 0])),
+    ]);
+    c.socket.write(chunk);
+    close = await c.nextDataFrame();
+    assert.equal(close.opcode, 0x8);
+    assert.equal(closeCodeOf(close), 1009, "oversized single chunk of frames");
+    c.destroy();
+
+    // Query strings are rejected on the upgrade, not silently stripped.
+    for (const wsPath of ["/v1/sync/ws?foo=bar", "/v1/sync/ws?"]) {
+      const q = await rawWs(main, { token: d1.accessToken, deviceId: d1.deviceId, path: wsPath });
+      assert.equal(q.status, 400, wsPath);
+      assert.ok(q.body().includes("VALIDATION_ERROR"));
+      assert.ok(await q.waitEnded());
+      q.destroy();
+    }
+
+    // Anything but exactly {"type":"ping"} closes with 1008.
+    for (const text of [
+      "not json",
+      "[]",
+      "null",
+      "42",
+      '{"type":"ping","extra":1}',
+      '{"type":"pong"}',
+      '{"type":"subscribe"}',
+      '{"type":1}',
+      "{}",
+    ]) {
+      c = await connect();
+      c.sendText(text);
+      close = await c.nextDataFrame();
+      assert.equal(close.opcode, 0x8, text);
+      assert.equal(closeCodeOf(close), 1008, `message ${text}`);
+      assert.equal(close.payload.subarray(2).toString(), "invalid_message");
+      c.destroy();
+    }
+
+    // The same through the standard WebSocket client.
+    const ws = openWs(main, d1);
+    await ws.opened;
+    await ws.waitFor((m) => m.type === "connected");
+    ws.ws.send("definitely not json");
+    assert.equal((await ws.waitClosed()).code, 1008);
   });
 
   section("replaceCloud and fullResyncRequired");
@@ -1488,7 +1571,7 @@ async function run() {
 
   section("Device listing and revocation");
   await step("list devices, revoke Device 2: its WebSocket closes with 4001 and its token is rejected", async () => {
-    d1 = Object.assign(new Device("Device 1b", main), { deviceId: d1.deviceId });
+    d1 = Object.assign(new Device("Device 1b", main), { wireId: d1.wireId, deviceId: d1.deviceId });
     const { res } = await d1.signIn(EMAIL, RECOVERED_PASSWORD);
     assert.equal(res.status, 200);
     const s2 = new Device("Device 2b", main);
@@ -1589,6 +1672,53 @@ async function run() {
     for (let i = 0; i < 10; i += 1) assert.equal((await api(limited, "GET", "/health")).status, 200);
     await limited.stop();
     await rm(limited.dataDir, { recursive: true, force: true });
+  });
+
+  await step("DELETE /v1/account (runs scrypt) shares the per-IP auth rate limiter -> 429; other account routes are not limited", async () => {
+    const limited = await startServer({ OPEN_SYNC_AUTH_RATE_LIMIT: "3" });
+    extraServers.push(limited);
+    const bogus = { token: "z".repeat(43), body: { authVerifier: b64(crypto.randomBytes(32)) } };
+    for (let i = 0; i < 3; i += 1) {
+      assertError(await api(limited, "DELETE", "/v1/account", bogus), 401, "UNAUTHORIZED");
+    }
+    const res = await api(limited, "DELETE", "/v1/account", bogus);
+    assertError(res, 429, "RATE_LIMITED");
+    assert.ok(Number(res.headers.get("retry-after")) >= 1);
+    // The limiter bucket is shared with /v1/auth/*.
+    assertError(await api(limited, "POST", "/v1/auth/kdf-params", { body: { email: "a@example.com" } }), 429, "RATE_LIMITED");
+    // Other account routes (GET/PATCH, device removal) are untouched by the limiter.
+    for (let i = 0; i < 5; i += 1) {
+      assertError(await api(limited, "GET", "/v1/account", { token: bogus.token }), 401, "UNAUTHORIZED");
+      assertError(await api(limited, "DELETE", "/v1/account/devices/x", { token: bogus.token }), 401, "UNAUTHORIZED");
+    }
+    await limited.stop();
+    await rm(limited.dataDir, { recursive: true, force: true });
+  });
+
+  section("Device ID canonicalization");
+  await step("uppercase and lowercase UUIDs are one device: login normalizes to lowercase, isCurrent works, DELETE with the uppercase id removes it", async () => {
+    const dev = new Device("Casing", main);
+    assert.notEqual(dev.wireId, dev.deviceId);
+    const first = await dev.signIn(EMAIL, RECOVERED_PASSWORD);
+    assert.equal(first.res.status, 200, JSON.stringify(first.res.json));
+    assert.equal(first.res.json.deviceId, dev.deviceId, "uppercase request -> lowercase response");
+    // Same device signs in again with a differently cased id: still one row.
+    dev.wireId = dev.deviceId;
+    assert.equal((await dev.signIn(EMAIL, RECOVERED_PASSWORD)).res.status, 200);
+    const acct = (await api(main, "GET", "/v1/account", dev.auth)).json;
+    assert.equal(acct.devices.filter((d) => d.deviceId.toLowerCase() === dev.deviceId).length, 1, "no duplicate device rows");
+    assert.ok(acct.devices.every((d) => d.deviceId === d.deviceId.toLowerCase()), "all stored ids are lowercase");
+    assert.equal(acct.devices.find((d) => d.deviceId === dev.deviceId).isCurrent, true, "isCurrent matches");
+    // Refresh with the uppercase spelling also works.
+    const refreshed = await api(main, "POST", "/v1/auth/refresh", { body: { refreshToken: dev.refreshToken, deviceId: dev.deviceId.toUpperCase() } });
+    assert.equal(refreshed.status, 200, JSON.stringify(refreshed.json));
+    dev.adopt({ ...refreshed.json, accountId: dev.accountId });
+    assert.equal((await api(main, "GET", "/v1/account", dev.auth)).status, 200, "rotated tokens work");
+    // Removing with the UPPERCASE id works from another device of the account.
+    const del = await api(main, "DELETE", `/v1/account/devices/${dev.deviceId.toUpperCase()}`, d1.auth);
+    assert.deepEqual(del.json, { ok: true, removed: true });
+    const after = (await api(main, "GET", "/v1/account", d1.auth)).json.devices.map((d) => d.deviceId);
+    assert.ok(!after.includes(dev.deviceId));
   });
 
   section("Account deletion");

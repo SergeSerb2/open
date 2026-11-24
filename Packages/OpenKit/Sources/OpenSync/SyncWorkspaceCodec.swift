@@ -89,14 +89,20 @@ public enum SyncWorkspaceCodec {
     /// The workspace to install for `bundle`, or nil when it holds no workspace change or would
     /// leave this Mac with no Profile or no Space. Existing tabs are reused by ID, so open pages
     /// keep their web content.
+    /// - Parameter reservedDirectoryNames: Directory names a new Profile must not take, such as
+    ///   the folders that already exist under `Profiles/`. Compared without case (APFS).
     public static func resolveWorkspace(current model: BrowserModel, bundle: SyncRemoteBundle, mode: SyncApplyMode,
-                                        categories: SyncCategorySettings) throws -> ResolvedWorkspace? {
+                                        categories: SyncCategorySettings,
+                                        reservedDirectoryNames: Set<String> = []) throws -> ResolvedWorkspace? {
         let includeWorkspace = categories.isEnabled(.workspace)
         let includeToday = categories.isEnabled(.todayTabs)
+        let replace = mode == .replaceLocal
+        // A full cloud replacement with no Today records means the cloud has no Today tabs.
+        let clearsToday = replace && includeToday && bundle.isFullSnapshot
         var relevant: Set<SyncCollection> = []
         if includeWorkspace { relevant.formUnion([.workspaceMeta, .workspaceProfile, .workspaceSpace]) }
         if includeToday { relevant.insert(.workspaceToday) }
-        guard bundle.records.contains(where: { relevant.contains($0.collection) }) else { return nil }
+        guard clearsToday || bundle.records.contains(where: { relevant.contains($0.collection) }) else { return nil }
 
         // Current local state as payloads, keyed by ID.
         var profiles: [UUID: ProfileDTO] = [:]
@@ -107,7 +113,6 @@ public enum SyncWorkspaceCodec {
         var meta = metaPayload(from: model)
         let localMeta = meta
 
-        let replace = mode == .replaceLocal
         let remoteHasStructure = bundle.records.contains { !$0.deleted && ($0.collection == .workspaceProfile || $0.collection == .workspaceSpace) }
         if replace, includeWorkspace, remoteHasStructure { profiles = [:]; spaces = [:] }
 
@@ -158,10 +163,14 @@ public enum SyncWorkspaceCodec {
 
         var builder = NodeBuilder(model: model)
         // Profiles: a Profile this Mac has keeps its data directory; a new one gets a free name.
-        var usedDirectories = Set<String>()
-        for id in profileOrder {
-            if let local = model.profile(id: ProfileID(rawValue: id)) { usedDirectories.insert(local.dataDirectoryName) }
-        }
+        // Every local Profile's directory and every reserved name is taken, also a Profile the
+        // cloud deletes: its folder stays on disk until cleanup.
+        var usedDirectories = Set(reservedDirectoryNames.map { $0.lowercased() })
+        for profile in model.profiles { usedDirectories.insert(profile.dataDirectoryName.lowercased()) }
+        // `Default` is the engine's global context, not a removable folder: a cloud Profile may
+        // take it when no local Profile that stays keeps it.
+        let keepsDefault = profileOrder.contains { model.profile(id: ProfileID(rawValue: $0))?.dataDirectoryName.lowercased() == "default" }
+        if !keepsDefault { usedDirectories.remove("default") }
         var newProfileIDs = Set<ProfileID>()
         var builtProfiles: [Profile] = []
         for id in profileOrder {
@@ -202,6 +211,8 @@ public enum SyncWorkspaceCodec {
             let todayNodes: [SidebarNode]
             if includeToday, let remoteToday = today[id] {
                 todayNodes = remoteToday.compactMap { builder.node($0) }
+            } else if clearsToday {
+                todayNodes = []
             } else {
                 // Keep this Mac's Today tabs when Today does not sync or did not change.
                 todayNodes = (model.space(id: spaceID)?.today ?? []).compactMap { builder.adopt($0) }
@@ -223,12 +234,13 @@ public enum SyncWorkspaceCodec {
     /// Returns the resolved workspace, or nil when nothing changed. Also applies the window layout.
     @discardableResult
     public static func apply(_ bundle: SyncRemoteBundle, mode: SyncApplyMode, categories: SyncCategorySettings,
-                             to model: BrowserModel) throws -> ResolvedWorkspace? {
+                             to model: BrowserModel, reservedDirectoryNames: Set<String> = []) throws -> ResolvedWorkspace? {
         if categories.isEnabled(.workspace), let record = bundle.records(in: .workspaceWindowLayout).last(where: { !$0.deleted }),
            let layout = try record.decode(SyncedWindowLayoutDTO.self) {
             for window in model.windows where window.style == .standard { applyWindowLayout(layout, to: window) }
         }
-        guard let resolved = try resolveWorkspace(current: model, bundle: bundle, mode: mode, categories: categories) else { return nil }
+        guard let resolved = try resolveWorkspace(current: model, bundle: bundle, mode: mode, categories: categories,
+                                                  reservedDirectoryNames: reservedDirectoryNames) else { return nil }
         model.applySyncedWorkspace(profiles: resolved.profiles, spaces: resolved.spaces,
                                    routingRules: resolved.routingRules, defaultDestination: resolved.defaultDestination)
         return resolved
@@ -241,26 +253,48 @@ public enum SyncWorkspaceCodec {
         return ids.filter { valid.contains($0) && seen.insert($0).inserted }
     }
 
+    /// A directory name for a new Profile: only ASCII letters, digits, space, `-` and `_`,
+    /// 1...64 characters, not taken by `used` (lowercased, because APFS ignores case).
     private static func freeDirectoryName(preferred: String, used: inout Set<String>) -> String {
-        let trimmed = preferred.trimmingCharacters(in: .whitespacesAndNewlines)
-        let safe = !trimmed.isEmpty && !trimmed.contains("/") && !trimmed.hasPrefix(".") && trimmed.count <= 64
-        if safe, used.insert(trimmed).inserted { return trimmed }
+        let allowed = preferred.unicodeScalars.filter { scalar in
+            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || scalar == " " || scalar == "-" || scalar == "_")
+        }
+        var view = String.UnicodeScalarView()
+        view.append(contentsOf: allowed.prefix(64))
+        var base = String(view).trimmingCharacters(in: .whitespaces)
+        if base.isEmpty { base = "Profile" }
+        if base.lowercased() == "default" { base = "Default" }
+        if used.insert(base.lowercased()).inserted { return base }
         var index = 1
-        while !used.insert("Profile \(index)").inserted { index += 1 }
+        while !used.insert("profile \(index)").inserted { index += 1 }
         return "Profile \(index)"
     }
 
     /// Builds sidebar nodes from payloads with each item ID used once, reusing this Mac's `Tab`
     /// objects so open pages keep their web content.
+    /// Remote input is bounded: folders nest at most `maxDepth` levels and one resolve builds at
+    /// most `maxNodes` remote items. Items past a bound are skipped.
     @MainActor
     private struct NodeBuilder {
+        static let maxDepth = 32
+        static let maxNodes = 10_000
+
         let model: BrowserModel
         var used = Set<UUID>()
+        private var builtCount = 0
 
         init(model: BrowserModel) { self.model = model }
 
+        /// Counts one remote item; false when the bound is reached.
+        private mutating func reserveNode() -> Bool {
+            guard builtCount < Self.maxNodes else { return false }
+            builtCount += 1
+            return true
+        }
+
         mutating func tab(_ dto: TabDTO) -> Tab? {
-            guard let uuid = UUID(uuidString: dto.id), used.insert(uuid).inserted else { return nil }
+            guard let uuid = UUID(uuidString: dto.id), !used.contains(uuid), reserveNode() else { return nil }
+            used.insert(uuid)
             let fresh = SnapshotMapper.tab(from: dto)
             guard let existing = model.tab(id: ItemID(rawValue: uuid)) else { return fresh }
             existing.customTitle = fresh.customTitle
@@ -277,13 +311,14 @@ public enum SyncWorkspaceCodec {
             return existing
         }
 
-        mutating func node(_ dto: NodeDTO) -> SidebarNode? {
+        mutating func node(_ dto: NodeDTO, depth: Int = 0) -> SidebarNode? {
             switch dto {
             case .tab(let tab):
                 return self.tab(tab).map { .tab($0) }
             case .folder(let folder):
-                guard let uuid = UUID(uuidString: folder.id), used.insert(uuid).inserted else { return nil }
-                let children = folder.children.compactMap { node($0) }
+                guard depth < Self.maxDepth, let uuid = UUID(uuidString: folder.id), !used.contains(uuid), reserveNode() else { return nil }
+                used.insert(uuid)
+                let children = folder.children.compactMap { node($0, depth: depth + 1) }
                 let peeked = folder.peekedChildID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) }
                 let built = Folder(id: ItemID(rawValue: uuid), title: folder.title, isExpanded: folder.isExpanded,
                                    customIcon: folder.customIcon, iconOverride: SnapshotMapper.icon(from: folder.iconOverride),
@@ -292,11 +327,14 @@ public enum SyncWorkspaceCodec {
                 if let existing = model.node(id: ItemID(rawValue: uuid))?.folder { built.liveSSOURL = existing.liveSSOURL }
                 return .folder(built)
             case .split(let split):
-                guard let uuid = UUID(uuidString: split.id), !used.contains(uuid) else { return nil }
+                guard let uuid = UUID(uuidString: split.id), !used.contains(uuid), reserveNode() else { return nil }
                 let panes = split.panes.compactMap { tab($0) }
                 guard !panes.isEmpty else { return nil }
                 used.insert(uuid)
-                let fractions = split.fractions.count == panes.count ? split.fractions : Array(repeating: 1 / Double(panes.count), count: panes.count)
+                // Remote fractions must be finite and positive, one per pane; else equal panes.
+                let fractionsValid = split.fractions.count == panes.count && split.fractions.allSatisfy { $0.isFinite && $0 > 0 }
+                let total = fractionsValid ? split.fractions.reduce(0, +) : 0
+                let fractions = fractionsValid && total.isFinite && total > 0 ? split.fractions.map { $0 / total } : []
                 let focused = split.focusedPaneID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) }
                 return .split(Split(id: ItemID(rawValue: uuid), orientation: SplitOrientation(rawValue: split.orientation) ?? .horizontal,
                                     fractions: fractions, panes: panes,
