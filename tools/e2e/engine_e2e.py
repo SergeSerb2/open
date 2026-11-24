@@ -15475,7 +15475,7 @@ def main():
                 # UX round 1 wave 2 (W2) alone: duplicate tab titles across Spaces.
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/commandbar_duplicates.py"))["run"](factory, results[opts.only], sys.modules[__name__])
                 setcmd6_only = keys6_only = True
-            elif opts.only == "commandbar":
+            elif opts.only == "commandbar" and not setcmd6_only and not keys6_only and os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1":
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/commandbar_duplicates.py"))["run"](factory, results[opts.only], sys.modules[__name__])
             if opts.only == "commandbar" and not setcmd6_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/keybindings_r6.py"))["run"](factory, results[opts.only])
