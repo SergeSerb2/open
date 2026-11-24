@@ -158,6 +158,7 @@
 
     init(app: AppDelegate) {
       self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self
+      Self.installFullKeyboardAccessOverrideIfRequested()
       if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREPARATION_TRACE"] == "1" {
         libraryPreparationHeartbeat = LibraryPreparationHeartbeat()
         libraryPreparationHeartbeat?.start()
@@ -472,6 +473,9 @@
           throw Failure(message: "activation peer \(pid) maps this executable but is not a running application after 2 s")
         }
         NSApp.yieldActivation(to: target); return true
+      case "responder": return try auditResponder(a)
+      case "ax-tree": return try auditAXTree(a)
+      case "ax-debug": return try auditAXDebug(a)
       case "native-focus-state":
         return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "uptime": ProcessInfo.processInfo.systemUptime,
@@ -738,6 +742,10 @@
         let frame = controller.contentView.convert(action.view.bounds, from: action.view)
         return ["shown": true, "glyph": action.glyph.map { String(describing: $0) } ?? "", "label": action.view.accessibilityLabel() ?? "",
           "frame": [frame.minX, frame.minY, frame.width, frame.height], "point": [frame.midX, frame.midY]] as [String: Any]
+      case "sidebar-departing-rows":
+        // Row views the front window's outline is animating out (closed, archived or deleted rows).
+        guard let controller = app.frontWindowController else { throw Failure(message: "no window") }
+        return (a["all"] as? Bool == true) ? controller.sidebar.allRowViews : controller.sidebar.departingRows
       case "sidebar-row":
         // A sidebar row's frame and center in the front browser window (top-left origin).
         guard let controller = app.frontWindowController, let raw = a["node"] as? String, let uuid = UUID(uuidString: raw),
@@ -1559,6 +1567,9 @@
           "cardSamples": controller.cardMotionSamples.map { ["time": $0.time, "offset": $0.offset] },
           "space": controller.sidebar.spaceSlideAnimation.map(describeAnimation) ?? [:],
           "spacePage": ["phase": controller.container.spacePageMotionPhase,
+            "coverFading": controller.container.spacePageCoverFading, "containerHidden": controller.container.isHidden,
+            "coverFades": controller.container.spacePageCoverFades, "emptyPanelHidden": controller.emptyPanelHidden,
+            "containerMasked": controller.container.layer?.mask != nil,
             "cachedDestination": controller.container.spacePageUsesSnapshot,
             "cacheBytes": controller.container.spacePageSnapshotBytes,
             "captures": controller.container.spacePageCaptureCount,
@@ -1684,6 +1695,29 @@
           "paneBackgrounds": controller.container.slots.map { ["tab": $0.tabID.description,
             "color": colorComponents($0.paneChrome?.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) })] as [String: Any] },
           "shownPages": w.contents.filter { $0.value.view.window === win && !$0.value.view.isHiddenOrHasHiddenAncestor }.keys.map(\.description)] as [String: Any]
+      case "increase-contrast":
+        // Automation stand-in for macOS Increase Contrast in every browser window, through the same
+        // path as the system notification (context flag + refresh). The system setting is untouched.
+        guard let on = a["on"] as? Bool else { throw Failure(message: "missing on") }
+        // Kept for windows opened later too (review r1 #6); off returns to the system setting.
+        BrowserWindowController.increaseContrastOverride = on ? true : nil
+        let value = on || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        for controller in app.windowControllers where controller.context.increaseContrast != value {
+          controller.context.increaseContrast = value; controller.refresh()
+        }
+        return value
+      case "sidebar-force-hover":
+        // Render-only hover of a sidebar control (`SidebarContext.forcedHover`), so hover colours can be
+        // measured without the pointer or activating Open. target: urlField, urlStatus, or none.
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        switch a["target"] as? String ?? "none" {
+        case "urlField": controller.context.forcedHover = .urlField
+        case "urlStatus": controller.context.forcedHover = .urlStatus
+        case "none": controller.context.forcedHover = nil
+        default: throw Failure(message: "unknown hover target")
+        }
+        controller.contentView.layoutSubtreeIfNeeded()
+        return true
       case "appearance":
         // Open's own appearance only (light, dark, or nil for the system's); the
         // system setting is untouched.
@@ -2928,7 +2962,9 @@
       // AppKit preserves Shift in charactersIgnoringModifiers. Native menu
       // equivalents such as Redo need "Z", even though the key router folds case.
       // `characters` sends what real hardware gives (Cmd+Shift+2 carries "@"), for the base-key check.
-      let eventCharacters = (a["characters"] as? String).flatMap { $0.count == 1 ? $0 : nil } ?? (mods.contains(.shift) ? chars.uppercased() : chars)
+      // Hardware Shift-Tab carries the backtab character (0x19), which NSTextView maps to insertBacktab:.
+      let shiftedChars = chars == "\t" ? "\u{19}" : chars.uppercased()
+      let eventCharacters = (a["characters"] as? String).flatMap { $0.count == 1 ? $0 : nil } ?? (mods.contains(.shift) ? shiftedChars : chars)
       let route = a["route"] as? String ?? "app"
       let observeCommands = a["observeCommands"] as? Bool == true
       var menuObserver: (any NSObjectProtocol)?

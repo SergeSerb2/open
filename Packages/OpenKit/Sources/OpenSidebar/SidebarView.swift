@@ -279,9 +279,13 @@ public final class SidebarView: NSView {
     /// Theme, appearance, and the window background.
     private func syncTheme() {
         if let draft = creationDraft {
-            appearance = draft.resolvedAppearance(system: context.systemAppearance).nsAppearance
+            appearance = (context.increaseContrast && !context.isIncognito
+                ? SidebarContext.draftRoles(draft, system: context.systemAppearance).appearance
+                : draft.resolvedAppearance(system: context.systemAppearance)).nsAppearance
             let bg = presentation == .floatingCard ? cardBackground : themeBackground
             if bg?.targetStyle != draft { bg?.crossfade(to: draft, animated: false) }
+            // Increase Contrast chrome draws fixed role colours, which do not follow the appearance.
+            for v in [toolbar, urlField, bottomBar] as [NSView] { v.needsDisplay = true }
             return
         }
         guard let space = context.focusedSpace else { return }
@@ -402,10 +406,10 @@ public final class SidebarView: NSView {
         needsLayout = true; layoutSubtreeIfNeeded(); pager.beginCreation(page: page)
     }
     public func previewSpaceCreation(_ style: SpaceThemeStyle) {
-        creationDraft = style; syncTheme()
+        creationDraft = style; context.creationDraft = style; syncTheme()
     }
     public func endSpaceCreation(focus: SpaceID?) {
-        isCreatingSpace = false; creationDraft = nil
+        isCreatingSpace = false; creationDraft = nil; context.creationDraft = nil
         pager.endCreation(); needsLayout = true; layoutSubtreeIfNeeded(); syncTheme()
     }
     /// Starts inline rename of a row (or of the Space title when `nodeID` is nil).
@@ -748,6 +752,29 @@ extension SidebarView {
     public var downloadBadgeEvidence: [String: Any] { bottomBar.home.evidence }
 
     public func spaceSwitcher(spaceID: SpaceID) -> NSView? { bottomBar.items[spaceID] }
+
+    #if DEBUG || OPEN_AUTOMATION
+    /// Row views the focused outline is animating out (no longer mapped to a row), UXB-11.
+    public var departingRows: [[String: Any]] {
+        // AppKit moves an animating-out row into a nested clip view (NSTableRowsClipView).
+        allRowViews.filter { ($0["row"] as? Int ?? 0) < 0 }
+    }
+    /// Every row view under the focused outline (any depth), with its outline row (diagnostics).
+    public var allRowViews: [[String: Any]] {
+        guard let outline = pager.currentPage?.outline else { return [] }
+        func walk(_ v: NSView, _ depth: Int) -> [[String: Any]] {
+            var out: [[String: Any]] = []
+            for s in v.subviews {
+                if let r = s as? SidebarRowView {
+                    var e = r.departureEvidence; e["row"] = outline.row(for: r); e["depth"] = depth
+                    e["parent"] = String(describing: type(of: v)); out.append(e)
+                } else { out += walk(s, depth + 1) }
+            }
+            return out
+        }
+        return walk(outline, 0)
+    }
+    #endif
 
     #if DEBUG || OPEN_AUTOMATION
     /// Bottom-bar geometry in `root` coordinates for layout checks: Home, +, the sidebar, and each

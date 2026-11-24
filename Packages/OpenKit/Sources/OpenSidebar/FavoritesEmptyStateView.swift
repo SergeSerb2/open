@@ -31,6 +31,11 @@ public final class FavoritesEmptyStateView: NSView {
     private let titleLabel = NSTextField(wrappingLabelWithString: FavoritesEmptyStateView.title)
     private let bodyLabel = NSTextField(wrappingLabelWithString: FavoritesEmptyStateView.body)
     public let dismissButton = FavoritesEmptyDismissButton()
+    public override func isAccessibilityElement() -> Bool { true }
+    public override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    public override func accessibilityLabel() -> String? { Self.title }
+    public override func accessibilityHelp() -> String? { Self.body }
+    public override func accessibilityChildren() -> [Any]? { [dismissButton] }
     private var roles: SidebarRoles?
     private var content: ContentAppearance = .dark
     var onDismiss: (@MainActor () -> Void)? { didSet { dismissButton.onPress = onDismiss } }
@@ -58,12 +63,13 @@ public final class FavoritesEmptyStateView: NSView {
         wantsLayer = true
         titleLabel.font = Self.titleFont; titleLabel.alignment = .center; titleLabel.maximumNumberOfLines = 2
         bodyLabel.font = Self.bodyFont; bodyLabel.alignment = .center; bodyLabel.maximumNumberOfLines = 3
-        for label in [titleLabel, bodyLabel] { label.isSelectable = false; label.drawsBackground = false; addSubview(label) }
-        dismissButton.setAccessibilityLabel("Dismiss")
+        for label in [titleLabel, bodyLabel] {
+            label.isSelectable = false; label.drawsBackground = false; addSubview(label)
+            // The card's own label and help speak this text; hit testing lands on the group (K11).
+            label.setAccessibilityElement(false); label.cell?.setAccessibilityElement(false)
+        }
         dismissButton.setAccessibilityIdentifier("sidebarFavoritesEmptyStateDismissButton")
         addSubview(dismissButton)
-        setAccessibilityElement(true); setAccessibilityRole(.group)
-        setAccessibilityLabel(Self.title + ". " + Self.body)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
@@ -156,6 +162,8 @@ public final class FavoritesEmptyDismissButton: NSView {
     public override var isFlipped: Bool { true }
     public override func isAccessibilityElement() -> Bool { true }
     public override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    public override func accessibilityLabel() -> String? { "Close" }
+    public override func accessibilityHelp() -> String? { "Hide this tip" }
     public override func accessibilityPerformPress() -> Bool { onPress?(); return onPress != nil }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     public override func draw(_ dirtyRect: NSRect) {

@@ -34,7 +34,11 @@ extension AutomationController {
       "label": view.accessibilityLabel() ?? "",
       "id": view.accessibilityIdentifier(), "default": view.reloadButton.keyEquivalent == "\r",
       "buttons": [view.reloadButton, view.closeButton].map {
-        ["id": $0.accessibilityIdentifier(), "label": $0.accessibilityLabel() ?? "", "enabled": $0.isEnabled] as [String: Any]
+        // Frame in window points from the top-left, for pixel checks of the button's label.
+        let r = controller.contentView.convert($0.bounds, from: $0)
+        return ["id": $0.accessibilityIdentifier(), "label": $0.accessibilityLabel() ?? "", "enabled": $0.isEnabled,
+                "frame": [r.minX, controller.contentView.isFlipped ? r.minY : controller.contentView.bounds.height - r.maxY, r.width, r.height],
+                "appearance": $0.effectiveAppearance.name.rawValue] as [String: Any]
       }] as [String: Any]
   }
 }

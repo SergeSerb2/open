@@ -258,6 +258,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var hasPeekController: Bool { peekStorage != nil }
     private let emptyPanel = WebPanelChromeLayer()
     private let emptyPanelHost = NSView()
+    /// The empty-Space panel chrome is hidden (automation readback, UX1 wave 2 review r1 #1).
+    public var emptyPanelHidden: Bool { emptyPanelHost.isHidden }
     public var visibilityOverride: OpenSleepWindowState?
     public var onOpenCommandBar: ((CommandBarSource, URL?) -> Void)?
     public var onVisibilityChange: (() -> Void)?
@@ -270,6 +272,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var refreshPending = false
     private var systemAppearanceObservation: NSKeyValueObservation?
     private var increaseContrastObserver: NSObjectProtocol?
+    /// Automation stand-in for macOS Increase Contrast; nil follows the system (every window, also later ones).
+    public static var increaseContrastOverride: Bool?
     private let snapshotStore: SnapshotStore?
     /// Toasts over the web panel (page-platform §4.1, D-1): one center per window.
     public let toastOverlay = ToastOverlayView()
@@ -348,7 +352,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.appearance = incognitoTitle == nil ? NSApp.effectiveAppearance : NSAppearance(named: .darkAqua)
         context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle, windowOnlyTitle: windowOnlyTitle)
         context.systemAppearance = context.isIncognito ? .dark : ContentAppearance(NSApp.effectiveAppearance)
-        context.increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        context.increaseContrast = Self.increaseContrastOverride ?? NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         WindowSpeedTrace.mark("sidebarInitBegin")
         sidebar = SidebarView(context: context); container = WebContentContainer(factory: factory)
         WindowSpeedTrace.mark("sidebarAndContainerCreated")
@@ -410,7 +414,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                let value = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+                let value = Self.increaseContrastOverride ?? NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
                 if self.context.increaseContrast != value { self.context.increaseContrast = value; self.refresh() }
             }
         }

@@ -80,6 +80,16 @@ public struct SettingsContent: View {
 }
 
 @MainActor public enum SettingsWindow {
+    /// Automation evidence: whether the Settings search field's last draw showed its focus ring.
+    public static func searchFocusRingDrawn(in window: NSWindow) -> Bool {
+        func find(_ view: NSView) -> SettingsNavigationView? {
+            if let nav = view as? SettingsNavigationView { return nav }
+            return view.subviews.lazy.compactMap(find).first
+        }
+        guard let nav = window.contentView.flatMap(find) else { return false }
+        nav.displayIfNeeded()
+        return nav.drewSearchFocusRing
+    }
     public static func makeWindow(viewModel: SettingsViewModel) -> NSWindow {
         let window = OpenSettingsWindow(settings: viewModel)
         window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
