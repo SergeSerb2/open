@@ -5257,6 +5257,40 @@ def sidebar_checks(factory, results, tmp):
             app.call("window-motion", reduced=ux_reduced)
             app.call("space", space=ux_home); app.call("select", tab=a)
             wait_until(ux_settled, timeout=5, step=.05)
+        # Review r2 #1: Cmd+S during the empty-Space fade. Ending the fade inside the sidebar layout re-entered
+        # it and left the web panel clipped by the sidebar motion mask for good.
+        ux_s = {}
+        # A fresh empty Space: the first one now has a cached snapshot, which retires without a fade.
+        ux_empty2 = app.call("space-create", title="UX1 Empty 2")
+        app.call("space", space=ux_home); app.call("select", tab=a)
+        wait_until(ux_settled, timeout=5, step=.05)
+        try:
+            app.call("window-motion", reduced=False)
+            app.call("space", space=ux_empty2)
+            ux_s["fadingSeen"] = bool(wait_until(lambda: (lambda p: p if p["coverFading"] else None)(ux_page()), timeout=2, step=.005))
+            app.call("key", route="app", key="s", modifiers=["cmd"])
+            time.sleep(.8)
+            ux_s["page"] = ux_page(); ux_s["sidebarVisible"] = app.call("window-state")["sidebarVisible"]
+        finally:
+            if app.call("window-state")["sidebarVisible"] is False:
+                app.call("key", route="app", key="s", modifiers=["cmd"]); time.sleep(.6)
+            app.call("window-motion", reduced=ux_reduced)
+            app.call("space", space=ux_home); app.call("select", tab=a)
+            wait_until(ux_settled, timeout=5, step=.05)
+        # Leave the Space list as the later rows expect: delete both test Spaces (real menu + confirm).
+        for ux_doomed in (ux_empty, ux_empty2):
+            app.call("space", space=ux_doomed)
+            wait_until(ux_settled, timeout=5, step=.05)
+            app.call("sidebar-menu", item="Delete Space")
+            if wait_until(lambda: app.call("window-state").get("confirmation"), timeout=3, step=.05):
+                app.call("alert", button="Delete")
+            wait_until(lambda: ux_doomed not in [sp["id"] for sp in app.call("spaces")], timeout=3, step=.05)
+        app.call("space", space=ux_home); app.call("select", tab=a)
+        wait_until(ux_settled, timeout=5, step=.05)
+        ux_s["spacesLeft"] = [sp["id"] for sp in app.call("spaces") if sp["id"] in (ux_empty, ux_empty2)]
+        results["UX1W2_cmd_s_during_cover_fade"] = {
+            "ok": ux_s.get("fadingSeen") is True and ux_s["page"]["containerMasked"] is False and ux_s["sidebarVisible"] is False,
+            "state": ux_s}
         m, r = ux.get("motion", {}), ux.get("reduced", {})
         results["UX1W2_empty_space_cover_fades_out"] = {
             "ok": m.get("fades") == 1 and m["settled"]["containerHidden"] is True and m["settled"]["emptyPanelHidden"] is False

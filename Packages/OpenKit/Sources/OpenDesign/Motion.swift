@@ -45,7 +45,8 @@ public enum Motion {
     public static let spaceSwipeSnap = SpringToken(response: 0.26, dampingFraction: 0.92)
     /// The Space switch cover fades out over the presented page instead of leaving in one frame
     /// (a flat Space field popped into the grained background, UX1 wave 2). guess: about one
-    /// hover-card fade; a fade, so it stays under Reduce Motion.
+    /// hover-card fade. Only a flat field that slid in fades; never under Reduce Motion, on an
+    /// instant cover, or over a cached snapshot (SpacePageSnapshotTransition.presented).
     public static let spacePlateRetire: CFTimeInterval = 0.10
     /// Background cross-fade: linear, 0.21 s; unchanged from the first capture fit.
     /// Session 2 used equal themes and did not re-measure the cross-fade.

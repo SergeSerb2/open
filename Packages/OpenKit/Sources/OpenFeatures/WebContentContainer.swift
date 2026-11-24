@@ -472,7 +472,10 @@ public final class WebContentContainer: NSView {
                 guard let self, self.emptyHidePending else { return }
                 // Hiding a manually laid-out child does not lay the window out: tell the window,
                 // so the empty-Space panel and shadow follow the hidden container (review r1 #1).
-                self.emptyHidePending = false; self.isHidden = true; self.onSpaceSelectionApplied?()
+                // A fade ended by this container's own layout (Cmd+S, resize) runs inside the window's
+                // layout pass: ask for another pass instead of re-entering it (review r2 #1).
+                self.emptyHidePending = false; self.isHidden = true
+                if self.inLayout { self.superview?.needsLayout = true } else { self.onSpaceSelectionApplied?() }
             }
         } else { isHidden = true }
         onSpaceSelectionApplied?()
@@ -1009,9 +1012,12 @@ public final class WebContentContainer: NSView {
         orientation == .horizontal ? CGRect(x: edge, y: box.minY, width: 0, height: box.height)
             : CGRect(x: box.minX, y: edge, width: box.width, height: 0)
     }
+    /// True inside `layout()`: a cover fade ended here must not re-enter the window's layout pass.
+    private var inLayout = false
     public override func layout() {
         let region = WindowSpeedTrace.begin("webContainer.layout")
         defer { region?() }
+        inLayout = true; defer { inLayout = false }
         super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false); spaceMotionStorage?.layout()
     }
     private func layoutDividers() {
