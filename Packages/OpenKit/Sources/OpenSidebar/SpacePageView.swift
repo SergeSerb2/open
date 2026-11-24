@@ -430,6 +430,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             if oldIDs.filter({ kept.contains($0) }) == newIDs {
                 let indexes = IndexSet(oldIDs.indices.filter { !kept.contains(oldIDs[$0]) })
                 for i in indexes { if let folder = old[i] as? Folder { dropCache(folder) } }
+                outline.prepareRemoval(of: indexes.map { old[$0] })
                 setList(new, for: d)
                 outline.removeItems(at: indexes, inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
                 return
@@ -448,6 +449,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                 var removed: AnyObject?
                 mutate(d) { removed = $0.remove(at: i) }
                 if let f = removed as? Folder { dropCache(f) }
+                if let removed { outline.prepareRemoval(of: [removed]) }
                 outline.removeItems(at: IndexSet(integer: i), inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
             case .insert(let j):
                 mutate(d) { $0.insert(new[j], at: j) }
@@ -1238,6 +1240,16 @@ final class SidebarOutlineView: NSOutlineView {
         SidebarDiagnostics.outlineItemUpdates += 1
         SidebarDiagnostics.outlineItemsInserted += indexes.count
         super.insertItems(at: indexes, inParent: parent, withAnimation: animationOptions)
+    }
+
+    /// Rows about to be removed drop their plate before the removal animation (the outline still maps
+    /// the items to their rows here).
+    func prepareRemoval(of items: [AnyObject]) {
+        for item in items {
+            let row = row(forItem: item)
+            guard row >= 0 else { continue }
+            (rowView(atRow: row, makeIfNecessary: false) as? SidebarRowView)?.leave()
+        }
     }
 
     override func removeItems(at indexes: IndexSet, inParent parent: Any?, withAnimation animationOptions: NSTableView.AnimationOptions) {

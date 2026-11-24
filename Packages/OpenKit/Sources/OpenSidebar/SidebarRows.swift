@@ -142,7 +142,20 @@ final class SidebarRowView: NSTableRowView {
         for case let cell as SidebarCellView in subviews { cell.rowStateChanged() }
     }
 
+    /// The row is being removed. A closed tab's model object is gone at once, so its cell is already
+    /// empty; the plate goes with it, so the row leaves as one piece instead of an empty selected
+    /// plate for a frame (UX round 1, UXD-W2-S1).
+    private(set) var leaving = false
+    func leave() {
+        leaving = true
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        fill.opacity = 0; fill.shadowOpacity = 0
+        for ring in developerOutline { ring.isHidden = true }
+        CATransaction.commit()
+    }
+
     func updateFill(animated: Bool) {
+        if leaving { return }
         let appearance = contentAppearance
         let multiselected = tracked({
             guard let id = itemID(of: representedItem), let selection = page?.context.selection else { return false }
@@ -246,6 +259,7 @@ final class SidebarRowView: NSTableRowView {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        leaving = false
         representedItem = nil
         isKeyboardFocused = false
         isHovered = false
