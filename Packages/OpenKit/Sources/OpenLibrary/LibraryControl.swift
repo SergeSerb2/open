@@ -7,6 +7,10 @@ final class LibraryControl: NSButton {
     private let iconLayer = CALayer()
     private let textLayer = LibraryText.layer()
     private let dotLayer = CALayer()
+    private let chevronLayer = CALayer()
+    /// A pop-up button: the label sits at the leading edge and a chevron at the trailing edge,
+    /// so it does not read as another segment next to List and Gallery (UXE E6).
+    var showsPopUpChevron = false { didSet { if showsPopUpChevron != oldValue { needsDisplay = true } } }
     /// The label Open draws in `textLayer`. NSButton's own title stays empty: when both were set,
     /// the button cell drew a second, unstyled label (rail items showed "Media" over the glyph and
     /// again below it; PB1 rail fix). VoiceOver reads the accessibility label set here.
@@ -54,7 +58,8 @@ final class LibraryControl: NSButton {
         isBordered = false; focusRingType = .none
         wantsLayer = true; layer?.cornerRadius = tile ? 12 : 10
         layer?.cornerCurve = .continuous; layerContentsRedrawPolicy = .onSetNeedsDisplay
-        layer?.addSublayer(iconLayer); layer?.addSublayer(textLayer); layer?.addSublayer(dotLayer)
+        layer?.addSublayer(iconLayer); layer?.addSublayer(textLayer); layer?.addSublayer(dotLayer); layer?.addSublayer(chevronLayer)
+        chevronLayer.contentsGravity = .resizeAspect; chevronLayer.isHidden = true
         dotLayer.cornerRadius = 2
         iconLayer.contentsGravity = .resizeAspect
         target = self; action = #selector(press)
@@ -93,7 +98,13 @@ final class LibraryControl: NSButton {
         let textSize = text.size()
         if (textLayer.string as? NSAttributedString) !== text { textLayer.string = text }; textLayer.contentsScale = window?.backingScaleFactor ?? 2
         iconLayer.isHidden = glyph == nil
-        let iconWidth: CGFloat = isTile ? 28 : glyph == nil ? 0 : glyphSize ?? (title.isEmpty ? 18 : 16)
+        // A tile keeps Arc's 80 pt geometry (glyph top 17, label top 51). A short window gives the
+        // rail shorter tiles (LibraryPanelView.railMetrics): glyph and label then stay centred as one
+        // group, and the glyph shrinks only when the label would not fit (UXE E1).
+        let compact = isTile && bounds.height < 80
+        let tileGlyph: CGFloat = compact ? max(16, min(28, bounds.height - 25)) : 28
+        let tileTop: CGFloat = compact ? max(2, ((bounds.height - (tileGlyph + 5 + ceil(textSize.height))) / 2).rounded()) : 17
+        let iconWidth: CGFloat = isTile ? tileGlyph : glyph == nil ? 0 : glyphSize ?? (title.isEmpty ? 18 : 16)
         let gap: CGFloat = title.isEmpty || glyph == nil ? 0 : 5
         // A label wider than the control (a long Profile or Space name in a filter chip) keeps the
         // chip's inner padding and ends in "…" (LibraryTextLayer truncates); labels that fit are unchanged.
@@ -101,9 +112,27 @@ final class LibraryControl: NSButton {
         let textWidth = !isTile && natural > room ? max(0,room-(isChip ? 24 : 16)) : natural
         let group = (textWidth < natural ? textWidth : textSize.width) + gap + iconWidth
         let x = (bounds.width-group)/2
-        iconLayer.frame = CGRect(x:isTile ? (bounds.width-28)/2 : x,y:isTile ? 17 : (bounds.height-iconWidth)/2,width:iconWidth,height:iconWidth)
+        iconLayer.frame = CGRect(x:isTile ? (bounds.width-tileGlyph)/2 : x,y:isTile ? tileTop : (bounds.height-iconWidth)/2,width:iconWidth,height:iconWidth)
         if let glyph { iconLayer.contents = glyph.image(size:iconWidth,color:color,selected:selected,scale:window?.backingScaleFactor ?? 2) }
-        textLayer.frame = CGRect(x:isTile ? (bounds.width-textSize.width)/2 : x+(glyph == nil ? 0 : iconWidth+5),y:isTile ? 51 : (bounds.height-textSize.height)/2,width:textWidth,height:ceil(textSize.height))
+        textLayer.frame = CGRect(x:isTile ? (bounds.width-textSize.width)/2 : x+(glyph == nil ? 0 : iconWidth+5),y:isTile ? (compact ? tileTop+tileGlyph+5 : 51) : (bounds.height-textSize.height)/2,width:textWidth,height:ceil(textSize.height))
         textLayer.isHidden = title.isEmpty
+        chevronLayer.isHidden = !showsPopUpChevron
+        if showsPopUpChevron {
+            let scale = window?.backingScaleFactor ?? 2, chevron = CGSize(width:8,height:11)
+            let room = max(0,bounds.width-12-chevron.width-6-10)
+            textLayer.frame = CGRect(x:12,y:(bounds.height-textSize.height)/2,width:min(ceil(textSize.width),room),height:ceil(textSize.height))
+            chevronLayer.frame = CGRect(x:bounds.width-10-chevron.width,y:(bounds.height-chevron.height)/2,width:chevron.width,height:chevron.height)
+            chevronLayer.contentsScale = scale
+            chevronLayer.contents = Self.chevron(color:color,scale:scale)
+        }
+    }
+    /// The pop-up's up-and-down chevron (SF Symbol), tinted with the label colour.
+    private static func chevron(color: NSColor, scale: CGFloat) -> CGImage? {
+        let configuration = NSImage.SymbolConfiguration(pointSize:9,weight:.semibold).applying(.init(paletteColors:[color]))
+        guard let symbol = NSImage(systemSymbolName:"chevron.up.chevron.down",accessibilityDescription:nil)?.withSymbolConfiguration(configuration) else { return nil }
+        var rect = CGRect(origin:.zero,size:symbol.size)
+        let context = NSGraphicsContext.current
+        let hints: [NSImageRep.HintKey:Any] = [.ctm:NSAffineTransform(transform:AffineTransform(scale:scale))]
+        return symbol.cgImage(forProposedRect:&rect,context:context,hints:hints)
     }
 }

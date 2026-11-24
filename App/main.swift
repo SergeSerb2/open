@@ -178,6 +178,23 @@ if UserDefaults.standard.bool(forKey: "open.advanced.enableWidevine") {
 // macOS would ask for keychain access each time; they use Chromium's mock key.
 // Developer ID builds use the "Open Safe Storage" keychain item.
 configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
+#if OPEN_AUTOMATION || DEBUG
+// Test binaries get a new code identity on every build, and macOS asks for Local Network access
+// again for each one: Chromium's built-in DNS client (AsyncDns) sends UDP DNS to the configured
+// server, usually the router on the LAN, about 1 s after launch. These builds resolve through
+// getaddrinfo instead (exempt from the prompt). Shipping Release keeps AsyncDns, as Chrome and Arc
+// do (HTTPS DNS records, Encrypted Client Hello, first-connect HTTP/3), and explains the one-time
+// prompt with NSLocalNetworkUsageDescription. --enable-features=AsyncDns keeps it on for a run.
+let asyncDNSRequested = CommandLine.arguments.contains { argument in
+  argument.hasPrefix("--enable-features=")
+    && argument.dropFirst("--enable-features=".count).split(separator: ",")
+      .contains { $0.split(separator: "<").first.map(String.init) == "AsyncDns" }
+}
+if !asyncDNSRequested { configuration.additionalSwitches.append("--disable-features=AsyncDns") }
+// The DNS-error probe has its own DNS client: a NAME_NOT_RESOLVED page (suites map hosts to
+// NOTFOUND on purpose) otherwise still sends UDP DNS to the LAN server and to 8.8.8.8.
+configuration.disablesDNSErrorProbes = true
+#endif
 #if OPEN_AUTOMATION
 // The engine's test hooks run only with this switch; normal Release builds
 // never pass it. E2E launchers separately suppress macOS notification setup.

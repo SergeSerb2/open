@@ -415,6 +415,84 @@ def icon_checks(factory, results, tmp, harness):
         app.quit()
 
 
+def creation_form_pixels(factory, results, tmp, harness):
+    """UX round 1 C1: New Space must show its form inside the sidebar, in a real window snapshot.
+
+    Pages move by layer translation, so native frames (creation-state 'visible') could not see a form
+    composited a whole strip to the left. This row reads the presentation-layer rect and the pixels.
+    It needs no key window: it reads only Open's own window and layers.
+    """
+    app = factory(urls=(), fresh=True)
+    out = Path(tmp, 'creation-form-pixels'); out.mkdir(parents=True, exist_ok=True)
+    try:
+        app.call('window-frame', frame=[80, 60, 1120, 800])
+        # The real menu item only: a broken or disabled Spaces ▸ New Space… must fail this row
+        # (it works in an inactive window too).
+        app.call('menu-perform', id='new-space'); path = 'menu'
+        opened = harness.wait_until(lambda: app.call('creation-state').get('open'), timeout=5, step=.05)
+        time.sleep(.6)  # past the 0.3 s slide and the 0.2 s entrance fade
+        state = app.call('creation-state'); window = app.call('window-state')
+        sidebar = window['sidebarFrame']
+        rect = state.get('layers', {}).get('presentationRectInRoot') or [0, 0, 0, 0]
+        inside = (bool(opened) and rect[2] > 0 and rect[3] > 0
+                  and rect[0] >= sidebar[0] - .5 and rect[0] + rect[2] <= sidebar[0] + sidebar[2] + .5
+                  and rect[1] >= sidebar[1] - .5 and rect[1] + rect[3] <= sidebar[1] + sidebar[3] + .5)
+        shot = str(out / 'new-space.png')
+        app.call('snapshot', path=shot)
+        width, height, pixel = harness.read_image(shot)
+        scale = width / window['frame'][2]
+        # Text and card edges in the form's upper part (title, subtitle, name card): count sharp
+        # horizontal luma steps. An empty sidebar background has none.
+        x0, x1 = max(rect[0], sidebar[0]) + 4, min(rect[0] + rect[2], sidebar[0] + sidebar[2]) - 4
+        # Sample only inside the sidebar: the image reader clamps coordinates, so an off-window form
+        # would otherwise sample the window border.
+        y0, y1 = max(rect[1], sidebar[1]) + 8, min(rect[1] + min(rect[3], 320), sidebar[1] + sidebar[3])
+        edges = 0
+        if x1 > x0:
+            for y in range(int(y0), int(y1), 2):
+                for x in range(int(x0), int(x1) - 2):
+                    a = pixel(x * scale, y * scale); b = pixel((x + 2) * scale, y * scale)
+                    if abs(harness.luma(a) - harness.luma(b)) > 40: edges += 1
+        ok = inside and edges >= 60
+        print('creation_form_visible', 'PASS' if ok else 'FAIL', flush=True)
+        results['creation_form_visible'] = dict(ok=ok, path=path, formRectInWindow=rect, sidebar=sidebar,
+            edges=edges, snapshot=shot, chain=[[c['class'], c['tx'], c['presentationTx']] for c in state.get('layers', {}).get('chain', [])])
+        app.call('editor-close')
+    finally:
+        app.quit()
+
+
+def creation_keeps_focus_after_space_switch(factory, results, tmp, harness):
+    """#685 focus fix: a Space switch applies its page behind the Space cover, after the input turn.
+    If New Space opens while that cover is still moving, the late page swap must not take the
+    keyboard from the name field."""
+    app = factory(urls=(), fresh=True)
+    page = 'data:text/html,%3Ctitle%3EFocus%20page%3C%2Ftitle%3E%3Cbody%3Epage%3C%2Fbody%3E'
+    try:
+        app.call('window-frame', frame=[80, 60, 1120, 800])
+        home = next(s for s in app.call('spaces') if s['focused'])['id']
+        home_tab = app.call('open', url=page)['id']; app.call('wait', tab=home_tab)
+        other = app.call('space-create', title='Focus Target')
+        other_tab = app.call('open', url=page)['id']; app.call('wait', tab=other_tab)
+        app.call('space', space=home)
+        harness.wait_until(lambda: app.call('window-motion')['spacePage']['phase'] == 'idle', timeout=5, step=.05); time.sleep(.3)
+        app.call('space', space=other)
+        app.call('menu-perform', id='new-space')
+        moving = app.call('window-motion')['spacePage']['phase']
+        settled = harness.wait_until(lambda: app.call('window-motion')['spacePage']['phase'] == 'idle', timeout=5, step=.02)
+        time.sleep(.3)
+        state, window = app.call('creation-state'), app.call('window-state')
+        ok = moving != 'idle' and bool(settled) and state.get('open') and state.get('nameFocused') is True \
+            and window['firstResponder'] == 'CreationFieldEditor' and window['space'] == other
+        print('creation_keeps_focus_after_space_switch', 'PASS' if ok else 'FAIL', flush=True)
+        results['creation_keeps_focus_after_space_switch'] = dict(ok=bool(ok), phaseWhenFormOpened=moving,
+            settled=bool(settled), nameFocused=state.get('nameFocused'), firstResponder=window['firstResponder'],
+            space=window['space'] == other, key=window['isKeyWindow'])
+        app.call('editor-close')
+    finally:
+        app.quit()
+
+
 def checks(factory, results, tmp, harness):
     run(factory, results, tmp, harness.ROOT, harness.wait_until, harness.read_image, harness.chrome_delta_e)
     icon_checks(factory, results, tmp, harness)
