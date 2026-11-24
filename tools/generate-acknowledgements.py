@@ -295,25 +295,63 @@ def shared_credits(products):
     return '\n'.join(out)
 
 
-def rtf(text):
+HEX_RUN = re.compile(r'\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b')  # hashes; an all-digit build number stays
+
+
+def short_version(version):
+    """The About panel's version: the first part, without hashes, commit or checksum words and notes."""
+    first = version.split(';')[0]
+    first = re.sub(r'\([^)]*\)', '', first)               # (branch 8078), (regex-syntax 0.8.11)
+    first = re.sub(r'\+g[0-9a-f]+', '', first)             # 156.0.14+g4fa4ab5
+    first = re.sub(r'\b(?:commit|SHA-256|snapshot commit)\s+[0-9a-f]+', '', first)
+    first = re.sub(r'\s+as labelled by .*$', '', first)
+    first = re.sub(r'\s+bundled snapshot$', '', first)
+    first = HEX_RUN.sub('', first)
+    first = re.sub(r'^(\d{4}-\d{2}-\d{2})_\S+', r'\1', first.strip())   # 2026-10-22_08-36-41_UTC
+    return re.sub(r'\s{2,}', ' ', first).strip(' ,;')
+
+
+def short_license(license_name):
+    """SPDX-style identifiers only: notes in parentheses and prose parts stay in the text twin."""
+    plain = re.sub(r'\s*\([^)]*\)', '', license_name)
+    parts = [part.strip() for part in plain.split(';')]
+    kept = [part for part in parts if part and not re.fullmatch(r'[a-z ]+', part)]
+    return ', '.join(kept or parts)
+
+
+def about_line(name, version, license_name):
+    """One About panel line: name, short version, license."""
+    license_text = short_license(license_name)
+    if license_text == 'Open-owned':
+        return f'{name} — {license_text}'
+    short = re.sub(r'^Embedded in ', 'in ', short_version(version))
+    # No version when it is empty, already in the name (Rust: idna 0.2.3) or names the parent (Chromium bundled).
+    if not short or name.endswith(short) or '(' + short.split()[0] + ' ' in name:
+        return f'{name} — {license_text}'
+    return f'{name} {short} — {license_text}' if short[0].isdigit() or short[0] == 'v' else f'{name}, {short} — {license_text}'
+
+
+def rtf(text, hanging=frozenset()):
     # RTF uses signed UTF-16 code units, including surrogate pairs for non-BMP
-    # text. Escape braces/backslashes before emitting control words.
-    escaped = []
-    for char in text:
+    # text. Escape braces/backslashes before emitting control words. Lines in
+    # `hanging` get their own paragraph with a hanging indent (About components).
+    def escape(char):
         if char in '\\{}':
-            escaped.append('\\' + char)
-        elif char == '\n':
-            escaped.append('\\par\n')
-        elif char == '\t':
-            escaped.append('\\tab ')
-        elif 32 <= ord(char) < 127:
-            escaped.append(char)
-        else:
-            data = char.encode('utf-16-le')
-            for i in range(0, len(data), 2):
-                unit = int.from_bytes(data[i:i + 2], 'little')
-                escaped.append('\\u%d?' % (unit if unit < 32768 else unit - 65536))
-    return '{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Helvetica;}}\\uc1\\f0\\fs20\n' + ''.join(escaped) + '}\n'
+            return '\\' + char
+        if char == '\t':
+            return '\\tab '
+        if 32 <= ord(char) < 127:
+            return char
+        data = char.encode('utf-16-le')
+        return ''.join('\\u%d?' % (u if u < 32768 else u - 65536)
+                       for u in (int.from_bytes(data[i:i + 2], 'little') for i in range(0, len(data), 2)))
+    out = []
+    lines = text.split('\n')
+    for index, line in enumerate(lines):
+        body = ''.join(escape(char) for char in line)
+        end = '\\par\n' if index < len(lines) - 1 else ''
+        out.append('\\pard\\fi-360\\li360 ' + body + end + '\\pard ' if line in hanging else body + end)
+    return '{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Helvetica;}}\\uc1\\f0\\fs20\n' + ''.join(out) + '}\n'
 
 
 def main():
@@ -386,20 +424,18 @@ def main():
     # review notes; they stay complete in Acknowledgements.txt. Every license text and the
     # Chromium credits below are in both outputs.
     about = [f'Open {marketing} ({build})', stamp, '', 'Components', '']
+    hanging = set()
     for name, version, license_name, use, offer in shipped:
         paragraphs.extend([f'{name} — {version} — {license_name}\n{use}\n{offer}', ''])
-        about.append(f'{name} — {version} — {license_name}')
-        if re.search(r'\b(?:L?GPL|MPL)-', license_name):
-            urls = [u.rstrip(').,;') for u in re.findall(r'https://[^\s`|]+', offer)]
-            if urls:
-                about.append('Source: ' + ' '.join(dict.fromkeys(urls)))
+        line = about_line(name, version, license_name)
+        about.append(line); hanging.add(line)
     about.append('')
     if needs_source:
         location = 'Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)')
         paragraphs.extend([location, ''])
         about.extend([location, ''])
-    about.extend(['Full notices for each component, including how Open uses it, are in '
-                  'Acknowledgements.txt, published with each Open release.', ''])
+    about.extend(['Full notices for each component, including how Open uses it and where to get its '
+                  'source, are in Acknowledgements.txt, published with each Open release.', ''])
     tail = ['License texts', '']
     for name, text in texts:
         tail.extend([name, text.rstrip(), ''])
@@ -440,7 +476,7 @@ def main():
         raise ValueError('RTF and TXT outputs must not overwrite the HTML twin')
     a.output.parent.mkdir(parents=True, exist_ok=True)
     twin.parent.mkdir(parents=True, exist_ok=True)
-    a.output.write_text(rtf(about_text), encoding='ascii')
+    a.output.write_text(rtf(about_text, frozenset(hanging)), encoding='ascii')
     twin.write_text(text, encoding='utf-8')
     # Keep the exact distribution HTML next to each text output, including
     # previews. A sample twin is labelled incomplete above, never accepted.
