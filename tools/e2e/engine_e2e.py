@@ -5141,7 +5141,13 @@ def sidebar_bars_checks(factory, results, tmp):
     runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_bars.py"))["run"](factory, results, wait_until, tmp, ROOT, read_image)
 
 
+def sidebar_rowleave_checks(factory, results, tmp):
+    """A removed row drops its plates at once (tools/e2e/sidebar_rowleave.py, UXB-11)."""
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_rowleave.py"))["run"](factory, results, wait_until, tmp, ROOT)
+
+
 def sidebar_checks(factory, results, tmp):
+    sidebar_rowleave_checks(factory, results, tmp)
     sidebar_bars_checks(factory, results, tmp)
     # Bug sweep r6 sidebar rows (tools/e2e/sidebar_r6.py); OPEN_SIDEBAR_R6_ONLY=1 runs only them.
     runpy.run_path(os.path.join(ROOT, "tools", "e2e", "sidebar_r6.py"))["run"](factory, results, wait_until, tmp)
@@ -15051,6 +15057,7 @@ def main():
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--sidebar-pinfav-only", action="store_true", help="run only the pinned-tab and Favorite close rows of the sidebar suite")
+    ap.add_argument("--sidebar-rowleave-only", action="store_true", help="run only the removed-row plate row (UXB-11) of the sidebar suite")
     ap.add_argument("--sidebar-bars-only", action="store_true", help="run only the bottom-bar and Space header geometry rows (UXB-1..3) of the sidebar suite")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
@@ -15591,16 +15598,21 @@ def main():
                     results[opts.only]['app_icons_' + row] = value
         elif opts.only == "space-editor":
             results[opts.only] = CheckedResults(tracker)
-            import space_editor
-            # First, and focus-free: the New Space form is on screen (UX round 1 C1).
-            space_editor.creation_form_pixels(factory, results[opts.only], tmp, sys.modules[__name__])
-            space_editor.creation_keeps_focus_after_space_switch(factory, results[opts.only], tmp, sys.modules[__name__])
-            space_editor.spaces_polish_rows(factory, results[opts.only], tmp, sys.modules[__name__])
+            # OPEN_E2E_THEMES_UXG_ONLY=1 runs only the UX round 1 wave 2 contrast rows (tools/e2e/themes_ux1.py).
+            if os.environ.get("OPEN_E2E_THEMES_UXG_ONLY") != "1":
+                import space_editor
+                # First, and focus-free: the New Space form is on screen (UX round 1 C1).
+                space_editor.creation_form_pixels(factory, results[opts.only], tmp, sys.modules[__name__])
+                space_editor.creation_keeps_focus_after_space_switch(factory, results[opts.only], tmp, sys.modules[__name__])
+                space_editor.spaces_polish_rows(factory, results[opts.only], tmp, sys.modules[__name__])
+                if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
+                    space_editor_creation_checks(factory, results[opts.only], tmp)
+                    runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
+                        sys.modules[__name__], factory, results[opts.only], tmp)
+                    space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
             if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
-                space_editor_creation_checks(factory, results[opts.only], tmp)
-                runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
-                    sys.modules[__name__], factory, results[opts.only], tmp)
-                space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/themes_ux1.py'))['run'](
+                    factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
@@ -15673,7 +15685,13 @@ def main():
         elif opts.only == "downloads":
             import downloads
             results["downloads"] = CheckedResults(tracker)
-            downloads.checks(factory, results["downloads"], tmp, opts.config, sys.modules[__name__])
+            # UX round 1 wave 2 (UXC) error and empty state rows; OPEN_STATES_UX1_ONLY=1 runs only them. They are
+            # not observer rows: the observers lane and a targeted OPEN_DOWNLOADS_CASE skip them.
+            states_only = os.environ.get("OPEN_STATES_UX1_ONLY") == "1"
+            if states_only or (opts.lane != "observers" and not os.environ.get("OPEN_DOWNLOADS_CASE")):
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/states_ux1.py"))["run"](factory, results["downloads"], tmp, sys.modules[__name__])
+            if not states_only:
+                downloads.checks(factory, results["downloads"], tmp, opts.config, sys.modules[__name__])
         elif opts.only == "incognito":
             import incognito
             import incognito_privacy
@@ -15724,6 +15742,8 @@ def main():
             results["sidebar"] = CheckedResults(tracker)
             if opts.sidebar_pinfav_only:
                 sidebar_pinfav_checks(factory, results["sidebar"], tmp)
+            elif opts.sidebar_rowleave_only:
+                sidebar_rowleave_checks(factory, results["sidebar"], tmp)
             elif opts.sidebar_bars_only:
                 sidebar_bars_checks(factory, results["sidebar"], tmp)
             else:

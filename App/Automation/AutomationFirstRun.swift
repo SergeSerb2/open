@@ -259,6 +259,12 @@ extension AutomationController {
         state["settingsPasswords"] = wizard.plan.passwords
         state["settingsPlan"] = ["bookmarks": wizard.plan.bookmarks, "history": wizard.plan.history, "openTabs": wizard.plan.openTabs]
         state["settingsNotFound"] = ["Bookmarks", "History", "Open tabs"].filter { wizard.isNotFound($0) }
+        // Arc's own data types: ticked state and "Not found" (UX round 1 W2 S4).
+        state["settingsArcPlan"] = ["Spaces": wizard.plan.spaces, "Pinned and Today tabs": wizard.plan.tabs, "Favorites": wizard.plan.favorites,
+          "Folders": wizard.plan.folders, "Archive": wizard.plan.archive, "History": wizard.plan.history,
+          "Passwords and cookies": wizard.plan.secretsRequested]
+        state["settingsArcNotFound"] = ["Spaces", "Pinned and Today tabs", "Favorites", "Folders", "Archive", "History",
+          "Passwords and cookies"].filter { wizard.isNotFound($0) }
         state["settingsNeedsPrimaryPassword"] = wizard.needsPrimaryPassword
         state["settingsSafariExport"] = wizard.plan.safariFiles.exportArchive?.lastPathComponent ?? ""
         state["settingsReportCategories"] = wizard.displayedReportCategories
