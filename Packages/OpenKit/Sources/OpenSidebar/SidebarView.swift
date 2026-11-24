@@ -279,9 +279,13 @@ public final class SidebarView: NSView {
     /// Theme, appearance, and the window background.
     private func syncTheme() {
         if let draft = creationDraft {
-            appearance = draft.resolvedAppearance(system: context.systemAppearance).nsAppearance
+            appearance = (context.increaseContrast && !context.isIncognito
+                ? SidebarContext.draftRoles(draft, system: context.systemAppearance).appearance
+                : draft.resolvedAppearance(system: context.systemAppearance)).nsAppearance
             let bg = presentation == .floatingCard ? cardBackground : themeBackground
             if bg?.targetStyle != draft { bg?.crossfade(to: draft, animated: false) }
+            // Increase Contrast chrome draws fixed role colours, which do not follow the appearance.
+            for v in [toolbar, urlField, bottomBar] as [NSView] { v.needsDisplay = true }
             return
         }
         guard let space = context.focusedSpace else { return }
@@ -402,10 +406,10 @@ public final class SidebarView: NSView {
         needsLayout = true; layoutSubtreeIfNeeded(); pager.beginCreation(page: page)
     }
     public func previewSpaceCreation(_ style: SpaceThemeStyle) {
-        creationDraft = style; syncTheme()
+        creationDraft = style; context.creationDraft = style; syncTheme()
     }
     public func endSpaceCreation(focus: SpaceID?) {
-        isCreatingSpace = false; creationDraft = nil
+        isCreatingSpace = false; creationDraft = nil; context.creationDraft = nil
         pager.endCreation(); needsLayout = true; layoutSubtreeIfNeeded(); syncTheme()
     }
     /// Starts inline rename of a row (or of the Space title when `nodeID` is nil).
