@@ -311,12 +311,13 @@ Tooltips were not captured: use the labels below with the shortcut keycaps (shar
 | # | Tooltip and AX label | Glyph | Runs | Enabled when |
 |---|---|---|---|---|
 | 1 | Share | `square.and.arrow.up` | `share-page` (system share picker anchored to the button) | page loaded |
-| 2 | New Boost | `BoostGlyph.outline` = `paintbrush.pointed` + one Open-drawn 4-point sparkle at its top-left | §3.7 New Boost flow | http(s) page, not incognito, `open.advanced.enableBoosts` |
+| 2 | New Boost | `BoostGlyph.outline` = `paintbrush.pointed` (no top-left sparkle; user decision 2026-11-24) | §3.7 New Boost flow | http(s) page, not incognito, `open.advanced.enableBoosts` |
 | 3 | Capture a portion of this page (⇧⌘2) | `camera` | `capture-page` | command enabled |
 | 4 | Capture the full page | `text.viewfinder` | `capture-full-page` | command enabled |
 
 Arc's New Boost glyph is a diagonal paintbrush (bristles up-right) with a small sparkle at its
-top-left, and its fourth glyph is corner brackets around three text lines with no page outline
+top-left; Open intentionally omits that 4 pt sparkle on the New Boost action button so it does not
+read as a stray white dot (user decision, 2026-11-24). Its fourth glyph is corner brackets around three text lines with no page outline
 (S2 09/0010, 09/0016). The mapping of the camera and viewfinder glyphs to the two SC-15 capture actions is a guess (no
 tooltip was captured). Copy URL and Capture in Portrait Mode are not in the row (S2-3); Copy URL
 stays on ⇧⌘C and on the URL field's copy button. A button action closes the panel first, then runs

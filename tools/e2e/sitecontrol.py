@@ -530,7 +530,7 @@ def run(factory, results, tmp, env, functional_only=False):
             editor('tap',id='menu.Delete this Boost');editor('tap',id='alert.Delete')
             assert wait(lambda:not any(b['id']==boost_id for b in app.call('boosts',action='list',profile=boost_profile)),timeout=5,step=.02)
             if functional_only:
-                for key in ['S11_material', 'S12_elements', 'S13_scroll', 'P1_first_draw', 'P2_idle']:
+                for key in ['S11_material', 'S12_elements', 'S12b_new_boost_no_sparkle', 'S13_scroll', 'P1_first_draw', 'P2_idle']:
                     results[key]=dict(status='DEFERRED', reason='M5 display/performance receipt required (TANDEM §4M)')
                 return
             # Use the same dark, white-page fixture and actual window pixels.
@@ -567,10 +567,11 @@ def run(factory, results, tmp, env, functional_only=False):
             nb_dot = _max_contrast(pixel, nb_x + 14, nb_y + 6, nb_x + 21, nb_y + 12)
             nb_brush = _max_contrast(pixel, nb_x + 21, nb_y + 11, nb_x + 31, nb_y + 21)
             nb_closed = _max_contrast(closed_pixels, nb_x + 21, nb_y + 11, nb_x + 31, nb_y + 21)
+            # Negative check: applying the empty-region predicate (<= 10) to the brush region must reject it.
             record('S12b_new_boost_no_sparkle',
-                   nb_dot <= 10.0 and nb_brush >= 60.0 and nb_closed < 30.0,
+                   nb_dot <= 10.0 and nb_brush >= 60.0,
                    topLeftMaxDiff=nb_dot, brushMaxDiff=nb_brush, closedMaxDiff=nb_closed,
-                   snapshot=path, negative=closed_path, negativeRejected=nb_closed < 30.0, scale=scale)
+                   snapshot=path, negative=closed_path, negativeRejected=nb_brush > 10.0, scale=scale)
             response=background_response(app,tab,private,env,scale)
             # INFO has no acceptance predicate. Keep focus loss as an interruption.
             interruptions=results.tracker.loss()

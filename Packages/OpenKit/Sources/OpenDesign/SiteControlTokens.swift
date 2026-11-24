@@ -226,6 +226,7 @@ public extension SiteControlMetrics {
     // SF vector optical boxes are calibrated separately from their point size.
     static let symbolRasterPhase: [String: CGPoint] = ["square.and.arrow.up": CGPoint(x: 0.25,y: 0.5),"paintbrush.pointed": CGPoint(x: 0.75,y: 0.75),"gearshape.fill": CGPoint(x: 0.75,y: 0)]
     static let symbolRasterCompensation: [String: CGSize] = ["square.and.arrow.up": CGSize(width: 1,height: 0),"paintbrush.pointed": CGSize(width: 1,height: 0),"camera": CGSize(width: 1,height: 0),"text.viewfinder": CGSize(width: 1,height: 1),"lock.fill": CGSize(width: 2,height: 0),"ellipsis": CGSize(width: 2,height: 1),"gearshape.fill": CGSize(width: 2,height: 2)]
+    // Index 1 (`16x16`) fits `paintbrush.pointed` alone (the 4 pt top-left sparkle was removed per user decision 2026-11-24).
     static let actionInk = [CGSize(width: 14,height: 17),CGSize(width: 16,height: 16),CGSize(width: 19,height: 15),CGSize(width: 15,height: 18)]
     static let gearInk = CGSize(width: 13,height: 13) // S2 09/0010; 15 pt symbol optical box
     static let rowTitleTrailing: CGFloat = 16 // includes the tail-ellipsis optical inset
