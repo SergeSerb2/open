@@ -4,7 +4,7 @@ Settings uses Open’s original design. The standard resizable window opens at 9
 
 ## Navigation and search
 
-The sections are General, Appearance, Tabs & Archive, Search, Links, Downloads, Previews, Ad Blocking, Site Permissions, Passwords & Cards, Browsing Data, Profiles, Shortcuts, Extensions, and Advanced. Library is separate and is unchanged.
+The sections are General, Appearance, Tabs & Archive, Search, Links, Downloads, Previews, Ad Blocking, Site Permissions, Passwords & Cards, Browsing Data, Account & Sync, Profiles, Shortcuts, Extensions, and Advanced. Library is separate and is unchanged.
 
 Command-F focuses the global search. Labels, help, aliases, and every active shortcut command are indexed. `is:changed` limits results to changed settings. Up/Down selects a result; Return opens its section and pulses the target once. Escape clears search. Command-1 through Command-9 opens the first nine sections. Command-[ and Command-] move through section history. Typing while a navigation item has focus starts search.
 

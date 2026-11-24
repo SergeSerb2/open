@@ -426,6 +426,10 @@ public enum CommandRegistry {
                           defaultShortcuts: [KeyboardShortcut(key: "n", modifiers: [.command, .option])], scope: .global,
                           aliases: ["Little Open", "Little Arc"]),
         CommandDefinition(id: "show-shortcuts-overlay", title: "Show Shortcuts While Holding Command", scope: .window),
+        // Open Accounts & Sync (docs/sync-protocol.md). Command bar only; no default keys.
+        CommandDefinition(id: "account-sync", title: "Account & Sync…", menuPath: nil,
+                          aliases: ["Sync", "Arc Sync", "Sign In", "Open Account", "Cloud Sync"]),
+        CommandDefinition(id: "sync-now", title: "Sync Now", menuPath: nil, aliases: ["Sync Account", "Refresh Sync"]),
     ] + (1...9).map { number in
         CommandDefinition(id: "go-to-tab-\(number)", title: "Go to Tab \(number)",
                           defaultShortcuts: [.cmd(String(number))], isCustomizable: true, aliases: ["Go to Sidebar Item \(number)"])

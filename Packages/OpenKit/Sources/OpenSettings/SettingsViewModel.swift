@@ -5,6 +5,7 @@ import OpenRouting
 import OpenStore
 import OpenCommands
 import OpenAdBlock
+import OpenSync
 
 @MainActor @Observable public final class SettingsViewModel {
     public typealias PaneID = OpenSettings.PaneID
@@ -74,6 +75,33 @@ import OpenAdBlock
         let directories = ProfileDirectories(root: root)
         adBlock = AdBlockSettingsModel(root: self, store: adBlockStore,
             directoryForProfile: directoryForProfile ?? { directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) })
+    }
+    /// The App's shared sync engine. Nil until the App attaches it or the Account & Sync page asks
+    /// for it (`ensureSyncEngine()`); Settings never creates it while it opens on another page.
+    public var syncEngine: SyncEngine?
+    public func attach(syncEngine: SyncEngine) { self.syncEngine = syncEngine }
+    /// The navigation shows an attention dot on Account & Sync while sync needs the user.
+    public var syncAttention: Bool {
+        guard let status = syncEngine?.snapshot.status else { return false }
+        switch status {
+        case .error, .needsReauth, .awaitingInitialChoice: return true
+        case .signedOut, .idle, .syncing: return false
+        }
+    }
+    /// Asks the App for its engine once the Account & Sync page is on screen.
+    @discardableResult public func ensureSyncEngine() -> SyncEngine? {
+        if let syncEngine { return syncEngine }
+        guard let engine = actions.ensureSyncEngine() else { return nil }
+        syncEngine = engine
+        return engine
+    }
+    @ObservationIgnored private var accountSyncStorage: AccountSyncViewModel?
+    /// Built on the first visit to Account & Sync, never on Settings' first open.
+    public var accountSync: AccountSyncViewModel {
+        if let accountSyncStorage { return accountSyncStorage }
+        let model = AccountSyncViewModel(root: self)
+        accountSyncStorage = model
+        return model
     }
     public var showsPreviews = false
     public var showsImport = false { didSet {

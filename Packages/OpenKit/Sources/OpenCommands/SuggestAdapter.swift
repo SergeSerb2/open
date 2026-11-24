@@ -113,6 +113,7 @@ public extension CommandRegistry {
         "add-to-favorites", "remove-from-favorites", "replace-pinned-url",
         "mute-all-tabs", "unmute-all-tabs", "air-traffic-control",
         "manage-passwords", "search-settings", "extension-shortcuts",
+        "account-sync", "sync-now",
     ]
 
     /// Menu commands with no command-bar row (text, spelling, chrome, help detail).
@@ -165,5 +166,6 @@ public extension CommandRegistry {
         "mute-all-tabs": "speaker.slash", "unmute-all-tabs": "speaker.wave.2",
         "air-traffic-control": "airplane", "manage-passwords": "key", "search-settings": "magnifyingglass.circle",
         "expand-pinned-section": "chevron.down", "collapse-pinned-section": "chevron.up",
+        "account-sync": "icloud", "sync-now": "arrow.triangle.2.circlepath",
     ]
 }
