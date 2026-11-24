@@ -115,6 +115,30 @@ def run(factory, results, tmp, h):
                     return not low, dict(v, below=low)
                 row('uxg_ic_contrast_%s_%s' % (theme.lower().replace(' ', ''), appearance), check)
 
+        def bar_selection(theme, key):
+            # The command bar's selected row (white text on the Space accent) in Light, per theme.
+            app.call('increase-contrast', on=False); app.call('appearance', name='light'); time.sleep(.4)
+            for _ in range(3):
+                if not app.call('commandbar-state').get('presented'): break
+                app.call('command', id='new-tab'); time.sleep(.8)
+            app.call('theme-set', style=_style(key) if key is not None else None); time.sleep(.5)
+            app.call('command', id='new-tab'); time.sleep(1.0)
+            state = app.call('commandbar-state')
+            if not state.get('presented'): return False, {'error': 'command bar did not open'}
+            panel = state['panelFrame']
+            path = os.path.join(tmp, 'uxg-bar.png'); app.call('snapshot', path=path)
+            width, _, pixel = h.read_image(path, srgb=True)
+            scale = width / app.call('window-state')['frame'][2]
+            # Row 1 title: panel-relative box (fitted on 1x captures: title ink at x +53…+131, y +76…+94).
+            label = (panel[0] + 53, panel[1] + 76, panel[0] + 131, panel[1] + 94)
+            value = _ratio(pixel, label, scale)
+            app.call('command', id='new-tab'); time.sleep(.6)
+            os.remove(path)
+            return value >= 4.5, {'selectedRowText': value, 'panel': panel}
+        BAR_THEMES = {'Default': None, 'Drab 5': 0xD1B46A, 'Brand 8': 0x7EB8D6, 'Greyscale 5': 0x808080, 'Pastel 9': 0xC5C6E2}
+        for theme, key in BAR_THEMES.items():
+            row('uxg_commandbar_selection_aa_%s_light' % theme.lower().replace(' ', ''), lambda t=theme, k=key: bar_selection(t, k))
+
         def normal_keeps_parity():
             # Without Increase Contrast a light-text Space keeps Arc's values: the white selected plate.
             app.call('increase-contrast', on=False); app.call('appearance', name='dark'); time.sleep(.4)
