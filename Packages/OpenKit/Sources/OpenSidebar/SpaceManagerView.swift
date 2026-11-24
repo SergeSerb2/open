@@ -440,6 +440,7 @@ final class SpaceManagerScrollView: NSScrollView {
         guard !event.hasPreciseScrollingDeltas, abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) else {
             super.scrollWheel(with: event); return
         }
+        // (A Shift-wheel turn routed from a column arrives here as vertical too.)
         // One wheel line moves 48 pt, like a row of the columns.
         var bounds = contentView.bounds
         bounds.origin.x -= event.scrollingDeltaY * 48

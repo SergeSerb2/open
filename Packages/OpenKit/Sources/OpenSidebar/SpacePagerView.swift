@@ -386,6 +386,8 @@ final class PagerStrip: NSView {
 final class PageScrollView: NSScrollView {
     weak var pager: SpacePagerView?
     private var routing = false
+    /// A trackpad gesture's direction is set by its first event that moves (`began` may carry none).
+    private var gestureDecided = false
     private var managerStrip: SpaceManagerScrollView? {
         var view = superview
         while let candidate = view { if let strip = candidate as? SpaceManagerScrollView { return strip }; view = candidate.superview }
@@ -398,9 +400,20 @@ final class PageScrollView: NSScrollView {
         // sideways wheel turn (Shift-wheel), belongs to the manager's sideways strip.
         if pager == nil, let strip = managerStrip {
             let plain = event.phase == [] && event.momentumPhase == []
-            if plain || event.phase == .began { routing = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) }
+            let dx = abs(event.scrollingDeltaX), dy = abs(event.scrollingDeltaY)
+            if plain {
+                // A notched wheel: sideways when it turns sideways, or with Shift (the macOS convention).
+                routing = dx > dy || (!event.hasPreciseScrollingDeltas && event.modifierFlags.contains(.shift))
+            } else if event.phase == .began {
+                gestureDecided = dx + dy > 0; routing = dx > dy
+            } else if !gestureDecided, dx + dy > 0 {
+                gestureDecided = true; routing = dx > dy
+            }
             if routing { strip.scrollWheel(with: event) } else { super.scrollWheel(with: event) }
-            if plain || event.momentumPhase == .ended || event.momentumPhase == .cancelled { routing = false }
+            if plain || event.momentumPhase == .ended || event.momentumPhase == .cancelled
+                || (event.momentumPhase == [] && (event.phase == .ended || event.phase == .cancelled) && !routing) {
+                routing = false; gestureDecided = false
+            }
             return
         }
         if event.phase == .began { routing = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) }

@@ -2658,6 +2658,7 @@
         cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
         // continuous=false is a notched mouse wheel (no precise deltas); the default is a trackpad.
         cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: a["continuous"] as? Bool == false ? 0 : 1)
+        if a["shift"] as? Bool == true { cg.flags = .maskShift }
         cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
         let momentum = a["momentum"] as? Int64 ?? 0
         guard (0...3).contains(momentum) else { throw Failure(message: "invalid momentum phase") }
