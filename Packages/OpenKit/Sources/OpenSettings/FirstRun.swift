@@ -192,9 +192,9 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public func reportSaveFailure(imported:Bool) {errorText=imported ? Self.importedSaveError:Self.freshSaveError}
     public func reportValue(_ category:String)->String {
         if let failure=outcome?.failures[category] {return failure}
-        if category == "History" && !wizard.plan.history {return "Not selected"}
         if category == "Passwords and cookies" && !wizard.plan.secretsConsented {return includeSecrets && wizard.consentWasDecided ? "Not imported":"Not selected"}
-        return wizard.reportCount(category).formatted()
+        // Every other left-out category ("History", Archive, Spaces and tabs, browser rows) as the wizard says it.
+        return wizard.reportValue(category)
     }
     public var reportNote:String? {
         if let error=errorText,!error.isEmpty {return error}
@@ -233,7 +233,9 @@ public struct FirstRunView:View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let startsProbe:Bool
     private let embeddedImport:Bool
-    public init(model:FirstRunViewModel,startsProbe:Bool=true,embeddedImport:Bool=false) {self.model=model;self.startsProbe=startsProbe;self.embeddedImport=embeddedImport}
+    /// The host's accent (first run passes the Space accent so checkboxes match its other controls).
+    private let accent:Color?
+    public init(model:FirstRunViewModel,startsProbe:Bool=true,embeddedImport:Bool=false,accent:Color?=nil) {self.model=model;self.startsProbe=startsProbe;self.embeddedImport=embeddedImport;self.accent=accent}
     private var secondary:Color {Color(nsColor:SettingsTokens.secondary.nsColor)}
     private var section:Font {embeddedImport ? .system(size:12):Font(SettingsTokens.section.font)}
     public var body:some View {
@@ -323,14 +325,28 @@ public struct FirstRunView:View {
     }
     private func choice(_ title:String,help:String,found:String,value:Binding<Bool>,height:CGFloat,last:Bool=false,enabled:Bool=true)->some View {
         SettingsRow(divider:!last,minimumHeight:height) {HStack(alignment:.top,spacing:8) {
-            VStack(alignment:.leading,spacing:4) {Toggle(title,isOn:value).toggleStyle(.checkbox).disabled(!enabled);Text(help).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.leading,21)}
+            VStack(alignment:.leading,spacing:4) {checkbox(Toggle(title,isOn:value)).disabled(!enabled);Text(help).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.leading,21)}
             Spacer(minLength:0);Text(found).font(section).foregroundStyle(secondary).monospacedDigit().fixedSize().padding(.top,2)
         }}
+    }
+    /// First run draws the checkbox in the host accent; Settings keeps the system checkbox.
+    @ViewBuilder private func checkbox<V:View>(_ toggle:Toggle<V>)->some View {
+        if let accent {toggle.toggleStyle(AccentCheckboxStyle(accent:accent))} else {toggle.toggleStyle(.checkbox)}
     }
     private var chooseFolder:some View {Button("Choose Folder…") {let panel=NSOpenPanel();panel.canChooseDirectories=true;panel.canChooseFiles=false;if panel.runModal() == .OK,let directory=panel.url {Task {await model.choose(directory:directory)}}}}
     private func symbol(_ name:String)->some View {Image(systemName:name).font(.system(size:40)).foregroundStyle(secondary).frame(width:64,height:40)}
     private func sparse<V:View>(@ViewBuilder content:()->V)->some View {VStack(spacing:0) {Spacer(minLength:0);content().frame(width:SettingsTokens.firstRunSparseTextWidth);Spacer(minLength:0)}.frame(maxWidth:.infinity).multilineTextAlignment(.center)}
     private var passwords:some View {VStack(spacing:16) {
+        if embeddedImport {
+            // First run: one left-aligned block under the step title, at a readable measure (about 60 characters).
+            VStack(alignment:.leading,spacing:10) {
+                Image(systemName:"key.fill").font(.system(size:22,weight:.medium)).foregroundStyle(accent ?? secondary).frame(height:28)
+                Text(model.passwordsCopy.title).font(.system(size:15,weight:.semibold)).fixedSize(horizontal:false,vertical:true)
+                Text(model.passwordsCopy.body).font(.system(size:13)).lineSpacing(2).fixedSize(horizontal:false,vertical:true)
+                Text(PasswordsImportCopy.later).font(.system(size:12)).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)
+            }.frame(maxWidth:360,alignment:.leading).frame(maxWidth:.infinity,alignment:.leading)
+            Spacer(minLength:0)
+        } else {
         sparse {
             VStack(spacing:8) {
                 symbol("key.fill").padding(.bottom,8)
@@ -339,12 +355,23 @@ public struct FirstRunView:View {
                 Text(PasswordsImportCopy.later).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)
             }
         }
+        }
         if !embeddedImport {HStack {Button("Cancel"){model.cancelPasswords()};Spacer(minLength:0)
             if model.wizard.canImportPasswordsAndCookies {Button(PasswordsImportCopy.skipButton){Task {await model.skipPasswords()}};primary(PasswordsImportCopy.allowButton){Task {await model.allowPasswords()}}}
             else {primary(PasswordsImportCopy.skipButton){Task {await model.skipPasswords()}}}
         }}
     }}
-    private var progress:some View {sparse {VStack(spacing:0) {
+    @ViewBuilder private var progress:some View {
+        if embeddedImport {
+            VStack(alignment:.leading,spacing:12) {
+                Text(model.phaseText).font(.system(size:15,weight:.semibold))
+                Group {if let value=model.progress {ProgressView(value:value)} else {ProgressView().progressViewStyle(.linear)}}.tint(accent).frame(maxWidth:360).accessibilityValue(model.phaseText)
+                if model.browserHasLanded && model.phaseText == "Importing your history…" {Text("Your browser is ready. History is still importing in the background.").font(.system(size:12)).foregroundStyle(secondary).frame(maxWidth:360,alignment:.leading).fixedSize(horizontal:false,vertical:true)}
+                Spacer(minLength:0)
+            }.frame(maxWidth:.infinity,alignment:.leading)
+        } else {progressSparse}
+    }
+    private var progressSparse:some View {sparse {VStack(spacing:0) {
         brand.padding(.bottom,16)
         Text(model.phaseText).font(.headline).padding(.bottom,12)
         Group {if let value=model.progress {ProgressView(value:value)} else {ProgressView().progressViewStyle(.linear)}}.frame(width:320).accessibilityValue(model.phaseText)
@@ -411,7 +438,8 @@ public struct FirstRunView:View {
             if embeddedImport, model.outcome?.errorText != nil, !model.wizard.hasImportedData {Button("Try Again") {model.showImport()}}
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}
-            if let note=model.reportNote {Text(note).font(embeddedImport ? .system(size:12):section).foregroundStyle(model.reportNoteIsError ? Color.red:embeddedImport ? Color(nsColor:.tertiaryLabelColor):secondary).fixedSize(horizontal:false,vertical:true)}
+            // A secrets-only failure already shows its own sentence above; skip the generic copy of it.
+            if let note=model.reportNote, !(model.outcome?.failures.keys.sorted() == ["Passwords and cookies"] && note == model.outcome?.errorText) {Text(note).font(embeddedImport ? .system(size:12):section).foregroundStyle(model.reportNoteIsError ? Color.red:embeddedImport ? Color(nsColor:.tertiaryLabelColor):secondary).fixedSize(horizontal:false,vertical:true)}
         }.frame(maxWidth:.infinity,alignment:.leading).padding(.bottom,embeddedImport ? 24:0)}.scrollIndicators(.automatic).mask(scrollEdge)
         if !embeddedImport {HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true).disabled(model.wizard.extensions.isInstalling)}
     }}
@@ -439,4 +467,23 @@ public struct FirstRunView:View {
         }}
         if !embeddedImport {HStack {Button("Back"){model.showImport()};Button("Start Fresh Instead"){model.startFresh()};Spacer();primary("Try Again"){Task {await model.continueImport()}}}}
     }}
+}
+
+/// A checkbox in a given accent (first run). Same Toggle semantics and accessibility as the system checkbox.
+struct AccentCheckboxStyle:ToggleStyle {
+    let accent:Color
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration:Configuration)->some View {
+        Button {configuration.isOn.toggle()} label:{
+            HStack(spacing:7) {
+                ZStack {
+                    RoundedRectangle(cornerRadius:4,style:.continuous).fill(configuration.isOn ? accent:Color(nsColor:.controlBackgroundColor))
+                    RoundedRectangle(cornerRadius:4,style:.continuous).strokeBorder(configuration.isOn ? Color.clear:Color(nsColor:.separatorColor),lineWidth:1)
+                    if configuration.isOn {Image(systemName:"checkmark").font(.system(size:9,weight:.bold)).foregroundStyle(.white)}
+                }.frame(width:14,height:14)
+                configuration.label
+            }.opacity(enabled ? 1:0.45).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityElement(children:.combine).accessibilityRemoveTraits(.isButton).accessibilityAddTraits(.isToggle)
+            .accessibilityValue(configuration.isOn ? "On":"Off")
+    }
 }
