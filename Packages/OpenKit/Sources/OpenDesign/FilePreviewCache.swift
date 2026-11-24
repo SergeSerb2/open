@@ -9,6 +9,9 @@ import UniformTypeIdentifiers
 public final class FilePreviewCache {
     public static let shared = FilePreviewCache()
     private let images = NSCache<NSString, NSImage>()
+    /// Paths whose cached image is a QuickLook thumbnail of the file's content, not the Finder
+    /// file icon used as a fallback (movies, other types, or a failed thumbnail).
+    private var thumbnails = Set<String>()
     private var checked: [String:Double] = [:]
     private var pending: [String:[@MainActor () -> Void]] = [:]
     /// Requests that arrived while all 16 slots were busy. A row configured then keeps its
@@ -40,7 +43,7 @@ public final class FilePreviewCache {
     private func start(key:String,url:URL,callbacks:[@MainActor () -> Void]) {
         pending[key] = callbacks
         Task { [weak self] in
-            let preview = await Task.detached(priority:.utility) { () -> CGImage? in
+            let result = await Task.detached(priority:.utility) { () -> (image: CGImage?, thumbnail: Bool) in
                 let values = try? url.resourceValues(forKeys:[.contentTypeKey,.fileSizeKey])
                 let type = values?.contentType ?? UTType(filenameExtension:url.pathExtension)
                 if let type,(type.conforms(to:.image) || type.conforms(to:.pdf)),(values?.fileSize ?? 0)<=256*1024*1024 {
@@ -48,20 +51,28 @@ public final class FilePreviewCache {
                     let thumbnail: CGImage? = await withCheckedContinuation { continuation in
                         QLThumbnailGenerator.shared.generateBestRepresentation(for:request) { representation,_ in continuation.resume(returning:representation?.cgImage) }
                     }
-                    if let thumbnail { return thumbnail }
+                    if let thumbnail { return (thumbnail, true) }
                 }
                 let icon = NSWorkspace.shared.icon(forFile:url.path)
                 var rect = CGRect(x:0,y:0,width:64,height:64)
-                return icon.cgImage(forProposedRect:&rect,context:nil,hints:nil)
+                return (icon.cgImage(forProposedRect:&rect,context:nil,hints:nil), false)
             }.value
             guard let self else { return }
+            let preview = result.image
             self.checked[key] = ProcessInfo.processInfo.systemUptime
+            if preview != nil, result.thumbnail { self.thumbnails.insert(key) } else { self.thumbnails.remove(key) }
+            if self.thumbnails.count > 512 { self.thumbnails.removeAll() }
             if let preview { self.images.setObject(NSImage(cgImage:preview,size:CGSize(width:preview.width,height:preview.height)),forKey:key as NSString,cost:preview.bytesPerRow*preview.height) }
             let callbacks = self.pending.removeValue(forKey:key) ?? []
             for callback in callbacks { callback() }
             if self.checked.count>512 { self.checked = [:] }
             self.startWaiting()
         }
+    }
+    /// True when the image `image(for:)` returns for this file is a QuickLook thumbnail of its
+    /// content (a picture), false for the placeholder or a Finder file icon.
+    public func isThumbnail(for url:URL) -> Bool {
+        thumbnails.contains(url.path) && images.object(forKey:url.path as NSString) != nil
     }
     /// Newest first: the rows the user scrolled to last are the ones on screen.
     private func startWaiting() {

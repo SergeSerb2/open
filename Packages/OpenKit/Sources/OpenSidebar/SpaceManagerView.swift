@@ -313,6 +313,14 @@ private final class SpaceManagerColumn: NSView {
         let page = SpacePageView(context: context, space: space, menus: menus)
         page.displaysHeader = false
         self.page = page; content.addSubview(page)
+        if manager.libraryLayout {
+            // The last row can scroll fully clear of the bottom fade (UXE E11).
+            page.scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: Self.fade, right: 0)
+            // The fade shows only while the list overflows: re-check when its height changes
+            // (rows added or removed), never per scroll.
+            page.outline.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(listHeightChanged), name: NSView.frameDidChangeNotification, object: page.outline)
+        }
         updateTheme(); setLifted(false); needsLayout = true
     }
     func setLifted(_ lifted: Bool) {
@@ -359,19 +367,31 @@ private final class SpaceManagerColumn: NSView {
         page?.frame = CGRect(x: 0, y: SpaceManagerMetrics.headerHeight, width: bounds.width, height: max(0, bounds.height - SpaceManagerMetrics.headerHeight - (manager.libraryLayout ? 44 : 0)))
         if manager.libraryLayout, let page { fadeBottom(of: page) }
     }
-    /// Library Spaces cards: rows that continue below the card's list fade out over the last
-    /// 20 pt instead of being cut through their glyphs at the footer (UXE E11). The mask is
-    /// static: it changes only when the card is resized, never while the list scrolls.
-    private func fadeBottom(of page: NSView) {
+    private static let fade: CGFloat = 20
+    @objc private func listHeightChanged() { if let page { fadeBottom(of: page) } }
+    /// Library Spaces cards: while the list overflows, rows that continue below the card's list
+    /// fade out over the last 20 pt instead of being cut through their glyphs at the footer
+    /// (UXE E11). A 20 pt bottom inset lets the last row scroll clear of the fade. The mask is
+    /// static: it changes only when the card or the list height changes, never while it scrolls.
+    private func fadeBottom(of page: SpacePageView) {
         page.wantsLayer = true
         guard let layer = page.layer, layer.bounds.height > 0 else { return }
+        // Overflow: at the top of the list, the rows reach into the fade zone. The outline's own
+        // frame is at least the clip height, so measure the last row, not the frame.
+        let rows = page.outline.numberOfRows
+        let rowsBottom = rows > 0 ? page.outline.rect(ofRow: rows - 1).maxY : 0
+        let overflows = rowsBottom > page.scroll.frame.height - Self.fade
+        guard overflows else {
+            if layer.mask != nil { CATransaction.begin(); CATransaction.setDisableActions(true); layer.mask = nil; CATransaction.commit() }
+            return
+        }
         let mask = layer.mask as? CAGradientLayer ?? CAGradientLayer()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if layer.mask !== mask {
             mask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
             layer.mask = mask
         }
-        let height = layer.bounds.height, fade = min(20, height / 4)
+        let height = layer.bounds.height, fade = min(Self.fade, height / 4)
         // The page view is flipped: gradient locations run from the layer's origin, which is its top.
         let flipped = page.isFlipped
         mask.startPoint = CGPoint(x: 0.5, y: flipped ? 0 : 1); mask.endPoint = CGPoint(x: 0.5, y: flipped ? 1 : 0)
