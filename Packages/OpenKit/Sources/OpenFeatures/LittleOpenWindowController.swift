@@ -269,11 +269,6 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         guard state == .page else { return }
         onFind?((sender as? NSMenuItem)?.tag ?? 1)
     }
-    public override func responds(to selector: Selector!) -> Bool {
-        // Only a shown page can be searched: the blank bar keeps the menu items disabled.
-        if selector == #selector(performFindPanelAction(_:)) { return onFind != nil && state == .page }
-        return super.responds(to: selector)
-    }
     @objc public func dismissIntro() { banner.isHidden = true; layoutContent() }
     /// A fresh container on profile switch prevents host/cache reuse across Profile data contexts.
     func replaceProfile() {
@@ -509,4 +504,12 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     public func windowDidMiniaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidDeminiaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidChangeOcclusionState(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
+}
+
+extension LittleOpenWindowController: NSMenuItemValidation {
+    /// Only a shown page can be searched: the blank bar keeps Edit ▸ Find disabled (UX1 D7).
+    public func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(performFindPanelAction(_:)) { return onFind != nil && state == .page }
+        return true
+    }
 }
