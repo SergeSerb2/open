@@ -31,9 +31,10 @@ public final class ColorPadView: OpenDesign.ColorPadView {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     /// Tab / Shift-Tab onto the pad shows the ring; a click or the editor's own focus on open does not.
+    /// The current event decides: the window's selection direction is stale when focus is set in code.
     public override func becomeFirstResponder() -> Bool {
         guard super.becomeFirstResponder() else { return false }
-        showsKeyboardFocus = (window?.keyViewSelectionDirection ?? .directSelection) != .directSelection
+        showsKeyboardFocus = NSApp.currentEvent.map { $0.type == .keyDown && $0.keyCode == 48 } ?? false
         return true
     }
     public override func resignFirstResponder() -> Bool {

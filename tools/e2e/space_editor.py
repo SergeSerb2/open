@@ -569,7 +569,8 @@ def spaces_polish_rows(factory, results, tmp, harness):
         # Keyboard focus still shows: Tab away and Shift-Tab back onto the pad turns the ring on.
         app.call('editor-act', action='key', key='tab'); time.sleep(.2)
         away = app.call('editor-state')
-        app.call('editor-act', action='key', key='tab', modifiers=['shift']); time.sleep(.2)
+        # A real Shift-Tab carries the back-tab character (U+0019), which AppKit reads as "previous".
+        app.call('editor-act', action='key', key='tab', modifiers=['shift'], characters='\x19'); time.sleep(.2)
         back = app.call('editor-state')
         row('theme_editor_pad_ring_on_keyboard_focus', away.get('padFirstResponder') is False and away.get('padShowsFocusRing') is False
             and back.get('padFirstResponder') is True and back.get('padShowsFocusRing') is True,
