@@ -12,11 +12,12 @@ Loopback only: one HTTP server on 127.0.0.1; no host names, no real network.
 """
 import json
 import re
-import socket
 import tempfile
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+
+from loopback_http import LoopbackHTTPServer
 from pathlib import Path
 
 
@@ -39,7 +40,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def run(factory, results, tmp, h):
-    server = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
+    server = LoopbackHTTPServer(_Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = 'http://127.0.0.1:%d' % server.server_address[1]
 
