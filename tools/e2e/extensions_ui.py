@@ -778,7 +778,7 @@ def little_open_checks(app, results, local_origin, probe, control, extensions, w
         little_menu=little_call("ext-click",extension="more") if little_strip["visible"] else {"menu":[]}
         results["X19_button_menu"]={"ok":bool(little) and little_strip["visible"] and len(little_strip["ids"])>=4
             and little["titleElements"].get("extensions")==[little["frame"][2]-252,16,16,16]
-            and [i["title"] for i in little_menu["menu"] if not i["separator"]][-2:]==["Manage Extensions…","Add Extension…"],
+            and [i["title"] for i in little_menu["menu"] if not i["separator"]][-2:]==["Add Extension…","Manage Extensions…"],
             "strip":little_strip,"session":little,"menu":little_menu}
         for appearance in ("light","dark"):
             app.call("appearance",name=appearance);capture("little-"+appearance,little["window"])

@@ -53,6 +53,11 @@ public struct ExtensionPromptText: Equatable, Sendable {
     public let acceptButton = NSButton(), cancelButton = NSButton()
     public let bodyScroll = NSScrollView()
     public private(set) var bodyHeight: CGFloat = 0
+    public private(set) var bodyVisibleHeight: CGFloat = 0
+    public private(set) var bodyOverflows = false
+    /// The bottom fade shows while more of the list lies below the visible part.
+    public private(set) var bodyFadeVisible = false
+    private static let bodyFadeHeight: CGFloat = 20
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
     public init(model: any ExtensionPromptModel) {
@@ -71,10 +76,15 @@ public struct ExtensionPromptText: Equatable, Sendable {
         if let heading = text.bodyHeading {
             let document = PromptDocumentView()
             var y: CGFloat = 0
+            // Bottom edge of every text line, so a scrolling body can end on a whole line.
+            var lineBottoms: [CGFloat] = []
             func line(_ text: String, x: CGFloat, font: NSFont, secondary: Bool = false) {
                 let label = Self.label(text, font: font, secondary: secondary)
                 let h = Self.height(text, width: 372 - x, font: font)
-                label.frame = CGRect(x: x, y: y, width: 372 - x, height: h); document.addSubview(label); y += h
+                label.frame = CGRect(x: x, y: y, width: 372 - x, height: h); document.addSubview(label)
+                let count = max(1, Int((h / NSLayoutManager().defaultLineHeight(for: font)).rounded()))
+                lineBottoms += (1...count).map { y + h * CGFloat($0) / CGFloat(count) }
+                y += h
             }
             line(heading, x: 0, font: model.permissions.isEmpty ? Typography.promptBody.font : .systemFont(ofSize: 13, weight: .semibold))
             if !model.permissions.isEmpty { y += 10 }
@@ -88,12 +98,24 @@ public struct ExtensionPromptText: Equatable, Sendable {
             bodyHeight = y
             document.frame = CGRect(x: 0, y: 0, width: 372, height: y)
             bodyScroll.documentView = document; bodyScroll.drawsBackground = false
-            bodyScroll.hasVerticalScroller = y > ExtensionsMetrics.promptBodyMaxHeight
+            bodyOverflows = y > ExtensionsMetrics.promptBodyMaxHeight
+            // A long list stops on a whole line under a fade, with the scroller shown once: a line cut
+            // through its middle reads as the end of the list (UX round 1 X1).
+            let limit = ExtensionsMetrics.promptBodyMaxHeight
+            bodyVisibleHeight = bodyOverflows ? (lineBottoms.last(where: { $0 <= limit }) ?? limit) : y
+            bodyScroll.hasVerticalScroller = bodyOverflows
             bodyScroll.autohidesScrollers = true; bodyScroll.borderType = .noBorder
-            bodyScroll.frame = CGRect(x: 24, y: top, width: 372, height: min(y, ExtensionsMetrics.promptBodyMaxHeight))
+            bodyScroll.frame = CGRect(x: 24, y: top, width: 372, height: bodyVisibleHeight)
             addSubview(bodyScroll)
+            if bodyOverflows {
+                bodyScroll.wantsLayer = true
+                bodyScroll.contentView.postsBoundsChangedNotifications = true
+                NotificationCenter.default.addObserver(self, selector: #selector(bodyDidScroll),
+                    name: NSView.boundsDidChangeNotification, object: bodyScroll.contentView)
+                updateBodyFade()
+            }
         }
-        let buttonY = (text.bodyHeading == nil ? max(72, 24 + titleHeight) : top + min(bodyHeight, 240)) + 24
+        let buttonY = (text.bodyHeading == nil ? max(72, 24 + titleHeight) : top + bodyVisibleHeight) + 24
         for (button, label, key) in [(cancelButton, text.cancel, "esc"), (acceptButton, text.accept, "↩")] {
             button.title = ""; button.isBordered = false; button.wantsLayer = true; button.layer?.cornerRadius = 8
             let font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -131,6 +153,26 @@ public struct ExtensionPromptText: Equatable, Sendable {
         acceptButton.layer?.backgroundColor = Core.brandBlue.cgColor(contentAppearance)
         cancelButton.layer?.backgroundColor = SidebarColors.itemBackground.cgColor(contentAppearance)
     }
+    @objc private func bodyDidScroll() { updateBodyFade() }
+    private func updateBodyFade() {
+        let clip = bodyScroll.contentView.bounds
+        let more = bodyOverflows && clip.maxY < bodyHeight - 0.5
+        guard more != bodyFadeVisible || (more && bodyScroll.layer?.mask == nil) else { return }
+        bodyFadeVisible = more
+        guard more, let layer = bodyScroll.layer else { bodyScroll.layer?.mask = nil; return }
+        let fade = CAGradientLayer()
+        fade.frame = layer.bounds
+        // The scroll view is not flipped in layer space: location 0 is the bottom edge.
+        fade.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.black.cgColor]
+        fade.locations = [0, NSNumber(value: Double(Self.bodyFadeHeight / max(1, layer.bounds.height))), 1]
+        fade.startPoint = CGPoint(x: 0.5, y: 0); fade.endPoint = CGPoint(x: 0.5, y: 1)
+        CATransaction.begin(); CATransaction.setDisableActions(true); layer.mask = fade; CATransaction.commit()
+    }
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil, bodyOverflows { bodyScroll.flashScrollers() }
+    }
+    isolated deinit { NotificationCenter.default.removeObserver(self) }
     @objc private func accept() { onAnswer?(true) }
     @objc private func cancel() { onAnswer?(false) }
     public override func keyDown(with event: NSEvent) {

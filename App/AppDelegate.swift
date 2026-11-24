@@ -693,8 +693,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       controller.context.favoriteBadgesEnabled = true
     }
     // Native Note and Easel rows have no page or stored icon: draw their marks even before they show.
-    controller.context.faviconProvider = { tab in
-      NoteTab.matches(tab.url) ? NoteTab.faviconImage : EaselTab.matches(tab.url) ? EaselIcon.image : nil
+    // An extension's own page (options, welcome) shows that extension's name and icon, not its ID (UX round 1 X3).
+    let extensionsContext = factory.extensions.context
+    controller.context.extensionName = { [weak extensionsContext] id in extensionsContext?.actions.first { $0.id == id }?.name }
+    extensionsContext.observe { [weak controller] change in
+      if case .list = change { controller?.context.extensionNamesRevision += 1 }
+    }
+    controller.context.faviconProvider = { [weak controller, weak extensionsContext] tab in
+      if NoteTab.matches(tab.url) { return NoteTab.faviconImage }
+      if EaselTab.matches(tab.url) { return EaselIcon.image }
+      guard tab.url.scheme?.lowercased() == "chrome-extension", let id = tab.url.host() else { return nil }
+      _ = controller?.context.extensionNamesRevision
+      return extensionsContext?.actions.first { $0.id == id }?.menuIcon.map { NSImage(cgImage: $0.cgImage, size: CGSize(width: 16, height: 16)) }
     }
     factory.attach(controller)
     windowControllers.append(controller)

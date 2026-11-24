@@ -332,9 +332,16 @@ public final class SidebarContext {
     /// That page is a Note: it has no address to copy or share (bug sweep r7 AB-06).
     var pageIsNote: Bool { shownPeek == nil && currentTab.map(SidebarMenus.isNote) == true }
     var pageHost: String? {
-        if let peek = shownPeek { return Self.fieldText(peek.url, developerModeHosts) }
-        return currentTab.map { Self.fieldText($0.url, developerModeHosts) }
+        let url = shownPeek?.url ?? currentTab?.url
+        guard let url else { return nil }
+        if url.scheme?.lowercased() == "chrome-extension" { _ = extensionNamesRevision }
+        return Self.fieldText(url, developerModeHosts, extensionName: extensionName)
     }
+    /// The name of an installed extension by ID (App supplies it from the window's extension list):
+    /// an extension's own page names the extension, not its 32-letter ID (UX round 1 X3).
+    @ObservationIgnored public var extensionName: (@MainActor (String) -> String?)?
+    /// Bumped by App when the window's extension list changes, so extension pages re-read their name and icon.
+    public var extensionNamesRevision = 0
     /// Sites in Developer Mode (page-platform §4.10.3): their URL field shows the full URL.
     public var developerModeHosts: Set<String> = []
     /// The page the toolbar describes is a Developer Mode site: the toolbar shows the reload options chevron.
@@ -344,8 +351,9 @@ public final class SidebarContext {
     }
     /// The URL field text: the host, or for a Developer Mode site the full URL without the scheme
     /// (host, port, path, query).
-    static func fieldText(_ url: URL, _ developerHosts: Set<String>) -> String {
+    static func fieldText(_ url: URL, _ developerHosts: Set<String>, extensionName: (@MainActor (String) -> String?)? = nil) -> String {
         if url.absoluteString == "open://welcome" { return "Welcome to Open" }
+        if url.scheme?.lowercased() == "chrome-extension", let id = url.host(), let name = extensionName?(id), !name.isEmpty { return name }
         // Arc shows a lock and "Share" for an Easel; Open has no sharing, so it names the page kind.
         if url.scheme?.lowercased() == "open", url.host()?.lowercased() == "easel" { return "Easel" }
         // GUESS — capture pending (Arc 1.172 cannot create Notes): a Note's URL field names the kind.

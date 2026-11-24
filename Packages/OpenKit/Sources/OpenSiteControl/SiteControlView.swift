@@ -117,6 +117,9 @@ public final class SiteControlPanelView: NSView {
     public var extensionsContext: ExtensionsUIContext? { didSet { reloadExtensions() } }
     public private(set) lazy var extensionsBody = ExtensionsSectionBody(frame: .zero)
     public var hasExtensionItems: Bool { extensionsContext?.actions.isEmpty == false }
+    /// The text shown in place of extension items, if any.
+    public private(set) var extensionsNote: String?
+    static let incognitoExtensionsNote = "Extensions are off in Incognito."
     public func reloadExtensions() {
         guard let snapshot else { return }
         rebuildSections(snapshot, animated: false); needsLayout = true
@@ -299,6 +302,7 @@ extension SiteControlPanelView {
             body.addSubview(button); controls.append(button)
         }
         header("extensions","Extensions","Manage")
+        extensionsNote = nil
         if let context = extensionsContext, !context.actions.isEmpty {
             _ = extensionsBody.setActions(context.actions)
             // guess (child), S-5/S-11: the required 236 pt grid uses the SCC's
@@ -306,6 +310,14 @@ extension SiteControlPanelView {
             let x: CGFloat = extensionsBody.isGrid ? 0 : m.padding
             extensionsBody.frame = CGRect(x: x, y: y, width: m.width - 2 * x, height: extensionsBody.intrinsicContentSize.height)
             body.addSubview(extensionsBody); y += extensionsBody.frame.height
+        } else if snapshot.context.isIncognito {
+            _ = extensionsBody.setActions([])
+            // A private window runs only the extensions allowed there. With none, a lone Add tile reads as
+            // "your extensions are gone" (UX round 1 X6). GUESS — capture UXC-W3-C2: one line, as Boosts' off note.
+            let note = SiteControlBaselineLabel(Self.incognitoExtensionsNote, multiline: true)
+            note.frame = CGRect(x: m.padding, y: y, width: m.width - 2 * m.padding, height: m.globalOffHeight)
+            body.addSubview(note); y += m.globalOffHeight
+            extensionsNote = Self.incognitoExtensionsNote
         } else {
             _ = extensionsBody.setActions([])
             // With no installed actions, use the plan's 48 x 32 Add tile.

@@ -15514,9 +15514,15 @@ def main():
                     factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "extensions_ui.py"))["run"](
-                factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT,
-                sys.modules[__name__], functional_only=opts.functional_only)
+            # OPEN_EXTENSIONS_UX1_ONLY=1 runs only the UX round 1 extensions rows (tools/e2e/extensions_ux1.py).
+            ux1_only = os.environ.get("OPEN_EXTENSIONS_UX1_ONLY") == "1"
+            if not ux1_only:
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "extensions_ui.py"))["run"](
+                    factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT,
+                    sys.modules[__name__], functional_only=opts.functional_only)
+            if ux1_only or (not os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") and opts.lane != "observers"):
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "extensions_ux1.py"))["run"](
+                    factory, results["extensions-ui"], tmp, ROOT, wait_until, sys.modules[__name__])
         elif opts.only == "split":
             import importlib.util
             spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))
