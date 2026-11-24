@@ -1465,6 +1465,9 @@ final class SpaceIconView: NSView {
         guard let context, let space else { return SidebarRole.spaceTitle.nsColor }
         return context.roles(for: space).spaceTitle.nsColor
     }
+    /// Ink for letters, symbols and the planet mark. Default: this Space's title colour. The bottom
+    /// bar draws every Space's icon over the focused Space's theme, so it supplies that bar's ink.
+    var tint: (@MainActor () -> NSColor)? { didSet { needsDisplay = true } }
     var emojiSize: CGFloat = Typography.headerEmoji.size
     /// Emoji sit 1 pt above the frame's center (NCC fit on F0001).
     var emojiNudgeY: CGFloat = -1
@@ -1482,42 +1485,62 @@ final class SpaceIconView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let space else { return }
-        let icon = tracked({ space.icon }) { [weak self] in self?.needsDisplay = true }
+        // The ink is read here too, so a theme, appearance or Increase Contrast change redraws the
+        // icon (the layer redraws only on needsDisplay).
+        let (icon, ink) = tracked({ (space.icon, self.tint?() ?? self.spaceTitleColor) }) { [weak self] in self?.needsDisplay = true }
         switch icon {
+        case .emoji(let e)? where EmojiRenderer.isText(e):
+            // A Space icon string with no emoji in it (a letter, a digit): draw it like the Space
+            // title, not as black emoji-sized text sitting on its line box (UX round 1, E10).
+            drawText(e, color: ink)
         case .emoji(let e)?:
             if desaturated, let gray = EmojiRenderer.grayscale(e, size: emojiSize) {
                 let s = gray.size
                 gray.draw(in: NSRect(x: bounds.midX - s.width / 2, y: bounds.midY - s.height / 2 + emojiNudgeY, width: s.width, height: s.height),
                           from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             } else {
-                EmojiRenderer.draw(e, fontSize: emojiSize, in: bounds.offsetBy(dx: 0, dy: emojiNudgeY))
+                EmojiRenderer.draw(e, fontSize: emojiSize, color: ink, in: bounds.offsetBy(dx: 0, dy: emojiNudgeY))
             }
         case .named(let name)?:
-            drawSymbol(NamedSpaceIcons.symbolName(for: name))
+            drawSymbol(NamedSpaceIcons.symbolName(for: name), color: ink)
         case .symbol(let name)? where NSImage(systemSymbolName: name, accessibilityDescription: nil) == nil:
             // Arc's own named icons (for example "planet" on the default Space) have no SF Symbol.
             CustomIcon.planet(in: NSRect(x: bounds.midX - emojiSize / 2, y: bounds.midY - emojiSize / 2, width: emojiSize, height: emojiSize),
-                              color: self.spaceTitleColor)
+                              color: ink)
         case .symbol(let name)?:
             if let img = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: emojiSize * 0.8, weight: .medium)) {
                 let s = img.size
                 img.drawTinted(in: NSRect(x: bounds.midX - s.width / 2, y: bounds.midY - s.height / 2, width: s.width, height: s.height),
-                               color: self.spaceTitleColor)
+                               color: ink)
             }
         case nil:
             // Arc draws a planet-like mark for Spaces without an icon (F0079); ours is drawn in code.
             CustomIcon.planet(in: NSRect(x: bounds.midX - emojiSize / 2, y: bounds.midY - emojiSize / 2, width: emojiSize, height: emojiSize),
-                              color: self.spaceTitleColor)
+                              color: ink)
         }
     }
 
-    private func drawSymbol(_ name: String) {
+    /// Text icon: the Space title's semibold face at 13/14 of the emoji size (13 pt beside a 14 pt
+    /// emoji, the title's size) in the title colour, cap height centred on the icon.
+    private func drawText(_ text: String, color: NSColor) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let font = NSFont.systemFont(ofSize: emojiSize * Typography.spaceTitle.size / Typography.headerEmoji.size, weight: .semibold)
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]))
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        ctx.saveGState()
+        ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        ctx.textPosition = CGPoint(x: (bounds.midX - width / 2).rounded(), y: (bounds.midY + font.capHeight / 2).rounded())
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
+    }
+
+    private func drawSymbol(_ name: String, color: NSColor) {
         guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: emojiSize * 0.8, weight: .medium)) else { return }
         let size = image.size
         image.drawTinted(in: NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
-                                   width: size.width, height: size.height), color: self.spaceTitleColor)
+                                   width: size.width, height: size.height), color: color)
     }
 
 }
