@@ -35,10 +35,12 @@ function intEnv(
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const host = (env["OPEN_SYNC_HOST"] ?? "").trim() || "127.0.0.1";
+  const hasPlatformPort = (env["PORT"] ?? "").trim() !== "";
+  const host = (env["OPEN_SYNC_HOST"] ?? "").trim() || (hasPlatformPort ? "0.0.0.0" : "127.0.0.1");
+  const defaultPort = intEnv(env, "PORT", 8787, 0, 65535);
   return {
     host,
-    port: intEnv(env, "OPEN_SYNC_PORT", 8787, 0, 65535),
+    port: intEnv(env, "OPEN_SYNC_PORT", defaultPort, 0, 65535),
     dataDir: path.resolve((env["OPEN_SYNC_DATA_DIR"] ?? "").trim() || "./data"),
     maxAccountBlobBytes: intEnv(
       env,

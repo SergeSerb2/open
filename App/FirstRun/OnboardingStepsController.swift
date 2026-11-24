@@ -83,6 +83,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var accountPasswordField: NSSecureTextField?
   private var accountServerField: NSTextField?
   private var accountActionButton: OnboardingButton?
+  private var accountCopyPromptButton: OnboardingButton?
   private var accountStatusLabel: NSTextField?
   private(set) var savePanel: NSSavePanel?
   private let started = Date()
@@ -115,7 +116,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     for field in [accountEmailField, accountPasswordField, accountServerField] { field?.delegate = nil; field?.target = nil }
     accountModeBar?.target = nil
     accountModeBar = nil; accountEmailField = nil; accountPasswordField = nil; accountServerField = nil
-    accountActionButton = nil; accountStatusLabel = nil
+    accountActionButton = nil; accountCopyPromptButton = nil; accountStatusLabel = nil
   }
   override func loadView() {
     let root = OnboardingSurface()
@@ -176,10 +177,22 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
         field?.frame = NSRect(x: 0, y: 44+CGFloat(index)*36, width: contentWidth, height: 28)
       }
       let formBottom: CGFloat = accountEmailField == nil ? 0:152
+      var buttonsBottom = formBottom
       if let button = accountActionButton {
-        button.frame = NSRect(x: 0, y: formBottom+8, width: max(120, OnboardingButton.labelWidth(button)+40), height: 32)
+        let actionWidth = max(120, OnboardingButton.labelWidth(button)+40)
+        button.frame = NSRect(x: 0, y: formBottom+8, width: actionWidth, height: 32)
+        buttonsBottom = button.frame.maxY
+        if let promptButton = accountCopyPromptButton {
+          let promptWidth = min(contentWidth, OnboardingButton.labelWidth(promptButton)+28)
+          if actionWidth+10+promptWidth <= contentWidth {
+            promptButton.frame = NSRect(x: actionWidth+10, y: formBottom+8, width: promptWidth, height: 32)
+          } else {
+            promptButton.frame = NSRect(x: 0, y: button.frame.maxY+8, width: promptWidth, height: 32)
+            buttonsBottom = promptButton.frame.maxY
+          }
+        }
       }
-      let statusY = accountActionButton == nil ? formBottom:formBottom+56
+      let statusY = accountActionButton == nil ? formBottom:buttonsBottom+14
       accountStatusLabel?.frame = NSRect(x: 0, y: statusY, width: contentWidth, height: max(40, controls.bounds.height-statusY))
     }
     preview.frame = NSRect(x: width, y: 0, width: view.bounds.width-width, height: view.bounds.height)
@@ -486,9 +499,21 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     let server = field(NSTextField(), accountServer, "Sync server")
     let action = button(accountCreating ? "Create Account":"Sign In") { [weak self] in self?.submitAccount() }
     action.outlined = true; action.isEnabled = !accountBusy; mode.isEnabled = !accountBusy
-    for control in [mode, email, password, server, action, status] as [NSView] { controls.addSubview(control) }
+    let copyPrompt = button("Copy Agent Prompt") { [weak self] in self?.copyAccountSetupPrompt() }
+    copyPrompt.pill = true; copyPrompt.isEnabled = !accountBusy
+    copyPrompt.setAccessibilityLabel("Copy AI agent sync server setup prompt")
+    for control in [mode, email, password, server, action, copyPrompt, status] as [NSView] { controls.addSubview(control) }
     accountModeBar = mode; accountEmailField = email; accountPasswordField = password; accountServerField = server
-    accountActionButton = action; accountStatusLabel = status
+    accountActionButton = action; accountCopyPromptButton = copyPrompt; accountStatusLabel = status
+  }
+  func copyAccountSetupPrompt() {
+    guard step == .account, !accountBusy else { return }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(SyncSetupPrompts.agentSetupPrompt, forType: .string)
+    accountStatus = "Copied AI agent setup prompt. Paste it into your coding agent to deploy your own sync server, then paste its URL above."
+    accountStatusIsError = false
+    accountStatusLabel?.stringValue = accountStatus
+    accountStatusLabel?.textColor = .secondaryLabelColor
   }
   /// Keeps typed values across re-renders (busy state, mode switch, Back and Next).
   private func captureAccountFields() {

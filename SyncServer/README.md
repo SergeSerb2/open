@@ -10,7 +10,35 @@ Self-hosted, zero-knowledge sync server for the Open browser. It implements
   in `src/ws.ts`.
 - One process, one SQLite file (WAL) plus a directory of encrypted blob files.
 
-## Quick start
+## One-prompt setup (AI coding agent)
+
+Paste this prompt into **Claude Code, Cursor, Codex, Antigravity, T3 Code, Windsurf**, or any AI coding agent to have it deploy your own private Open Sync Server and hand you back your `https://...` URL (also available via **Copy Agent Prompt** inside **Open ▸ Settings ▸ Account & Sync**):
+
+```text
+Set up a private Open Sync Server for my Open browser from https://github.com/SergeSerb2/open (the `SyncServer/` folder).
+
+First, check which deployment tools I already have authenticated (such as `railway`, `flyctl`, `docker`, or `node`), or ask me where I want to host it:
+- Railway (recommended easiest cloud setup)
+- Fly.io
+- Render
+- Docker on a VPS / NAS / home server
+- Local Mac (optionally over Tailscale)
+
+Requirements:
+1. Build and run `SyncServer/` using its `Dockerfile` (zero runtime dependencies, Node.js 22+ built-in SQLite + WebSockets). Do not modify server code unless required.
+2. Run a single instance/replica only (SQLite WAL uses one writer).
+3. Attach persistent storage mounted at `/data` and set `OPEN_SYNC_DATA_DIR=/data`.
+   - On Railway: also set `RAILWAY_RUN_UID=0` (the entrypoint fixes `/data` ownership and drops back to unprivileged `node`).
+   - Railway/Fly/Render `PORT` is supported automatically when `OPEN_SYNC_PORT` is unset.
+4. Expose HTTPS with WebSocket upgrades forwarded on `/v1/sync/ws`, and set `OPEN_SYNC_TRUST_PROXY=1` whenever behind a reverse proxy or cloud edge.
+5. Verify the live server before finishing:
+   - `GET <url>/health` returns HTTP 200 with `{"ok":true,"service":"open-sync","version":1}`
+   - Confirm `/v1/sync/ws` reaches the server (an unauthenticated upgrade returns HTTP 401, not 404/502)
+   - Leave the database clean (delete any temporary test account).
+6. Reply with my final `https://...` server URL so I can paste it into Open -> Settings -> Account & Sync -> Sync server.
+```
+
+## Quick start (manual)
 
 ```sh
 cd SyncServer
@@ -29,9 +57,16 @@ docker compose up -d --build     # listens on 127.0.0.1:8787, data in the open-s
 ```
 
 The image runs as the unprivileged `node` user and has a `/health` healthcheck.
+If started as root (for example with `RAILWAY_RUN_UID=0` on a Railway volume),
+the entrypoint fixes ownership on `OPEN_SYNC_DATA_DIR` and drops privileges to
+`node` via `setpriv` before `exec`ing Node.
 
-> The Docker files could not be build-tested in the authoring environment (no
-> registry access). They use only `npm ci` and `tsrs`, the same steps as above.
+### Railway
+
+`railway.toml` configures a Dockerfile build with `/health` healthchecks. Mount
+a persistent volume at `/data` and set `OPEN_SYNC_DATA_DIR=/data`,
+`OPEN_SYNC_TRUST_PROXY=1`, and `RAILWAY_RUN_UID=0`. Railway's `PORT` variable is
+honored automatically when `OPEN_SYNC_PORT` is unset.
 
 ### TLS
 
