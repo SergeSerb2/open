@@ -1684,6 +1684,12 @@
           "paneBackgrounds": controller.container.slots.map { ["tab": $0.tabID.description,
             "color": colorComponents($0.paneChrome?.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) })] as [String: Any] },
           "shownPages": w.contents.filter { $0.value.view.window === win && !$0.value.view.isHiddenOrHasHiddenAncestor }.keys.map(\.description)] as [String: Any]
+      case "space-rename":
+        // The model rename the Space header and Rename Space… commit (no keyboard focus needed).
+        guard let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }),
+          let title = a["title"] as? String, title.utf8.count <= 256 else { throw Failure(message: "space-rename needs a Space and a title") }
+        app.model.renameSpace(id: space.id, title: title)
+        return true
       case "appearance":
         // Open's own appearance only (light, dark, or nil for the system's); the
         // system setting is untouched.

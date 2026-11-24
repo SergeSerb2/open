@@ -15444,11 +15444,12 @@ def main():
             # OPEN_SPLIT_WIN6_ONLY=1 runs only the bug sweep round 6 window rows (tools/e2e/windows_r6.py).
             # OPEN_SPLIT_WIN8_ONLY=1 runs only the bug sweep round 8 window rows (tools/e2e/windows_r8.py).
             # OPEN_SPLIT_UXG_ONLY=1 runs only the UX round 1 pane bar rows (tools/e2e/pagechrome_ux1.py).
+            # OPEN_SPLIT_UXG_WIN_ONLY=1 runs only the UX round 1 wave 3 window rows (tools/e2e/windows_ux1.py).
             win8 = os.environ.get("OPEN_SPLIT_WIN8_ONLY") == "1"
-            uxg = os.environ.get("OPEN_SPLIT_UXG_ONLY") == "1"
+            uxg = os.environ.get("OPEN_SPLIT_UXG_ONLY") == "1" or os.environ.get("OPEN_SPLIT_UXG_WIN_ONLY") == "1"
             if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8 and not uxg:
                 module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
-            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
+            if os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8 and os.environ.get("OPEN_SPLIT_UXG_WIN_ONLY") != "1":
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/pagechrome_ux1.py"))["split_rows"](
                     factory, results["split"], tmp, sys.modules[__name__])
             if not win8 and not uxg:
@@ -15456,6 +15457,9 @@ def main():
                     factory, results["split"], tmp, sys.modules[__name__])
             if not uxg:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_r8.py"))["run"](
+                    factory, results["split"], tmp, sys.modules[__name__])
+            if os.environ.get("OPEN_SPLIT_UXG_ONLY") != "1" and os.environ.get("OPEN_SPLIT_WIN6_ONLY") != "1" and not win8:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/windows_ux1.py"))["run"](
                     factory, results["split"], tmp, sys.modules[__name__])
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
