@@ -73,6 +73,16 @@ def run(factory, results, tmp, h):
             app.call('defaults', key=k, value=True)
         start = next(t['id'] for t in app.call('tabs') if t['url'].endswith('/start')); app.call('wait', tab=start)
 
+        def hover_until(node, kind):
+            # The card shows after the 0.5 s hover delay; under load it can land after the hover's own read.
+            shown = app.call('hover', node=node, ms=600)
+            if shown.get('kind') != kind:
+                shown = wait(lambda: (lambda st: st if st.get('kind') == kind else None)(app.call('preview-state')), timeout=3, step=.05) or shown
+            return shown
+
+        def preview_until(test):
+            return wait(lambda: (lambda st: st if test(st) else None)(app.call('preview-state')), timeout=3, step=.05)
+
         # H1: the first hover of a pinned tab with no live page shows the page laid out at the card's size. Before,
         # CefTabStrip::CreateTab resized the new background tab like the active tab (the content area, 1042 × 780)
         # after OpenEngine had fitted it to the card, so it was squeezed into the 420 × 560 card for the whole hover.
@@ -80,13 +90,22 @@ def run(factory, results, tmp, h):
             app.call('select', tab=start); app.call('focus', tab=start); time.sleep(.5)
             unloaded = not any(n.get('loaded') for n in app.call('sidebar-tree').get('pinned', []) if n.get('id') == pinned)
             app.call('hover', leave=True, ms=300)
-            shown = app.call('hover', node=pinned, ms=900)
-            inner = app.eval(pinned, '[innerWidth, innerHeight]')
+            shown = hover_until(pinned, 'page')
+            inner, still = None, {}
+            if shown.get('kind') == 'page':
+                # Read the page's viewport as soon as it is live (the engine refuses an eval before), while the
+                # card is still open: the size the user sees first.
+                def viewport():
+                    try: return app.call('eval', tab=pinned, js='[innerWidth, innerHeight]')
+                    except RuntimeError: return None
+                inner = wait(viewport, timeout=10, step=.05)
+                still = app.call('preview-state')
             card = shown.get('card', [])
             app.call('hover', leave=True, ms=300)
             ok = (bool(unloaded) and shown.get('kind') == 'page' and shown.get('makeHostCount', 0) >= 1 and len(card) == 4
+                  and still.get('kind') == 'page' and still.get('card') == card and isinstance(inner, list)
                   and abs(inner[0] - card[2]) <= 1 and abs(inner[1] - card[3]) <= 1)
-            return {'ok': ok, 'unloaded': bool(unloaded), 'card': card, 'inner': inner, 'hover': shown}
+            return {'ok': ok, 'unloaded': bool(unloaded), 'card': card, 'inner': inner, 'hover': shown, 'after': still}
         gate('UX1W2_page_card_first_hover_layout', first_hover_page_size)
 
         # H2: an empty folder card is only its "No tabs" text: no search band, no separator, text centred.
@@ -95,13 +114,51 @@ def run(factory, results, tmp, h):
             node = next((n for n in app.call('sidebar-tree').get('pinned', []) if n.get('id') == folder), {})
             if node.get('expanded'): app.call('folder-toggle', folder=folder)
             app.call('hover', leave=True, ms=300)
-            shown = app.call('hover', node=folder, ms=900)
+            shown = hover_until(folder, 'folder')
             fs = shown.get('folderSearch', {})
             label, height = fs.get('emptyLabel', []), fs.get('cardHeight', 0)
             app.call('hover', leave=True, ms=300)
             centred = len(label) == 4 and label[3] > 0 and abs((label[1] + label[3] / 2) - height / 2) <= 2
             return {'ok': shown.get('kind') == 'folder' and fs.get('searchHidden') is True and fs.get('separatorShown') is False
-                    and 0 < height <= 72 and centred, 'folderSearch': fs, 'card': shown.get('card')}
+                    and 0 < height <= 72 and centred and fs.get('emptyText') == 'No tabs', 'folderSearch': fs, 'card': shown.get('card'),
+                    'folder': folder}
         gate('UX1W2_empty_folder_card_layout', empty_folder_card)
+
+        # Review r1 nit: a tab joins or leaves the folder while its card is open. The change comes from a second
+        # window on the same model (this window's own sidebar actions close the card by design). The card grows to
+        # one row with its search band, then goes back to the 64 pt "No tabs" card, without closing.
+        def live_folder_change():
+            folder = results['UX1W2_empty_folder_card_layout'].get('folder')
+            if not folder: return {'ok': False, 'error': 'no empty folder from the row above'}
+            space = next(s['id'] for s in app.call('spaces') if s['focused'])
+            tab = h['new_tab'](app, origin + '/live')
+            w1 = app.call('window-state')['id']
+            app.call('menu-perform', id='new-window')
+            w2 = wait(lambda: next((w['id'] for w in app.call('shell-windows') if w['id'] != w1), None), timeout=5, step=.1)
+            if not w2: return {'ok': False, 'error': 'no second window'}
+            try:
+                app.call('window-focus', id=w1, activate=True)
+                app.call('select', tab=start); app.call('focus', tab=start); time.sleep(.3)
+                app.call('hover', leave=True, ms=300)
+                opened = hover_until(folder, 'folder')
+                app.call('sidebar-drop', window=w2, nodes=[tab], parent={'kind': 'folder', 'id': folder}, index=0)
+                # The card frame and its folder view (laid out on the next pass) must both reach the new height.
+                grown = preview_until(lambda st: st.get('kind') == 'folder' and st['folderSearch'].get('rows') == 1
+                                      and st['card'][3] == st['folderSearch'].get('cardHeight') == 48 + 45 + 8) or app.call('preview-state')
+                app.call('sidebar-drop', window=w2, nodes=[tab], parent={'kind': 'today', 'id': space}, index=0)
+                shrunk = preview_until(lambda st: st.get('kind') == 'folder' and st['folderSearch'].get('rows') == 0
+                                       and st['card'][3] == st['folderSearch'].get('cardHeight', 0) <= 72) or app.call('preview-state')
+                app.call('hover', leave=True, ms=300)
+            finally:
+                app.call('window-focus', id=w2, activate=True); app.call('window-close')
+                app.call('window-focus', id=w1, activate=True)
+            g, k = grown.get('folderSearch', {}), shrunk.get('folderSearch', {})
+            ok = (opened.get('kind') == 'folder' and g.get('rows') == 1 and g.get('searchHidden') is False and g.get('cardHeight') == 101
+                  and grown.get('card', [0, 0, 0, 0])[3] == 101 and k.get('rows') == 0 and k.get('searchHidden') is True
+                  and k.get('emptyText') == 'No tabs' and 0 < k.get('cardHeight', 0) <= 72 and shrunk.get('card', [0, 0, 0, 99])[3] <= 72
+                  and grown.get('shows') == shrunk.get('shows') == opened.get('shows'))
+            return {'ok': ok, 'opened': opened.get('card'), 'grown': {'card': grown.get('card'), 'fs': g},
+                    'shrunk': {'card': shrunk.get('card'), 'fs': k}, 'shows': [opened.get('shows'), grown.get('shows'), shrunk.get('shows')]}
+        gate('UX1W2_folder_card_live_change', live_folder_change)
     finally:
         app.quit(); server.shutdown(); server.server_close()

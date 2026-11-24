@@ -2600,6 +2600,7 @@
         folderSearch = ["placeholder": card.searchPlaceholder, "textBoxWidth": box.width,
           "searchHidden": card.searchField.isHidden, "separatorShown": card.separatorShown,
           "cardHeight": card.bounds.height, "emptyLabel": [empty.minX, empty.minY, empty.width, empty.height],
+          "emptyText": card.emptyLabelText, "rows": card.displayedTabIDs.count,
           "needs": ceil((card.searchPlaceholder as NSString).size(withAttributes: [.font: font]).width),
           "tailEllipsis": style?.lineBreakMode == .byTruncatingTail]
       }

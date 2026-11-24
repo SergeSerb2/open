@@ -21,6 +21,8 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     private var filtered: [Tab] = []
     private var loops: [ObservationLoop] = []
     public var onSelect: (@MainActor (ItemID) -> Void)?
+    /// Called when the card's height changes while it is open: a tab joins or leaves the folder.
+    public var onResize: (@MainActor () -> Void)?
 
     public init(context: SidebarContext, folder: Folder) {
         self.context = context; self.folder = folder
@@ -72,9 +74,12 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     }
     /// Height of an empty folder's card: the Recents card's empty height, so both empty cards match.
     static let emptyHeight: CGFloat = RecentsPreviewView.emptyHeight
-    /// Layout readback for checks: the header separator is shown, and the empty text's frame.
+    #if DEBUG || OPEN_AUTOMATION
+    /// Layout readback for checks: the header separator is shown, and the empty text's frame and text.
     public var separatorShown: Bool { !separator.isHidden }
     public var emptyLabelFrame: CGRect { emptyLabel.isHidden ? .zero : emptyLabel.frame }
+    public var emptyLabelText: String { emptyLabel.isHidden ? "" : emptyLabel.text() }
+    #endif
     /// The search field's placeholder: "Search <folder title>…" (measured text form).
     public var searchPlaceholder: String { searchField.placeholderAttributedString?.string ?? searchField.placeholderString ?? "" }
     public var displayedTabIDs: [ItemID] { filtered.map(\.id) }
@@ -89,7 +94,13 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         return walk(folder.children)
     }
     private func rebuild() {
+        let oldCount = tabs.count, oldHeight = fittingSize.height
         tabs = collectTabs()
+        if tabs.isEmpty, !searchField.stringValue.isEmpty {
+            // The field hides with the folder's last tab: drop its query, so the card says "No tabs".
+            if searchField.currentEditor() != nil { window?.makeFirstResponder(self) }
+            searchField.stringValue = ""
+        }
         let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         filtered = query.isEmpty ? tabs : tabs.filter { $0.displayTitle.localizedCaseInsensitiveContains(query) }
         let name = folder.title.trimmingCharacters(in: .whitespaces)
@@ -105,6 +116,8 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         emptyLabel.isHidden = !filtered.isEmpty
         emptyLabel.setAccessibilityLabel(emptyLabel.text())
         tableView.reloadData(); needsLayout = true; invalidateIntrinsicContentSize()
+        // Only a tab joining or leaving resizes an open card; typing a query keeps its height.
+        if tabs.count != oldCount, fittingSize.height != oldHeight { onResize?() }
         // The first row carries the highlight plate (measured); Up / Down move it.
         if !filtered.isEmpty { tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false) }
     }
