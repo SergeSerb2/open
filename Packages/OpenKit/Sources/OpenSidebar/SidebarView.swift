@@ -695,6 +695,23 @@ extension SidebarView {
         guard let page = pager.currentPage, !page.dropIndicator.isHidden else { return nil }
         return convert(page.dropIndicator.bounds, from: page.dropIndicator)
     }
+    /// The Favorites tray's insertion mark during a drag, in this view's coordinates.
+    public var favoritesGapIndicatorFrame: CGRect? {
+        guard let frame = favorites.gapIndicatorFrame else { return nil }
+        return convert(frame, from: favorites)
+    }
+    /// The folder a drag will drop into (row filled, glyph open), read from the row views.
+    public var dropTargetFolderState: [String: Any]? {
+        guard let page = pager.currentPage, let folder = page.dropTargetFolder else { return nil }
+        let row = page.outline.row(forItem: folder)
+        let rowView = row >= 0 ? page.outline.rowView(atRow: row, makeIfNecessary: false) as? SidebarRowView : nil
+        let icon = row >= 0 ? (page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? FolderCellView)?.icon : nil
+        // The glyph redraws on AppKit's next display pass, which a window behind others never gets:
+        // display its layer now, so `drawnGlyph` is what the screen shows once the window is visible.
+        icon?.layer?.displayIfNeeded()
+        return ["folder": folder.id.description, "rowFilled": rowView?.isDropTarget ?? false,
+                "glyphOpen": icon?.dropOpen ?? false, "drawnGlyph": icon?.lastDrawnGlyph ?? ""]
+    }
 
     /// Simulates a two-finger horizontal swipe through the pager's real handler.
     public func simulateSwipe(_ events: [NSEvent]) {

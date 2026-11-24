@@ -371,7 +371,7 @@ extension LibraryPanelView {
         content.isHidden = !rowsEmpty || (section == .spaces && manager != nil) || (section != .spaces && hosts[section]?.loaded != true)
         manager?.isHidden = section != .spaces
         header.isHidden = section == .spaces || filterOpen; filter.isHidden = !section.hasFilter || filterOpen
-        filter.showsDot = hasActiveFilters; filterEditor.isHidden = !filterOpen
+        filter.showsDot = filterDiffersFromDefault; filterEditor.isHidden = !filterOpen
         boostList.isHidden = section != .boosts; boostGallery.isHidden = section != .boosts; boostsProfile.isHidden = section != .boosts
         let boostsOff = section == .boosts && !viewModel.defaults.bool(forKey:"open.advanced.enableBoosts")
         boostDisabledText.isHidden = !boostsOff; boostTurnOn.isHidden = !boostsOff
@@ -652,6 +652,11 @@ extension LibraryPanelView {
             guard let self else { return }; await self.viewModel.loadNextArchivePage(); self.archivePageLoading = false
             if self.contentActive, self.section == .archive { self.renderRows() }
         }
+    }
+    /// The Filter button's dot: a filter differs from the section's default (UXC-W2-S8). Downloads
+    /// and History default to the window's Profile, so that Profile alone shows no dot.
+    var filterDiffersFromDefault: Bool {
+        section == .downloads ? viewModel.downloadProfileFilter != context.focusedSpace?.profileID : hasActiveFilters
     }
     var hasActiveFilters: Bool {
         switch section {

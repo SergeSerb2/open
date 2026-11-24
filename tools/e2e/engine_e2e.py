@@ -15536,7 +15536,11 @@ def main():
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             results[opts.only] = CheckedResults(tracker)
-            module.context_menu_checks(factory, results[opts.only], tmp, sys.modules[__name__])
+            # OPEN_CONTEXT_MENUS_UXE_ONLY=1 runs only the UX round 1 wave 2 rows (tools/e2e/menus_dnd_ux1.py).
+            if os.environ.get("OPEN_CONTEXT_MENUS_UXE_ONLY") != "1":
+                module.context_menu_checks(factory, results[opts.only], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/menus_dnd_ux1.py"))["run"](
+                factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "applescript":
             results["applescript"] = CheckedResults(tracker)
             applescript = runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))
