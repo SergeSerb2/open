@@ -50,6 +50,7 @@ extension AutomationController {
           controller.context.focusedSpace.map { controller.background.targetStyle == controller.context.style(for: $0) } ?? true
         },
         "nameFocused": form.nameField.currentEditor() != nil,
+        "createEnabled": form.createButton.isEnabled, "textFit": form.textFit,
         // What the window server composites: the form's rect through the presentation layer tree
         // (page strips move pages by layer translation, so native frames alone cannot see it).
         "layers": creationLayerState(form, in: browser.contentView),

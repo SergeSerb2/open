@@ -489,6 +489,62 @@ def creation_keeps_focus_after_space_switch(factory, results, tmp, harness):
             settled=bool(settled), nameFocused=state.get('nameFocused'), firstResponder=window['firstResponder'],
             space=window['space'] == other, key=window['isKeyWindow'])
         app.call('editor-close')
+def spaces_polish_rows(factory, results, tmp, harness):
+    """UX round 1 C3-C5 and the narrow New Space form, in the real App with no key window.
+
+    C3: on header hover, a truncated title ends at least 6 pt before the options button.
+    C4: the theme editor opens with no focus ring on the pad (state and pixels).
+    C5: Create Space is disabled while the name is empty.
+    Narrow form: at 164 pt the subtitle and the Choose a Theme label fit (no clipped line, no wrap).
+    """
+    app = factory(urls=(), fresh=True)
+    out = Path(tmp, 'spaces-polish'); out.mkdir(parents=True, exist_ok=True)
+    def row(name, ok, **detail):
+        print(name, 'PASS' if ok else 'FAIL', flush=True)
+        results[name] = dict(detail, ok=bool(ok))
+    try:
+        app.call('window-frame', frame=[80, 60, 1120, 800])
+        # C5 and the narrow form, at the narrowest sidebar and at the default width.
+        for width in (164, 228):
+            app.call('updater-banner-width', width=float(width)); time.sleep(.3)
+            app.call('menu-perform', id='new-space')
+            harness.wait_until(lambda: app.call('creation-state').get('open'), timeout=5, step=.05); time.sleep(.4)
+            state = app.call('creation-state')
+            row('creation_create_disabled_when_empty_w%d' % width, state['name'] == '' and state.get('createEnabled') is False,
+                name=state['name'], createEnabled=state.get('createEnabled'))
+            row('creation_text_fits_w%d' % width, state.get('textFit') == {'subtitle': True, 'themeTitle': True},
+                textFit=state.get('textFit'), widthClass=state.get('widthClass'))
+            app.call('editor-close'); harness.wait_until(lambda: not app.call('creation-state').get('open'), timeout=5, step=.05)
+        app.call('updater-banner-width', width=228.0); time.sleep(.3)
+        # C4: no ring on the pad when the editor opens.
+        space = next(s for s in app.call('spaces') if s['focused'])['id']
+        app.call('editor-open', kind='theme', space=space)
+        harness.wait_until(lambda: app.call('editor-state').get('open'), timeout=5, step=.05); time.sleep(.6)
+        editor = app.call('editor-state')
+        shot = str(out / 'theme-editor.png'); app.call('snapshot', path=shot, window='editor')
+        width, height, pixel = harness.read_image(shot)
+        scale = width / editor['frame'][2]
+        pad = editor['controls']['pad']; x0, y0 = pad[0] + 13, pad[1] + 13; x1, y1 = x0 + pad[2], y0 + pad[3]
+        # The default ring is a blue line on the pad's edge: scan 3 px across each edge.
+        blue = 0
+        def is_blue(x, y):
+            r, g, b = pixel(x * scale, y * scale); return b - max(r, g) > 50
+        for t in range(0, int(pad[2]), 2):
+            for d in (-1, 0, 1):
+                blue += is_blue(x0 + t, y0 + d) + is_blue(x0 + t, y1 - 1 + d) + is_blue(x0 + d, y0 + t) + is_blue(x1 - 1 + d, y0 + t)
+        row('theme_editor_pad_no_ring_at_open', editor.get('padFirstResponder') is True and editor.get('padShowsFocusRing') is False and blue == 0,
+            padFirstResponder=editor.get('padFirstResponder'), padShowsFocusRing=editor.get('padShowsFocusRing'), bluePixels=blue, snapshot=shot)
+        app.call('editor-close'); time.sleep(.3)
+        # C3: hover gap between a truncated title and the options button.
+        app.call('space-create', title='Studio projects and long research notes'); time.sleep(.8)
+        state = app.call('window-state'); header = state['chrome']['header']
+        app.call('mouse', action='hover', x=header[0] + header[2] / 2, y=header[1] + header[3] / 2)
+        hovered = harness.wait_until(lambda: (lambda st: st if st['chrome']['headerHovered'] else None)(app.call('window-state')), timeout=3, step=.05) or app.call('window-state')
+        title = hovered['chrome']['headerTitle']; sidebar_width = hovered['sidebarWidth']
+        more_min_x = sidebar_width - 13 - 26  # SpaceListMetrics.headerMoreTrailing / headerMoreSize
+        row('space_header_hover_title_clears_options', hovered['chrome']['headerHovered'] and title[0] + title[2] <= more_min_x - 6 + .5,
+            titleMaxX=title[0] + title[2], optionsMinX=more_min_x, hovered=hovered['chrome']['headerHovered'])
+        app.call('mouse', action='hover', x=700, y=400)
     finally:
         app.quit()
 

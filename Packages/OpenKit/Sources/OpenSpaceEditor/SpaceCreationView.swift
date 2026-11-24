@@ -45,6 +45,14 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     public var systemAppearance: ContentAppearance = .dark
     private var creatingProfile = false
     private var entered = false
+    /// Whether each label's text fits its frame (no clipped line, no wrap): automation and checks.
+    public var textFit: [String: Bool] {
+        func lines(_ field: NSTextField, width: CGFloat) -> CGFloat { ceil(field.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: width, height: 1000)).height ?? 0) }
+        let themeTitle = (themeButton.cell?.titleRect(forBounds: themeButton.bounds).width ?? 0)
+        let themeNeeded = ceil((themeButton.title as NSString).size(withAttributes: [.font: themeButton.font as Any]).width)
+        return ["subtitle": lines(subtitle, width: subtitle.frame.width) <= subtitle.frame.height + 0.5,
+                "themeTitle": themeNeeded <= themeTitle + 0.5]
+    }
     public var cardFrames: [String: CGRect] {
         ["header": header.frame, "name": nameCard.frame, "theme": themeCard.frame, "profile": profileCard.frame,
          "create": convert(createButton.bounds, from: createButton)]
