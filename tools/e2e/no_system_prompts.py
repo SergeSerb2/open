@@ -58,6 +58,8 @@ def run(factory, results, tmp, h):
         try: app.call('policy', permissions='')
         except Exception: pass
         server.shutdown()
+        # The next launch is fresh=True and deletes the data root: this App must be gone first.
+        app.quit()
     local_network_rows(factory, results, tmp, h, row)
 
 
