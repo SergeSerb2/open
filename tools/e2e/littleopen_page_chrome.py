@@ -150,7 +150,7 @@ def run(factory, results, tmp, h):
                             and bool(again) and second['visible']==(decision=='notnow')
                             and (decision!='allow' or ev('permissionResult')=='granted')
                             and state['buttons']==['Not Now','Allow']
-                            and state['help']=='Click the lock to change this any time'
+                            and state['help']=='Change this any time in Site Controls'
                             and state['question']=='Allow little-'+decision+'.localhost to access your MIDI devices?', state=state, second=second, stored=stored, inside=inside, positioned=positioned)
             gate('little_permission_' + decision, permission)
         for key in ['escape','return','w','t','l']:

@@ -41,13 +41,18 @@ extension AutomationController {
         "themeOpen": creation.themeEditor != nil,
         "themeKey": creation.themeEditor?.panel.isKeyWindow ?? false,
         "windowActive": browser.context.isWindowActive, "backgroundActive": browser.background.isWindowActive,
+        // Composited placement, not native frames: pages move by layer translation (UX round 1 C1).
         "visible": browser.window?.isVisible == true && !form.isHiddenOrHasHiddenAncestor
+          && (creationLayerRects(form, in: browser.contentView).presentation.map { $0.intersection(browser.contentView.bounds).width > 0 } ?? false)
           && form.convert(form.bounds, to: browser.contentView).intersection(browser.contentView.bounds).width > 0,
         "previewMatches": browser.background.targetStyle == form.style,
         "otherWindowsMatchModel": app.windowControllers.filter { $0 !== browser }.allSatisfy { controller in
           controller.context.focusedSpace.map { controller.background.targetStyle == controller.context.style(for: $0) } ?? true
         },
         "nameFocused": form.nameField.currentEditor() != nil,
+        // What the window server composites: the form's rect through the presentation layer tree
+        // (page strips move pages by layer translation, so native frames alone cannot see it).
+        "layers": creationLayerState(form, in: browser.contentView),
         "systemAppearance": form.systemAppearance.rawValue, "formAppearance": form.appearance?.name.rawValue ?? ""] as [String: Any]
     case "creation-act":
       guard let creation = browser.spaceCreationController else { throw Failure(message: "no creation form") }
@@ -83,6 +88,39 @@ extension AutomationController {
       return true
     default: throw Failure(message: "unknown space editor command")
     }
+  }
+
+  private func creationLayerState(_ form: NSView, in root: NSView) -> [String: Any] {
+    func tx(_ layer: CALayer?) -> Any {
+      guard let value = (layer?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue, value.isFinite else { return NSNull() }
+      return value
+    }
+    var chain: [[String: Any]] = []
+    var view: NSView? = form
+    while let current = view, current !== root.superview {
+      let layer = current.layer, shown = layer?.presentation()
+      chain.append(["class": String(describing: type(of: current)), "hidden": current.isHidden,
+        "layerHidden": layer?.isHidden ?? false, "opacity": Double(layer?.opacity ?? -1),
+        "presentationOpacity": Double(shown?.opacity ?? -1), "tx": tx(layer), "presentationTx": tx(shown),
+        "frame": [current.frame.minX, current.frame.minY, current.frame.width, current.frame.height]])
+      view = current.superview
+    }
+    func list(_ r: CGRect?) -> [Double] {
+      guard let r, [r.minX, r.minY, r.width, r.height].allSatisfy(\.isFinite) else { return [] }
+      return [r.minX, r.minY, r.width, r.height]
+    }
+    let rects = creationLayerRects(form, in: root)
+    return ["chain": chain, "presentationRectInRoot": list(rects.presentation), "modelRectInRoot": list(rects.model),
+            "rootBounds": [root.bounds.width, root.bounds.height]]
+  }
+
+  /// The form's rect in the root view through the layer trees. The presentation rect is converted
+  /// only inside the presentation tree (both layers must have one); otherwise it is the model rect.
+  private func creationLayerRects(_ form: NSView, in root: NSView) -> (model: CGRect?, presentation: CGRect?) {
+    guard let formLayer = form.layer, let rootLayer = root.layer else { return (nil, nil) }
+    let model = rootLayer.convert(formLayer.bounds, from: formLayer)
+    guard let shownForm = formLayer.presentation(), let shownRoot = rootLayer.presentation() else { return (model, model) }
+    return (model, shownRoot.convert(shownForm.bounds, from: shownForm))
   }
 }
 #endif

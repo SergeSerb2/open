@@ -207,14 +207,15 @@ public struct ProfilesPane: View {
             Button("Delete unused Profiles…") { model.beginDelete(unused: true) }.disabled(model.unusedIDs.isEmpty)
         }.padding(.top, 12)
         SettingsInlineMessage(text: model.errorText).padding(.top, model.errorText.isEmpty ? 0 : 12)
-        OpenSettingsGroup("New documents") {
+        // OpenSettingsGroup already leaves 24 pt above its title (UX round 1 F16).
+        OpenSettingsGroup("Documents") {
             OpenSettingsRow(root: model.root, id: "profiles/new-documents", title: "New documents",
                             help: "What New Note (⌃⇧N) creates in \(model.profile?.name ?? "this Profile").",
                             changed: model.defaultDocumentApp != DocumentApp.note.id, last: true,
                             reset: { model.defaultDocumentApp = DocumentApp.note.id }) {
                 OpenSettingsPop(title: "New documents", value: $model.defaultDocumentApp, options: DocumentApp.all.map { ($0.title, $0.id) })
             }
-        }.padding(.top, 24).id("profiles/new-documents")
+        }.id("profiles/new-documents")
         .onAppear { model.refresh() }
     }
 }
@@ -270,13 +271,13 @@ private struct ProfileActionsMenu: NSViewRepresentable {
     func makeNSView(context: Context) -> ProfileActionsButton { ProfileActionsButton(model: model, row: row, rename: rename) }
     func updateNSView(_ view: ProfileActionsButton, context: Context) { view.row = row; view.rename = rename; view.rebuild() }
 }
-@MainActor private final class ProfileActionsButton: NSPopUpButton {
+@MainActor private final class ProfileActionsButton: SettingsMenuButton {
     let model: ProfilesViewModel
     var row: ProfileRowData
     var rename: () -> Void
     init(model: ProfilesViewModel, row: ProfileRowData, rename: @escaping () -> Void) {
         self.model = model; self.row = row; self.rename = rename
-        super.init(frame: .zero, pullsDown: true); isBordered = false; rebuild()
+        super.init(symbol: "ellipsis"); rebuild()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
     func rebuild() {
@@ -289,7 +290,7 @@ private struct ProfileActionsMenu: NSViewRepresentable {
                 let help = menu.addItem(withTitle: reason.message, action: nil, keyEquivalent: ""); help.isEnabled = false
             }
         }
-        self.menu = menu; font = .systemFont(ofSize: 13, weight: .medium)
+        self.menu = menu; font = SettingsMenuButton.font
         setAccessibilityLabel("Actions for Profile " + row.name)
     }
     @objc private func renameProfile() { rename() }
@@ -331,7 +332,7 @@ public struct ProfileDeleteSheet: View {
     public init(model: ProfilesViewModel) { self.model=model }
     public var body: some View {
         VStack(alignment:.leading,spacing:16) {
-            Text(model.confirmsUnused ? "Delete Unused Profiles" : "Delete this Profile").font(.title3)
+            SettingsSheetTitle(model.confirmsUnused ? "Delete Unused Profiles" : "Delete this Profile")
                 .accessibilityLabel(model.confirmsUnused ? "Delete Unused Profiles" : "Delete this Profile")
             if model.confirmsUnused {
                 Text("Deleting these Profiles will permanently remove their cookies, history, preferences, and logins. This can't be undone.")
@@ -358,7 +359,7 @@ public struct ProfileNameSheet:View {
     @Bindable var model:ProfilesViewModel;let create:Bool
     public init(model:ProfilesViewModel,create:Bool) { self.model=model;self.create=create }
     public var body:some View { VStack(alignment:.leading,spacing:20) {
-        Text(create ? "What do you want to call this Profile?" : "Rename Profile").font(.title3)
+        SettingsSheetTitle(create ? "What do you want to call this Profile?" : "Rename Profile")
         TextField("Name",text:$model.nameDraft).accessibilityLabel("Profile name")
         if create { Text("Which Spaces should use this Profile?");Text("These Spaces will start fresh in your brand new Profile").foregroundStyle(.secondary)
             ForEach(model.root.model.spaces,id:\.id) { space in Toggle(model.root.model.displayTitle(for:space),isOn:Binding(get:{model.assignedSpaces.contains(space.id)},set:{if $0 {model.assignedSpaces.insert(space.id)} else {model.assignedSpaces.remove(space.id)}})) }
@@ -382,9 +383,9 @@ public struct SuggestNoticeSheet:View {
 public struct ClearBrowsingDataSheet:View {
     @Bindable var model:ProfilesViewModel
     public init(model:ProfilesViewModel) { self.model=model }
-    public var body:some View { VStack(alignment:.leading,spacing:20) { Text("Clear Browsing Data").font(.title2);Text("Clear data for “\(model.clearProfileName)”.").foregroundStyle(.secondary)
+    public var body:some View { VStack(alignment:.leading,spacing:20) { SettingsSheetTitle("Clear Browsing Data");Text("Clear data for “\(model.clearProfileName)”.").foregroundStyle(.secondary)
         ForEach([(ClearDataKinds.history,"Browsing history"),(.cookies,"Cookies and site data"),(.cache,"Cached files"),(.downloads,"Download history")],id:\.0.rawValue) { kind,title in Toggle(title,isOn:Binding(get:{model.clearKinds.contains(kind)},set:{if $0 {model.clearKinds.insert(kind)} else {model.clearKinds.remove(kind)}})) }
-        Picker("Time range",selection:$model.clearRange) { ForEach(ClearDataRange.allCases,id:\.self) { Text($0.rawValue).tag($0) } }
+        HStack { Text("Time range"); Spacer(); OpenSettingsPop(title:"Time range",value:$model.clearRange,options:ClearDataRange.allCases.map { ($0.rawValue,$0) }) }
         if model.clearing { ProgressView() };if !model.clearStatus.isEmpty {Text(model.clearStatus)};Spacer()
         HStack { Button(model.clearStatus == "Done" ? "Done":"Cancel") { model.showsClear=false }.keyboardShortcut(.cancelAction).disabled(model.clearing);Spacer();Button("Clear data",role:.destructive) { Task {await model.clear()} }.disabled(model.clearing || model.clearKinds.isEmpty) }
     }.padding(24).frame(width:460,height:360).settingsSheet() }

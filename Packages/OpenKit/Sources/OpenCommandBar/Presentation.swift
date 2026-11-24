@@ -117,12 +117,13 @@ enum RowPresentation {
             let display = s.url.map(URLDisplay.short) ?? s.title
             // The typed-URL row carries a merged history title in `subtitle`. Other navigate rows
             // (Top Domains, Easels, remote navigation) carry their own title and label.
+            // A subtitle equal to the title is dropped: a typed address with no history title read twice (UX1 D10).
             guard s.id == WhatYouTypedProvider.urlRowID else {
-                return CommandBarRow(id: s.id, kind: s.kind, title: s.title.isEmpty ? display : s.title,
-                                     subtitle: s.subtitle.isEmpty ? display : s.subtitle, icon: icon)
+                let title = s.title.isEmpty ? display : s.title, subtitle = s.subtitle.isEmpty ? display : s.subtitle
+                return CommandBarRow(id: s.id, kind: s.kind, title: title, subtitle: subtitle == title ? "" : subtitle, icon: icon)
             }
             let title = s.subtitle.isEmpty ? display : s.subtitle
-            return CommandBarRow(id: s.id, kind: s.kind, title: title, subtitle: display, icon: icon)
+            return CommandBarRow(id: s.id, kind: s.kind, title: title, subtitle: display == title ? "" : display, icon: icon)
         case .history:
             return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.url.map(URLDisplay.short) ?? "", icon: icon)
         case .switchToTab:

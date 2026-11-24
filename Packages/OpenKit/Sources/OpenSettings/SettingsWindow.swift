@@ -20,6 +20,11 @@ public struct SettingsContent: View {
                 .frame(width: SettingsTokens.Redesign.navigationWidth)
             Rectangle().fill(Color(nsColor: SettingsTokens.Redesign.hairline.nsColor)).frame(width: 1)
             SettingsDetailHost(root: viewModel, section: viewModel.selectedSection, searching: !viewModel.searchQuery.isEmpty)
+                // Scrolled content fades out under the transparent title-bar strip instead of being cut (UX round 1 F19).
+                .overlay(alignment: .top) {
+                    LinearGradient(colors: [Color(nsColor: SettingsTokens.Redesign.background.nsColor), Color(nsColor: SettingsTokens.Redesign.background.nsColor).opacity(0)],
+                        startPoint: .top, endPoint: .bottom).frame(height: 28).allowsHitTesting(false).accessibilityHidden(true)
+                }
         }
         .font(.system(size: 13)).foregroundStyle(Color(nsColor: SettingsTokens.Redesign.text.nsColor))
         .background(Color(nsColor: SettingsTokens.Redesign.background.nsColor)).ignoresSafeArea()

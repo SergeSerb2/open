@@ -513,6 +513,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard self.model.tab(id: id) != nil, self.model.isPinned(tabID: id) || favorite || flags.contains(.shift) else { return true }
             return self.peekController.intercept(tabID: id, url: url, flags: flags)
         }
+        container.canFocusDeferredSelection = { [weak self] in
+            guard let self, self.window?.isKeyWindow == true else { return false }
+            return self.spaceCreationController == nil && !self.isLibraryOpen && self.peekStorage?.isShown != true
+                && !self.isCommandBarPresented && !self.captureOverlayActive && self.themeEditor == nil
+        }
         container.onReturnPreviewHost = { [weak self] in
             self?.hoverPreview.hide(animated: false); self?.context.hoverPreviews.dismiss()
         }

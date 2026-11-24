@@ -7748,9 +7748,10 @@ def sleep_checks(factory, results, tmp, style):
             # A repeated switch takes its last value (base::CommandLine).
             found = re.findall(r"--%s=(\S+)" % flag, cmd)
             return set(found[-1].split(",")) if found else set()
+        # AsyncDns: automation and Debug builds only (App/main.swift); this suite runs those builds.
         off = {"OptimizationHints", "OptimizationTargetPrediction", "OptimizationGuidePageContentExtraction",
                "OptimizationGuideModelExecution", "SegmentationPlatform", "SegmentationPlatformUkmEngine", "MediaRouter",
-               "TranslateRankerQuery", "TranslateRankerEnforcement"}
+               "TranslateRankerQuery", "TranslateRankerEnforcement", "AsyncDns"}
         results["sleep_f0_switches"] = {"ok": "WebContentsDiscard" in feature_list("enable-features") and off <= feature_list("disable-features"),
                                         "enabled": sorted(feature_list("enable-features")), "disabledMissing": sorted(off - feature_list("disable-features"))}
 
@@ -14960,7 +14961,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["persistence", "engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
+    ap.add_argument("--only", choices=["persistence", "engine-presentation", "engine-presentation-unavailable", "engine-apis", "ntp", "onboarding", "welcome", "blank-window", "menu-titles", "settings-layout", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "no-system-prompts", "developer-mode", "app-icons"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -15391,6 +15392,11 @@ def main():
             results["menu-titles"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/menu_titles.py"))["run"](
                 factory, results["menu-titles"], tmp, sys.modules[__name__])
+        elif opts.only == "settings-layout":
+            # UX round 1 (UXF): Settings frames that regressed unseen (info box, pop-up style, list height).
+            results["settings-layout"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/settings_layout.py"))["run"](
+                factory, results["settings-layout"], tmp, sys.modules[__name__])
         elif opts.only == "notes-format":
             results["notes-format"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_format.py"))["run"](
@@ -15488,11 +15494,15 @@ def main():
                     results[opts.only]['app_icons_' + row] = value
         elif opts.only == "space-editor":
             results[opts.only] = CheckedResults(tracker)
-            space_editor_creation_checks(factory, results[opts.only], tmp)
-            runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
-                sys.modules[__name__], factory, results[opts.only], tmp)
             import space_editor
-            space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
+            # First, and focus-free: the New Space form is on screen (UX round 1 C1).
+            space_editor.creation_form_pixels(factory, results[opts.only], tmp, sys.modules[__name__])
+            space_editor.creation_keeps_focus_after_space_switch(factory, results[opts.only], tmp, sys.modules[__name__])
+            if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
+                space_editor_creation_checks(factory, results[opts.only], tmp)
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
+                    sys.modules[__name__], factory, results[opts.only], tmp)
+                space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
@@ -15511,10 +15521,15 @@ def main():
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results[opts.only] = CheckedResults(tracker)
             # OPEN_CHROME7_ONLY=1 runs only the bug sweep round 7 window chrome rows (tools/e2e/chrome_r7.py).
-            if os.environ.get("OPEN_CHROME7_ONLY") != "1":
+            # OPEN_UX1_ONLY=1 runs only the UX round 1 command bar / page chrome rows (tools/e2e/ux1_commandbar.py).
+            ux1_only = os.environ.get("OPEN_UX1_ONLY") == "1"
+            if os.environ.get("OPEN_CHROME7_ONLY") != "1" and not ux1_only:
                 module.run(factory, results[opts.only], tmp, globals())
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/littleopen_page_chrome.py"))["run"](factory, results[opts.only], tmp, globals())
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/chrome_r7.py"))["run"](factory, results[opts.only], tmp, globals())
+            if not ux1_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/chrome_r7.py"))["run"](factory, results[opts.only], tmp, globals())
+            if os.environ.get("OPEN_CHROME7_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/ux1_commandbar.py"))["run"](factory, results[opts.only], tmp, globals())
         elif opts.only == "context-menus":
             import importlib.util
             spec = importlib.util.spec_from_file_location("open_context_menus", os.path.join(ROOT, "tools/e2e/context_menus.py"))
@@ -15573,10 +15588,15 @@ def main():
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
             # OPEN_LIBRARY_R7_ONLY=1 runs only the bug sweep r7 Library and Spaces rows (tools/e2e/library_r7.py).
-            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1":
+            # OPEN_LIBRARY_UX1_ONLY=1 runs only the UX round 1 Library rows (tools/e2e/library_ux1.py).
+            ux1_only = os.environ.get("OPEN_LIBRARY_UX1_ONLY") == "1"
+            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1" and not ux1_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
                     factory, results["history"], tmp, wait_until, _restore_defaults)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/library_r7.py"))["run"](factory, results["history"], tmp, wait_until)
+            if not ux1_only:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/library_r7.py"))["run"](factory, results["history"], tmp, wait_until)
+            if os.environ.get("OPEN_LIBRARY_R7_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/library_ux1.py"))["run"](factory, results["history"], tmp, wait_until)
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
