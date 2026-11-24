@@ -67,8 +67,9 @@ def split_rows(factory, results, tmp, h):
         tabs = [t['id'] for t in app.call('tabs')]
         app.call('select', tab=tabs[0])
         app.call('split'); wait(lambda: len(app.call('split', op='state')['panes']) >= 2, timeout=10)
-        for _ in range(2):
-            app.call('split', op='menu', item='Add Pane'); time.sleep(1.0)
+        for count in (3, 4):
+            app.call('split', op='menu', item='Add Pane')
+            assert wait(lambda: len(app.call('split', op='state')['panes']) == count, timeout=10), 'Add Pane did not make %d panes' % count
 
         def bars(size):
             app.call('window-frame', frame=[80, 80, size[0], size[1]], unconstrained=True); time.sleep(.8)
@@ -78,6 +79,8 @@ def split_rows(factory, results, tmp, h):
         for size in ((1280, 800), (760, 520), (520, 380)):
             def check(size=size):
                 state, panes = bars(size)
+                if len(panes) != 4:
+                    return False, {'error': 'expected 4 panes, found %d' % len(panes)}
                 problems, seen = [], []
                 for frame, focused, controls in panes:
                     if controls is None:
@@ -100,7 +103,9 @@ def split_rows(factory, results, tmp, h):
                 return not problems, {'size': list(size), 'panes': seen, 'problems': problems[:12]}
             _row(results, 'uxg_split_bar_no_overlap_%dx%d' % size, check)
     finally:
-        app.call('window-frame', frame=[80, 80, 1280, 800], unconstrained=True)
+        # Quit before the next sub-suite's fresh factory deletes this data root.
+        try: app.quit()
+        except Exception: pass
         server.shutdown(); server.server_close()
 
 
@@ -151,9 +156,9 @@ def zap_rows(factory, results, tmp, h):
         app.call('wait', tab=tab)
         picker = _Picker(app, tab)
 
-        def editor_on(size):
+        def editor_on(size, x=80):
             app.call('boost-editor', action='close'); time.sleep(.3)
-            app.call('window-frame', frame=[80, 80, size[0], size[1]], unconstrained=True); time.sleep(.8)
+            app.call('window-frame', frame=[x, 80, size[0], size[1]], unconstrained=True); time.sleep(.8)
             app.call('boost-editor', action='open')
             ready = lambda: (lambda s: any(c['id'] == 'editor.tool.zap' and c['enabled'] for c in s.get('controls', [])))(app.call('boost-editor'))
             assert wait(ready, timeout=10, step=.1), 'Zap did not enable'
@@ -199,6 +204,7 @@ def zap_rows(factory, results, tmp, h):
         _row(results, 'uxg_zap_popup_clear_of_editor_1280x800', default_window)
 
         def after_resize():
+            editor_on((1280, 800)); click_right_block()  # its own state, not the previous row's
             app.call('window-frame', frame=[80, 80, 900, 700], unconstrained=True); time.sleep(1.0)
             ok, evidence = placed('.popup', 'popup')
             # The editor stays where it was, so it no longer covers the page: Done is back at its
@@ -237,6 +243,65 @@ def zap_rows(factory, results, tmp, h):
                 'popup': [round(v, 1) for v in r], 'page': page, 'editor': editor, 'editorInMiddle': middle,
                 'popupWidth': box[2], 'doneFlushRight': flush}
         _row(results, 'uxg_zap_editor_over_middle_falls_back', moved_window)
+
+        def sidebar_shown():
+            # The page view narrows inside the window (no window resize): the cover's viewport
+            # fraction changes, so the picker must hear it again.
+            editor_on((1280, 800))
+            app.call('command', id='toggle-sidebar'); time.sleep(1.2)
+            hidden = app.call('window-state')['sidebarMode']
+            click_right_block()
+            app.call('command', id='toggle-sidebar'); time.sleep(1.2)
+            ok, evidence = placed('.popup', 'popup')
+            return ok and hidden == 'hidden', dict(evidence, sidebarWhileClicking=hidden)
+        _row(results, 'uxg_zap_popup_clear_after_sidebar_shows', sidebar_shown)
+
+        def screen_edge():
+            # The window runs past the screen's right edge; the editor stops at its screen margin,
+            # short of the page's right edge, and still counts as the cover at the right.
+            visible = app.call('screens')[0]
+            right = visible[0] + visible[2]
+            editor_on((1280, 800), x=right - 1280 + 80)
+            page, editor, to_screen = geometry()
+            clamped = editor[0] + editor[2] <= right - 7 and page[0] + page[2] > editor[0] + editor[2] + 1
+            click_right_block()
+            ok, evidence = placed('.popup', 'popup')
+            return ok and clamped, dict(evidence, editorClampedShortOfPage=clamped, screenRight=right)
+        _row(results, 'uxg_zap_popup_clear_of_editor_at_screen_edge', screen_edge)
+
+        def divider_drag():
+            # Zap in the right pane of a split; dragging the divider 40 pt right narrows that page inside
+            # the window (no window resize), so the cover's viewport fraction must be measured again.
+            app.call('boost-editor', action='close'); time.sleep(.3)
+            app.call('window-frame', frame=[80, 80, 1280, 800], unconstrained=True); time.sleep(.6)
+            other = app.call('open', url=origin + '/plain')['id']; app.call('wait', tab=other)
+            app.call('select', tab=other); app.call('split')
+            assert wait(lambda: len(app.call('split', op='state')['panes']) == 2, timeout=10), 'no split'
+            panes = app.call('split', op='state')['panes']
+            if panes[1]['id'] != tab:
+                return False, {'error': 'Zap page is not the right pane', 'panes': [p['id'] for p in panes], 'tab': tab}
+            app.call('select', tab=tab); time.sleep(.4)
+            app.call('boost-editor', action='open', tab=tab)
+            ready = lambda: (lambda s: any(c['id'] == 'editor.tool.zap' and c['enabled'] for c in s.get('controls', [])))(app.call('boost-editor'))
+            assert wait(ready, timeout=10, step=.1), 'Zap did not enable'
+            app.call('boost-editor', action='tap', id='editor.tool.zap')
+            assert wait(lambda: app.eval(tab, 'window.__openZap?.isActive() === true', world='open'), timeout=5, step=.05), 'picker did not enter'
+            time.sleep(.6); click_right_block()
+            d = app.call('split', op='state')['dividers'][0]; point = [d[0] + d[2] / 2, d[1] + d[3] / 2]
+            app.call('mouse', action='down', x=point[0], y=point[1])
+            app.call('mouse', action='drag', x=point[0] + 40, y=point[1])
+            app.call('mouse', action='up', x=point[0] + 40, y=point[1]); time.sleep(1.0)
+            pane = next(p for p in app.call('split', op='state')['panes'] if p['id'] == tab)
+            win = app.call('window-state'); frame = win['frame']; pf = pane.get('pageFrame') or pane['frame']
+            inner = app.eval(tab, '[innerWidth, innerHeight]'); scale = pf[2] / inner[0]
+            page = [frame[0] + pf[0], frame[1] + frame[3] - pf[1] - pf[3], pf[2], pf[3]]
+            box = picker.box('.popup'); editor = app.call('boost-editor')['frame']
+            r = [page[0] + box[0] * scale, page[1] + page[3] - (box[1] + box[3]) * scale, box[2] * scale, box[3] * scale]
+            covered = _overlap(r, editor)
+            narrowed = pane['frame'][2] <= 516 - 30  # still room for the popup beside the editor
+            return narrowed and not covered, {'popup': [round(v, 1) for v in r], 'page': page, 'editor': editor,
+                                              'underEditor': covered, 'paneWidth': pane['frame'][2]}
+        _row(results, 'uxg_zap_popup_clear_after_divider_drag', divider_drag)
     finally:
         try:
             app.call('boost-editor', action='close')
@@ -245,4 +310,7 @@ def zap_rows(factory, results, tmp, h):
                 app.call('defaults', key=k, value=v)
         except Exception:
             pass
+        # Quit before any later sub-suite's fresh factory deletes this data root.
+        try: app.quit()
+        except Exception: pass
         server.shutdown(); server.server_close()
