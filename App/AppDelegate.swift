@@ -759,14 +759,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   static func cascade(_ state: BrowserWindowState, from source: BrowserWindowController) {
     guard let window = source.window else { return }
     let saved = source.context.window
-    var frame = window.styleMask.contains(.fullScreen)
+    // Full screen (or entering / leaving it): the frame the window returns to, not the animating one.
+    var frame = window.styleMask.contains(.fullScreen) || source.isChangingFullScreen
       ? CGRect(x: saved?.frameX ?? 100, y: saved?.frameY ?? 100, width: saved?.frameWidth ?? 1280, height: saved?.frameHeight ?? 800)
       : window.frame
     if let width = saved?.sidebarWidth { state.sidebarWidth = width }
     frame.origin.x += cascadeStep; frame.origin.y -= cascadeStep
-    if let visible = (window.screen ?? NSScreen.main)?.visibleFrame, visible.width > 0 {
+    if let visible = (window.screen ?? NSScreen.main)?.visibleFrame, visible.width > 0, visible.height > 0 {
       frame.size.width = min(frame.width, visible.width); frame.size.height = min(frame.height, visible.height)
-      if frame.maxX > visible.maxX || frame.minY < visible.minY || !visible.intersects(frame) {
+      // Fully on screen on every side, else start again at the screen's top-left.
+      if frame.minX < visible.minX || frame.maxX > visible.maxX || frame.minY < visible.minY || frame.maxY > visible.maxY {
         frame.origin = CGPoint(x: visible.minX, y: visible.maxY - frame.height)
       }
     }

@@ -200,8 +200,11 @@ extension AutomationController {
     case "open-in-space":
       // The title bar's "Open in Space" (Cmd+O) without key focus: the page moves into the most recently
       // focused standard window's Space (or `space`), through the coordinator's own path.
-      let spaceID = (args["space"] as? String).flatMap { raw in app.model.spaces.first { $0.id.description == raw }?.id }
-        ?? app.frontMainModelWindowController?.context.focusedSpace?.id
+      let spaceID: SpaceID?
+      if let raw = args["space"] as? String {
+        guard let match = app.model.spaces.first(where: { $0.id.description == raw }) else { throw Failure(message: "unknown Space") }
+        spaceID = match.id
+      } else { spaceID = app.frontMainModelWindowController?.context.focusedSpace?.id }
       guard let spaceID else { throw Failure(message: "no Space to open in") }
       app.littleOpenCoordinator.moveToSpace(sessionID: controller.session.id, spaceID: spaceID)
     case "picker": controller.showSpacePicker()

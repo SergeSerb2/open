@@ -1,7 +1,7 @@
 """UX round 1 wave 3 (lane UXG): new windows and window titles, real App, socket only.
 
 - New Window (⌘N) takes the source window's size and sidebar width, one cascade step (24 pt right and
-  down) from it; a step past the screen starts again at the screen's top-left (Arc: same size, same Space,
+  down) from it; a window that would leave the screen on any side starts again at the screen's top-left (Arc: same size, same Space,
   the source's sidebar width; docs/re/interaction-states.md §17, §13).
 - New Incognito Window cascades from the front window instead of a fixed default over it.
 - A standard window's title (Window menu, Mission Control, AppleScript `name of window`) is its focused
@@ -60,6 +60,18 @@ def run(factory, results, tmp, h):
                 app.call('window-focus', id=wid); app.call('window-close'); time.sleep(.5)
         app.call('window-focus', id=keep); time.sleep(.3)
 
+    def visible():
+        return app.call('screens')[0]  # visible frame of the main screen (M5 2560 x 1440, M1 1512 x 982)
+
+    def source_frame():
+        # A window with room for one cascade step on every side, on any screen.
+        vx, vy, vw, vh = visible()
+        return [vx + 80, vy + 120, min(1100, vw - 200), min(760, vh - 200)]
+
+    def inside(frame, screen):
+        nx, ny, nw, nh = frame; vx, vy, vw, vh = screen
+        return nx >= vx - .5 and ny >= vy - .5 and nx + nw <= vx + vw + .5 and ny + nh <= vy + vh + .5
+
     def new_window(command, source):
         before = set(windows())
         app.call('window-focus', id=source); time.sleep(.3)
@@ -74,7 +86,7 @@ def run(factory, results, tmp, h):
         app.call('wait', tab=next(t['id'] for t in app.call('tabs') if t.get('selected')))
 
         def cmd_n_matches_source():
-            app.call('window-frame', frame=[700, 300, 1100, 760], unconstrained=True); time.sleep(.5)
+            app.call('window-frame', frame=source_frame(), unconstrained=True); time.sleep(.5)
             app.call('updater-banner-width', width=300.0); time.sleep(.4)
             src = state(first)
             made = new_window('new-window', first)
@@ -88,19 +100,30 @@ def run(factory, results, tmp, h):
         row('uxg_new_window_same_size_sidebar_cascade', cmd_n_matches_source)
 
         def cmd_n_wraps_at_screen_edge():
-            screen = app.call('screens')[0]  # visible frame of the main screen
+            screen = visible()
             vx, vy, vw, vh = screen
             # The source touches the bottom of the visible frame: a cascade step would leave the screen.
             app.call('window-frame', frame=[vx + vw - 1000, vy, 900, 600], unconstrained=True); time.sleep(.5)
             made = new_window('new-window', first)
-            nx, ny, nw, nh = state(made)['frame']
-            inside = nx >= vx - .5 and ny >= vy - .5 and nx + nw <= vx + vw + .5 and ny + nh <= vy + vh + .5
+            new = state(made)['frame']
             close_others(first)
-            return inside and (nw, nh) == (900, 600), {'visible': screen, 'new': [nx, ny, nw, nh]}
+            return inside(new, screen) and new[2:] == [900, 600], {'visible': screen, 'new': new}
         row('uxg_new_window_stays_on_screen', cmd_n_wraps_at_screen_edge)
 
+        def cmd_n_from_left_edge():
+            screen = visible()
+            vx, vy, vw, vh = screen
+            # The source hangs 120 pt off the left edge: one step right would still leave the new window off screen.
+            app.call('window-frame', frame=[vx - 120, vy + 120, 900, 600], unconstrained=True); time.sleep(.5)
+            src = state(first)['frame']
+            made = new_window('new-window', first)
+            new = state(made)['frame']
+            close_others(first)
+            return inside(new, screen) and new[2:] == [900, 600], {'visible': screen, 'source': src, 'new': new}
+        row('uxg_new_window_left_edge_stays_on_screen', cmd_n_from_left_edge)
+
         def incognito_cascades():
-            app.call('window-frame', frame=[700, 300, 1100, 760], unconstrained=True); time.sleep(.5)
+            app.call('window-frame', frame=source_frame(), unconstrained=True); time.sleep(.5)
             src = state(first)
             made = new_window('new-incognito-window', first)
             nx, ny, nw, nh = state(made)['frame']

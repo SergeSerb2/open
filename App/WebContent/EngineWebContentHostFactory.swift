@@ -351,6 +351,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
+    updateWindowTitle()  // the Space title from the first frame, before the engine is ready
     attachSavePrompts()
     controller.shouldDeferKeyToFirstResponder = { [weak self] event in
       if let picker = self?.iconPicker, event.window === picker.panel || event.window === picker.toneWindow {

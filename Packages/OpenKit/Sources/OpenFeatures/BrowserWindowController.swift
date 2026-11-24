@@ -528,7 +528,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.onFocusedMetadata = { [weak self] title in
             guard let self else { return }
             if self.context.isIncognito { self.window?.title = title.isEmpty ? "Incognito" : title }
-            else if self.context.isWindowOnly, !title.isEmpty { self.window?.title = title }
+            else if self.context.isWindowOnly {
+                // An empty page title falls back to the Space title, never a stale page title.
+                self.window?.title = title.isEmpty ? (self.context.focusedSpace.map { self.model.displayTitle(for: $0) } ?? "Open") : title
+            }
         }
         container.onURLField = { [weak self] in guard let self else { return }; self.onOpenCommandBar?(.urlField, self.context.currentTab?.url) }
         container.toasts = toasts
