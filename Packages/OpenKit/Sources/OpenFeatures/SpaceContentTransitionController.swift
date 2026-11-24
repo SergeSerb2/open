@@ -86,7 +86,7 @@ final class SpaceContentTransitionController {
             if let captureFrom, self.nativeSelection == captureFrom { self.captureSource(captureFrom) }
             self.applying = true
             self.nativeSelection = selection; self.nativeStyle = style
-            self.container.applySpaceSelection(selection, animateSlots: false)
+            self.container.applySpaceSelection(selection, animateSlots: false, deferred: true)
             self.applying = false
             self.awaitPresentation(rearm: false)
         }

@@ -442,7 +442,10 @@ public final class WebContentContainer: NSView {
         if let motion = spaceMotionStorage, motion.plate.phase != .idle { return true }
         return cache.values.contains { $0.framePresentation != nil }
     }
-    func applySpaceSelection(_ selection: SpaceContentSelection, animateSlots: Bool, notify: Bool = true) {
+    /// True while a Space selection is applied behind the cover, after its input turn.
+    private var applyingDeferredSelection = false
+    func applySpaceSelection(_ selection: SpaceContentSelection, animateSlots: Bool, notify: Bool = true, deferred: Bool = false) {
+        applyingDeferredSelection = deferred; defer { applyingDeferredSelection = false }
         if let focused = selection.focused {
             isHidden = false
             showNative(tabIDs: selection.tabs, focusedTabID: focused, orientation: selection.orientation,
@@ -511,7 +514,11 @@ public final class WebContentContainer: NSView {
         if let responder = window?.firstResponder as? NSView, retiringSlots.contains(where: { responder.isDescendant(of: $0) }) {
             window?.makeFirstResponder(nil)
         }
-        if previousFocus != focusedTabID { focusContent(focusedTabID) }
+        // A selection applied later (behind the Space cover) must not take the keyboard from a text
+        // field outside the pages that the user started typing in meanwhile, such as the New Space name.
+        let typingElsewhere = applyingDeferredSelection
+            && ((window?.firstResponder as? NSTextView).map { $0.isFieldEditor && !$0.isDescendant(of: self) } ?? false)
+        if previousFocus != focusedTabID, !typingElsewhere { focusContent(focusedTabID) }
         let pending = tabIDs.filter { $0 != focusedTabID && cache[$0] == nil }
         if !pending.isEmpty {
             DispatchQueue.main.async { [weak self] in
