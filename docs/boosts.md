@@ -400,6 +400,19 @@ chunks with the same `listID`, followed by an empty `complete` marker. Native
 rejects stale requests, duplicate selectors, unknown fields and selectors outside
 the requested stored set. It publishes counts only when every requested entry
 has arrived. A missing, malformed or failed counts exchange never ends Zap.
+
+`zap:occlusion` (UX round 1, lane UXG) tells the picker which part of the viewport
+the Boost editor covers. The editor sits centred on the window's right edge
+(interaction-states §20.6), so it covers the page's right side. Payload: the
+session pair plus `right`, `top` and `bottom`, viewport fractions clamped to 0…1:
+a strip `right` wide at the right edge, from `top` to `bottom`. The App sends it
+when the picker is ready and when the browser window or the editor moves or
+resizes (measured after the window's layout pass), only when the value changes,
+and only for a cover that reaches the page's right edge. The picker keeps its
+popup 6 px inside the visible page and clear of the cover, and pads the bottom
+bar so Done moves clear of a cover over the bar. A cover that would leave less
+room than the popup's buttons (352 px) or the bar's controls (220 px) is ignored
+for that element. Like `zap:list`, a failed delivery never ends Zap.
 The package harness keeps its existing single-message request format.
 
 Rebinding a host exits its old tab's picker before changing the tab ID. The shell
