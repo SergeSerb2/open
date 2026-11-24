@@ -85,6 +85,7 @@ final class EaselTextEditor: NSView, NSTextViewDelegate {
         textView.textContainer?.size = CGSize(width: textFrame.width, height: .greatestFiniteMagnitude)
         placeholderLabel.frame = textFrame
         applyStyle()
+        canvas.revealTextEditor(frame)
     }
 
     func textDidChange(_ notification: Notification) {
