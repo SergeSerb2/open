@@ -68,11 +68,13 @@ public struct SecretsReportRow: Hashable, Sendable {
     public let added: Int
     public let existing: Int
     public let failed: Int
-    public init(title: String, added: Int, existing: Int, failed: Int) {
-        self.title = title; self.added = added; self.existing = existing; self.failed = failed
+    /// Records found but not imported on purpose: expired cookies, federated logins, unmapped Profiles.
+    public let skipped: Int
+    public init(title: String, added: Int, existing: Int, failed: Int, skipped: Int = 0) {
+        self.title = title; self.added = added; self.existing = existing; self.failed = failed; self.skipped = skipped
     }
-    /// The source had none of these records (for example no saved passwords).
-    public var noneFound: Bool { added == 0 && existing == 0 && failed == 0 }
+    /// The source had none of these records (for example no saved passwords). Skipped records count as found.
+    public var noneFound: Bool { added == 0 && existing == 0 && failed == 0 && skipped == 0 }
 }
 
 /// Counts only; the UI can render these lines without retaining source records.
@@ -89,7 +91,8 @@ public struct ArcSecretsImportReport: Sendable {
     public var rows: [SecretsReportRow] {
         let counts = total
         return [("Passwords", counts.logins), ("Cookies", counts.cookies), ("Addresses", counts.addresses), ("Cards", counts.cards)].map {
-            SecretsReportRow(title: $0.0, added: $0.1.added, existing: $0.1.existing, failed: $0.1.failed)
+            SecretsReportRow(title: $0.0, added: $0.1.added, existing: $0.1.existing, failed: $0.1.failed,
+                             skipped: $0.1.skippedFederated + $0.1.skippedExpired + $0.1.unmapped)
         }
     }
     public var lines: [String] {
