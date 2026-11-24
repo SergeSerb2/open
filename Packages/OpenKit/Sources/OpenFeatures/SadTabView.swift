@@ -72,6 +72,11 @@ public final class SadTabView: NSView {
         let system: ContentAppearance = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
         let appearance = style.resolvedAppearance(system: system)
         let palette = style.palette(for: appearance)
+        // The buttons are system controls: they draw for the theme's appearance, not the window's. A light
+        // Space theme in a dark window drew "Close Tab" as white text on a light fill (UX round 1 W2 S1).
+        // Only the buttons are pinned, so this view still follows its window's appearance changes.
+        let named: NSAppearance.Name = appearance == .dark ? .darkAqua : .aqua
+        for button in [reloadButton, closeButton] where button.appearance?.name != named { button.appearance = NSAppearance(named: named) }
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = (palette?.background.nsColor ?? .textBackgroundColor).cgColor
         }

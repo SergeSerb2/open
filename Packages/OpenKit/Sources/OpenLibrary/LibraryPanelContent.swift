@@ -757,6 +757,16 @@ nonisolated func downloadKind(_ fileName: String) -> String? {
     return nil
 }
 
+/// Time left in plain units: "40 sec left", "25 min left", "2 hr 5 min left" (was raw seconds, "1519s").
+/// Arc's formatter has a remaining-time part (`0x101cdd8f4`, page-chrome.md); its exact wording is not
+/// captured (GUESS until capture UXC-W2-C4).
+nonisolated func downloadTimeLeft(_ seconds: Int64) -> String {
+    if seconds < 60 { return "\(max(1, seconds)) sec left" }
+    if seconds < 3600 { return "\((seconds + 30) / 60) min left" }
+    let hours = seconds / 3600, minutes = (seconds % 3600 + 30) / 60
+    return minutes == 0 || minutes == 60 ? "\(hours + (minutes == 60 ? 1 : 0)) hr left" : "\(hours) hr \(minutes) min left"
+}
+
 nonisolated private func downloadSubtitle(_ item:DownloadItemSnapshot) -> String {
     switch item.state {
     // Arc's subtitle is the file-kind word ("PDF", "Archive"), else "Download" (capture session 8 item 9).
@@ -780,7 +790,7 @@ nonisolated private func downloadSubtitle(_ item:DownloadItemSnapshot) -> String
             let target = bytes.string(fromByteCount:total)
             if let unit = target.split(separator:" ").last,received.hasSuffix(" "+unit) { received.removeLast(unit.count+1) }
             received += "/"+target
-            if item.bytesPerSecond>0 { received += " · \(max(0,(total-item.receivedBytes)/item.bytesPerSecond))s" }
+            if item.bytesPerSecond>0 { received += " · " + downloadTimeLeft(max(0,(total-item.receivedBytes)/item.bytesPerSecond)) }
         }
         return received
     }

@@ -282,7 +282,9 @@ import OpenImport
         await refreshProviderCounts()
         readable=result.sidebarFound && result.spaces != nil
         counting=false
-        if !readable {errorText="No readable import data found at \(directoryDisplayPath)."}
+        untickNotFound()
+        // The folder is already shown above ("From: …"); a long temp path in the error broke mid-word.
+        if !readable {errorText="This folder has no Arc data. Choose the Arc folder in Library ▸ Application Support."}
     }
     public func countLabel(_ category:String)->String {
         if let family = browserFamily, family != .chromium {
@@ -307,7 +309,11 @@ import OpenImport
     public func isNotFound(_ category: String) -> Bool { !counting && countLabel(category) == "Not found" }
     private var untickedNotFound: Set<String> = []
     private func untickNotFound() {
-        let keys: [(String, WritableKeyPath<ImportPlan, Bool>)] = [("Bookmarks", \.bookmarks), ("History", \.history), ("Open tabs", \.openTabs)]
+        // Arc's own data types too: a folder with no Arc data left them ticked next to "Not found" (UX round 1 W2 S4).
+        let browserKeys: [(String, WritableKeyPath<ImportPlan, Bool>)] = [("Bookmarks", \.bookmarks), ("History", \.history), ("Open tabs", \.openTabs)]
+        let arcKeys: [(String, WritableKeyPath<ImportPlan, Bool>)] = [("Spaces", \.spaces), ("Pinned and Today tabs", \.tabs),
+            ("Favorites", \.favorites), ("Folders", \.folders), ("Archive", \.archive)]
+        let keys = plan.isArc ? arcKeys : browserKeys
         for (category, key) in keys {
             if isNotFound(category) {
                 if plan[keyPath: key] { plan[keyPath: key] = false; untickedNotFound.insert(category) }
@@ -626,7 +632,7 @@ public struct ImportWizard: View {
         }
     }
     private func option(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
-        HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
+        HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })).disabled(model.isNotFound(name)); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
     }
 }
 
