@@ -59,6 +59,7 @@ public final class SidebarView: NSView {
     private var modelUpdateDepth = 0
     private var pendingChanges: [TreeChange] = []
     private var pendingRename: ItemID?
+    private var pendingRenameGeneration = 0
     public var updateBannerState: UpdateBannerState? { didSet { refreshBanners() } }
     public var onUpdateBannerAction: (() -> Void)?
     public var onUpdateBannerDismiss: (() -> Void)?
@@ -392,15 +393,35 @@ public final class SidebarView: NSView {
         }
         if let id = pendingRename {
             pendingRename = nil
-            reveal(nodeID: id)
-            layoutSubtreeIfNeeded()
-            beginRename(nodeID: id)
+            startRenameForInsertedNode(id)
         }
     }
 
     func renameInsertedNode(_ id: ItemID) {
         if modelUpdateDepth > 0 { pendingRename = id }
-        else { reveal(nodeID: id); layoutSubtreeIfNeeded(); beginRename(nodeID: id) }
+        else { startRenameForInsertedNode(id) }
+    }
+
+    private func startRenameForInsertedNode(_ id: ItemID, remainingAttempts: Int = 6, generation: Int? = nil) {
+        let currentGen: Int
+        if let generation {
+            guard generation == pendingRenameGeneration else { return }
+            currentGen = generation
+        } else {
+            pendingRenameGeneration &+= 1
+            currentGen = pendingRenameGeneration
+        }
+        guard context.model.node(id: id) != nil else { return }
+        reveal(nodeID: id)
+        layoutSubtreeIfNeeded()
+        if pager.currentPage?.beginRename(nodeID: id) == true { return }
+        guard remainingAttempts > 0 else { return }
+        // An animated NSOutlineView insertion may attach or lay out the new row on a later turn.
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(40)) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.startRenameForInsertedNode(id, remainingAttempts: remainingAttempts - 1, generation: currentGen)
+            }
+        }
     }
 
     /// App command handlers and confirmed alerts use the same transactional path

@@ -409,7 +409,13 @@ class SidebarCellView: NSView {
 
     /// Inline title editor (double-click or "Rename…").
     private var editor: NSTextField?
-    func beginEditing(text: String, frame: NSRect, font: NSFont, placeholder: String? = nil, commit: @escaping @MainActor (String) -> Void) {
+    @discardableResult
+    func beginEditing(text: String, frame: NSRect, font: NSFont, placeholder: String? = nil, commit: @escaping @MainActor (String) -> Void) -> Bool {
+        guard let window, bounds.width > 0, frame.width > 0 else { return false }
+        if let existing = editor {
+            existing.removeFromSuperview()
+            editor = nil
+        }
         page?.context.suppressPreviews(.rename, true)
         let field = RenameField(frame: frame)
         field.stringValue = text
@@ -431,8 +437,18 @@ class SidebarCellView: NSView {
         subviews.forEach { if $0 is TextLabel { $0.isHidden = true } }
         addSubview(field)
         editor = field
-        window?.makeFirstResponder(field)
+        let focused = window.makeFirstResponder(field)
+        let active = focused && (window.firstResponder === field || (field.currentEditor() != nil && window.firstResponder === field.currentEditor()))
+        if !active {
+            field.removeFromSuperview()
+            editor = nil
+            page?.context.suppressPreviews(.rename, false)
+            subviews.forEach { if $0 is TextLabel { $0.isHidden = false } }
+            needsLayout = true
+            return false
+        }
         field.currentEditor()?.selectAll(nil)
+        return true
     }
 }
 
@@ -786,11 +802,12 @@ final class TabCellView: SidebarCellView {
         return titleX + (showRecording ? m.recordingSlotWidth : 0) + audioShift
     }
 
-    func beginRename() {
-        guard let tab else { return }
+    @discardableResult
+    func beginRename() -> Bool {
+        guard let tab else { return false }
         let id = tab.id
-        beginEditing(text: tab.customTitle ?? tab.title, frame: title.frame.insetBy(dx: -2, dy: 0).offsetBy(dx: 0, dy: 0).with(y: 10, height: 20),
-                     font: title.font) { [weak self] value in self?.context?.send(.rename(nodeID: id, title: value)) }
+        return beginEditing(text: tab.customTitle ?? tab.title, frame: title.frame.insetBy(dx: -2, dy: 0).offsetBy(dx: 0, dy: 0).with(y: 10, height: 20),
+                            font: title.font) { [weak self] value in self?.context?.send(.rename(nodeID: id, title: value)) }
     }
 }
 
@@ -930,10 +947,15 @@ final class FolderCellView: SidebarCellView {
         title.frame = CGRect(x: m.titleX + indent, y: 0, width: max(0, right - m.titleX - indent), height: m.rowHeight)
     }
 
-    func beginRename() {
-        guard let folder else { return }
+    @discardableResult
+    func beginRename() -> Bool {
+        guard let folder else { return false }
         let id = folder.id
-        beginEditing(text: folder.title, frame: title.frame.with(y: 10, height: 20), font: title.font) { [weak self] value in
+        let fallbackWidth = max(0, bounds.width - SpaceListMetrics.titleX - indent - SpaceListMetrics.titleTrailingInset)
+        let frame = title.frame.width > 10
+            ? title.frame.with(y: 10, height: 20)
+            : CGRect(x: SpaceListMetrics.titleX + indent, y: 10, width: fallbackWidth, height: 20)
+        return beginEditing(text: folder.title, frame: frame, font: title.font) { [weak self] value in
             self?.context?.send(.rename(nodeID: id, title: value))
         }
     }
@@ -1127,12 +1149,13 @@ final class SplitCellView: SidebarCellView {
          "iconSource":customIcon.isHidden ? "panes" : split?.iconOverride == nil ? "count" : "custom"]
     }
 
-    func beginRename() {
-        guard let split else { return }
+    @discardableResult
+    func beginRename() -> Bool {
+        guard let split else { return false }
         let id = split.id, m = SpaceListMetrics.self
-        beginEditing(text: split.displayTitle,
-                     frame: CGRect(x:m.titleX + indent,y:10,width:max(0,bounds.width - m.titleX - indent - m.titleTrailingInset),height:20),
-                     font: Typography.tabTitle.font, placeholder:"Title") { [weak self] value in
+        return beginEditing(text: split.displayTitle,
+                            frame: CGRect(x:m.titleX + indent,y:10,width:max(0,bounds.width - m.titleX - indent - m.titleTrailingInset),height:20),
+                            font: Typography.tabTitle.font, placeholder:"Title") { [weak self] value in
             self?.context?.send(.rename(nodeID:id,title:value))
         }
     }

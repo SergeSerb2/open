@@ -1013,6 +1013,7 @@ def context_menu_checks(factory, results, tmp, h):
                 # 1. Single-tab right-click -> New Folder with Tab wraps the tab in place and opens inline rename.
                 app.call('sidebar-menu', node=tab_a, item='New Folder with Tab')
                 editor = wait(lambda: (lambda f: f if f.get('owner') == 'sidebar' and 'Text' in f.get('responder', '') else None)(app.call('focus-state')), timeout=3)
+                focus_after_create = app.call('focus-state')
                 app.call('key', key='a', modifiers=['cmd'], route='app')
                 app.call('key', text='QuickWork')
                 app.call('key', key='return', route='app')
@@ -1032,11 +1033,13 @@ def context_menu_checks(factory, results, tmp, h):
                 btn = app.call('basics-demo', op='targets').get('newFolderButton') or []
                 pinned_before = len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder'])
                 btn_editor = None
+                focus_after_button = None
                 btn_made = False
                 if len(btn) == 4 and btn[2] > 0 and btn[3] > 0:
                     app.call('mouse', action='click', x=btn[0] + btn[2] / 2, y=btn[1] + btn[3] / 2)
                     btn_made = wait(lambda: len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']) == pinned_before + 1, timeout=3) is True
                     btn_editor = wait(lambda: (lambda f: f if f.get('owner') == 'sidebar' and 'Text' in f.get('responder', '') else None)(app.call('focus-state')), timeout=3)
+                    focus_after_button = app.call('focus-state')
                     app.call('key', key='escape', route='app')
                     app.call('key', key='z', modifiers=['command'], route='app')
                 btn_undone = wait(lambda: len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']) == pinned_before, timeout=3) is True
@@ -1050,7 +1053,9 @@ def context_menu_checks(factory, results, tmp, h):
                     'button_opens_rename': bool(btn_editor),
                     'button_undone': btn_undone,
                 }
-                return {'ok': all(rows.values()), 'rows': rows, 'button': btn, 'moveTo': move_items, 'afterCreate': after_create, 'editor': editor}
+                return {'ok': all(rows.values()), 'rows': rows, 'button': btn, 'moveTo': move_items,
+                        'afterCreate': after_create, 'editor': editor,
+                        'focusAfterCreate': focus_after_create, 'focusAfterButton': focus_after_button}
             finally:
                 for tab_id in made:
                     h._try(lambda t=tab_id: app.call('close', tab=t))

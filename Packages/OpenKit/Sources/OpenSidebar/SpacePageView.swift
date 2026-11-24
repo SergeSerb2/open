@@ -854,24 +854,27 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
     }
 
-    func beginRename(nodeID: ItemID?) {
-        guard let nodeID else { header.beginRename(); return }
-        guard let obj = context.model.node(id: nodeID)?.object else { return }
+    @discardableResult
+    func beginRename(nodeID: ItemID?) -> Bool {
+        guard let nodeID else { header.beginRename(); return true }
+        guard let obj = context.model.node(id: nodeID)?.object else { return false }
         ensureNodeInOutline(obj)
         let row = outline.row(forItem: obj)
         if row >= 0 { outline.scrollRowToVisible(row) }
-        beginRename(item: obj)
+        return beginRename(item: obj)
     }
 
-    fileprivate func beginRename(item: AnyObject) {
+    @discardableResult
+    fileprivate func beginRename(item: AnyObject) -> Bool {
         let row = outline.row(forItem: item)
-        guard row >= 0 else { return }
+        guard row >= 0 else { return false }
         outline.layoutSubtreeIfNeeded()
-        guard let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return }
+        guard let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return false }
         cell.layoutSubtreeIfNeeded()
-        (cell as? TabCellView)?.beginRename()
-        (cell as? FolderCellView)?.beginRename()
-        (cell as? SplitCellView)?.beginRename()
+        if let tab = cell as? TabCellView { return tab.beginRename() }
+        if let folder = cell as? FolderCellView { return folder.beginRename() }
+        if let split = cell as? SplitCellView { return split.beginRename() }
+        return false
     }
 
     func menu(at point: NSPoint) -> NSMenu {
