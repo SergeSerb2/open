@@ -359,6 +359,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   func popoverDidClose(_ notification: Notification) { if !finishing, !popover.isShown { finish(nil) } }
   #if OPEN_AUTOMATION
+  /// Automation: draw Allow on a given bezel colour (nil: the system accent).
+  func setAllowBezelForAutomation(_ color: NSColor?) { view.bezelOverride = color; view.needsDisplay = true; view.displayIfNeeded() }
   @discardableResult func press(_ answer: String) -> Bool {
     guard isShown, current != nil, ["allow", "notnow"].contains(answer) else { return false }
     (answer == "allow" ? view.allow : view.notNow).performClick(nil); return true
@@ -381,9 +383,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
      "promptScreenFrame": view.window.map { let r = $0.convertToScreen(view.convert(view.bounds, to: nil)); return [r.minX, r.minY, r.width, r.height] } ?? [],
      "ownerScreenFrame": owner?.window.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
      // UXC-W2-S7: Allow styled as the default button; an opaque backdrop behind the popover content.
-     "allowAccent": view.allow.bezelColor == .controlAccentColor,
+     "allowAccent": view.allow.accentFill && view.allow.fillOverride == nil,
      "opaqueBackdrop": card != nil || (view.window.map { PermissionPromptBackdrop.isInPlace(in: $0) } ?? false),
-     "allowTitleWhite": view.allowTitleColor == .white, "allowTitleContrast": view.allowTitleContrast]
+     "allowTitleWhite": view.allowTitleColor == .white, "allowDrawn": view.drawnAllowContrast()]
   }
   private func point(in target: NSView, at local: CGPoint? = nil) -> [Double] {
     guard let window = target.window else { return [] }
