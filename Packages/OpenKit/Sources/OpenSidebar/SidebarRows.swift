@@ -1102,6 +1102,8 @@ final class SplitCellView: SidebarCellView {
             t.text = { [weak pane] in pane?.displayTitle ?? "" }
             t.color = { [weak self] in
                 guard let page = self?.page else { return .labelColor }
+                // Increase Contrast: the raised title, as every other row (review r1 #4).
+                if page.context.increaseContrast { return page.roles.title.nsColor }
                 return page.style.splitTitleColor(page.contentAppearanceForSpace).nsColor
             }
             addSubview(f); addSubview(t)

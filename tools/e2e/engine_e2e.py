@@ -15590,16 +15590,21 @@ def main():
                     results[opts.only]['app_icons_' + row] = value
         elif opts.only == "space-editor":
             results[opts.only] = CheckedResults(tracker)
-            import space_editor
-            # First, and focus-free: the New Space form is on screen (UX round 1 C1).
-            space_editor.creation_form_pixels(factory, results[opts.only], tmp, sys.modules[__name__])
-            space_editor.creation_keeps_focus_after_space_switch(factory, results[opts.only], tmp, sys.modules[__name__])
-            space_editor.spaces_polish_rows(factory, results[opts.only], tmp, sys.modules[__name__])
+            # OPEN_E2E_THEMES_UXG_ONLY=1 runs only the UX round 1 wave 2 contrast rows (tools/e2e/themes_ux1.py).
+            if os.environ.get("OPEN_E2E_THEMES_UXG_ONLY") != "1":
+                import space_editor
+                # First, and focus-free: the New Space form is on screen (UX round 1 C1).
+                space_editor.creation_form_pixels(factory, results[opts.only], tmp, sys.modules[__name__])
+                space_editor.creation_keeps_focus_after_space_switch(factory, results[opts.only], tmp, sys.modules[__name__])
+                space_editor.spaces_polish_rows(factory, results[opts.only], tmp, sys.modules[__name__])
+                if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
+                    space_editor_creation_checks(factory, results[opts.only], tmp)
+                    runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
+                        sys.modules[__name__], factory, results[opts.only], tmp)
+                    space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
             if os.environ.get('OPEN_SPACE_EDITOR_PIXELS_ONLY') != '1':
-                space_editor_creation_checks(factory, results[opts.only], tmp)
-                runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
-                    sys.modules[__name__], factory, results[opts.only], tmp)
-                space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
+                runpy.run_path(os.path.join(ROOT, 'tools/e2e/themes_ux1.py'))['run'](
+                    factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/mixed_folder_delete.py'))['checks'](
