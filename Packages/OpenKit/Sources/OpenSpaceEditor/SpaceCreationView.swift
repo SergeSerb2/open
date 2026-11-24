@@ -32,7 +32,8 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     private let document = CreationFlippedView()
     private let header = CreationHeaderView()
     private let titleLabel = NSTextField(labelWithString: "Create a Space")
-    private let subtitle = NSTextField(wrappingLabelWithString: "Separate your tabs for life,\nwork, projects, and more.")
+    private static let subtitleCopy = "Separate your tabs for life,\nwork, projects, and more."
+    private let subtitle = NSTextField(wrappingLabelWithString: SpaceCreationView.subtitleCopy)
     private let nameCard = CreationFlippedView()
     private let themeCard = CreationFlippedView()
     private let profileCard = CreationFlippedView()
@@ -44,6 +45,21 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     public var systemAppearance: ContentAppearance = .dark
     private var creatingProfile = false
     private var entered = false
+    #if DEBUG || OPEN_AUTOMATION
+    /// Whether each label's text fits its frame (no clipped line, no wrap): automation and checks.
+    /// Measured without the label's line limit, so a cut last line counts as not fitting.
+    public var textFit: [String: Bool] {
+        let subtitleNeeded = ceil(subtitle.attributedStringValue.boundingRect(with: CGSize(width: subtitle.cell?.titleRect(forBounds: subtitle.bounds).width ?? subtitle.frame.width,
+                                height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
+        let theme = themeTitleWidths
+        return ["subtitle": subtitleNeeded <= subtitle.frame.height + 0.5, "themeTitle": theme.needed <= theme.available + 0.5]
+    }
+    public var themeTitleWidths: (needed: CGFloat, available: CGFloat) {
+        (ceil((themeButton.title as NSString).size(withAttributes: [.font: themeButton.font as Any]).width),
+         themeButton.cell?.titleRect(forBounds: themeButton.bounds).width ?? 0)
+    }
+    #endif
     public var cardFrames: [String: CGRect] {
         ["header": header.frame, "name": nameCard.frame, "theme": themeCard.frame, "profile": profileCard.frame,
          "create": convert(createButton.bounds, from: createButton)]
@@ -69,6 +85,7 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
             field.font = .systemFont(ofSize: 14); field.delegate = self
         }
         nameField.placeholderString = "Space name"; nameField.setAccessibilityLabel("Space name")
+        (nameField as? CreationTextField)?.onValueChange = { [weak self] in self?.refreshSubmitState() }
         profileNameField.placeholderString = "Profile name"; profileNameField.setAccessibilityLabel("Profile name")
         nameCard.addSubview(iconButton); nameCard.addSubview(nameField)
         themeCard.addSubview(themeButton); themeCard.addSubview(swatch)
@@ -80,7 +97,9 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         iconButton.action = #selector(pickIcon); iconButton.toolTip = "Change Space Icon"
         themeButton.cell = CreationThemeCell(textCell: "Choose a Theme")
         themeButton.isBordered = false; themeButton.font = .systemFont(ofSize: 13, weight: .medium)
-        themeButton.action = #selector(pickTheme); themeButton.alignment = .left
+        themeButton.cell?.usesSingleLineMode = true; themeButton.cell?.lineBreakMode = .byTruncatingTail
+        // A new cell drops the target set above; without it the click relied on the responder chain.
+        themeButton.target = self; themeButton.action = #selector(pickTheme); themeButton.alignment = .left
         createButton.action = #selector(create); cancelButton.action = #selector(cancel)
         createButton.wantsLayer = true; createButton.layer?.cornerRadius = 8
         createButton.keyEquivalent = "\r"; cancelButton.keyEquivalent = "\u{1b}"
@@ -88,11 +107,12 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         profilePopup.target = self; profilePopup.action = #selector(pickProfile)
         profilePopup.isBordered = false; profilePopup.font = .systemFont(ofSize: 13)
         profileLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        subtitle.font = .systemFont(ofSize: 13); subtitle.alignment = .center; subtitle.maximumNumberOfLines = 2
+        subtitle.font = .systemFont(ofSize: 13); subtitle.alignment = .center; subtitle.maximumNumberOfLines = 3
         titleLabel.alignment = .center
         issueLabel.font = .systemFont(ofSize: 11); issueLabel.textColor = .systemRed
         buttons.addSubview(createButton); buttons.addSubview(cancelButton)
         apply(theme: SpaceTheme(), icon: nil)
+        refreshSubmitState()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
@@ -146,7 +166,12 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         let inset: CGFloat = widthClass == .full ? 8 : 6
         let hero: CGFloat = widthClass == .compact ? 60 : 80
         let titleY = 16 + hero + 14
-        let cardsY = titleY + 24 + 8 + 36 + 20
+        // Below full width the forced line break would wrap "life," onto its own line and the
+        // third line was cut off (UX round 1): let the copy wrap naturally, up to three lines.
+        let copy = widthClass == .full ? Self.subtitleCopy : Self.subtitleCopy.replacingOccurrences(of: "\n", with: " ")
+        if subtitle.stringValue != copy { subtitle.stringValue = copy }
+        let subtitleHeight = max(36, min(54, ceil(subtitle.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: w - 16, height: 200)).height ?? 36)))
+        let cardsY = titleY + 24 + 8 + subtitleHeight + 20
         let profileHeight: CGFloat = creatingProfile ? (issueLabel.isHidden ? 82 : 112) : 44
         let end = cardsY + 88 + 2 * gap + profileHeight
         submitIsPinned = end + 12 + 64 + 12 > h
@@ -158,7 +183,9 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         header.full = widthClass == .full
         titleLabel.font = .systemFont(ofSize: widthClass == .full ? 17 : 15, weight: .semibold)
         titleLabel.frame = CGRect(x: 8, y: titleY, width: w - 16, height: 24)
-        subtitle.frame = CGRect(x: 0, y: titleY + 32, width: w, height: 36)
+        subtitle.frame = CGRect(x: 8, y: titleY + 32, width: w - 16, height: subtitleHeight)
+        let themeFont = NSFont.systemFont(ofSize: widthClass == .compact ? 12 : 13, weight: .medium)
+        if themeButton.font != themeFont { themeButton.font = themeFont }
         let cw = w - 2 * inset
         nameCard.frame = CGRect(x: inset, y: cardsY, width: cw, height: 44)
         themeCard.frame = CGRect(x: inset, y: cardsY + 44 + gap, width: cw, height: 44)
@@ -166,7 +193,12 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         iconButton.frame = CGRect(x: 6, y: 6, width: 32, height: 32)
         nameField.frame = CGRect(x: 44, y: 13, width: cw - 50, height: 22)
         themeButton.frame = CGRect(x: 0, y: 0, width: cw, height: 44)
-        swatch.frame = CGRect(x: cw - 36, y: 10, width: 24, height: 24)
+        // Compact: a 20 pt swatch and a 6 pt gap leave "Choose a Theme" room on one line at 164 pt.
+        let swatchSize: CGFloat = widthClass == .compact ? 20 : 24
+        swatch.frame = CGRect(x: cw - 12 - swatchSize, y: (44 - swatchSize) / 2, width: swatchSize, height: swatchSize)
+        if let cell = themeButton.cell as? CreationThemeCell, cell.trailingReserve != 12 + swatchSize + (widthClass == .compact ? 6 : 8) {
+            cell.trailingReserve = 12 + swatchSize + (widthClass == .compact ? 6 : 8); themeButton.needsDisplay = true
+        }
         profileLabel.frame = CGRect(x: 12, y: 14, width: 43, height: 18)
         profileInfo.isHidden = widthClass == .compact
         profileInfo.frame = CGRect(x: 57, y: 16, width: 12, height: 12)
@@ -209,11 +241,19 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         }
     }
     public func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) { onCreate?(); return true }
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) { if createButton.isEnabled { onCreate?() }; return true }
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) { onCancel?(); return true }
         return false
     }
     public override func cancelOperation(_ sender: Any?) { onCancel?() }
+    public func controlTextDidChange(_ notification: Notification) { refreshSubmitState() }
+    /// Arc keeps Create Space disabled while the name is empty (§20.8, `spaceCreationCreateSpaceButton`); spaces alone count as empty.
+    public func refreshSubmitState() {
+        // The model trims the title, so a whitespace-only name would create an untitled Space.
+        let enabled = !nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard createButton.isEnabled != enabled || createButton.alphaValue != (enabled ? 1 : 0.45) else { return }
+        createButton.isEnabled = enabled; createButton.alphaValue = enabled ? 1 : 0.45
+    }
     @objc private func create() { onCreate?() }
     @objc private func cancel() { onCancel?() }
     @objc private func pickTheme() { onTheme?() }
@@ -255,6 +295,9 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
 
 @MainActor private final class CreationTextField: NSTextField {
     let editor = CreationFieldEditor(usingTextLayoutManager: false)
+    /// Also for values set in code (a prefilled title), which post no text-change notification.
+    var onValueChange: (() -> Void)?
+    override var stringValue: String { didSet { onValueChange?() } }
     override class var cellClass: AnyClass? {
         get { CreationTextFieldCell.self }
         set {}
@@ -336,9 +379,11 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
 }
 
 @MainActor private final class CreationThemeCell: NSButtonCell {
+    /// Right-hand space kept for the swatch: its 12 pt margin, its size and the gap before it.
+    var trailingReserve: CGFloat = 44
     override func titleRect(forBounds rect: NSRect) -> NSRect {
         let title = super.titleRect(forBounds: rect)
-        return CGRect(x: rect.minX + 12, y: title.minY, width: max(0, rect.width - 60), height: title.height)
+        return CGRect(x: rect.minX + 12, y: title.minY, width: max(0, rect.width - 12 - trailingReserve), height: title.height)
     }
 }
 

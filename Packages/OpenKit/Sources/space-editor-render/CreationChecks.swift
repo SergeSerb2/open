@@ -188,6 +188,8 @@ final class CreationScene: NSObject, NSWindowDelegate {
             guard convertingFolder == (removedFolder != nil) else {
                 throw CLIError(description: "C1 sweep fixture folder conversion was not prepared")
             }
+            // Create Space is disabled while the name is empty (Arc 20.8); a folder title prefills it.
+            if swept.controller.creationView.nameField.stringValue.isEmpty { swept.controller.creationView.nameField.stringValue = "Swept" }
             swept.key(36, characters: "\r")
             guard let created = model.spaces.last, created.id != source.id else {
                 throw CLIError(description: "C1 sweep fixture form did not create a Space")
@@ -218,6 +220,7 @@ final class CreationScene: NSObject, NSWindowDelegate {
         let refusedBefore = try encoder.encode(SnapshotMapper.dto(from: refused.model))
         refused.controller.profilePicker.isCreatingProfile = true
         refused.controller.creationView.profileNameField.stringValue = "Must not be created"
+        refused.controller.creationView.nameField.stringValue = "Refused"
         refused.key(36, characters: "\r")
         let refusedAfter = try encoder.encode(SnapshotMapper.dto(from: refused.model))
         Checks.check(refusedBefore == refusedAfter && !refused.undo.canUndo && !refused.controller.isFinished,
@@ -252,6 +255,7 @@ final class CreationScene: NSObject, NSWindowDelegate {
         let profileCount = inline.model.profiles.count, spaceCount = inline.model.spaces.count
         inline.controller.profilePicker.isCreatingProfile = true
         inline.controller.creationView.profileNameField.stringValue = "Inline Profile"
+        inline.controller.creationView.nameField.stringValue = "Inline"
         inline.key(36, characters: "\r")
         Checks.check(inline.model.profiles.count == profileCount + 1 && inline.model.spaces.count == spaceCount + 1,
                      "C1 inline Profile and Space create together")

@@ -298,6 +298,10 @@ final class SwitcherItemView: PlateButton {
         icon.space = space
         icon.context = context
         icon.emojiSize = BottomBarMetrics.switcherEmojiSize
+        // Letters and symbols take the bar's ink: the bar shows the focused Space's theme.
+        icon.tint = { [unowned context] in
+            context.focusedSpace.map { context.roles(for: $0).spaceTitle.nsColor } ?? SidebarRole.spaceTitle.nsColor
+        }
         addSubview(icon)
         action = { [unowned context, space] in context.send(.switchSpace(space.id)) }
         menuProvider = nil
