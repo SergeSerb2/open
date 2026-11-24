@@ -99,10 +99,15 @@ function sendError(req: IncomingMessage, res: ServerResponse, error: unknown): v
     "Content-Length": body.length,
     ...extra,
   };
-  if (hasUnreadBody(req)) headers["Connection"] = "close";
+  const unread = hasUnreadBody(req);
+  if (unread) headers["Connection"] = "close";
   res.writeHead(status, headers);
-  res.end(body);
-  drainAndClose(req, res);
+  if (unread) {
+    res.write(body);
+    drainAndClose(req, res);
+  } else {
+    res.end(body);
+  }
 }
 
 function rejectUpgrade(socket: Duplex, status: number, reason: string, code: string, message: string): void {

@@ -143,7 +143,7 @@ def run(factory, results, tmp, h):
         app.call('key', key='return'); screen('blocker'); action('set-blocker', on=False); off = state(); shot('blocker-off-light')
         gate('blocker_choice', lambda s: s.get('blocker') is False, off, initial)
         app.call('key', key='return'); screen('account'); shot('account-light')
-        app.call('key', key='return'); default = screen('defaultBrowser'); shot('default-browser-light')
+        action('skip'); default = screen('defaultBrowser'); shot('default-browser-light')
         gate('no_default_prompt_before_click', lambda s: s['screen']=='defaultBrowser' and not s['defaultAttempted'], default, off)
         action('choose-default', yes=False); app.call('key', key='return'); ready = screen('ready'); shot('ready-light')
         gate('name_greeting', lambda s: s.get('title')=='Welcome to Open, Example.', ready, initial)

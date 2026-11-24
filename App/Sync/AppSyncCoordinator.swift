@@ -27,7 +27,6 @@ final class AppSyncCoordinator {
   private weak var observedModel: BrowserModel?
   private var notificationTokens: [any NSObjectProtocol] = []
   private var workspaceGeneration = 0
-  private var statusGeneration = 0
   private var boostsGeneration = 0
   private var stopped = false
   private var preferenceCheckPending = false
@@ -62,7 +61,8 @@ final class AppSyncCoordinator {
     lastKeyBindings = app.commandServicesPrepared ? app.keyBindings : nil
     installObservers()
     modelDidInstall()
-    observeStatus()
+    engine.onSnapshotDidChange = { [weak self] _ in self?.updateBanner() }
+    updateBanner()
   }
 
   /// One `stat` when no account is saved; otherwise loads state off the main thread and syncs.
@@ -189,19 +189,6 @@ final class AppSyncCoordinator {
 
   // MARK: Sidebar banner
 
-  private func observeStatus() {
-    statusGeneration &+= 1
-    let generation = statusGeneration
-    guard !stopped else { return }
-    updateBanner()
-    withObservationTracking { _ = engine.snapshot } onChange: { [weak self] in
-      Task { @MainActor [weak self] in
-        guard let self, self.statusGeneration == generation else { return }
-        self.observeStatus()
-      }
-    }
-  }
-
   private static func banner(for snapshot: SyncAccountSnapshot) -> SyncBannerState? {
     switch snapshot.status {
     case .error(let message): return .error(message)
@@ -273,7 +260,8 @@ final class AppSyncCoordinator {
   func stop() {
     guard !stopped else { return }
     stopped = true
-    workspaceGeneration &+= 1; statusGeneration &+= 1; boostsGeneration &+= 1
+    workspaceGeneration &+= 1; boostsGeneration &+= 1
+    engine.onSnapshotDidChange = nil
     if let modelObserver, let observedModel { observedModel.removeObserver(modelObserver) }
     modelObserver = nil; observedModel = nil
     for token in notificationTokens { NotificationCenter.default.removeObserver(token) }

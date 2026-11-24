@@ -134,6 +134,8 @@ public final class SyncEngine {
     @ObservationIgnored public private(set) var isApplyingRemote = false
 
     public let dataRoot: URL
+    /// Called synchronously on the main actor right after `snapshot` changes.
+    @ObservationIgnored public var onSnapshotDidChange: (@MainActor (SyncAccountSnapshot) -> Void)?
     private let stateStore: SyncStateStore
     private let credentialStore: any SyncCredentialStoring
     private let preferredDeviceName: String?
@@ -1143,6 +1145,12 @@ public final class SyncEngine {
                 if nextMode == .replaceCloud {
                     state.lastResetRevision = response.resetRevision
                     state.lastPulledRevision = 0
+                } else if conflicted.isEmpty,
+                          response.resetRevision == state.lastResetRevision,
+                          response.currentRevision >= base,
+                          response.currentRevision <= base + response.acceptedCount {
+                    // Only our own mutations advanced the server revision: advance the cursor past them.
+                    state.lastPulledRevision = response.currentRevision
                 }
             }
             saveStateInBackground()
@@ -1268,7 +1276,10 @@ public final class SyncEngine {
             usesFileCredentialStore: credentialStore.usesFileBackend,
             isBusy: currentSync != nil,
             pendingInitialChoice: state?.awaitingInitialChoice)
-        if next != snapshot { snapshot = next }
+        if next != snapshot {
+            snapshot = next
+            onSnapshotDidChange?(next)
+        }
     }
 
     // MARK: Validation

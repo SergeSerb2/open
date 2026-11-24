@@ -122,9 +122,13 @@ def run(factory, results, tmp, h, config="Debug"):
 
         # Verify Account & Sync Settings section deep-link works cleanly.
         link_res = mac_a.call("settings-link", url="open://settings/account-sync/account")
-        record("settings_deep_link", bool(link_res.get("accepted")), response=link_res)
-        # Close Settings window cleanly so no extra window sits around.
-        mac_a.call("key", key="w", modifiers=["cmd"])
+        settings_ui = mac_a.call("settings-ui", metricsOnly=True)
+        record(
+            "settings_deep_link",
+            bool(link_res.get("accepted")) and settings_ui.get("section") == "account-sync",
+            response=link_res,
+            section=settings_ui.get("section"),
+        )
 
         # 2. Populate Mac A's real browser setup: Space, Pinned tab, Favorite, Today tab, Note, Keybinding.
         work_space_id = mac_a.call("space-create", title="Work Sync")
@@ -136,7 +140,7 @@ def run(factory, results, tmp, h, config="Debug"):
         mac_a.call("favorite", tab=fav_res["id"])
         mac_a.call("open", url="https://example.com/today-sync")
 
-        # Write a custom keybinding and reload so Mac A has non-default shortcuts.
+        # Write a custom keybinding for a customizable command and reload so Mac A has non-default shortcuts.
         kb_path = mac_a_dir / "State" / "keybindings.json"
         kb_path.parent.mkdir(parents=True, exist_ok=True)
         kb_path.write_text(
@@ -144,7 +148,7 @@ def run(factory, results, tmp, h, config="Debug"):
                 {
                     "version": 1,
                     "bindings": {
-                        "sync-now": {
+                        "new-note": {
                             "shortcuts": [{"key": "y", "modifiers": ["command", "shift"]}]
                         }
                     },
@@ -237,6 +241,9 @@ def run(factory, results, tmp, h, config="Debug"):
         applied = mac_b.call("sync", action="complete-initial-sync", strategy="replaceLocal")
         backups = list((mac_b_dir / "State" / "SyncBackups").glob("*")) if (mac_b_dir / "State" / "SyncBackups").is_dir() else []
         spaces_b = mac_b.call("spaces")
+        work_space_b = next((s for s in spaces_b if s.get("title") == "Work Sync"), None)
+        if work_space_b is not None:
+            mac_b.call("space", space=work_space_b["id"])
         tabs_b = mac_b.call("tabs")
         kb_b = json.loads((mac_b_dir / "State" / "keybindings.json").read_text()) if (mac_b_dir / "State" / "keybindings.json").is_file() else {}
         notes_b = [p.read_text(errors="ignore") for p in (mac_b_dir / "Notes").glob("*.json")] if (mac_b_dir / "Notes").is_dir() else []
@@ -251,12 +258,14 @@ def run(factory, results, tmp, h, config="Debug"):
             and any("pinned-sync" in (u or "") for u in tab_urls_b)
             and any("fav-sync" in (u or "") for u in tab_urls_b)
             and any("today-sync" in (u or "") for u in tab_urls_b)
-            and "sync-now" in kb_b.get("bindings", {})
+            and "new-note" in kb_b.get("bindings", {})
             and any("Encrypted Sync Note Body" in n for n in notes_b)
             and applied.get("snapshot", {}).get("hasBanner") is False,
             backupCount=len(backups),
             spaces=space_titles_b,
             tabCount=len(tabs_b),
+            tabUrls=tab_urls_b,
+            hasKeybinding="new-note" in kb_b.get("bindings", {}),
             noteCount=len(notes_b),
         )
 
@@ -270,13 +279,15 @@ def run(factory, results, tmp, h, config="Debug"):
         record(
             "realtime_websocket_delta_sync",
             waited.get("ok")
+            and target_rev > rev_after_signup
             and waited.get("reached") is True
             and any("realtime-delta" in (t.get("url") or "") for t in tabs_b_after),
             targetRevision=target_rev,
             reached=waited.get("reached"),
         )
 
-        # 8. Tombstone deletion propagation: Mac A closes the realtime-delta tab -> syncs -> Mac B drops it!
+        # 8. Tombstone deletion propagation: Mac A unpins and closes the realtime-delta tab -> syncs -> Mac B drops it!
+        mac_a.call("pin", tab=delta_res["id"])
         mac_a.call("close", tab=delta_res["id"])
         pushed_del = mac_a.call("sync", action="sync-now")
         del_rev = pushed_del.get("snapshot", {}).get("serverRevision", 0)
@@ -285,6 +296,7 @@ def run(factory, results, tmp, h, config="Debug"):
         record(
             "tombstone_deletion_propagates",
             waited_del.get("ok")
+            and del_rev > target_rev
             and waited_del.get("reached") is True
             and not any("realtime-delta" in (t.get("url") or "") for t in tabs_b_post_del),
             deleteRevision=del_rev,

@@ -123,29 +123,46 @@ export function hasUnreadBody(req: IncomingMessage): boolean {
 }
 
 /**
- * After an early error response while the client is still uploading, keep
- * reading (and discarding) a bounded amount so the client can read our reply.
+ * After writing an early error response while the client is still uploading,
+ * keep reading (and discarding) a bounded amount before ending the response
+ * so the socket does not RST while the client is still writing.
  */
 export function drainAndClose(req: IncomingMessage, res: ServerResponse, maxBytes = 64 * 1024 * 1024): void {
-  if (!hasUnreadBody(req)) return;
+  if (!hasUnreadBody(req)) {
+    if (!res.writableEnded) res.end();
+    return;
+  }
   let seen = 0;
+  let finished = false;
   const socket = req.socket;
-  const timer = setTimeout(() => socket.destroy(), 15_000);
-  timer.unref();
-  const done = (): void => {
+  const finish = (destroy: boolean): void => {
+    if (finished) return;
+    finished = true;
     clearTimeout(timer);
     req.off("data", onData);
-  };
-  const onData = (chunk: Buffer): void => {
-    seen += chunk.length;
-    if (seen > maxBytes) {
-      done();
+    req.off("end", onDone);
+    req.off("error", onDestroy);
+    req.off("aborted", onDestroy);
+    res.off("close", onResClose);
+    if (destroy) {
       socket.destroy();
+    } else if (!res.writableEnded) {
+      res.end();
     }
   };
+  const onDone = (): void => finish(false);
+  const onDestroy = (): void => finish(true);
+  const onResClose = (): void => finish(false);
+  const timer = setTimeout(() => finish(true), 15_000);
+  timer.unref();
+  const onData = (chunk: Buffer): void => {
+    seen += chunk.length;
+    if (seen > maxBytes) finish(true);
+  };
   req.on("data", onData);
-  req.once("end", done);
-  req.once("error", done);
-  res.once("close", done);
+  req.once("end", onDone);
+  req.once("error", onDestroy);
+  req.once("aborted", onDestroy);
+  res.once("close", onResClose);
   req.resume();
 }
