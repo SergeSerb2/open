@@ -9,16 +9,19 @@ public enum PeekPolicy {
         public var shiftHeld: Bool
         public var peekOtherSitesEnabled: Bool
         public var peekShiftEnabled: Bool
+        public var isAuthenticationFlow: Bool
         public init(sourceIsPinnedOrFavorite: Bool, sourceHost: String?, targetHost: String?, shiftHeld: Bool,
-                    peekOtherSitesEnabled: Bool, peekShiftEnabled: Bool) {
+                    peekOtherSitesEnabled: Bool, peekShiftEnabled: Bool, isAuthenticationFlow: Bool = false) {
             self.sourceIsPinnedOrFavorite = sourceIsPinnedOrFavorite; self.sourceHost = sourceHost
             self.targetHost = targetHost; self.shiftHeld = shiftHeld
             self.peekOtherSitesEnabled = peekOtherSitesEnabled; self.peekShiftEnabled = peekShiftEnabled
+            self.isAuthenticationFlow = isAuthenticationFlow
         }
     }
     public enum Decision: Sendable { case navigate, peek }
     public static func decision(for click: Click) -> Decision {
         if click.shiftHeld && click.peekShiftEnabled { return .peek }
+        if click.isAuthenticationFlow { return .navigate }
         if click.sourceIsPinnedOrFavorite && click.peekOtherSitesEnabled,
            let source = click.sourceHost, let target = click.targetHost, source != target { return .peek }
         return .navigate

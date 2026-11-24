@@ -892,6 +892,17 @@ bool OEClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
       !OEIsPageBrowser(page, browser)) {
     return false;
   }
+  // Shell link routing (Peek, Little Open) cancels the navigation and opens
+  // only the URL via GET. Never intercept non-GET requests (POST form submits
+  // such as cross-domain SSO/FIDO bridges would lose their body), form
+  // submissions, client/server redirects, history traversals, or direct loads.
+  const CefRequest::TransitionType transition = request->GetTransitionType();
+  const auto source = transition & TT_SOURCE_MASK;
+  if (request->GetMethod() != "GET" || source != TT_LINK ||
+      (transition & (TT_IS_REDIRECT_MASK | TT_FORWARD_BACK_FLAG |
+                     TT_DIRECT_LOAD_FLAG)) != 0) {
+    return false;
+  }
   return OECancelNavigation(page, OEURL(request->GetURL()), user_gesture,
                             OENavigationModifiers(page));
 }

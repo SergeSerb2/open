@@ -23,12 +23,77 @@ public enum FeatureSite {
         guard let source, target.fragment != nil, var a = URLComponents(url: source, resolvingAgainstBaseURL: false), var b = URLComponents(url: target, resolvingAgainstBaseURL: false) else { return false }
         a.fragment = nil; b.fragment = nil; return a == b
     }
+    // Dedicated sign-in hosts (not general product or account-settings portals).
+    private static let identityHosts: Set<String> = [
+        "login.microsoftonline.com", "login.microsoft.com", "login.live.com",
+        "login.windows.net", "sts.windows.net",
+        "login.microsoftonline.us", "login.chinacloudapi.cn", "login.partner.microsoftonline.cn",
+        "accounts.google.com", "appleid.apple.com", "idmsa.apple.com",
+    ]
+    // Tenant-only identity provider domains: require a non-www subdomain so vendor marketing sites
+    // (for example okta.com/pricing or www.auth0.com) still open in Peek.
+    private static let identityTenantSuffixes: [String] = [
+        "b2clogin.com", "okta.com", "oktapreview.com", "okta-emea.com",
+        "auth0.com", "onelogin.com", "duosecurity.com",
+        "pingidentity.com", "pingone.com", "jumpcloud.com", "awsapps.com",
+    ]
+    // Anchored auth endpoint paths (exact/suffix or root prefix) to avoid matching repo/doc paths.
+    private static let authPathSuffixes: [String] = [
+        "/bridge/fido", "/common/reprocess",
+        "/oauth/authorize", "/oauth2/authorize", "/oauth2/v1/authorize",
+        "/oauth2/v2/auth", "/oauth2/v2.0/authorize",
+        "/connect/authorize", "/protocol/openid-connect/auth",
+        "/saml/sso", "/sso/saml",
+    ]
+    private static let authPathPrefixes: [String] = [
+        "/o/oauth2/", "/adfs/ls", "/saml2/",
+    ]
+    private static func isIdentityHost(_ rawHost: String?) -> Bool {
+        guard let rawHost, !rawHost.isEmpty, rawHost.utf8.count <= 255 else { return false }
+        let host = HostNormalizer.canonicalHostName(rawHost)
+        if identityHosts.contains(host) { return true }
+        return identityTenantSuffixes.contains { suffix in
+            host.hasSuffix("." + suffix) && host != "www." + suffix
+        }
+    }
+    private static func isProtocolAuthURL(_ url: URL) -> Bool {
+        // Bound work even if a caller hands in a URL outside Chromium's 2 MiB URL limit.
+        guard url.absoluteString.utf8.count <= 2_097_152 else { return false }
+        let pathPrefix = String(url.path.prefix(512)).lowercased()
+        let trimmedPath = pathPrefix.count > 1 && pathPrefix.hasSuffix("/") ? String(pathPrefix.dropLast()) : pathPrefix
+        if authPathSuffixes.contains(where: { trimmedPath == $0 || trimmedPath.hasSuffix($0) }) { return true }
+        if authPathPrefixes.contains(where: { pathPrefix.hasPrefix($0) }) { return true }
+        guard let query = url.query, !query.isEmpty else { return false }
+        // Scan query parameter names without decoding values; cap param count to bound work on huge URLs.
+        var hasClientID = false, hasRedirectOrResponse = false, paramsScanned = 0
+        var i = query.utf8.startIndex
+        let end = query.utf8.endIndex
+        while i < end && paramsScanned < 128 {
+            let amp = query.utf8[i..<end].firstIndex(of: UInt8(ascii: "&")) ?? end
+            let eq = query.utf8[i..<amp].firstIndex(of: UInt8(ascii: "=")) ?? amp
+            let nameLength = query.utf8.distance(from: i, to: eq)
+            if nameLength > 0 && nameLength <= 64, let raw = String(query.utf8[i..<eq]) {
+                let name = raw.lowercased()
+                if name == "samlrequest" || name == "samlresponse" { return true }
+                if name == "client_id" { hasClientID = true }
+                else if name == "redirect_uri" || name == "response_type" { hasRedirectOrResponse = true }
+                if hasClientID && hasRedirectOrResponse { return true }
+            }
+            paramsScanned += 1
+            i = amp < end ? query.utf8.index(after: amp) : end
+        }
+        return false
+    }
+    static func isAuthenticationFlow(source: URL?, target: URL) -> Bool {
+        isIdentityHost(source?.host()) || isIdentityHost(target.host()) || isProtocolAuthURL(target)
+    }
     public static func shouldPeek(source: URL?, target: URL, pinned: Bool, flags: NSEvent.ModifierFlags, defaults: UserDefaults) -> Bool {
         guard ["http", "https"].contains(target.scheme?.lowercased() ?? ""), !flags.contains(.command),
               !flags.contains(.option), !fragmentOnly(source, target) else { return false }
         return PeekPolicy.decision(for: .init(sourceIsPinnedOrFavorite: pinned, sourceHost: domain(source), targetHost: domain(target),
                                               shiftHeld: flags.contains(.shift), peekOtherSitesEnabled: defaults.object(forKey: "open.links.openPeekOtherSites") as? Bool ?? true,
-                                              peekShiftEnabled: defaults.object(forKey: "open.links.openPeekShiftClick") as? Bool ?? true)) == .peek
+                                              peekShiftEnabled: defaults.object(forKey: "open.links.openPeekShiftClick") as? Bool ?? true,
+                                              isAuthenticationFlow: isAuthenticationFlow(source: source, target: target))) == .peek
     }
 }
 
@@ -97,7 +162,8 @@ public final class PeekController {
     public func intercept(tabID: ItemID, url: URL, flags: NSEvent.ModifierFlags) -> Bool {
         guard let tab = model.tab(id: tabID) else { return true }
         let favorite: Bool = if case .favorites? = model.parent(of: tabID) { true } else { false }
-        if FeatureSite.shouldPeek(source: tab.url, target: url, pinned: model.isPinned(tabID: tabID) || favorite, flags: flags, defaults: defaults) {
+        let sourceURL = splitController.container.host(for: tabID)?.currentURL ?? tab.url
+        if FeatureSite.shouldPeek(source: sourceURL, target: url, pinned: model.isPinned(tabID: tabID) || favorite, flags: flags, defaults: defaults) {
             open(url: url, sourceTabID: tabID); return false
         }
         return true

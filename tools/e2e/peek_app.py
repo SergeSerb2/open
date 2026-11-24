@@ -393,6 +393,85 @@ def run(factory, results, tmp, harness):
             and child.get('section')=='today' and bool(child_url),'child':child,'childURL':child_url,
             'space':space_now,'other':other,'home':home,'today':counts}
         app.call('space',space=home)
+        app.call('select',tab=source)
+
+        # Cross-site form submissions (POST & GET), client redirects, and auth/FIDO flows on a pinned
+        # tab must navigate in place rather than opening in Peek (which would turn POST into GET and
+        # drop the form body, breaking Microsoft login.microsoft.com/common/bridge/fido).
+        import http.server, threading
+        from loopback_http import LoopbackHTTPServer
+        form_hits = []
+        class FormHandler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def do_GET(self):
+                form_hits.append(('GET', self.headers.get('Host', ''), self.path, ''))
+                body = ('<!doctype html><meta charset=utf-8><title>GET</title><body>METHOD=GET PATH=%s</body>' % self.path).encode()
+                self.send_response(200); self.send_header('Content-Type', 'text/html'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
+            def do_POST(self):
+                length = int(self.headers.get('Content-Length') or 0)
+                payload = self.rfile.read(length).decode('utf-8', 'replace') if length else ''
+                form_hits.append(('POST', self.headers.get('Host', ''), self.path, payload))
+                body = ('<!doctype html><meta charset=utf-8><title>POST</title><body>METHOD=POST BODY=%s</body>' % payload).encode()
+                self.send_response(200); self.send_header('Content-Type', 'text/html'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
+        form_server = LoopbackHTTPServer(FormHandler)
+        form_port = form_server.server_address[1]
+        threading.Thread(target=form_server.serve_forever, daemon=True).start()
+        def furl(host, path): return 'http://%s:%d%s' % (host, form_port, path)
+        def click_el(tab_id, setup_js, shift=False):
+            pt = app.eval(tab_id, setup_js)
+            for kind in ('mousePressed', 'mouseReleased'):
+                app.call('devtools', tab=tab_id, method='Input.dispatchMouseEvent', params={
+                    'type': kind, 'x': pt[0], 'y': pt[1], 'button': 'left', 'clickCount': 1, 'modifiers': 8 if shift else 0})
+        try:
+            # 1) Microsoft-style postRedirectForm (async fetch + hidden POST form.submit()) + native POST form
+            for case_name, target_path, setup_tpl in [
+                ('native_post', '/target-native-post',
+                 '''(() => { document.body.innerHTML='<form method="POST" action="%s"><input type="hidden" name="ctx" value="native123"><button id="go" type="submit">Next</button></form>'; const r=document.getElementById('go').getBoundingClientRect(); return [r.x+r.width/2, r.y+r.height/2]; })()'''),
+                ('js_post_bridge', '/common/bridge/fido?cancelUrl=https%3A%2F%2Fa.localhost',
+                 '''(() => { document.body.innerHTML='<button id="go">Next</button>'; document.getElementById('go').onclick = async () => { await fetch('/api'); const f=document.createElement('form'); f.method='POST'; f.target='_top'; f.action=%s; const i=document.createElement('input'); i.type='hidden'; i.name='ctx'; i.value='fido456'; f.appendChild(i); document.body.appendChild(f); f.submit(); }; const r=document.getElementById('go').getBoundingClientRect(); return [r.x+r.width/2, r.y+r.height/2]; })()'''),
+            ]:
+                form_hits.clear(); clear()
+                navigate(source, furl('a.localhost', '/start-' + case_name))
+                target_u = furl('b.localhost', target_path)
+                js = setup_tpl % (json.dumps(target_u) if case_name == 'js_post_bridge' else target_u)
+                click_el(source, js)
+                moved = wait_until(lambda: app.eval(source, 'location.hostname') == 'b.localhost', timeout=6, step=.05)
+                if moved: app.call('wait', tab=source)
+                body_text = app.eval(source, 'document.body.textContent') if moved else ''
+                post_hit = [h for h in form_hits if h[0] == 'POST' and h[2].startswith(target_path.split('?')[0])]
+                results['peek_' + case_name + '_stays_in_tab'] = {
+                    'ok': bool(moved) and not state()['stack'] and len(post_hit) == 1 and ('ctx=' in post_hit[0][3]) and ('METHOD=POST' in body_text),
+                    'moved': bool(moved), 'peekStack': len(state()['stack']), 'hits': form_hits[-3:], 'body': body_text}
+
+            # 2) Native GET form submission
+            form_hits.clear(); clear()
+            navigate(source, furl('a.localhost', '/start-get-form'))
+            click_el(source, '''(() => { document.body.innerHTML='<form method="GET" action="%s"><input type="hidden" name="q" value="ok"><button id="go" type="submit">Go</button></form>'; const r=document.getElementById('go').getBoundingClientRect(); return [r.x+r.width/2, r.y+r.height/2]; })()''' % furl('b.localhost', '/target-get-form'))
+            moved = wait_until(lambda: app.eval(source, 'location.hostname') == 'b.localhost', timeout=6, step=.05)
+            results['peek_get_form_stays_in_tab'] = {'ok': bool(moved) and not state()['stack'], 'moved': bool(moved), 'peekStack': len(state()['stack'])}
+
+            # 3) Client-side location.replace redirect
+            form_hits.clear(); clear()
+            navigate(source, furl('a.localhost', '/start-replace'))
+            click_el(source, '''(() => { document.body.innerHTML='<button id="go">Next</button>'; document.getElementById('go').onclick = () => document.location.replace(%s); const r=document.getElementById('go').getBoundingClientRect(); return [r.x+r.width/2, r.y+r.height/2]; })()''' % json.dumps(furl('b.localhost', '/target-replace')))
+            moved = wait_until(lambda: app.eval(source, 'location.hostname') == 'b.localhost', timeout=6, step=.05)
+            results['peek_client_redirect_stays_in_tab'] = {'ok': bool(moved) and not state()['stack'], 'moved': bool(moved), 'peekStack': len(state()['stack'])}
+
+            # 4) Cross-site GET OAuth/FIDO link stays in pinned tab; Shift-click still Peeks.
+            clear(); navigate(source, furl('a.localhost', '/start-oauth'))
+            oauth_url = furl('b.localhost', '/oauth2/authorize?client_id=abc&redirect_uri=http%3A%2F%2Fa.localhost%2Fcb')
+            click(source, oauth_url)
+            moved = wait_until(lambda: app.eval(source, 'location.hostname') == 'b.localhost', timeout=6, step=.05)
+            no_peek = not state()['stack']
+            navigate(source, furl('a.localhost', '/start-oauth-shift'))
+            click(source, oauth_url, shift=True)
+            shift_peeked = bool(opened())
+            clear()
+            results['peek_auth_link_stays_in_tab_shift_peeks'] = {
+                'ok': bool(moved) and no_peek and shift_peeked,
+                'moved': bool(moved), 'noPeek': no_peek, 'shiftPeeked': shift_peeked}
+        finally:
+            form_server.shutdown(); form_server.server_close()
     finally:
         try:
             for key,value in saved.items(): app.call('defaults',key=key,value=value)

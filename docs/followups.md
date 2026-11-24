@@ -645,3 +645,8 @@ cannot be observed. Open keeps its current behaviour and builds no guessed surfa
 - The runtime correction (scale 1.015, lift 5 px of 1024) was measured on the M1 Dock at its default tile size. Other tile sizes and magnification are not measured.
 - The `dock_*` rows of `app-icons` run only where the Dock stays visible (the M1). Where it auto-hides (the M5) they print `SKIP real Dock rows` and do not run.
 - The reference tile is the first usable of Calculator, Photos, Notes, Contacts and Maps: an Apple system app in the Dock that is not running, has no badge and measures as a centred squircle (post-merge fix, LEAD 22:15, 2026-11-18). A wallpaper boundary behind Open's own tile can still mislead one edge; the M1 wallpaper is fixed, so the rows stay deterministic there.
+
+## Peek / Little Open modifier-click form submits (`OnOpenURLFromTab`, 2026-11-24)
+
+- `OEClient::OnBeforeBrowse` filters shell link routing to `GET` `TT_LINK` navigations (excluding `POST`, `TT_FORM_SUBMIT`, redirects, history traversals, and direct loads). However, `Shift+Enter` or `Cmd+Option+click` on a `<form method="POST">` routes through Chromium's `OnOpenURLFromTab` (`CEF_WOD_NEW_WINDOW` / modifier check), where CEF does not expose `OpenURLParams::post_data` or the HTTP method. When an engine fork update next touches CEF navigation hooks, skip `OECancelNavigation` on `OnOpenURLFromTab` when `post_data` is present.
+- `FeatureSite.isAuthenticationFlow` exempts cross-site identity/OAuth/SAML/FIDO navigations from automatic Peek on pinned/favorite tabs (while keeping explicit Shift-click Peek); Arc's exact cross-site auth-flow Peek boundary remains uncaptured and should be verified if a future Arc capture covers sign-in flows.

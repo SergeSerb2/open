@@ -181,6 +181,31 @@ enum FeatureChecks {
         defaults.set(false, forKey: "open.links.openPeekOtherSites"); defaults.set(false, forKey: "open.links.openPeekShiftClick")
         check(!FeatureSite.shouldPeek(source: pinned.url, target: URL(string: "https://other.org")!, pinned: true, flags: .shift, defaults: defaults), "P1 toggles off navigate")
         defaults.set(true, forKey: "open.links.openPeekOtherSites"); defaults.set(true, forKey: "open.links.openPeekShiftClick")
+        // Cross-site auth/SSO/FIDO flows stay in the pinned tab; Shift-click still Peeks.
+        let msLogin = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=1")!
+        let msFido = URL(string: "https://login.microsoft.com/common/bridge/fido?cancelUrl=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon%2Freprocess")!
+        let msReprocess = URL(string: "https://login.microsoftonline.com/common/reprocess?ctx=abc")!
+        let outlook = URL(string: "https://outlook.live.com/mail/")!
+        let oauthTarget = URL(string: "https://id.example.org/authorize?client_id=abc&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb")!
+        check(!FeatureSite.shouldPeek(source: outlook, target: msLogin, pinned: true, flags: [], defaults: defaults), "Auth: Outlook -> Microsoft login stays in tab")
+        check(!FeatureSite.shouldPeek(source: msLogin, target: msFido, pinned: true, flags: [], defaults: defaults), "Auth: Microsoft login -> FIDO bridge stays in tab")
+        check(!FeatureSite.shouldPeek(source: msFido, target: msReprocess, pinned: true, flags: [], defaults: defaults), "Auth: FIDO bridge cancel -> reprocess stays in tab")
+        check(!FeatureSite.shouldPeek(source: msLogin, target: outlook, pinned: true, flags: [], defaults: defaults), "Auth: identity provider return -> app stays in tab")
+        check(!FeatureSite.shouldPeek(source: pinned.url, target: oauthTarget, pinned: true, flags: [], defaults: defaults), "Auth: OAuth authorize params stay in tab")
+        check(FeatureSite.shouldPeek(source: outlook, target: msLogin, pinned: true, flags: .shift, defaults: defaults), "Auth: explicit Shift-click still opens Peek")
+        check(FeatureSite.shouldPeek(source: outlook, target: URL(string: "https://microsoft.com/en-us")!, pinned: true, flags: [], defaults: defaults), "Auth: non-login microsoft.com link still opens Peek")
+        check(FeatureSite.shouldPeek(source: outlook, target: URL(string: "https://okta.com/pricing")!, pinned: true, flags: [], defaults: defaults), "Auth: vendor marketing root okta.com still opens Peek")
+        check(FeatureSite.shouldPeek(source: outlook, target: URL(string: "https://www.okta.com/docs")!, pinned: true, flags: [], defaults: defaults), "Auth: vendor www.okta.com still opens Peek")
+        check(!FeatureSite.shouldPeek(source: outlook, target: URL(string: "https://acme.okta.com/app/outlook")!, pinned: true, flags: [], defaults: defaults), "Auth: tenant subdomain acme.okta.com stays in tab")
+        check(FeatureSite.shouldPeek(source: outlook, target: URL(string: "https://github.com/org/repo/tree/main/saml2/README.md")!, pinned: true, flags: [], defaults: defaults), "Auth: repo path containing saml2 segment still opens Peek")
+        check(FeatureSite.shouldPeek(source: outlook, target: URL(string: "https://example.org/article")!, pinned: true, flags: [], defaults: defaults), "Auth: ordinary external link from Outlook still opens Peek")
+        // Boundary: at-limit (indices 126 & 127 within 128-param cap) is detected; over-limit (130 filler params) stops scanning.
+        let atLimitParams = (0..<126).map { "p\($0)=1" }.joined(separator: "&")
+        let atParamLimit = URL(string: "https://other.org/page?\(atLimitParams)&client_id=1&redirect_uri=https%3A%2F%2Fapp.example.com")!
+        check(!FeatureSite.shouldPeek(source: outlook, target: atParamLimit, pinned: true, flags: [], defaults: defaults), "Auth: query scan accepts params at 128-param limit")
+        let manyParams = (0..<130).map { "p\($0)=1" }.joined(separator: "&")
+        let overParamLimit = URL(string: "https://other.org/page?\(manyParams)&client_id=1&redirect_uri=https%3A%2F%2Fapp.example.com")!
+        check(FeatureSite.shouldPeek(source: outlook, target: overParamLimit, pinned: true, flags: [], defaults: defaults), "Auth: query scan cap bounds work")
         let favorite = model.newTab(in: space.id, url: URL(string: "https://favorite.example.com")!, title: "Favorite")
         _ = model.addFavorite(tabID: favorite.id, to: space.profileID); favorite.live.sleepPhase = .live
         // A favorite's Peek is visible even when the Space selection is another node.
