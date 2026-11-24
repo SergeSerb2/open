@@ -123,8 +123,8 @@ enum RowPresentation {
             let short = label(s, path: false)
             let text = labels[row.title + "\u{1}" + short, default: 0] > 1 ? label(s, path: true) : short
             guard !text.isEmpty else { return row }
-            var row = row; row.subtitle = text; row.subtitleDisambiguates = true
-            return row
+            var labelled = row; labelled.subtitle = text; labelled.subtitleDisambiguates = true
+            return labelled
         }
     }
 
