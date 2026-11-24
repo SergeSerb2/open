@@ -59,7 +59,7 @@ public final class IconPickerView: NSView, NSSearchFieldDelegate, NSCollectionVi
         remove.target = self; remove.action = #selector(removeIcon); remove.isHidden = !hasIcon
         message.font = .systemFont(ofSize: 12); message.textColor = .secondaryLabelColor; message.alignment = .center
         for view in [pages, search, scroll, categories, remove, message] { addSubview(view) }
-        let symbols = ["face.smiling", "leaf", "fork.knife", "sportscourt", "airplane", "lightbulb", "heart", "flag"]
+        let symbols = ["face.smiling", "leaf", "fork.knife", "sportscourt", "car", "lightbulb", "heart", "flag"]
         let names = ["Smileys & People", "Animals & Nature", "Food & Drink", "Activities", "Travel & Places", "Objects", "Symbols", "Flags"]
         for (index, symbol) in symbols.enumerated() {
             let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: names[index])!, target: self, action: #selector(selectCategory(_:)))

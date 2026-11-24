@@ -34,6 +34,15 @@ public final class ThemeEditorPanel: EditorPopoverPanel {
         editorView.content.addSubview(material, positioned: .below, relativeTo: editorView.pad)
         setAccessibilityRole(.popover); setAccessibilityLabel("Edit Theme")
     }
+    /// True while AppKit moves focus along the key-view loop (Tab, Shift-Tab).
+    public private(set) var isSelectingKeyView = false
+    private func selectingKeyView(_ body: () -> Void) {
+        isSelectingKeyView = true; defer { isSelectingKeyView = false }; body()
+    }
+    public override func selectNextKeyView(_ sender: Any?) { selectingKeyView { super.selectNextKeyView(sender) } }
+    public override func selectPreviousKeyView(_ sender: Any?) { selectingKeyView { super.selectPreviousKeyView(sender) } }
+    public override func selectKeyView(following view: NSView) { selectingKeyView { super.selectKeyView(following: view) } }
+    public override func selectKeyView(preceding view: NSView) { selectingKeyView { super.selectKeyView(preceding: view) } }
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
     public override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
