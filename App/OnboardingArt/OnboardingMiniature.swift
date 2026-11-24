@@ -518,10 +518,13 @@ final class OnboardingMiniature: NSView {
         let ink = OnboardingTokens.Room.pageInk
         for (index, (heading, copy)) in sections.enumerated() {
             let y = top+CGFloat(index)*slot
-            (heading as NSString).draw(in: CGRect(x: left,y: y,width: width,height: 22),withAttributes: [.font:NSFont.systemFont(ofSize: 15,weight: .semibold),.foregroundColor:ink])
+            // Measured, so a heading that wraps (a narrow split page) pushes its copy down instead of clipping.
+            let headingFont = NSFont.systemFont(ofSize: 15,weight: .semibold)
+            let head = ceil((heading as NSString).boundingRect(with: CGSize(width: width,height: 60),options: [.usesLineFragmentOrigin],attributes: [.font:headingFont]).height)
+            (heading as NSString).draw(in: CGRect(x: left,y: y,width: width,height: head),withAttributes: [.font:headingFont,.foregroundColor:ink])
             let body = (copy as NSString).boundingRect(with: CGSize(width: width,height: 60),options: [.usesLineFragmentOrigin],attributes: [.font:NSFont.systemFont(ofSize: 13)])
-            (copy as NSString).draw(in: CGRect(x: left,y: y+28,width: width,height: ceil(body.height)),withAttributes: [.font:NSFont.systemFont(ofSize: 13),.foregroundColor:ink.withAlphaComponent(0.68)])
-            var line = y+28+ceil(body.height)+12
+            (copy as NSString).draw(in: CGRect(x: left,y: y+head+8,width: width,height: ceil(body.height)),withAttributes: [.font:NSFont.systemFont(ofSize: 13),.foregroundColor:ink.withAlphaComponent(0.68)])
+            var line = y+head+8+ceil(body.height)+12
             ink.withAlphaComponent(0.08).setFill()
             for fraction in [1.0, 0.92, 0.64] where line+6 <= y+slot-18 {
                 NSBezierPath(roundedRect: CGRect(x: left,y: line,width: width*fraction,height: 6),xRadius: 3,yRadius: 3).fill()

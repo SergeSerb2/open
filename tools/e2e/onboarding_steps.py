@@ -803,16 +803,29 @@ def run_layout_rows(factory, results, tmp, h):
             if fa[0]+fa[2]+8 > fb[0]+.5: problems.append(a+'/'+b+' crowded')
         if len({round(f[1]+f[3]/2) for _, f, _ in frames}) != 1: problems.append('not one centre line')
         return problems
+    def artwork_problems(s):
+        """The miniature lies inside the preview and stays at least 8 pt above the page dots."""
+        art = (s.get('layout') or {}).get('artwork') or {}
+        preview, mini, dots = art.get('preview'), art.get('miniature'), art.get('dots')
+        if not (preview and mini and dots): return ['no artwork frames']
+        problems = []
+        if mini[0] < preview[0]-.5 or mini[1] < preview[1]-.5 or mini[0]+mini[2] > preview[0]+preview[2]+.5 or mini[1]+mini[3] > preview[1]+preview[3]+.5:
+            problems.append('miniature outside preview')
+        if mini[1]+mini[3] > dots[1]-8+.5: problems.append('miniature on the dots')
+        return problems
     footers = {}
-    def record(name):
-        s = state(); footers[name if name else s['screen']] = dict(problems=footer_problems(s), buttons=(s.get('layout') or {}).get('buttons'))
+    def record(name, into=None):
+        s = state(); (footers if into is None else into)[name] = dict(problems=footer_problems(s)+(artwork_problems(s) if s['screen'] != 'ready' else []),
+            buttons=(s.get('layout') or {}).get('buttons'), artwork=(s.get('layout') or {}).get('artwork'))
         return s
     try:
         launch(env={'OPEN_AUTOMATION_SYNTHETIC_SECRETS': 'noLogins'}, flags=['--open-allow-mock-keychain-secrets'])
         named = record('name')
         insets = (named.get('layout') or {}).get('nameTextInsets') or []
-        results['steps_name_text_inset'] = dict(ok=len(insets) == 3 and insets[0] >= 10 and insets[1] >= 6
-            and abs(insets[1]-insets[2]) <= 2, insets=insets, field=(named.get('layout') or {}).get('nameFieldFrame'), load=os.getloadavg())
+        # The field must be editing (the field editor's own frame), with 10-16 pt each side and centred.
+        results['steps_name_text_inset'] = dict(ok=(named.get('layout') or {}).get('nameEditing') is True and len(insets) == 4
+            and 10 <= insets[0] <= 16 and 10 <= insets[3] <= 16 and insets[1] >= 6 and abs(insets[1]-insets[2]) <= 2,
+            insets=insets, editing=(named.get('layout') or {}).get('nameEditing'), field=(named.get('layout') or {}).get('nameFieldFrame'), load=os.getloadavg())
         action('set-name', name='Alex'); action('next'); until(lambda: state()['screen'] == 'import'); record('import')
         app.call('first-run', action='select', secrets=True)
         app.call('first-run', action='continue')
@@ -832,24 +845,36 @@ def run_layout_rows(factory, results, tmp, h):
         results['steps_consent_left_aligned'] = dict(ok=icon_left is not None and 54*scale <= icon_left <= 66*scale
             and right <= (56+360+4)*scale, iconLeft=icon_left and icon_left/scale, rightmostInk=right/scale, png=shot_path, load=os.getloadavg())
         action('next')
-        until(lambda: app.call('first-run')['step'] == 'report', timeout=60); record('report')
+        until(lambda: app.call('first-run')['step'] == 'report', timeout=60); reported = record('report')
         report = app.call('first-run')
         rows = dict(map(tuple, report.get('secretsReportRows') or []))
+        # What the hosted SwiftUI report exposes to accessibility, i.e. what it drew: the row value is
+        # there, the old plain "Passwords: 0 imported, 0 already in Open" line is not.
+        drawn = (reported.get('layout') or {}).get('reportText') or []
         results['steps_secrets_report_rows'] = dict(ok=rows.get('Passwords') == 'None found in Arc'
-            and all(rows.get(k, ' ')[0].isdigit() for k in ('Cookies', 'Addresses', 'Cards')), rows=rows, notes=report.get('secretsReportNotes'), load=os.getloadavg())
+            and all(rows.get(k, ' ')[0].isdigit() for k in ('Cookies', 'Addresses', 'Cards'))
+            and 'None found in Arc' in drawn and 'Passwords' in drawn and not any('already in Open' in t and ':' in t for t in drawn),
+            rows=rows, drawn=drawn[:60], notes=report.get('secretsReportNotes'), load=os.getloadavg())
         for step in ('theme', 'blocker', 'defaultBrowser', 'ready'):
             if state()['screen'] == 'defaultBrowser': action('choose-default', yes=False)
             current = state()['screen']; action('next'); until(lambda: state()['screen'] != current)
             until(lambda: state()['screen'] == step); record(step)
         results['steps_footer_layout'] = dict(ok=len(footers) == 8 and not any(v['problems'] for v in footers.values()),
             footers=footers, load=os.getloadavg())
-        # A display whose visible area is shorter and narrower than the 1280 x 800 design.
-        launch(env={'OPEN_AUTOMATION_ONBOARDING_VISIBLE_SIZE': '1440x700'})
+        # A display whose visible area is narrower and shorter than the 1280 x 800 design (a 13-inch
+        # MacBook in its larger-text mode): window, footers (with the widest, passwords) and artwork must fit.
+        launch(env={'OPEN_AUTOMATION_ONBOARDING_VISIBLE_SIZE': '1024x640', 'OPEN_AUTOMATION_SYNTHETIC_SECRETS': 'noLogins'},
+               flags=['--open-allow-mock-keychain-secrets'])
         small = state(); area, win = small.get('placementArea') or [0]*4, small.get('windowFrame') or [0]*4
-        problems = footer_problems(small)
+        narrow = {}; record('name', narrow)
+        action('next'); until(lambda: state()['screen'] == 'import'); record('import', narrow)
+        app.call('first-run', action='select', secrets=True); app.call('first-run', action='continue')
+        until(lambda: app.call('first-run')['step'] == 'secretsConsent', timeout=60); record('secretsConsent', narrow)
+        action('next'); until(lambda: app.call('first-run')['step'] == 'report', timeout=60); record('report', narrow)
         results['steps_small_screen_fits'] = dict(ok=win[2] <= area[2] and win[3] <= area[3]
             and win[0] >= area[0] and win[1] >= area[1] and win[0]+win[2] <= area[0]+area[2] and win[1]+win[3] <= area[1]+area[3]
-            and not problems, window=win, area=area, problems=problems, load=os.getloadavg())
+            and len(narrow) == 4 and not any(v['problems'] for v in narrow.values()),
+            window=win, area=area, screens=narrow, load=os.getloadavg())
         settings_source_list_row(factory, results, tmp, h)
     finally:
         if app and not app.closed: app.quit()
