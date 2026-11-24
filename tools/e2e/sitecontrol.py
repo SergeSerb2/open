@@ -554,6 +554,23 @@ def run(factory, results, tmp, env, functional_only=False):
             recorded_visual('S11_material',dict(ok=fits and validation and not closed_fit,load=load(),probes=probes,snapshot=path,negative=closed_path,negativeRejected=not closed_fit,scale=scale,state=s))
             from sitecontrol_pixels import compare_live, background_response
             recorded_visual('S12_elements',compare_live(path, s, scale, private, env,negative_path=closed_path))
+            # Verify the real-window New Boost action button renders only the paintbrush (no stray top-left sparkle dot).
+            nb_x, nb_y = s['body'][0] + 66, s['body'][1] + 10
+            def _max_contrast(px_fn, x0, y0, x1, y1):
+                peak = 0.0
+                for py in range(int(round(y0 * scale)), int(round(y1 * scale))):
+                    bg = px_fn((nb_x + 6) * scale + 0.5, py + 0.5)
+                    for px in range(int(round(x0 * scale)), int(round(x1 * scale))):
+                        c = px_fn(px + 0.5, py + 0.5)
+                        peak = max(peak, max(abs(c[i] - bg[i]) for i in range(3)))
+                return peak
+            nb_dot = _max_contrast(pixel, nb_x + 14, nb_y + 6, nb_x + 21, nb_y + 12)
+            nb_brush = _max_contrast(pixel, nb_x + 21, nb_y + 11, nb_x + 31, nb_y + 21)
+            nb_closed = _max_contrast(closed_pixels, nb_x + 21, nb_y + 11, nb_x + 31, nb_y + 21)
+            record('S12b_new_boost_no_sparkle',
+                   nb_dot <= 10.0 and nb_brush >= 60.0 and nb_closed < 30.0,
+                   topLeftMaxDiff=nb_dot, brushMaxDiff=nb_brush, closedMaxDiff=nb_closed,
+                   snapshot=path, negative=closed_path, negativeRejected=nb_closed < 30.0, scale=scale)
             response=background_response(app,tab,private,env,scale)
             # INFO has no acceptance predicate. Keep focus loss as an interruption.
             interruptions=results.tracker.loss()
