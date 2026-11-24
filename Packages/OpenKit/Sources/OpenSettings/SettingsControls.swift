@@ -239,7 +239,8 @@ private struct SettingsNativeChoice<Value: Hashable>: NSViewRepresentable {
         var x: CGFloat = profile ? 29 : 10
         if !profile, var image = selectedItem?.image {
             // A template symbol (Selected app) takes the text colour; app icons draw as they are.
-            if image.isTemplate, let tinted = image.withSymbolConfiguration(.init(pointSize: 12, weight: .regular).applying(.init(paletteColors: [color]))) { image = tinted }
+            // Full-alpha tint: the draw below dims a disabled image once (fraction 0.45).
+            if image.isTemplate, let tinted = image.withSymbolConfiguration(.init(pointSize: 12, weight: .regular).applying(.init(paletteColors: [SettingsStyle.text.nsColor]))) { image = tinted }
             let scale = min(16 / max(image.size.width, 1), 16 / max(image.size.height, 1), 1)
             let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
             image.draw(in: .init(x: x + (16 - size.width) / 2, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height),
