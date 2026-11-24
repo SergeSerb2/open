@@ -314,7 +314,8 @@ extension SiteControlPanelView {
             _ = extensionsBody.setActions([])
             // A private window runs only the extensions allowed there. With none, a lone Add tile reads as
             // "your extensions are gone" (UX round 1 X6). GUESS — capture UXC-W3-C2: one line, as Boosts' off note.
-            let note = SiteControlBaselineLabel(Self.incognitoExtensionsNote, multiline: true)
+            // One line: the multiline style draws only the Boosts note text.
+            let note = SiteControlBaselineLabel(Self.incognitoExtensionsNote)
             note.frame = CGRect(x: m.padding, y: y, width: m.width - 2 * m.padding, height: m.globalOffHeight)
             body.addSubview(note); y += m.globalOffHeight
             extensionsNote = Self.incognitoExtensionsNote
