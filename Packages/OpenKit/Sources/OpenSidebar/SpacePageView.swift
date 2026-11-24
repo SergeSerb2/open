@@ -708,6 +708,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         rowView.isCurrent = item != nil && item === current
         rowView.isPeekSource = context.peekSourceNodeID.map { itemID(of: item) == $0 } ?? false
         rowView.isHovered = item != nil && item === hover
+        rowView.isDropTarget = item != nil && item === dropTargetFolder
         rowView.alphaValue = itemID(of: item).map { draggingIDs.contains($0) } == true ? 0.4 : 1
         if let cell = rowView.view(atColumn: 0) as? DividerCellView { cell.showsClear = item === hover && hover === divider }
     }
@@ -1002,8 +1003,32 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     private func outlineView(_ outlineView: NSOutlineView, parentOf item: AnyObject) -> Any? { outlineView.parent(forItem: item) }
 
-    func clearDropIndicator() { dropIndicator.isHidden = true }
+    func clearDropIndicator() { dropIndicator.isHidden = true; setDropTargetFolder(nil) }
+    /// The folder a drag will drop into, highlighted Arc's way: its row fills and its glyph
+    /// opens, with no insertion line (sidebar-themes.md §3 "Drag", evidence `s24/18-drag`).
+    private(set) weak var dropTargetFolder: Folder?
+    private func setDropTargetFolder(_ folder: Folder?) {
+        let old = dropTargetFolder
+        dropTargetFolder = folder
+        // The fill is re-applied on every validate (the outline can reuse row views during a drag).
+        // The glyph reads `dropTargetFolder` when it draws, so it only needs a redraw on a change.
+        func mark(_ item: Folder?, _ target: Bool, redraw: Bool) {
+            guard let item else { return }
+            let row = outline.row(forItem: item)
+            guard row >= 0 else { return }
+            (outline.rowView(atRow: row, makeIfNecessary: false) as? SidebarRowView)?.isDropTarget = target
+            if redraw { (outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? FolderCellView)?.icon.needsDisplay = true }
+        }
+        if old !== folder { mark(old, false, redraw: true) }
+        mark(folder, true, redraw: old !== folder)
+    }
     private func showDropIndicator(item: Any?, index: Int) {
+        if index == NSOutlineViewDropOnItemIndex, let folder = item as? Folder {
+            dropIndicator.isHidden = true
+            setDropTargetFolder(folder)
+            return
+        }
+        setDropTargetFolder(nil)
         let items = children(of: item)
         let row: Int
         if index == NSOutlineViewDropOnItemIndex, let item { row = outline.row(forItem: item) + 1 }

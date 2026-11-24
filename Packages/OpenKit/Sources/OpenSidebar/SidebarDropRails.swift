@@ -66,7 +66,9 @@ private final class SidebarDropRailView: NSView {
 /// Capture s11/v4/e1-blank-drag/e1-hold.png: the blue line is 4 physical pixels
 /// at 2x (#363DFA); the ring's outer diameter is 16 pixels. It never changes row layout.
 @MainActor
-final class SidebarDropIndicator: NSView {
+class SidebarDropIndicator: NSView {
+    /// The Favorites tray's gap mark is the same line, standing up: the ring at the top end.
+    var vertical: Bool { false }
     override var isFlipped: Bool { true }
     override init(frame: NSRect) { super.init(frame: frame); setAccessibilityElement(false) }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -75,7 +77,18 @@ final class SidebarDropIndicator: NSView {
         NSColor(srgbRed: 54.0 / 255, green: 61.0 / 255, blue: 250.0 / 255, alpha: 1).setStroke()
         let ring = NSBezierPath(ovalIn: CGRect(x: 1, y: 1, width: 6, height: 6))
         ring.lineWidth = 2; ring.stroke()
-        let line = NSBezierPath(); line.move(to: CGPoint(x: 7, y: 4)); line.line(to: CGPoint(x: bounds.maxX, y: 4))
+        let line = NSBezierPath()
+        if vertical { line.move(to: CGPoint(x: 4, y: 7)); line.line(to: CGPoint(x: 4, y: bounds.maxY)) }
+        else { line.move(to: CGPoint(x: 7, y: 4)); line.line(to: CGPoint(x: bounds.maxX, y: 4)) }
         line.lineWidth = 2; line.stroke()
     }
+}
+
+/// The Favorites tray's insertion mark (an inter-item gap indicator): the sidebar's drop line,
+/// vertical, instead of AppKit's thin system-blue bar (UXE wave 2 D2, interim until capture
+/// UXE-W2-C1 settles Arc's tray feedback).
+@MainActor
+final class FavoritesGapIndicator: SidebarDropIndicator, NSCollectionViewElement {
+    static let identifier = NSUserInterfaceItemIdentifier("favorites-gap-indicator")
+    override var vertical: Bool { true }
 }

@@ -469,7 +469,7 @@ struct SidebarMenus {
     /// One pane of a split: a submenu titled with the pane title, cut to 30
     /// characters plus "…" (Arc's per-pane builder at 0x102ecf180).
     private func pane(of split: Split, _ tab: Tab) -> NSMenuItem {
-        var title = tab.displayTitle
+        var title = tab.splitPaneTitle
         if title.count > 30 { title = String(title.prefix(30)) + "…" }
         let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         parent.submenu = menu([
@@ -672,5 +672,15 @@ struct SidebarMenus {
             keyed(item("New Split", enabled: canSplit, .newSplitView), "=", [.control, .shift]),
             keyed(item("New Tab", .newTab), "t", .command),
         ])
+    }
+}
+
+extension Tab {
+    /// A split pane's title in the split row, its accessibility label and its menu. A pane that
+    /// never got a page (Add Split View, then no URL) reads "New Tab", not the raw "about:blank".
+    var splitPaneTitle: String {
+        guard customTitle == nil, url.absoluteString == "about:blank",
+              title.isEmpty || title == "about:blank" else { return displayTitle }
+        return "New Tab"
     }
 }

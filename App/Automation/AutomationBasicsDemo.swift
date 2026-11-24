@@ -70,8 +70,12 @@ extension AutomationController {
         guard let view = sidebar.spaceSwitcher(spaceID: space.id), view.window != nil, !view.isHidden else { return nil }
         return ["space": space.id.description, "title": space.title, "frame": box(view.bounds, in: view)]
       }
+      let favorites: [[String: Any]] = (factory.focusedSpace.flatMap { factory.model.profile(id: $0.profileID) }?.favorites ?? [])
+        .compactMap { tab in sidebar.favoriteFrame(tabID: tab.id).map { ["id": tab.id.description, "frame": box($0, in: sidebar)] } }
       let page = controller.container
-      return ["rows": rows, "spaces": switchers,
+      return ["rows": rows, "spaces": switchers, "favorites": favorites,
+        "favoritesEmptyCard": sidebar.favoritesEmptyCard.map { box($0.bounds, in: $0) } ?? [],
+        "dropFolder": sidebar.dropTargetFolderState ?? NSNull(),
         "newTab": sidebar.newTabRowFrame.map { box($0, in: sidebar) } ?? [],
         "sidebar": box(sidebar.bounds, in: sidebar), "page": box(page.bounds, in: page),
         "window": [target.frame.width, target.frame.height]] as [String: Any]
@@ -112,8 +116,12 @@ extension AutomationController {
       } else {
         operation = next?.draggingUpdated(request) ?? []
       }
+      controller.sidebar.displayIfNeeded()
       return ["destination": next.map { String(describing: type(of: $0)) } ?? "", "operation": operation.rawValue,
-        "indicator": controller.sidebar.dropIndicatorFrame.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? []] as [String: Any]
+        "indicator": controller.sidebar.dropIndicatorFrame.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? [],
+        "dropFolder": controller.sidebar.dropTargetFolderState ?? NSNull(),
+        "favoritesGap": controller.sidebar.favoritesGapIndicatorFrame.map { r -> [Any] in
+          [r.minX, r.minY, r.width, r.height] } ?? []] as [String: Any]
     case "drag-end":
       guard let drag = basicsDrag else { throw Failure(message: "no demo drag") }
       basicsDrag = nil

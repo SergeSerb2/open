@@ -34,6 +34,8 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         collection.dataSource = self
         collection.delegate = self
         collection.register(FavoriteTileItem.self, forItemWithIdentifier: FavoriteTileItem.identifier)
+        collection.register(FavoritesGapIndicator.self, forSupplementaryViewOfKind: NSCollectionView.elementKindInterItemGapIndicator,
+                            withIdentifier: FavoritesGapIndicator.identifier)
         collection.registerForDraggedTypes([.sidebarNode, .URL, .fileURL])
         collection.setDraggingSourceOperationMask(.move, forLocal: true)
         collection.setDraggingSourceOperationMask(.copy, forLocal: false)
@@ -145,6 +147,21 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
 
     func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int { tabs.count }
 
+    func collectionView(_ collectionView: NSCollectionView, viewForSupplementaryElementOfKind kind: NSCollectionView.SupplementaryElementKind,
+                        at indexPath: IndexPath) -> NSView {
+        collectionView.makeSupplementaryView(ofKind: kind, withIdentifier: FavoritesGapIndicator.identifier, for: indexPath)
+    }
+    #if DEBUG || OPEN_AUTOMATION
+    /// The visible Favorites insertion mark while a drag is over the tray (automation evidence).
+    var gapIndicatorFrame: CGRect? {
+        // AppKit adds the gap indicator as a collection subview, outside `visibleSupplementaryViews`.
+        func find(_ view: NSView) -> NSView? {
+            if view is FavoritesGapIndicator, !view.isHiddenOrHasHiddenAncestor, view.alphaValue > 0 { return view }
+            return view.subviews.lazy.compactMap(find).first
+        }
+        return find(collection).map { convert($0.bounds, from: $0) }
+    }
+    #endif
     func collectionView(_ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath) -> NSCollectionViewItem {
         let item = collectionView.makeItem(withIdentifier: FavoriteTileItem.identifier, for: indexPath)
         if let tile = item as? FavoriteTileItem { tile.bind(tabs[indexPath.item], context: context, owner: self) }
@@ -280,11 +297,7 @@ final class FavoritesLayout: NSCollectionViewLayout {
     }
 
     override func layoutAttributesForDropTarget(at pointInCollectionView: NSPoint) -> NSCollectionViewLayoutAttributes? {
-        guard !frames.isEmpty else {
-            let a = NSCollectionViewLayoutAttributes(forInterItemGapBefore: IndexPath(item: 0, section: 0))
-            a.frame = CGRect(x: FavoritesMetrics.inset, y: FavoritesMetrics.inset, width: 2, height: FavoritesMetrics.tileHeight)
-            return a
-        }
+        guard !frames.isEmpty else { return layoutAttributesForInterItemGap(before: IndexPath(item: 0, section: 0)) }
         // Nearest gap: before the tile whose center is right of the point in its row.
         var best = frames.count
         for (i, f) in frames.enumerated() where pointInCollectionView.y >= f.minY - FavoritesMetrics.rowGap && pointInCollectionView.y <= f.maxY + FavoritesMetrics.rowGap {
@@ -295,10 +308,21 @@ final class FavoritesLayout: NSCollectionViewLayout {
     }
 
     override func layoutAttributesForInterItemGap(before indexPath: IndexPath) -> NSCollectionViewLayoutAttributes? {
+        // An empty tray has no gap to mark (the frame would clip the line): the empty-state card
+        // shows the drop target itself.
         let a = NSCollectionViewLayoutAttributes(forInterItemGapBefore: indexPath)
+        guard !frames.isEmpty else {
+            // An empty tray has no gap to mark: the empty-state card shows the drop target itself.
+            // A whole, hidden mark (not a clipped or zero-size one) keeps AppKit's indicator valid
+            // for the next drag over tiles.
+            a.frame = CGRect(x: FavoritesMetrics.inset - 4, y: FavoritesMetrics.inset, width: 8, height: FavoritesMetrics.tileHeight)
+            a.isHidden = true
+            return a
+        }
         let i = indexPath.item
         let ref = i < frames.count ? frames[i] : (frames.last.map { $0.offsetBy(dx: $0.width + FavoritesMetrics.columnGap, dy: 0) } ?? .zero)
-        a.frame = CGRect(x: ref.minX - FavoritesMetrics.columnGap / 2 - 1, y: ref.minY, width: 2, height: ref.height)
+        // 8 pt wide around the gap's centre: the 2 pt line and the 6 pt ring at its top (D2).
+        a.frame = CGRect(x: ref.minX - FavoritesMetrics.columnGap / 2 - 4, y: ref.minY, width: 8, height: ref.height)
         return a
     }
 }

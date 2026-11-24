@@ -252,7 +252,9 @@ final class SidebarRowView: NSTableRowView {
         switch representedItem {
         case let tab as Tab: tab.voiceOverTitle
         case let folder as Folder: folder.title
-        case let split as Split: "Split View: " + (split.isCustomized ? split.displayTitle : split.panes.map(\.voiceOverTitle).joined(separator: ", "))
+        // A blank pane reads "New Tab" (M1); any other pane its VoiceOver title (empty titles fall back).
+        case let split as Split: "Split View: " + (split.isCustomized ? split.displayTitle
+            : split.panes.map { $0.splitPaneTitle == $0.displayTitle ? $0.voiceOverTitle : $0.splitPaneTitle }.joined(separator: ", "))
         case is NewTabItem: "New Tab"
         case is LiveFolderMoreItem: "Show More"
         default: nil
@@ -986,6 +988,9 @@ final class FolderIconView: NSView {
     weak var folder: Folder? { didSet { needsDisplay = true } }
     weak var cell: SidebarCellView?
     weak var context: SidebarContext?
+    /// A drag is over this folder's row: the glyph opens, as Arc's does (sidebar-themes.md §3 "Drag").
+    /// Read from the page on every draw, so a cell rebound during the drag keeps it.
+    var dropOpen: Bool { folder.map { cell?.page?.dropTargetFolder === $0 } ?? false }
 
     required override init(frame: NSRect) {
         super.init(frame: frame)
@@ -1024,19 +1029,20 @@ final class FolderIconView: NSView {
             return
         }
         let ink = bounds.insetBy(dx: 1.5, dy: 2.5)
-        lastDrawnGlyph = icon ?? (expansion == .expanded ? "folder.open" : folder.peekedChildID != nil ? "folder.peek" : "folder.closed")
+        let open = expansion == .expanded || dropOpen
+        lastDrawnGlyph = icon ?? (open ? "folder.open" : folder.peekedChildID != nil ? "folder.peek" : "folder.closed")
         if let icon {
             if let symbol = NSImage(systemSymbolName: icon, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium)) {
                 symbol.drawTinted(in: ink, color: accent)
             } else { EmojiRenderer.draw(icon, in: bounds) }
-        } else if folder.peekedChildID != nil {
+        } else if folder.peekedChildID != nil && !dropOpen {
             CustomIcon.folderPeek(in: bounds.insetBy(dx: 1, dy: 1), color: usesDefaultAccent ? SidebarRole.folderPeekDefaultAccent.light.nsColor : accent,
                                   dotsColor: SidebarRole.folderPeekDots.light.nsColor)
-        } else { CustomIcon.folder(open: expansion == .expanded, in: ink, color: accent) }
+        } else { CustomIcon.folder(open: open, in: ink, color: accent) }
         // Live Folder (capture s5 b3: a folder glyph with a service badge). Our badge is Open's own
         // pull-request glyph in the folder body, never GitHub's mark. Size and placement:
         // GUESS — capture pending (only one 2x frame of Arc's glyph exists).
-        if folder.live != nil, icon == nil, folder.peekedChildID == nil {
+        if folder.live != nil, icon == nil, folder.peekedChildID == nil || dropOpen {
             lastDrawnGlyph = "folder.live"
             let body = CGRect(x: ink.minX, y: ink.minY + ink.height * 0.30, width: ink.width, height: ink.height * 0.70)
             let side = min(body.width, body.height) * 0.78
@@ -1099,7 +1105,7 @@ final class SplitCellView: SidebarCellView {
             let f = FaviconView(); f.tab = pane; f.context = context
             let t = TextLabel(); t.font = Typography.tabTitle.font; t.baseline = SpaceListMetrics.titleBaselineOffset; t.inset = SpaceListMetrics.textInset
             t.trailingInset = SpaceListMetrics.textTrailingInset
-            t.text = { [weak pane] in pane?.displayTitle ?? "" }
+            t.text = { [weak pane] in pane?.splitPaneTitle ?? "" }
             t.color = { [weak self] in
                 guard let page = self?.page else { return .labelColor }
                 // Increase Contrast: the raised title, as every other row (review r1 #4).
