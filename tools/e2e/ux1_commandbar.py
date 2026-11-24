@@ -160,8 +160,9 @@ def run(factory, results, tmp, h):
             app.call('little-open-action', action='blank')
             row = wait(lambda: next((s for s in sessions() if s['id'] not in before and s.get('barPresented')), None), timeout=5, step=.05) or {}
             blank = dict(row)
-            app.call('key', window=row['window'], text=origin + '/find\r')
-            page = wait(lambda: next((s for s in sessions() if s['id'] == row['id'] and s['state'] == 'page' and s.get('url', '').endswith('/find')), None), timeout=12, step=.1) or {}
+            # A unique address: an address already open in the main window would offer Switch to Tab instead.
+            app.call('key', window=row['window'], text=origin + '/find?little=open\r')
+            page = wait(lambda: next((s for s in sessions() if s['id'] == row['id'] and s['state'] == 'page' and s.get('url', '').endswith('/find?little=open')), None), timeout=12, step=.1) or {}
             time.sleep(.5)
             app.call('key', window=row['window'], key='f', modifiers=['cmd']); app.call('key', window=row['window'], text='quasar')
             found = wait(lambda: (lambda s: s if s and pane(s.get('findBar', {})).get('countText', '').endswith('/24') else None)(
