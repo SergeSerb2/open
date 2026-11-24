@@ -1484,6 +1484,10 @@ final class SpaceIconView: NSView {
         guard let space else { return }
         let icon = tracked({ space.icon }) { [weak self] in self?.needsDisplay = true }
         switch icon {
+        case .emoji(let e)? where EmojiRenderer.isText(e):
+            // A Space icon string with no emoji in it (a letter, a digit): draw it like the Space
+            // title, not as black emoji-sized text sitting on its line box (UX round 1, E10).
+            drawText(e)
         case .emoji(let e)?:
             if desaturated, let gray = EmojiRenderer.grayscale(e, size: emojiSize) {
                 let s = gray.size
@@ -1510,6 +1514,20 @@ final class SpaceIconView: NSView {
             CustomIcon.planet(in: NSRect(x: bounds.midX - emojiSize / 2, y: bounds.midY - emojiSize / 2, width: emojiSize, height: emojiSize),
                               color: self.spaceTitleColor)
         }
+    }
+
+    /// Text icon: the Space title's semibold face at 13/14 of the emoji size (13 pt beside a 14 pt
+    /// emoji, the title's size) in the title colour, cap height centred on the icon.
+    private func drawText(_ text: String) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let font = NSFont.systemFont(ofSize: emojiSize * Typography.spaceTitle.size / Typography.headerEmoji.size, weight: .semibold)
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: spaceTitleColor]))
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        ctx.saveGState()
+        ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        ctx.textPosition = CGPoint(x: (bounds.midX - width / 2).rounded(), y: (bounds.midY + font.capHeight / 2).rounded())
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
     }
 
     private func drawSymbol(_ name: String) {

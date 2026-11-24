@@ -14,6 +14,10 @@ UXB-6  Resize sweep 164 -> 176 pt in 1 pt drags with the middle Space current: t
 UXB-8  A Space switch always shows the new Space's list: 4 launches (emoji or letter icons, Reduce
        Motion on and off) visit 11 new Spaces each; after every switch the list area must have
        drawn pixels (contrast) and the focused page must sit at index x width in the strip.
+UXB-9  Hovering a long-title pinned tab, pinned folder and Today tab (at 228 pt and after a native
+       drag to 164 pt): the title is drawn for its current width and ends before the row's x or -.
+UXB-10 A letter Space icon in the header draws like the title: its darkest ink within 25 levels of
+       the title's, and its ink between the title's cap top and baseline (1 pt slack).
 UXB-7  At 164 pt, moving the current Space from index 0 to 2 (real Space Manager drag; the Library
        shows about three columns, so both must be on screen) and undoing it (Cmd+Z) keeps the
        current Space visible and out of the fades.
@@ -97,8 +101,12 @@ def _bar_problems(g, current=True):
 
 
 def run(factory, results, wait_until, scratch, root, read_image=None):
-    if os.environ.get('OPEN_UXB8_ONLY') == '1':  # the Space-switch draw row alone (B7 iteration)
-        return _switch_draw_rows(factory, results, scratch, root, read_image)
+    only = set(filter(None, os.environ.get('OPEN_UXB_ONLY', '').split(',')))  # e.g. "8,9,10" for iteration
+    if only:
+        if '8' in only: _switch_draw_rows(factory, results, scratch, root, read_image)
+        if '9' in only: _hover_title_rows(factory, results, wait_until, scratch, root)
+        if '10' in only: _letter_icon_rows(factory, results, scratch, root, read_image)
+        return
     for count in (6, 20):
         fixture, ids = _fixture(root, scratch, count)
         app = factory(urls=(), snapshot=fixture)
@@ -144,8 +152,10 @@ def run(factory, results, wait_until, scratch, root, read_image=None):
                 _reveal_rows(app, results, wait_until, ids, resize, geometry)
         finally:
             app.quit()
+    _hover_title_rows(factory, results, wait_until, scratch, root)
     if read_image is not None:
         _switch_draw_rows(factory, results, scratch, root, read_image)
+        _letter_icon_rows(factory, results, scratch, root, read_image)
 
 
 def _switch_draw_rows(factory, results, scratch, root, read_image):
@@ -301,3 +311,95 @@ def _reveal_rows(app, results, wait_until, ids, resize, geometry):
     results['UXB7_reorder_keeps_current_visible'] = {
         'ok': rows['before']['index'] == 0 and rows['moved']['index'] == 2 and rows['undone']['index'] == 0
               and all(not r['problems'] and r['inkClear'] for r in rows.values()), 'rows': rows}
+
+
+def _tab(title, pinned=False):
+    now = time.time()
+    t = {'createdAt': now, 'id': str(uuid.uuid4()).upper(), 'isMuted': False, 'isUnread': False,
+         'lastActiveAt': now, 'title': title, 'url': PAGE}
+    if pinned: t['pinnedURL'] = PAGE
+    return {'tab': {'_0': t}}
+
+
+def _hover_title_rows(factory, results, wait_until, scratch, root):
+    """UXB-9 (UXD): a row's x / - must not sit on a title drawn for an older, wider frame."""
+    data = json.loads(Path(root, 'Packages/OpenKit/Fixtures/space-schema1/State/browser.json').read_text())
+    space = copy.deepcopy(data['spaces'][0]); space['id'] = str(uuid.uuid4()).upper(); space['title'] = 'Rows'
+    long_pinned = _tab('A really long pinned article title that keeps going', pinned=True)
+    folder = {'folder': {'_0': {'id': str(uuid.uuid4()).upper(), 'isExpanded': True, 'title': 'Reading list with a long folder name',
+                                'children': [_tab('Morning news', pinned=True)]}}}
+    long_today = _tab('A very long today tab title that runs past the edge')
+    space['pinned'] = [_tab('Lemon pasta recipe', pinned=True), long_pinned, folder]
+    space['today'] = [_tab('Trip planning'), long_today]
+    data['spaces'] = [space]
+    window = data['windows'][0]
+    window.update(focusedSpaceID=space['id'], sidebarWidth=228, sidebarMode='anchored', frameX=80, frameY=80,
+                  frameWidth=1280, frameHeight=800, selectedNodeBySpace={space['id']: space['today'][0]['tab']['_0']['id']})
+    data['windows'] = [window]
+    fixture = Path(scratch, 'sidebar-bars-rows.json'); fixture.write_text(json.dumps(data))
+    ids = {'pinned': long_pinned['tab']['_0']['id'], 'folder': folder['folder']['_0']['id'], 'today': long_today['tab']['_0']['id']}
+    app = factory(urls=(), snapshot=str(fixture))
+    rows, problems = {}, []
+    try:
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        for phase in ('w228', 'drag164'):
+            if phase == 'drag164':
+                state = app.call('window-state'); y = state['frame'][3] / 2
+                app.call('mouse', **{'from': [state['sidebarWidth'] - 1, y], 'to': [164, y]})
+                wait_until(lambda: abs(app.call('window-state')['sidebarWidth'] - 164) < 1, timeout=5, step=.05)
+            for name, node in ids.items():
+                point = app.call('sidebar-row', node=node)['point']
+                app.call('mouse', action='hover', x=point[0], y=point[1])
+                def settled():
+                    d = app.call('sidebar-row', node=node)['titleDraw']
+                    return d if d and d.get('buttonMinX') is not None and abs(d['drawnForWidth'] - d['width']) < .5 else None
+                draw = wait_until(settled, timeout=3, step=.05) or app.call('sidebar-row', node=node)['titleDraw']
+                key = '%s-%s' % (phase, name); rows[key] = draw
+                if not draw or draw.get('buttonMinX') is None:
+                    problems.append('%s: no row button shown on hover' % key)
+                elif abs(draw['drawnForWidth'] - draw['width']) >= .5 or draw['lineWidth'] > draw['width'] + .5 \
+                        or draw['titleMaxX'] > draw['buttonMinX'] + .5:
+                    problems.append('%s: title drawn for %s, width %s, line %.1f, ends %.1f, button at %.1f' % (
+                        key, draw['drawnForWidth'], draw['width'], draw['lineWidth'], draw['titleMaxX'], draw['buttonMinX']))
+            app.call('mouse', action='hover', x=700, y=400)
+    finally:
+        app.quit()
+    results['UXB9_hover_title_clears_row_button'] = {'ok': not problems and len(rows) == 6, 'problems': problems, 'rows': rows}
+
+
+def _letter_icon_rows(factory, results, scratch, root, read_image):
+    """UXB-10 (E10): a letter icon in the Space header draws in the title's ink, cap-aligned."""
+    data = json.loads(Path(root, 'Packages/OpenKit/Fixtures/space-schema1/State/browser.json').read_text())
+    space = copy.deepcopy(data['spaces'][0]); space['id'] = str(uuid.uuid4()).upper()
+    space['title'] = 'Studio'; space['icon'] = {'emoji': {'_0': 'P'}}
+    data['spaces'] = [space]
+    window = data['windows'][0]
+    window.update(focusedSpaceID=space['id'], sidebarWidth=228, sidebarMode='anchored', frameX=80, frameY=80,
+                  frameWidth=1280, frameHeight=800, selectedNodeBySpace={})
+    data['windows'] = [window]
+    fixture = Path(scratch, 'sidebar-bars-letter.json'); fixture.write_text(json.dumps(data))
+    app = factory(urls=(), snapshot=str(fixture))
+    try:
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True); time.sleep(.6)
+        png = str(Path(scratch, 'uxb10-letter.png')); app.call('snapshot', path=png)
+        state = app.call('window-state')
+    finally:
+        app.quit()
+    width, height, pixel = read_image(png)
+    k = width / state['frame'][2]
+    baseline = state['chrome']['headerTitleBaseline']; band = state['chrome']['header']
+
+    def ink(x0, x1):
+        y0, y1 = band[1] + 2, band[1] + band[3] - 2
+        bg = pixel(int(x0 * k), int(y0 * k))
+        pts = [(x, y) for x in range(x0, x1) for y in range(y0, y1)
+               if sum(abs(a - b) for a, b in zip(pixel(int(x * k), int(y * k)), bg)) > 60]
+        if not pts: return None
+        ys = [p[1] for p in pts]
+        return {'top': min(ys), 'bottom': max(ys), 'darkest': min(sum(pixel(int(x * k), int(y * k))) / 3 for x, y in pts)}
+    icon, title = ink(10, 40), ink(41, 60)  # the title's first letter, "S" (a capital, no descender)
+    ok = bool(icon and title) and abs(icon['darkest'] - title['darkest']) <= 25 \
+        and abs(icon['top'] - title['top']) <= 1 and abs(icon['bottom'] - (baseline - 1)) <= 1
+    results['UXB10_letter_icon_matches_title'] = {'ok': ok, 'icon': icon, 'title': title, 'baseline': baseline}
+    try: os.remove(png)
+    except OSError: pass

@@ -259,6 +259,14 @@ enum NodeIconRenderer {
 /// Emoji drawn to fit a box (Space icons, emoji tab icons).
 @MainActor
 enum EmojiRenderer {
+    /// True for a plain-text icon string (letters, digits, punctuation): no scalar asks for emoji
+    /// presentation (no emoji-presentation scalar, no U+FE0F, no pictograph above Latin-1).
+    static func isText(_ s: String) -> Bool {
+        !s.isEmpty && s.unicodeScalars.allSatisfy { u in
+            !u.properties.isEmojiPresentation && u.value != 0xFE0F && !(u.properties.isEmoji && u.value > 0xFF)
+        }
+    }
+
     /// Draws `emoji` at `fontSize`, centered on its typographic box in `rect`.
     static func draw(_ emoji: String, fontSize: CGFloat? = nil, in rect: NSRect) {
         let font = NSFont.systemFont(ofSize: fontSize ?? rect.height * 0.82)

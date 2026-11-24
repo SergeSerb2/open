@@ -584,6 +584,21 @@ extension SidebarView {
     #if DEBUG || OPEN_AUTOMATION
     public var spaceHeaderTitleDraw: [String: Any] { pager.currentPage?.header.titleDrawEvidence ?? [:] }
     public var pagerState: [String: Any] { pager.diagnostics }
+    /// A tab or folder row's title draw (UX round 1, UXD): the title's width and the width its last draw
+    /// used, the drawn line width, the title's right edge, and the left edge of a visible row button
+    /// (× or —), all in window points. nil when the row is not on screen.
+    public func rowTitleDraw(nodeID: ItemID) -> [String: Any]? {
+        guard let page = pager.currentPage, let obj = context.model.node(id: nodeID)?.object else { return nil }
+        let row = page.outline.row(forItem: obj)
+        guard row >= 0, let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) else { return nil }
+        let title: TextLabel? = (cell as? TabCellView)?.title ?? (cell as? FolderCellView)?.title
+        guard let title else { return nil }
+        let frame = title.convert(title.bounds, to: nil)
+        let buttons = cell.subviews.compactMap { $0 as? PlateButton }.filter { !$0.isHidden }.map { $0.convert($0.bounds, to: nil).minX }
+        return ["width": Double(title.bounds.width), "drawnForWidth": Double(title.lastDrawnBoundsWidth),
+                "lineWidth": Double(title.lastDrawnLineWidth), "titleMaxX": Double(frame.maxX),
+                "buttonMinX": buttons.min().map { Double($0) as Any } ?? NSNull()]
+    }
     #endif
 
     /// Favorite tiles in display order.

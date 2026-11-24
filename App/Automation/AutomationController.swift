@@ -747,7 +747,7 @@
         let style = controller.context.focusedSpace.map { controller.context.style(for:$0) }
         let contentAppearance = style?.resolvedAppearance(system:controller.context.systemAppearance) ?? controller.context.systemAppearance
         let ink = style?.titleColor(contentAppearance).nsColor.usingColorSpace(.sRGB)
-        return ["foreground":ink.map { [$0.redComponent,$0.greenComponent,$0.blueComponent,$0.alphaComponent] } ?? [], "frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
+        return ["foreground":ink.map { [$0.redComponent,$0.greenComponent,$0.blueComponent,$0.alphaComponent] } ?? [], "frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid)), "titleDraw": controller.sidebar.rowTitleDraw(nodeID: ItemID(rawValue: uuid)) ?? [:]] as [String: Any]
       case "preview-state":
         return try previewState(a)
       case "page-selection", "swipe", "swipe-indicator":
