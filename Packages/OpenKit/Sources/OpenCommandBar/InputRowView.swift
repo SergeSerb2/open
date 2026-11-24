@@ -9,6 +9,9 @@ final class CommandBarTextFieldCell: NSTextFieldCell {
     var selectedTextColor: NSColor = .textColor
 
     override func fieldEditor(for controlView: NSView) -> NSTextView? { editor ?? super.fieldEditor(for: controlView) }
+    // The system accessibility tree exposes this cell, not the field: give it the field's label (K10).
+    override func accessibilityLabel() -> String? { (controlView as? NSTextField)?.placeholderString ?? super.accessibilityLabel() }
+    override func accessibilityPlaceholderValue() -> String? { (controlView as? NSTextField)?.placeholderString }
 
     override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
         let text = super.setUpFieldEditorAttributes(textObj)
