@@ -98,6 +98,13 @@ final class NoteFormatBar: NSView, NSTextFieldDelegate {
     isEditingLink = false
     for view in stack.arrangedSubviews { view.isHidden = view === linkBox }
   }
+  /// A click on the bar (its padding, the link box around the input) stays in the bar: the editor
+  /// behind it would take the click, end the input and move the caret to the end of the Note.
+  override func mouseDown(with event: NSEvent) {
+    // Re-focusing a field that is already editing would end its editing session first, which
+    // closes the input: focus it only when focus went elsewhere.
+    if isEditingLink, linkField.currentEditor() == nil { window?.makeFirstResponder(linkField) }
+  }
   /// Focus left the input without Return or Esc (a click elsewhere): keep what was typed.
   func controlTextDidEndEditing(_ obj: Notification) {
     guard isEditingLink else { return }

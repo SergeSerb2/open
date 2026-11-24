@@ -24,6 +24,11 @@ extension AutomationController {
             // The link input in bar coordinates (its padding and height while editing a link).
             "linkField": bar.linkField.isHiddenOrHasHiddenAncestor ? [] : { let r = bar.convert(bar.linkField.bounds, from: bar.linkField)
               return [r.minX, r.minY, r.width, r.height].map { Double($0) } }(),
+            // The input's box in window points, top-left origin (the `mouse` command's space).
+            "linkBoxWindow": bar.linkField.isHiddenOrHasHiddenAncestor ? [] : { () -> [Double] in
+              guard let box = bar.linkField.superview, let window = bar.window else { return [] }
+              let r = box.convert(box.bounds, to: nil)
+              return [r.minX, window.frame.height - r.maxY, r.width, r.height].map { Double($0) } }(),
             "on": bar.buttons.filter(\.isOn).map(\.name), "items": bar.buttons.map(\.name)]
   }
   /// Each image's line: its height, the image's height, and the line's top above the image (the

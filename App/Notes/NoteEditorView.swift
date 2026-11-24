@@ -661,7 +661,7 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
     attachment.image = image
     attachment.bounds = NoteRichText.imageBounds(image.size, width: columnWidth)
     // The image is its own plain paragraph (UXE W3 N3): a line break before it when the caret is
-    // inside a paragraph, and after it when text follows; no list marker or indent on its line.
+    // inside a paragraph, and after it (also at the end); no list marker or indent on its line.
     let range = bodyView.selectedRange()
     let string = bodyView.string as NSString
     let typing = bodyView.typingAttributes
@@ -676,7 +676,9 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
     imageText.addAttributes(attributes, range: NSRange(location: 0, length: imageText.length))
     piece.append(imageText)
     let end = NSMaxRange(range)
-    if end < string.length, string.character(at: end) != 0x0A {
+    // Also at the end of the Note: the caret then lands on a new plain line below the image, so
+    // typing starts a paragraph of its own.
+    if end == string.length || string.character(at: end) != 0x0A {
       attributes[.noteImage] = nil
       piece.append(NSAttributedString(string: "\n", attributes: attributes))
     }
@@ -703,9 +705,9 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
   func trailingMarkerLine() -> (fragment: NSRect, baseline: CGFloat)? {
     guard let block = trailingBlock, block.isList, let manager = bodyView.layoutManager, let storage = bodyView.textStorage else { return nil }
     let font = NoteLook.bodyFont
-    var fragment = manager.extraLineFragmentRect
-    if fragment == .zero, storage.length == 0 { fragment = NSRect(x: 0, y: 0, width: bodyView.bounds.width, height: font.ascender - font.descender) }
     let lineHeight = manager.defaultLineHeight(for: font) * NoteLook.bodyLineHeightMultiple
+    var fragment = manager.extraLineFragmentRect
+    if fragment == .zero, storage.length == 0 { fragment = NSRect(x: 0, y: 0, width: bodyView.bounds.width, height: lineHeight) }
     return (fragment, (fragment.height > 0 ? fragment.height : lineHeight) + font.descender)
   }
   func drawMarkers(in view: NoteTextView, dirtyRect: NSRect) {

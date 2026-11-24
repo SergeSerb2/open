@@ -119,8 +119,10 @@ public final class EaselCanvasView: NSView {
         let font = NSFont.systemFont(ofSize: max(Self.titleMinimumFontSize, EaselTitleField.font.pointSize * f), weight: .bold)
         titleField.titleFont = font
         let lineHeight = ceil(font.ascender - font.descender + font.leading) + 4
-        let tw = min(Self.titleSize.width * f, max(120, width - 40))
-        var frame = CGRect(x: (width - tw) / 2, y: (Self.titleTop + (Self.titleSize.height - lineHeight / f) / 2) * f,
+        // The width shrinks no further than the font does, and the line never starts above the page.
+        let minimum = Self.titleMinimumFontSize / EaselTitleField.font.pointSize
+        let tw = min(Self.titleSize.width * max(minimum, f), max(120, width - 40))
+        var frame = CGRect(x: (width - tw) / 2, y: max(2, (Self.titleTop + (Self.titleSize.height - lineHeight / f) / 2) * f),
                            width: tw, height: lineHeight)
         let gap: CGFloat = 4
         let below = document.objects.map { viewRect($0.frame) }.filter { $0.minX < frame.maxX && $0.maxX > frame.minX && $0.maxY > frame.minY }
@@ -153,7 +155,8 @@ public final class EaselCanvasView: NSView {
     func layoutDocument() {
         let clip = scrollView.contentView.bounds
         let width = max(clip.width, EaselDocument.width * scale)
-        let bottom = max(document.contentBottom, draftView.map { $0.object.frame.maxY } ?? 0) + 400
+        let editing = textEditor.flatMap { editor in document.object(editor.objectID).map { $0.frame.minY + editor.neededDocHeight } } ?? 0
+        let bottom = max(document.contentBottom, draftView.map { $0.object.frame.maxY } ?? 0, editing) + 400
         let height = max(clip.height, bottom * scale)
         if docView.frame.size != CGSize(width: width, height: height) { docView.frame.size = CGSize(width: width, height: height) }
         layoutTitle(width: width)
@@ -583,6 +586,9 @@ public final class EaselCanvasView: NSView {
         let visible = clip.bounds
         let bar = convert(toolbar.frame, to: docView)
         guard editorFrame.minX < bar.maxX, editorFrame.maxX > bar.minX else { return }
+        // The box can grow past the stored frame the page height was measured from: keep room below it.
+        let needed = editorFrame.maxY + 400 * scale
+        if docView.frame.height < needed { docView.frame.size.height = needed }
         let overlap = editorFrame.maxY + Self.toolbarClearance - bar.minY
         let room = editorFrame.minY - visible.minY - Self.toolbarClearance
         let step = min(overlap, room, docView.frame.height - visible.maxY)
@@ -672,6 +678,7 @@ public final class EaselCanvasView: NSView {
 
     // MARK: State (automation and accessibility)
 
+    #if DEBUG || OPEN_AUTOMATION
     public func state() -> [String: Any] {
         // A size change marks layout as needed; report the laid-out geometry, not the old one.
         layoutSubtreeIfNeeded()
@@ -714,6 +721,7 @@ public final class EaselCanvasView: NSView {
                 "scrollOffset": scrollView.contentView.bounds.minY,
                 "appearance": effectiveAppearance.name.rawValue, "liveCount": liveObjectIDs.count]
     }
+    #endif
 
     /// Converts a document point to window coordinates (automation drives real mouse events).
     public func windowPoint(forDocument p: CGPoint) -> CGPoint {
