@@ -23,7 +23,7 @@ struct SettingsShortcutTools: NSViewRepresentable {
 
 @MainActor final class SettingsShortcutToolsView: NSView, NSTextFieldDelegate {
     private let model: ShortcutsViewModel
-    private let search = NSTextField()
+    private let search = SettingsSearchField()  // ring on Tab focus (UX round 1 wave 2 K3)
     private let glass = NSImageView()
     private let find = NSButton(title: "", target: nil, action: nil)
     private let found = NSButton(title: "", target: nil, action: nil)
@@ -41,7 +41,7 @@ struct SettingsShortcutTools: NSViewRepresentable {
         search.font = .systemFont(ofSize: 13); search.delegate = self
         search.setAccessibilityLabel("Find a command"); search.setAccessibilityRole(.textField); addSubview(search)
         glass.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
-        glass.setAccessibilityElement(false); addSubview(glass)
+        glass.setAccessibilityElement(false); glass.cell?.setAccessibilityElement(false); addSubview(glass)  // decoration (K9)
         for button in [find, found] {
             button.isBordered = false; button.font = .systemFont(ofSize: 11)
             button.target = self; button.setAccessibilityRole(.button); addSubview(button)
