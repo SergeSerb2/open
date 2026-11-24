@@ -792,11 +792,11 @@ for arg in sys.argv[2:]:
  size=int(subprocess.check_output(['du','-sk',str(p)]).split()[0])*1024 if p.is_dir() else p.stat().st_size
  mb=size/1_000_000
  print(f'{p.name}: {mb:.2f} MB ({size} bytes)')
- # Hard limit 335 MB (lead ruling 2026-11-12; SwiftShader stays in the bundle).
- if mb>335:
-  if sys.argv[1]!='1':raise SystemExit('FAIL: size exceeds 335 MB hard limit')
-  print('mode-SKIP: dry run exceeds the 335 MB production limit; the limit is unchanged')
- if 300<mb<=335:print('WARN: above the 300 MB target; within the 335 MB hard limit')
+ # Hard limit 345 MB (raised from 335 MB on 2026-11-24 for Accounts & Sync in 0.1.9; SwiftShader stays in the bundle).
+ if mb>345:
+  if sys.argv[1]!='1':raise SystemExit('FAIL: size exceeds 345 MB hard limit')
+  print('mode-SKIP: dry run exceeds the 345 MB production limit; the limit is unchanged')
+ if 300<mb<=345:print('WARN: above the 300 MB target; within the 345 MB hard limit')
 PY
 }
 dmg() {
