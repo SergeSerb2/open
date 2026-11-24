@@ -157,7 +157,7 @@ def _scroll_rows(app, results, wait_until, ids, resize, geometry):
     problems = [p for g in (swiped, wheeled, back) for p in _bar_problems(dict(g, current='none'), current=False)]
     results['UXB4_scroll_overflow_6spaces_w228'] = {
         'ok': start['scrollable'] and start['offset'] == 0 and start['fade'] == {'left': False, 'right': True, 'masked': True}
-              and 0 < swiped['offset'] < 60 and wheeled['offset'] == 60  # 6 × 34 − 144 = 60 pt of scroll
+              and swiped['offset'] > 0 and wheeled['offset'] == 60  # 6 × 34 − 144 = 60 pt; AppKit sets the gesture's distance
               and wheeled['fade']['left'] and not wheeled['fade']['right'] and back['offset'] == 0
               and not back['fade']['left'] and back['fade']['right'] and not problems,
         'offsets': [start['offset'], swiped['offset'], wheeled['offset'], back['offset']],
