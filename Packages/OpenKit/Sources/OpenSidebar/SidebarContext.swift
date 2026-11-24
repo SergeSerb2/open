@@ -466,7 +466,7 @@ public final class SidebarContext {
         let batches: Bool
         switch intent {
         case .moveNodes, .moveNodesToSpace, .moveNodesToNewSpace, .archiveNodes, .newFolderFromSelection,
-             .setPinned, .duplicateNodes, .duplicate, .exportSpaceIntoFolder: batches = true
+             .newFolder, .newNestedFolder, .setPinned, .duplicateNodes, .duplicate, .exportSpaceIntoFolder: batches = true
         default: batches = false
         }
         if batches { sidebar?.beginModelUpdates(); manager?.beginModelUpdates() }

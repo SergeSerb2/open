@@ -385,14 +385,20 @@ public final class SidebarView: NSView {
         guard modelUpdateDepth == 0 else { return }
         let changes = pendingChanges
         pendingChanges = []
+        let renameID = pendingRename
+        pendingRename = nil
+        // Inserting a row with NSOutlineView animation tears down or resigns an inline RenameField
+        // when the animation finishes; land the newly created folder directly before focusing it.
+        let restoreAnimation = renameID != nil && context.animatesChanges
+        if restoreAnimation { context.animatesChanges = false }
         if !changes.isEmpty {
             pager.applyBulk(changes)
             if let profile = context.favoritesProfile {
                 favorites.apply(.reload(parent: .favorites(profile.id)))
             }
         }
-        if let id = pendingRename {
-            pendingRename = nil
+        if restoreAnimation { context.animatesChanges = true }
+        if let id = renameID {
             startRenameForInsertedNode(id)
         }
     }

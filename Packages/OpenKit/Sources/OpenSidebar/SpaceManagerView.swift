@@ -199,9 +199,14 @@ public final class SpaceManagerView: NSView {
         updateDepth -= 1
         guard updateDepth == 0 else { return }
         let batch = changes; changes = []
+        let renameID = visibleForUpdates ? pendingRename : nil
+        if visibleForUpdates { pendingRename = nil }
+        let restoreAnimation = renameID != nil && context.animatesChanges
+        if restoreAnimation { context.animatesChanges = false }
         if visibleForUpdates { for column in columns.values { column.page?.applyBulk(batch) } }
         else { visibilityDirty = true }
-        if visibleForUpdates, let id = pendingRename { pendingRename = nil; renameInsertedNode(id) }
+        if restoreAnimation { context.animatesChanges = true }
+        if let id = renameID { renameInsertedNode(id) }
     }
     private func apply(_ change: TreeChange) {
         guard visibleForUpdates else { visibilityDirty = true; return }
