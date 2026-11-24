@@ -173,8 +173,18 @@ class OEApp : public CefApp,
       if (eq == std::string::npos) {
         command_line->AppendSwitch(sw);
       } else {
-        command_line->AppendSwitchWithValue(sw.substr(0, eq),
-                                            sw.substr(eq + 1));
+        std::string name = sw.substr(0, eq), value = sw.substr(eq + 1);
+        // Feature lists merge with the command line's own list: appending
+        // replaces a switch's value, so a shell --disable-features would
+        // otherwise drop one a launcher passed (e.g. the extension suites'
+        // DisableLoadExtensionCommandLineSwitch).
+        if (name == "enable-features" || name == "disable-features") {
+          std::string existing = command_line->GetSwitchValue(name);
+          if (!existing.empty()) {
+            value = existing + "," + value;
+          }
+        }
+        command_line->AppendSwitchWithValue(name, value);
       }
     }
     // CEF retains the initial Profile as its process-wide request context.
