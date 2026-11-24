@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import OpenModel
 import OpenRouting
+import OpenCommandBar
 import OpenCommands
 import OpenDesign
 
@@ -52,6 +53,8 @@ public final class LittleOpenCoordinator {
     public func keyBindingsChanged() { for controller in controllers.values { controller.refreshKeyBindings() } }
     @ObservationIgnored public var presentWindows = true
     @ObservationIgnored public var onChange: (() -> Void)?
+    /// Favicons for every Little Open bar, set before its first paint (UX1 D9, review r1 #3).
+    @ObservationIgnored public var commandBarFavicons: (any CommandBarFaviconSource)?
     /// Return true while the App's page-close preflight owns the request.
     @ObservationIgnored public var requestPageClose: ((WindowID, @escaping (Bool) -> Void) -> Bool)?
     @ObservationIgnored public var onOpenInMain: ((WindowID, ItemID, (any WebContentHost)?) -> Void)?

@@ -359,6 +359,11 @@ public enum CommandCard {
     /// The inline editor lies over the sidebar: a uniform tint. Arc 14c url-click body #F6F0E0 at both thirds (ΔE00 0);
     /// this is the share of the full tint alpha that gives it over #F9F9F9. Dark: same share (not captured; inference).
     public static let inlineTintShare = 0.93
+    /// Dark inline editor: at 0.93 the card took the dark sidebar's own color and its edges vanished over it
+    /// (UX1 D8). Interim until Arc's dark inline editor is captured (capture request UXD-C1): a lighter share
+    /// and a light hairline, so the card reads as raised. guess
+    public static let inlineTintShareDark = 0.55
+    public static let inlineDarkHairline = RGBA.white(0.16)
     /// Shadow y 22, blur 70 (Gaussian σ 35), black 38 %, plus a 0.5 pt black 22 % hairline.
     public static let shadowOffsetY: CGFloat = 22, shadowRadius: CGFloat = 35, shadowOpacity: Float = 0.38
     public static let hairline = RGBA.black(0.22), hairlineWidth: CGFloat = 0.5
