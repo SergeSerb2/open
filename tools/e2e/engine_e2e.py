@@ -15470,6 +15470,12 @@ def main():
             # OPEN_COMMANDBAR_R6_KEYS_ONLY=1 only bug sweep r6 seed 7 (tools/e2e/keybindings_r6.py).
             setcmd6_only = os.environ.get("OPEN_COMMANDBAR_SETCMD6_ONLY") == "1"
             keys6_only = os.environ.get("OPEN_COMMANDBAR_R6_KEYS_ONLY") == "1"
+            if opts.only == "commandbar" and os.environ.get("OPEN_COMMANDBAR_DUPLICATES_ONLY") == "1":
+                # UX round 1 wave 2 (W2) alone: duplicate tab titles across Spaces.
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/commandbar_duplicates.py"))["run"](factory, results[opts.only], sys.modules[__name__])
+                setcmd6_only = keys6_only = True
+            elif opts.only == "commandbar":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/commandbar_duplicates.py"))["run"](factory, results[opts.only], sys.modules[__name__])
             if opts.only == "commandbar" and not setcmd6_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/keybindings_r6.py"))["run"](factory, results[opts.only])
             if os.environ.get("OPEN_COMMANDBAR_NAV4_ONLY") != "1" and not setcmd6_only and not keys6_only:

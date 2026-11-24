@@ -36,6 +36,8 @@ public struct CommandBarRow: Sendable, Hashable, Identifiable {
     /// A Split View row's pane titles, drawn with a thin rule between them (CC-14). Empty for other rows.
     public var boldRanges: [Range<Int>]
     public var titleParts: [String]
+    /// The subtitle tells this row apart from another row with the same title; the title gives it room.
+    public var subtitleDisambiguates = false
 
     public init(id: String, kind: SuggestionKind, title: String, subtitle: String = "", icon: CommandBarIcon,
                 accessory: CommandBarAccessory = .none, titleParts: [String] = [], boldRanges: [Range<Int>] = []) {
@@ -100,6 +102,22 @@ public enum CommandBarText {
 
 /// Maps `OpenSuggest` rows to drawn rows. Each rule names its evidence.
 enum RowPresentation {
+    /// Tabs whose title another drawn row also has (the same page open in several Spaces) are
+    /// indistinguishable title-only rows. Each one gets "<Space> · <host>" (Space name first, then the
+    /// host; either part may be absent). Interim until Arc's own labels are captured (UXA w2 W2).
+    static func disambiguate(_ rows: [CommandBarRow], suggestions: [Suggestion]) -> [CommandBarRow] {
+        var count: [String: Int] = [:]
+        for row in rows where row.titleParts.isEmpty { count[row.title, default: 0] += 1 }
+        return zip(rows, suggestions).map { row, s in
+            guard row.kind == .switchToTab, row.titleParts.isEmpty, count[row.title, default: 0] > 1 else { return row }
+            let host = s.url?.host().map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? ""
+            let label = [s.spaceTitle ?? "", host].filter { !$0.isEmpty }.joined(separator: " · ")
+            guard !label.isEmpty else { return row }
+            var row = row; row.subtitle = label; row.subtitleDisambiguates = true
+            return row
+        }
+    }
+
     /// - navigate: "<url> — <url>", or "<page title> — <url>" after a history merge (F0040 "google.com — google.com").
     ///   Top Domains: "<name> — <domain>" (PB1-i "Netflix — netflix.com"); Easel and remote rows keep their own title (guess).
     /// - history: "<title> — <url>" (F0048 "The Browser Company — youtube.com/c/…").

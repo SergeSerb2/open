@@ -120,7 +120,13 @@ final class ResultRowView: NSView {
         let y = baseline(font)
         var title = TextLine(row.title, font: font, color: titleColor.cgColor, boldRanges: row.boldRanges)
         let available = textMaxX - l.titleX
-        title = title.truncated(to: min(available, CommandBarMetrics.titleMaxWidth), font: font, color: titleColor.cgColor)
+        var titleRoom = min(available, CommandBarMetrics.titleMaxWidth)
+        if row.subtitleDisambiguates {
+            // The subtitle is what tells this row apart: keep room for it (up to 45% of the row).
+            let wanted = ceil(TextLine(CommandBarMetrics.subtitlePrefix + row.subtitle, font: subFont, color: subColor.cgColor).width) + l.rowGap
+            titleRoom = min(titleRoom, max(available * 0.55, available - wanted))
+        }
+        title = title.truncated(to: titleRoom, font: font, color: titleColor.cgColor)
         title.draw(at: l.titleX, baseline: y, in: ctx)
         if !row.subtitle.isEmpty {
             let room = available - ceil(title.width) - l.rowGap
