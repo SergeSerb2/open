@@ -531,12 +531,16 @@ def spaces_polish_rows(factory, results, tmp, harness):
                 named = app.call('creation-state')
                 key('a', ['cmd']); key('delete'); time.sleep(.2)
                 cleared = app.call('creation-state')
-                row('creation_return_refused_when_empty', empty['open'] and spaces_only['open'] and after_spaces['open']
-                    and spaces_only['name'] == '   ' and spaces_only.get('createEnabled') is False
+                # A refused Return keeps the form; a closed form has no name or button state to read.
+                row('creation_return_refused_when_empty', empty.get('open') and spaces_only.get('open') and after_spaces.get('open')
+                    and spaces_only.get('name') == '   ' and spaces_only.get('createEnabled') is False
                     and len(app.call('spaces')) == count and named.get('createEnabled') is True
-                    and cleared['name'] == '' and cleared.get('createEnabled') is False,
-                    empty=empty['open'], spacesOnly=[spaces_only['name'], spaces_only.get('createEnabled'), after_spaces['open']],
-                    named=named.get('createEnabled'), cleared=[cleared['name'], cleared.get('createEnabled')])
+                    and cleared.get('name') == '' and cleared.get('createEnabled') is False,
+                    empty=empty.get('open'), spacesOnly=[spaces_only.get('name'), spaces_only.get('createEnabled'), after_spaces.get('open')],
+                    named=named.get('createEnabled'), cleared=[cleared.get('name'), cleared.get('createEnabled')],
+                    spacesCreated=len(app.call('spaces')) - count)
+                if not app.call('creation-state').get('open'):
+                    app.call('menu-perform', id='new-space'); time.sleep(.4)
                 # C6: Choose a Theme targets the form itself, not whatever holds the keyboard.
                 row('creation_theme_button_targets_form', cleared.get('themeButtonTargetsForm') is True,
                     themeButtonTargetsForm=cleared.get('themeButtonTargetsForm'))

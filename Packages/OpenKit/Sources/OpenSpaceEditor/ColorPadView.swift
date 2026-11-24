@@ -33,7 +33,7 @@ public final class ColorPadView: OpenDesign.ColorPadView {
     /// Tab / Shift-Tab onto the pad shows the ring; a click or the editor's own focus on open does not.
     public override func becomeFirstResponder() -> Bool {
         guard super.becomeFirstResponder() else { return false }
-        showsKeyboardFocus = (window?.keyViewSelectionDirection ?? .direct) != .direct
+        showsKeyboardFocus = (window?.keyViewSelectionDirection ?? .directSelection) != .directSelection
         return true
     }
     public override func resignFirstResponder() -> Bool {
