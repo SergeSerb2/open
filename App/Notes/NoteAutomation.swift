@@ -21,7 +21,43 @@ extension AutomationController {
     }
     return ["visible": !bar.isHidden, "frame": [bar.frame.minX, bar.frame.minY, bar.frame.width, bar.frame.height].map { Double($0) },
             "selectionTop": selectionTop, "editingLink": bar.isEditingLink,
+            // The link input in bar coordinates (its padding and height while editing a link).
+            "linkField": bar.linkField.isHiddenOrHasHiddenAncestor ? [] : { let r = bar.convert(bar.linkField.bounds, from: bar.linkField)
+              return [r.minX, r.minY, r.width, r.height].map { Double($0) } }(),
             "on": bar.buttons.filter(\.isOn).map(\.name), "items": bar.buttons.map(\.name)]
+  }
+  /// Each image's line: its height, the image's height, and the line's top above the image (the
+  /// blank band a line-height multiple adds).
+  static func imageLines(_ editor: NoteEditorView) -> [[String: Double]] {
+    guard let manager = editor.bodyView.layoutManager, let storage = editor.bodyView.textStorage else { return [] }
+    var lines: [[String: Double]] = []
+    storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+      guard let attachment = value as? NSTextAttachment, attachment.image != nil else { return }
+      let glyph = manager.glyphIndexForCharacter(at: range.location)
+      let line = manager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+      let size = manager.attachmentSize(forGlyphAt: glyph)
+      let baseline = manager.location(forGlyphAt: glyph).y
+      lines.append(["lineHeight": Double(line.height), "imageHeight": Double(size.height),
+                    "bandAbove": Double(baseline - size.height), "headIndent": Double((storage.attribute(.paragraphStyle, at: range.location,
+                      effectiveRange: nil) as? NSParagraphStyle)?.headIndent ?? 0),
+                    "ownParagraph": (storage.string as NSString).paragraphRange(for: range).length <= range.length + 1 ? 1 : 0])
+    }
+    return lines
+  }
+  /// The empty last list item: its marker's baseline in its line, and a written list line's baseline.
+  static func trailingMarker(_ editor: NoteEditorView) -> [String: Double] {
+    guard let manager = editor.bodyView.layoutManager, let storage = editor.bodyView.textStorage,
+      let marker = editor.trailingMarkerLine()?.baseline else { return [:] }
+    var item: Double = -1
+    var at = storage.length - 1
+    while at >= 0 {
+      if (storage.attribute(.noteBlock, at: at, effectiveRange: nil) as? String).flatMap(NoteBlock.init(rawValue:))?.isList == true,
+        (storage.string as NSString).character(at: at) != 0x0A {
+        item = Double(manager.location(forGlyphAt: manager.glyphIndexForCharacter(at: at)).y); break
+      }
+      at -= 1
+    }
+    return ["marker": Double(marker), "writtenItem": item]
   }
   static func imageCount(_ editor: NoteEditorView) -> Int {
     var count = 0
@@ -239,6 +275,8 @@ extension AutomationController {
       "formatBar": host.map { Self.barState($0.editor) } ?? [:],
       "gutterVisible": host.map { !$0.editor.gutterButton.isHidden } ?? false,
       "images": host.map { Self.imageCount($0.editor) } ?? 0,
+      "imageLines": host.map { Self.imageLines($0.editor) } ?? [],
+      "trailingMarker": host.map { Self.trailingMarker($0.editor) } ?? [:],
       "imageError": host?.editor.lastImageError ?? "",
       "importPlaceholder": noteID.flatMap { app.notes.load($0)?.importPlaceholder } ?? false,
       "assets": noteID.map { (try? FileManager.default.contentsOfDirectory(atPath: app.notes.assetDirectory(for: $0).path))?.count ?? 0 } ?? 0,

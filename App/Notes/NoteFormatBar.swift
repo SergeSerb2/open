@@ -11,6 +11,9 @@ final class NoteFormatBar: NSView, NSTextFieldDelegate {
   private(set) var buttons: [NoteFormatButton] = []
   private let stack = NSStackView()
   let linkField = NSTextField()
+  /// The link input's padded box: as tall as the buttons, so the bar keeps its 36 pt (UXE W3 N2).
+  private let linkBox = NSView()
+  private var linkStart = ""
   private(set) var isEditingLink = false
   private var dark = false
   /// (name, accessibility title, SF Symbol or text label)
@@ -42,15 +45,27 @@ final class NoteFormatBar: NSView, NSTextFieldDelegate {
     linkField.placeholderString = "Paste or type a link"   // GUESS: Arc's link input text is not captured.
     linkField.isBordered = false; linkField.drawsBackground = false; linkField.focusRingType = .none
     linkField.font = .systemFont(ofSize: 13)
+    linkField.cell?.usesSingleLineMode = true; linkField.cell?.isScrollable = true
     linkField.delegate = self
-    linkField.widthAnchor.constraint(equalToConstant: 240).isActive = true
-    linkField.isHidden = true
     linkField.setAccessibilityIdentifier("note-link-field")
-    stack.addArrangedSubview(linkField)
+    linkField.translatesAutoresizingMaskIntoConstraints = false
+    linkBox.wantsLayer = true; linkBox.layer?.cornerRadius = 5
+    linkBox.translatesAutoresizingMaskIntoConstraints = false
+    linkBox.addSubview(linkField)
+    NSLayoutConstraint.activate([
+      linkBox.widthAnchor.constraint(equalToConstant: Self.linkBoxWidth), linkBox.heightAnchor.constraint(equalToConstant: 28),
+      linkField.leadingAnchor.constraint(equalTo: linkBox.leadingAnchor, constant: 8),
+      linkField.trailingAnchor.constraint(equalTo: linkBox.trailingAnchor, constant: -8),
+      linkField.centerYAnchor.constraint(equalTo: linkBox.centerYAnchor)])
+    linkBox.isHidden = true
+    stack.addArrangedSubview(linkBox)
     setAccessibilityRole(.toolbar); setAccessibilityLabel("Format Selection")
     setAccessibilityIdentifier("note-format-bar")
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+  /// The buttons' row width (8 × 28 pt, 2 separators, 2 pt spacing): the input takes the same width.
+  static let linkBoxWidth: CGFloat = 244
 
   private static func separator() -> NSView {
     let line = NSBox(); line.boxType = .separator
@@ -65,21 +80,31 @@ final class NoteFormatBar: NSView, NSTextFieldDelegate {
     layer?.backgroundColor = NoteLook.menuBackground.resolve(dark).cgColor
     layer?.borderColor = NoteLook.menuBorder.resolve(dark).cgColor
     linkField.textColor = NoteLook.menuText.resolve(dark)
+    linkBox.layer?.backgroundColor = NoteLook.menuHover.resolve(dark).cgColor
     for button in buttons { button.apply(dark: dark) }
   }
 
   func refresh() { for button in buttons { button.isOn = state?(button.name) ?? false } }
 
-  /// Swaps the buttons for the link input; Return applies, Esc cancels.
+  /// Swaps the buttons for the link input; Return or clicking away applies, Esc cancels.
   func beginLink(current: String) {
     isEditingLink = true
-    for view in stack.arrangedSubviews where view !== linkField { view.isHidden = true }
-    linkField.isHidden = false; linkField.stringValue = current
+    linkStart = current
+    for view in stack.arrangedSubviews where view !== linkBox { view.isHidden = true }
+    linkBox.isHidden = false; linkField.stringValue = current
     window?.makeFirstResponder(linkField)
   }
   func endLink() {
     isEditingLink = false
-    for view in stack.arrangedSubviews { view.isHidden = view === linkField }
+    for view in stack.arrangedSubviews { view.isHidden = view === linkBox }
+  }
+  /// Focus left the input without Return or Esc (a click elsewhere): keep what was typed.
+  func controlTextDidEndEditing(_ obj: Notification) {
+    guard isEditingLink else { return }
+    let value = linkField.stringValue
+    endLink()
+    if value != linkStart { _ = onLink?(value) }
+    (superview as? NoteEditorView)?.updateChrome()
   }
   func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
     if selector == #selector(insertNewline(_:)) {

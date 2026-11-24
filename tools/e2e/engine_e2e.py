@@ -15492,11 +15492,19 @@ def main():
                 factory, results["notes-format"], tmp, sys.modules[__name__])
         elif opts.only == "easel":
             results["easel"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/easel.py"))["run"](
+            # OPEN_EASEL_UXE_ONLY=1 runs only the UX round 1 wave 3 rows (tools/e2e/notes_easels_ux1.py).
+            if os.environ.get("OPEN_EASEL_UXE_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/easel.py"))["run"](
+                    factory, results["easel"], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_easels_ux1.py"))["easel_rows"](
                 factory, results["easel"], tmp, sys.modules[__name__])
         elif opts.only == "notes":
             results["notes"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes.py"))["run"](
+            # OPEN_NOTES_UXE_ONLY=1 runs only the UX round 1 wave 3 rows (tools/e2e/notes_easels_ux1.py).
+            if os.environ.get("OPEN_NOTES_UXE_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/notes.py"))["run"](
+                    factory, results["notes"], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/notes_easels_ux1.py"))["note_rows"](
                 factory, results["notes"], tmp, sys.modules[__name__])
         elif opts.only == "welcome":
             results["welcome"] = CheckedResults(tracker)

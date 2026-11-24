@@ -660,11 +660,27 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
     let attachment = NSTextAttachment()
     attachment.image = image
     attachment.bounds = NoteRichText.imageBounds(image.size, width: columnWidth)
-    let piece = NSMutableAttributedString(attachment: attachment)
-    var attributes = bodyView.typingAttributes
+    // The image is its own plain paragraph (UXE W3 N3): a line break before it when the caret is
+    // inside a paragraph, and after it when text follows; no list marker or indent on its line.
+    let range = bodyView.selectedRange()
+    let string = bodyView.string as NSString
+    let typing = bodyView.typingAttributes
+    var attributes = typing
     attributes[.noteImage] = name
-    piece.addAttributes(attributes, range: NSRange(location: 0, length: piece.length))
-    replace(bodyView.selectedRange(), with: piece)
+    attributes[.noteBlock] = nil; attributes[.noteLevel] = nil
+    let piece = NSMutableAttributedString()
+    if range.location > 0, string.character(at: range.location - 1) != 0x0A {
+      piece.append(NSAttributedString(string: "\n", attributes: typing))
+    }
+    let imageText = NSMutableAttributedString(attachment: attachment)
+    imageText.addAttributes(attributes, range: NSRange(location: 0, length: imageText.length))
+    piece.append(imageText)
+    let end = NSMaxRange(range)
+    if end < string.length, string.character(at: end) != 0x0A {
+      attributes[.noteImage] = nil
+      piece.append(NSAttributedString(string: "\n", attributes: attributes))
+    }
+    replace(range, with: piece)
     return true
   }
 
@@ -681,6 +697,17 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
 
   // MARK: List markers
 
+  /// The empty last list item's line (it has no character) and its marker's baseline in that line.
+  /// The line's extra height sits above the glyphs, so the baseline is the descent above the line's
+  /// bottom, where the caret stands; measuring from the top put the marker ~4 pt high (UXE W3 N1).
+  func trailingMarkerLine() -> (fragment: NSRect, baseline: CGFloat)? {
+    guard let block = trailingBlock, block.isList, let manager = bodyView.layoutManager, let storage = bodyView.textStorage else { return nil }
+    let font = NoteLook.bodyFont
+    var fragment = manager.extraLineFragmentRect
+    if fragment == .zero, storage.length == 0 { fragment = NSRect(x: 0, y: 0, width: bodyView.bounds.width, height: font.ascender - font.descender) }
+    let lineHeight = manager.defaultLineHeight(for: font) * NoteLook.bodyLineHeightMultiple
+    return (fragment, (fragment.height > 0 ? fragment.height : lineHeight) + font.descender)
+  }
   func drawMarkers(in view: NoteTextView, dirtyRect: NSRect) {
     guard view === bodyView, let manager = view.layoutManager, let container = view.textContainer,
       let storage = view.textStorage else { return }
@@ -701,15 +728,12 @@ final class NoteEditorView: NSView, NSTextViewDelegate {
       draw(item.marker, level: item.level, fragment: fragment, baseline: manager.location(forGlyphAt: glyph).y)
     }
     // An empty last list item has no character: its marker comes from the typing attributes.
-    if let block = trailingBlock, block.isList {
+    if let block = trailingBlock, block.isList, let line = trailingMarkerLine() {
       let level = view.typingAttributes[.noteLevel] as? Int ?? 0
       let probe = NSMutableAttributedString(attributedString: storage)
       probe.append(NSAttributedString(string: "\u{200B}", attributes: [.noteBlock: block.rawValue, .noteLevel: level]))
       let marker = NoteRichText.markers(in: probe, range: NSRange(location: storage.length, length: 1)).last?.marker ?? "•"
-      var fragment = manager.extraLineFragmentRect
-      if fragment == .zero, storage.length == 0 { fragment = NSRect(x: 0, y: 0, width: view.bounds.width, height: font.ascender - font.descender) }
-      let lineHeight = manager.defaultLineHeight(for: font) * NoteLook.bodyLineHeightMultiple
-      draw(marker, level: level, fragment: fragment, baseline: (fragment.height > 0 ? fragment.height : lineHeight) - (lineHeight - font.ascender) - 0)
+      draw(marker, level: level, fragment: line.fragment, baseline: line.baseline)
     }
   }
 

@@ -108,6 +108,25 @@ public final class EaselCanvasView: NSView {
     func viewRect(_ r: CGRect) -> CGRect {
         CGRect(x: originX + r.minX * scale, y: r.minY * scale, width: r.width * scale, height: r.height * scale)
     }
+    /// The title's metrics are Arc's at its 906-pt page (scale 0.906). On a narrower canvas they
+    /// shrink with it (13 pt at least), so shapes keep their distance from the title as at full
+    /// width; a shape that still reaches the title's line pushes the title up (UXE W3 E3, interim
+    /// until capture UXE-W3-C1).
+    static let titleReferenceScale: CGFloat = 0.906
+    static let titleMinimumFontSize: CGFloat = 13
+    func layoutTitle(width: CGFloat) {
+        let f = min(1, scale / Self.titleReferenceScale)
+        let font = NSFont.systemFont(ofSize: max(Self.titleMinimumFontSize, EaselTitleField.font.pointSize * f), weight: .bold)
+        titleField.titleFont = font
+        let lineHeight = ceil(font.ascender - font.descender + font.leading) + 4
+        let tw = min(Self.titleSize.width * f, max(120, width - 40))
+        var frame = CGRect(x: (width - tw) / 2, y: (Self.titleTop + (Self.titleSize.height - lineHeight / f) / 2) * f,
+                           width: tw, height: lineHeight)
+        let gap: CGFloat = 4
+        let below = document.objects.map { viewRect($0.frame) }.filter { $0.minX < frame.maxX && $0.maxX > frame.minX && $0.maxY > frame.minY }
+        if let top = below.map(\.minY).min(), top < frame.maxY + gap { frame.origin.y = max(2, top - gap - lineHeight) }
+        titleField.frame = frame
+    }
     func docPoint(_ p: CGPoint) -> CGPoint { CGPoint(x: (p.x - originX) / scale, y: p.y / scale) }
     func viewPoint(_ p: CGPoint) -> CGPoint { CGPoint(x: originX + p.x * scale, y: p.y * scale) }
 
@@ -137,9 +156,7 @@ public final class EaselCanvasView: NSView {
         let bottom = max(document.contentBottom, draftView.map { $0.object.frame.maxY } ?? 0) + 400
         let height = max(clip.height, bottom * scale)
         if docView.frame.size != CGSize(width: width, height: height) { docView.frame.size = CGSize(width: width, height: height) }
-        let tw = min(Self.titleSize.width, max(120, width - 40))
-        let lineHeight = ceil(EaselTitleField.font.ascender - EaselTitleField.font.descender + EaselTitleField.font.leading) + 4
-        titleField.frame = CGRect(x: (width - tw) / 2, y: Self.titleTop + (Self.titleSize.height - lineHeight) / 2, width: tw, height: lineHeight)
+        layoutTitle(width: width)
         for (id, view) in objectViews {
             guard let object = document.object(id) else { continue }
             view.scale = scale
@@ -559,6 +576,22 @@ public final class EaselCanvasView: NSView {
 
     public func beginTextEditing(_ id: UUID) { beginTextEditing(id, undoBase: nil) }
 
+    /// Keeps the open text box clear of the floating toolbar while it grows or changes size: the
+    /// canvas scrolls it up, never past the box's own top (UXE W3 E2).
+    func revealTextEditor(_ editorFrame: CGRect) {
+        let clip = scrollView.contentView
+        let visible = clip.bounds
+        let bar = convert(toolbar.frame, to: docView)
+        guard editorFrame.minX < bar.maxX, editorFrame.maxX > bar.minX else { return }
+        let overlap = editorFrame.maxY + Self.toolbarClearance - bar.minY
+        let room = editorFrame.minY - visible.minY - Self.toolbarClearance
+        let step = min(overlap, room, docView.frame.height - visible.maxY)
+        guard step > 0.5 else { return }
+        clip.scroll(to: CGPoint(x: visible.minX, y: visible.minY + step))
+        scrollView.reflectScrolledClipView(clip)
+    }
+    static let toolbarClearance: CGFloat = 8
+
     func beginTextEditing(_ id: UUID, undoBase: EaselDocument?) {
         guard let object = document.object(id), case .text = object.content else { return }
         endTextEditing(commit: true)
@@ -577,9 +610,12 @@ public final class EaselCanvasView: NSView {
         guard let editor = textEditor else { return }
         textEditor = nil
         let id = editor.objectID
+        // Read before the removal: removing the text view hands first responder to the window, so a
+        // check afterwards never matched and Escape left the canvas without keyboard focus (UXE W3 E1).
+        let hadFocus = (window?.firstResponder as? NSView)?.isDescendant(of: editor) == true
         editor.removeFromSuperview()
         objectViews[id]?.editing = false
-        defer { if window?.firstResponder === editor.textView { window?.makeFirstResponder(docView) }; updateSelectionChrome() }
+        defer { if hadFocus { window?.makeFirstResponder(docView) }; updateSelectionChrome() }
         guard let object = document.object(id), case .text(var text) = object.content else { return }
         // Typed or pasted text over the stored limit would make the next load refuse the Easel.
         let typed = EaselDocument.clipped(editor.textView.string, utf16: EaselDocument.maxTextLength)
@@ -670,6 +706,8 @@ public final class EaselCanvasView: NSView {
                 "popoverColor": popover.isHidden ? NSNull() : popover.current.rawValue as Any,
                 "editingText": textEditor.map { $0.objectID.uuidString.lowercased() } as Any? ?? NSNull(),
                 "editorText": textEditor?.textView.string as Any? ?? NSNull(),
+                "editorFrame": textEditor.map { r(convert($0.frame, from: docView)) } as Any? ?? NSNull(),
+                "titleFontSize": titleField.titleFont.pointSize,
                 "canUndo": canvasUndoManager.canUndo, "canRedo": canvasUndoManager.canRedo,
                 "undoName": canvasUndoManager.undoActionName, "commitCount": commitCount,
                 "documentViewSize": [docView.frame.width, docView.frame.height],

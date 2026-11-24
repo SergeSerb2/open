@@ -79,7 +79,13 @@ enum NoteRichText {
       else { storage.removeAttribute(.noteBlock, range: enclosing) }
       if block?.isList == true { storage.addAttribute(.noteLevel, value: level, range: enclosing) }
       else { storage.removeAttribute(.noteLevel, range: enclosing) }
-      storage.addAttribute(.paragraphStyle, value: paragraphStyle(block, level: level), range: enclosing)
+      // An image line is as tall as the image: the body's 1.3 multiple would add 0.3 × its height
+      // of blank space above it (UXE W3 N3).
+      var hasImage = false
+      if enclosing.length > 0 {
+        storage.enumerateAttribute(.attachment, in: enclosing) { value, _, stop in if value != nil { hasImage = true; stop.pointee = true } }
+      }
+      storage.addAttribute(.paragraphStyle, value: paragraphStyle(block, level: level, image: hasImage), range: enclosing)
       let base = baseFont(block)
       let isHeading = block == .h1 || block == .h2 || block == .h3
       let color = (isHeading ? NoteLook.heading : NoteLook.body).resolve(dark)
@@ -102,7 +108,7 @@ enum NoteRichText {
     storage.endEditing()
   }
 
-  static func paragraphStyle(_ block: NoteBlock?, level: Int) -> NSParagraphStyle {
+  static func paragraphStyle(_ block: NoteBlock?, level: Int, image: Bool = false) -> NSParagraphStyle {
     let style = NSMutableParagraphStyle()
     switch block {
     case .h1, .h2, .h3:
@@ -116,6 +122,7 @@ enum NoteRichText {
     default:
       style.lineHeightMultiple = NoteLook.bodyLineHeightMultiple
     }
+    if image { style.lineHeightMultiple = 1 }
     return style
   }
 
