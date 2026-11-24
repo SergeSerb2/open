@@ -5,6 +5,15 @@ import AppKit
 /// first responder and any owned window's accessibility tree. Input still travels through the
 /// existing `key` command (NSApp.sendEvent); nothing here sends events or changes focus.
 extension AutomationController {
+  /// `OPEN_AUTOMATION_FULL_KEYBOARD_ACCESS=1` (automation builds only): Open behaves as if Keyboard
+  /// navigation (Full Keyboard Access) were on, without touching the user's system setting.
+  static func installFullKeyboardAccessOverrideIfRequested() {
+    guard ProcessInfo.processInfo.environment["OPEN_AUTOMATION_FULL_KEYBOARD_ACCESS"] == "1",
+      let method = class_getInstanceMethod(NSApplication.self, #selector(getter: NSApplication.isFullKeyboardAccessEnabled)) else { return }
+    let on: @convention(block) (AnyObject) -> Bool = { _ in true }
+    method_setImplementation(method, imp_implementationWithBlock(on))
+  }
+
   /// Window-relative frame, top-left origin, of an accessibility element or view.
   private func auditFrame(_ object: NSObject, in window: NSWindow) -> [Double] {
     var frame = CGRect.zero
@@ -30,6 +39,36 @@ extension AutomationController {
     return ""
   }
 
+  /// `ax-debug`: for every NSTableView/NSOutlineView in the key window, what the attribute-based
+  /// API answers for AXChildren and AXRows, the unignored count, and each row's parent and ignored state.
+  func auditAXDebug(_ a: [String: Any]) throws -> [String: Any] {
+    guard let window = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? NSApp.keyWindow,
+      let content = window.contentView else { throw Failure(message: "no window") }
+    var tables: [[String: Any]] = []
+    func walk(_ view: NSView) {
+      if let table = view as? NSTableView {
+        let modern = table.accessibilityChildren() ?? []
+        let attr = table.accessibilityAttributeValue(.children) as? [Any] ?? []
+        let rows = table.accessibilityAttributeValue(.rows) as? [Any] ?? []
+        let unignored = NSAccessibility.unignoredChildren(from: modern)
+        let detail = modern.prefix(4).map { child -> [String: Any] in
+          let object = child as AnyObject
+          let parent = (object as? NSView)?.accessibilityParent() as AnyObject?
+          return ["class": String(describing: type(of: object)), "parentIsTable": parent === table,
+            "parentClass": parent.map { String(describing: type(of: $0)) } ?? "nil",
+            "ignored": (object as? NSObject)?.accessibilityIsIgnored() ?? true,
+            "element": (object as? NSView)?.isAccessibilityElement() ?? false]
+        }
+        tables.append(["class": String(describing: type(of: table)), "modern": modern.count, "attributeChildren": attr.count,
+          "arrayCountChildren": table.accessibilityArrayAttributeCount(.children), "arrayCountRows": table.accessibilityArrayAttributeCount(.rows),
+          "attributeRows": rows.count, "unignored": unignored.count, "detail": detail])
+      }
+      view.subviews.forEach(walk)
+    }
+    walk(content)
+    return ["tables": tables]
+  }
+
   /// `responder`: the key (or given) window's first responder: class, accessibility role and
   /// label, frame, and focus ring type. A field editor reports its text field.
   func auditResponder(_ a: [String: Any]) throws -> [String: Any] {
@@ -39,7 +78,7 @@ extension AutomationController {
     if let editor = responder as? NSTextView, editor.isFieldEditor, let field = editor.delegate as? NSResponder { responder = field }
     var row: [String: Any] = ["window": window.windowNumber, "windowClass": String(describing: type(of: window)),
       "windowTitle": window.title, "class": responder.map { String(describing: type(of: $0)) } ?? "none",
-      "isWindow": responder === window]
+      "isWindow": responder === window, "fullKeyboardAccess": NSApp.isFullKeyboardAccessEnabled]
     if let object = responder as NSObject? {
       row["role"] = auditString(object, "accessibilityRole")
       row["label"] = auditString(object, "accessibilityLabel")

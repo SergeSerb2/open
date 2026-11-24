@@ -158,6 +158,7 @@
 
     init(app: AppDelegate) {
       self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self
+      Self.installFullKeyboardAccessOverrideIfRequested()
       if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREPARATION_TRACE"] == "1" {
         libraryPreparationHeartbeat = LibraryPreparationHeartbeat()
         libraryPreparationHeartbeat?.start()
@@ -474,6 +475,7 @@
         NSApp.yieldActivation(to: target); return true
       case "responder": return try auditResponder(a)
       case "ax-tree": return try auditAXTree(a)
+      case "ax-debug": return try auditAXDebug(a)
       case "native-focus-state":
         return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "uptime": ProcessInfo.processInfo.systemUptime,
