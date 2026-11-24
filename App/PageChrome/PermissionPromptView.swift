@@ -4,7 +4,7 @@ import AppKit
 final class PermissionPromptView: PageChromePopoverView {
   let symbol = NSImageView()
   let question = NSTextField(wrappingLabelWithString: "")
-  let help = NSTextField(labelWithString: "Click the lock to change this any time")
+  let help = NSTextField(wrappingLabelWithString: "Change this any time in Site Controls")
   let allow = PermissionButton(title: "Allow")
   let notNow = PermissionButton(title: "Not Now")
   override var isFlipped: Bool { true }
@@ -26,26 +26,35 @@ final class PermissionPromptView: PageChromePopoverView {
   /// The prompt's window is not key when it shows: the first click must reach it (review round 2).
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
   override func mouseDown(with event: NSEvent) { onFocusRequest?(); super.mouseDown(with: event) }
+  static let preferredWidth: CGFloat = 320, minimumWidth: CGFloat = 260
   init() {
-    super.init(frame: CGRect(x: 0, y: 0, width: 320, height: 156))
+    super.init(frame: CGRect(x: 0, y: 0, width: Self.preferredWidth, height: 156))
     question.font = .systemFont(ofSize: 13, weight: .semibold); question.maximumNumberOfLines = 3
-    help.font = .systemFont(ofSize: 11); help.textColor = .secondaryLabelColor
+    help.font = .systemFont(ofSize: 11); help.textColor = .secondaryLabelColor; help.maximumNumberOfLines = 2
     for child in [symbol, question, help, notNow, allow] { addSubview(child) }
     onReturn = { [weak self] in if self?.hasKeyboard == true { self?.allow.performClick(nil) } }
     onEscape = { [weak self] in if self?.hasKeyboard == true { self?.notNow.performClick(nil) } }
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-  func preferredHeight(width: CGFloat) -> CGFloat {
-    let questionHeight = question.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: max(1, width - 60), height: 64)).height ?? 48
-    return max(156, 108 + questionHeight)
+  // Compact stack (UX round 1 F17): question, help line under it, buttons at the bottom.
+  private func questionHeight(width: CGFloat) -> CGFloat {
+    let measured = question.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: max(1, width - 60), height: 64)).height ?? 32
+    return max(24, ceil(measured))
   }
+  /// The help line wraps at the 260 pt minimum width (Bold Text, larger fonts) instead of clipping.
+  private func helpHeight(width: CGFloat) -> CGFloat {
+    let measured = help.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: max(1, width - 60), height: 40)).height ?? 16
+    return max(16, ceil(measured))
+  }
+  func preferredHeight(width: CGFloat) -> CGFloat { 16 + questionHeight(width: width) + 8 + helpHeight(width: width) + 16 + 28 + 14 }
   override func layout() {
     super.layout()
+    let questionHeight = questionHeight(width: bounds.width)
     symbol.frame = CGRect(x: 16, y: 16, width: 20, height: 24)
-    question.frame = CGRect(x: 44, y: 16, width: max(1, bounds.width - 60), height: bounds.height - 108)
-    help.frame = CGRect(x: 16, y: bounds.height - 80, width: max(1, bounds.width - 32), height: 16)
-    notNow.frame = CGRect(x: bounds.width - 188, y: bounds.height - 44, width: 84, height: 28)
-    allow.frame = CGRect(x: bounds.width - 96, y: bounds.height - 44, width: 80, height: 28)
+    question.frame = CGRect(x: 44, y: 16, width: max(1, bounds.width - 60), height: questionHeight)
+    help.frame = CGRect(x: 44, y: question.frame.maxY + 8, width: max(1, bounds.width - 60), height: helpHeight(width: bounds.width))
+    notNow.frame = CGRect(x: bounds.width - 188, y: bounds.height - 42, width: 84, height: 28)
+    allow.frame = CGRect(x: bounds.width - 96, y: bounds.height - 42, width: 80, height: 28)
   }
 }
 

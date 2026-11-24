@@ -11,10 +11,18 @@ import OpenDesign
 private struct SettingsPageKey: EnvironmentKey {
     static let defaultValue: SettingsPageState? = nil
 }
+private struct SettingsViewportHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat = SettingsTokens.Redesign.window.height
+}
 extension EnvironmentValues {
     var settingsPage: SettingsPageState? {
         get { self[SettingsPageKey.self] }
         set { self[SettingsPageKey.self] = newValue }
+    }
+    /// The detail pane's visible height: content that has its own scroller sizes to it.
+    var settingsViewportHeight: CGFloat {
+        get { self[SettingsViewportHeightKey.self] }
+        set { self[SettingsViewportHeightKey.self] = newValue }
     }
 }
 

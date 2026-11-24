@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Generate About Credits.rtf and its text twin from the release inventory.
 
+Credits.rtf (the About panel) lists each component as name, short version and license, with an
+indented Source line for copyleft (LGPL, GPL, MPL) components; the text twin Acknowledgements.txt
+keeps the inventory's full use and source-offer columns. Both carry every license text and the
+Chromium credits.
+
 No network, third-party modules, or credentials. Preview mode warns about
 missing/sample Chromium credits and an unset public MPL source location.
 --require-cef-credits enforces both gates for existing release callers.
@@ -291,25 +296,78 @@ def shared_credits(products):
     return '\n'.join(out)
 
 
-def rtf(text):
+HEX_RUN = re.compile(r'\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b')  # hashes; an all-digit build number stays
+
+
+def short_version(version):
+    """The About panel's version: the first part, without hashes, commit or checksum words and notes."""
+    first = version.split(';')[0]
+    first = re.sub(r'\([^)]*\)', '', first)               # (branch 8078), (regex-syntax 0.8.11)
+    first = re.sub(r'\+g[0-9a-f]+', '', first)             # 156.0.14+g4fa4ab5
+    first = re.sub(r'\b(?:commit|SHA-256|snapshot commit)\s+[0-9a-f]+', '', first)
+    first = re.sub(r'\s+as labelled by .*$', '', first)
+    first = re.sub(r'\s+bundled snapshot$', '', first)
+    first = HEX_RUN.sub('', first)
+    first = re.sub(r'^(\d{4}-\d{2}-\d{2})_\S+', r'\1', first.strip())   # 2026-10-22_08-36-41_UTC
+    return re.sub(r'\s{2,}', ' ', first).strip(' ,;')
+
+
+COPYLEFT = re.compile(r'\b(?:L?GPL|MPL)-')
+
+
+def source_url(offer):
+    """The first public https URL of the inventory's source/offer column, without trailing punctuation."""
+    match = re.search(r'https://[^\s`|]+', offer)
+    return match[0].rstrip(').,;') if match else None
+
+
+def short_license(license_name):
+    """SPDX-style identifiers only: notes in parentheses and prose parts stay in the text twin."""
+    plain = re.sub(r'\s*\([^)]*\)', '', license_name)
+    parts = [part.strip() for part in plain.split(';')]
+    kept = [part for part in parts if part and not re.fullmatch(r'[a-z ]+', part)]
+    return ', '.join(kept or parts)
+
+
+def about_line(name, version, license_name):
+    """One About panel line: name, short version, license."""
+    license_text = short_license(license_name)
+    if license_text == 'Open-owned':
+        return f'{name} — {license_text}'
+    short = re.sub(r'^Embedded in ', 'in ', short_version(version))
+    # No version when it is empty, already in the name (Rust: idna 0.2.3) or names the parent (Chromium bundled).
+    if not short or name.endswith(short) or '(' + short.split()[0] + ' ' in name:
+        return f'{name} — {license_text}'
+    return f'{name} {short} — {license_text}' if short[0].isdigit() or short[0] == 'v' else f'{name}, {short} — {license_text}'
+
+
+def rtf(text, hanging=frozenset(), indented=frozenset()):
     # RTF uses signed UTF-16 code units, including surrogate pairs for non-BMP
-    # text. Escape braces/backslashes before emitting control words.
-    escaped = []
-    for char in text:
+    # text. Escape braces/backslashes before emitting control words. Lines in
+    # `hanging` get their own paragraph with a hanging indent (About components);
+    # lines in `indented` sit at that indent (a component's Source line).
+    def escape(char):
         if char in '\\{}':
-            escaped.append('\\' + char)
-        elif char == '\n':
-            escaped.append('\\par\n')
-        elif char == '\t':
-            escaped.append('\\tab ')
-        elif 32 <= ord(char) < 127:
-            escaped.append(char)
+            return '\\' + char
+        if char == '\t':
+            return '\\tab '
+        if 32 <= ord(char) < 127:
+            return char
+        data = char.encode('utf-16-le')
+        return ''.join('\\u%d?' % (u if u < 32768 else u - 65536)
+                       for u in (int.from_bytes(data[i:i + 2], 'little') for i in range(0, len(data), 2)))
+    out = []
+    lines = text.split('\n')
+    for index, line in enumerate(lines):
+        body = ''.join(escape(char) for char in line)
+        end = '\\par\n' if index < len(lines) - 1 else ''
+        if line in hanging:
+            out.append('\\pard\\fi-360\\li360 ' + body + end + '\\pard ')
+        elif line in indented:
+            out.append('\\pard\\li360 ' + body + end + '\\pard ')
         else:
-            data = char.encode('utf-16-le')
-            for i in range(0, len(data), 2):
-                unit = int.from_bytes(data[i:i + 2], 'little')
-                escaped.append('\\u%d?' % (unit if unit < 32768 else unit - 65536))
-    return '{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Helvetica;}}\\uc1\\f0\\fs20\n' + ''.join(escaped) + '}\n'
+            out.append(body + end)
+    return '{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Helvetica;}}\\uc1\\f0\\fs20\n' + ''.join(out) + '}\n'
 
 
 def main():
@@ -377,13 +435,32 @@ def main():
             data.decode('utf-8')
 
     paragraphs = [f'Open {marketing} ({build})', stamp, '']
+    # The About panel (Credits.rtf) is user-facing: one plain line per component, with the
+    # public source location of copyleft components. The use and offer columns hold release
+    # review notes; they stay complete in Acknowledgements.txt. Every license text and the
+    # Chromium credits below are in both outputs.
+    about = [f'Open {marketing} ({build})', stamp, '', 'Components', '']
+    hanging, indented = set(), set()
     for name, version, license_name, use, offer in shipped:
         paragraphs.extend([f'{name} — {version} — {license_name}\n{use}\n{offer}', ''])
+        line = about_line(name, version, license_name)
+        about.append(line); hanging.add(line)
+        # Copyleft components keep their source location in the App itself (lead, #683 r2).
+        if COPYLEFT.search(license_name):
+            source = source_url(offer)
+            if not source:
+                raise ValueError('copyleft component needs a public source URL in the inventory: ' + name)
+            about.append('Source: ' + source); indented.add('Source: ' + source)
+    about.append('')
     if needs_source:
-        paragraphs.extend(['Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)'), ''])
-    paragraphs.extend(['License texts', ''])
+        location = 'Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)')
+        paragraphs.extend([location, ''])
+        about.extend([location, ''])
+    about.extend(['Full notices for each component, including how Open uses it, are in '
+                  'Acknowledgements.txt, published with each Open release.', ''])
+    tail = ['License texts', '']
     for name, text in texts:
-        paragraphs.extend([name, text.rstrip(), ''])
+        tail.extend([name, text.rstrip(), ''])
     complete = False
     cef_bytes = None
     if a.cef_credits.is_file():
@@ -400,7 +477,7 @@ def main():
                 parser = CreditsParser()
                 parser.feed(raw)
                 body = ''.join(parser.parts).strip()
-            paragraphs.extend(['Chromium and third-party credits (HTML twin: CREDITS.html)', body, ''])
+            tail.extend(['Chromium and third-party credits (HTML twin: CREDITS.html)', body, ''])
     if not complete:
         message = 'INCOMPLETE PREVIEW: full Chromium/codec CREDITS.html is missing or is the upstream sample.'
         if a.require_cef_credits:
@@ -410,8 +487,9 @@ def main():
         raise ValueError('\n'.join(failures))
     for message in warnings:
         print('WARNING: ' + message, file=sys.stderr)
-        paragraphs.extend([message, ''])
-    text = '\n'.join(paragraphs)
+        tail.extend([message, ''])
+    text = '\n'.join(paragraphs + tail)
+    about_text = '\n'.join(about + tail)
     twin = a.text_output or a.output.with_name('Acknowledgements.txt')
     if a.output.resolve() == twin.resolve():
         raise ValueError('RTF and TXT outputs must be different paths')
@@ -420,7 +498,7 @@ def main():
         raise ValueError('RTF and TXT outputs must not overwrite the HTML twin')
     a.output.parent.mkdir(parents=True, exist_ok=True)
     twin.parent.mkdir(parents=True, exist_ok=True)
-    a.output.write_text(rtf(text), encoding='ascii')
+    a.output.write_text(rtf(about_text, frozenset(hanging), frozenset(indented)), encoding='ascii')
     twin.write_text(text, encoding='utf-8')
     # Keep the exact distribution HTML next to each text output, including
     # previews. A sample twin is labelled incomplete above, never accepted.
