@@ -214,18 +214,20 @@ enum Checks {
         if let r = sidebar.displayedRows.firstIndex(of: "newTab"), let outline = sidebar.focusedOutline {
             let f = outline.rect(ofRow: r)
             click(scene.convert(NSPoint(x: f.midX, y: f.midY), from: outline))
-        }
-        check(delegate.log.contains(.openCommandBar(.newTabRow)), "click on New Tab asks for the command bar")
-        delegate.log.removeAll()
-        if let f = sidebar.newFolderButtonFrame {
+            check(delegate.log.contains(.openCommandBar(.newTabRow)), "click on New Tab asks for the command bar")
+            delegate.log.removeAll()
             let pinnedBefore = space.pinned.count
-            click(scene.convert(NSPoint(x: f.midX, y: f.midY), from: sidebar))
+            click(scene.convert(NSPoint(x: f.maxX - 16, y: f.midY), from: outline))
             pump()
-            check(delegate.log.contains(.newFolder(in: .spacePinned(space.id))) && space.pinned.count == pinnedBefore + 1,
-                  "click on New Tab row's New Folder button creates a pinned folder")
-            if let field = host.firstResponder as? NSTextView { host.makeFirstResponder(nil); _ = field }
-            undo.undo(); pump()
-        } else { check(false, "New Tab row shows a New Folder button") }
+            let cell = outline.view(atColumn: 0, row: r, makeIfNecessary: false)
+            let hasFolderButton = cell?.subviews.contains(where: {
+                $0.accessibilityIdentifier() == "sidebarNewFolderButton" || $0.accessibilityLabel() == "New Folder"
+            }) ?? false
+            check(!hasFolderButton && delegate.log.contains(.openCommandBar(.newTabRow)) && space.pinned.count == pinnedBefore,
+                  "New Tab row has no trailing New Folder button and trailing click asks for the command bar")
+        } else {
+            check(false, "New Tab row is displayed")
+        }
         delegate.log.removeAll()
         click(scene.convert(NSPoint(x: 100, y: 64), from: sidebar))
         check(delegate.log.contains(.openCommandBar(.urlField)), "click on the URL field asks for the command bar")

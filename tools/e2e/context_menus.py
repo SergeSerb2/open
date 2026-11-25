@@ -1000,8 +1000,8 @@ def context_menu_checks(factory, results, tmp, h):
                     h._try(lambda t=tab_id: app.call('close', tab=t))
                 h._try(focus)
         run('cm_selection_menu_order', selection_menu_order)
-        # Easy sidebar folder workflows: single-tab "New Folder with Tab", "Move to ▸" existing folder,
-        # and the visible New Folder button on the New Tab row (all with auto-rename and one-step Undo).
+        # Easy sidebar folder workflows: single-tab "New Folder with Tab" and "Move to ▸" existing folder
+        # (with no trailing New Folder button on the New Tab row).
         def sidebar_folder_quick_actions():
             focus()
             app.call('space', space=app.call('space-create', title='Quick folders', profile='Default'))
@@ -1029,34 +1029,37 @@ def context_menu_checks(factory, results, tmp, h):
                     moved = wait(lambda: next((n for n in app.call('sidebar-tree')['today']
                                                if n['kind'] == 'folder' and n['title'] == 'QuickWork'
                                                and [c['id'] for c in n.get('children', [])] == [tab_a, tab_b]), None), timeout=3)
-                # 3. Visible New Folder button on the New Tab row creates a pinned folder and opens inline rename.
-                btn = app.call('basics-demo', op='targets').get('newFolderButton') or []
+                # 3. No New Folder button on the New Tab row: clicking its trailing edge opens the command bar
+                #    without creating a pinned folder.
+                targets = app.call('basics-demo', op='targets')
+                new_tab = targets.get('newTab') or []
                 pinned_before = len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder'])
-                btn_editor = None
-                focus_after_button = None
-                btn_made = False
-                if len(btn) == 4 and btn[2] > 0 and btn[3] > 0:
-                    app.call('mouse', action='click', x=btn[0] + btn[2] / 2, y=btn[1] + btn[3] / 2)
-                    btn_made = wait(lambda: len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']) == pinned_before + 1, timeout=3) is True
-                    btn_editor = wait(lambda: (lambda f: f if f.get('owner') == 'sidebar' and 'Text' in f.get('responder', '') else None)(app.call('focus-state')), timeout=3)
-                    focus_after_button = app.call('focus-state')
-                    app.call('key', key='escape', route='app')
-                    app.call('key', key='z', modifiers=['command'], route='app')
-                btn_undone = wait(lambda: len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']) == pinned_before, timeout=3) is True
+                trailing_opens_commandbar = False
+                trailing_no_folder = False
+                commandbar_after_click = None
+                if len(new_tab) == 4 and new_tab[2] > 24 and new_tab[3] > 0:
+                    app.call('mouse', action='click', x=new_tab[0] + new_tab[2] - 16, y=new_tab[1] + new_tab[3] / 2)
+                    commandbar_after_click = wait(lambda: (lambda st: st if st.get('presented') and st.get('mode') == 'newTab' else None)(app.call('commandbar-state')), timeout=3)
+                    trailing_opens_commandbar = bool(commandbar_after_click)
+                    trailing_no_folder = len([n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']) == pinned_before
+                    if trailing_opens_commandbar:
+                        app.call('key', key='escape', route='app')
+                        wait(lambda: not app.call('commandbar-state').get('presented'), timeout=3)
                 rows = {
                     'single_tab_rename_editor': bool(editor),
                     'single_tab_wrapped_and_renamed': bool(created),
                     'move_to_lists_folder': 'Folders' in move_items['items'] and 'QuickWork' in move_items['items'],
                     'move_to_folder_moves_tab': bool(moved),
-                    'button_visible': len(btn) == 4 and btn[2] > 0 and btn[3] > 0,
-                    'button_creates_folder': btn_made,
-                    'button_opens_rename': bool(btn_editor),
-                    'button_undone': btn_undone,
+                    'no_new_folder_button_target': 'newFolderButton' not in targets,
+                    'trailing_click_opens_commandbar': trailing_opens_commandbar,
+                    'trailing_click_does_not_create_folder': trailing_no_folder,
                 }
-                return {'ok': all(rows.values()), 'rows': rows, 'button': btn, 'moveTo': move_items,
+                return {'ok': all(rows.values()), 'rows': rows, 'newTab': new_tab, 'moveTo': move_items,
                         'afterCreate': after_create, 'editor': editor,
-                        'focusAfterCreate': focus_after_create, 'focusAfterButton': focus_after_button}
+                        'focusAfterCreate': focus_after_create, 'commandbarAfterClick': commandbar_after_click}
             finally:
+                if (h._try(lambda: app.call('commandbar-state')) or {}).get('presented'):
+                    h._try(lambda: app.call('key', key='escape', route='app'))
                 for tab_id in made:
                     h._try(lambda t=tab_id: app.call('close', tab=t))
                 h._try(focus)
