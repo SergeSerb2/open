@@ -1,0 +1,26 @@
+# Shared GN args for Open Unified Browser (Chromium 156.0.8078.48, no CEF).
+open_unified_browser = true
+open_enable_automation = true
+
+is_debug = false
+dcheck_always_on = false
+is_component_build = false
+is_official_build = false
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+chrome_pgo_phase = 0
+treat_warnings_as_errors = false
+disable_fieldtrial_testing_config = true
+enable_background_mode = false
+enable_downgrade_processing = false
+enable_nacl = false
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+enable_widevine = true
+bundle_widevine_cdm = false
+enable_cdm_host_verification = false
+enable_cdm_storage_id = false
+optimize_webui = true
+use_lld = true
+use_siso = true

@@ -1,0 +1,6 @@
+# macOS arm64 GN overrides (appended after common.args.gn).
+target_os = "mac"
+target_cpu = "arm64"
+enable_precompiled_headers = false
+enable_stripping = false
+ignore_missing_widevine_signing_cert = true

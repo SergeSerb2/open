@@ -1,0 +1,11 @@
+# Linux x64 GN overrides (appended after common.args.gn).
+target_os = "linux"
+target_cpu = "x64"
+use_sysroot = true
+use_ozone = true
+ozone_platform_x11 = true
+ozone_platform_wayland = true
+ozone_platform_headless = true
+use_dbus = true
+use_gtk = true
+enable_linux_installer = false

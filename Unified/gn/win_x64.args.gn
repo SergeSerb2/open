@@ -1,0 +1,8 @@
+# Windows x64 GN overrides (appended after common.args.gn).
+# Supports both native Windows MSVC/clang-cl builds and Linux -> Windows x64 cross-builds.
+target_os = "win"
+target_cpu = "x64"
+is_clang = true
+enable_precompiled_headers = false
+enable_resource_allowlist_generation = false
+use_thin_lto = false
