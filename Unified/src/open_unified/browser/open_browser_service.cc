@@ -10,6 +10,8 @@
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -74,6 +76,64 @@ void OpenStore(const base::SequenceBound<Store>& store) {
 
 // ---------------------------------------------------------------------------
 // ProfileServices
+
+namespace {
+
+class OpenSyncDataAdapter final : public SyncDataAdapter {
+ public:
+  OpenSyncDataAdapter(BrowserModel* model, base::FilePath state_dir)
+      : model_(model), state_dir_(std::move(state_dir)) {}
+  ~OpenSyncDataAdapter() override = default;
+
+  SyncLocalBundle CollectLocalData(
+      const SyncCategorySettings& categories,
+      const SyncVaultKeys& /*vault_keys*/) override {
+    SyncLocalBundle bundle;
+    if (model_ && categories.IsEnabled(SyncCollection::kWorkspaceSpace)) {
+      base::DictValue meta;
+      base::ListValue space_order;
+      for (const Space& space : model_->spaces()) {
+        space_order.Append(space.id);
+        base::DictValue space_dict;
+        space_dict.Set("id", space.id);
+        space_dict.Set("title", space.title.value_or(""));
+        space_dict.Set("profileId", space.profile_id);
+        std::string space_json;
+        base::JSONWriter::Write(space_dict, &space_json);
+        bundle.records.push_back(
+            {SyncCollection::kWorkspaceSpace, space.id, std::move(space_json)});
+      }
+      meta.Set("spaceOrder", std::move(space_order));
+      std::string meta_json;
+      base::JSONWriter::Write(meta, &meta_json);
+      const std::string meta_id =
+          SyncCollectionSingletonId(SyncCollection::kWorkspaceMeta)
+              .value_or("workspace");
+      bundle.records.push_back(
+          {SyncCollection::kWorkspaceMeta, meta_id, std::move(meta_json)});
+      bundle.complete_collections.insert(SyncCollection::kWorkspaceMeta);
+      bundle.complete_collections.insert(SyncCollection::kWorkspaceSpace);
+    }
+    return bundle;
+  }
+
+  SyncApplyOutcome ApplyRemoteData(
+      const SyncRemoteBundle& /*bundle*/,
+      SyncApplyMode /*mode*/,
+      const SyncCategorySettings& /*categories*/) override {
+    return SyncApplyOutcome{};
+  }
+
+  bool PrepareLocalBackup(const base::FilePath& backup_dir) override {
+    return base::CreateDirectory(backup_dir);
+  }
+
+ private:
+  raw_ptr<BrowserModel> model_;
+  base::FilePath state_dir_;
+};
+
+}  // namespace
 
 ProfileServices::ProfileServices() = default;
 
@@ -306,11 +366,14 @@ std::unique_ptr<ProfileServices> OpenBrowserService::CreateProfileServices(
              }));
   s->documents.emplace(s->store_runner, profile_dir);
 
+  s->sync_adapter = std::make_unique<OpenSyncDataAdapter>(
+      model_.get(), s->state_dir);
   s->sync = std::make_unique<SyncEngine>(
       ToStdPath(s->state_dir.AppendASCII("Sync")), model_.get(),
       OpenPlatform::Get()->CreateSecretStore(s->state_dir),
       chrome_profile->GetDefaultStoragePartition()
           ->GetURLLoaderFactoryForBrowserProcess());
+  s->sync->SetDataAdapter(s->sync_adapter.get());
   s->sync->SetStatusObserver(base::BindRepeating(
       [](base::WeakPtr<OpenBrowserService> self, const SyncStatusInfo& info) {
         if (!self) {

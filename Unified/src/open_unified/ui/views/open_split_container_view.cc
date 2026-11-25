@@ -37,6 +37,7 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -1331,7 +1332,7 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
 
   void RefreshChrome() {
     const SkColor page = PageColor();
-    web_view_->SetResizeBackgroundColor(page);
+    web_view_->SetBackground(views::CreateSolidBackground(page));
     if (!context_.show_bar) {
       return;
     }

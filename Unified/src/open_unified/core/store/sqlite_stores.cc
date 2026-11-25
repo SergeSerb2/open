@@ -11,6 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -113,12 +114,6 @@ std::optional<std::pair<std::string, std::string>> ExtractOriginAndPageKey(
   return std::make_pair(std::move(origin), std::move(page_key));
 }
 
-sql::DatabaseOptions MakeVirtualTableOptions() {
-  sql::DatabaseOptions opts;
-  opts.enable_virtual_tables_discouraged = true;
-  return opts;
-}
-
 std::vector<uint8_t> ReadBlobColumn(sql::Statement& stmt, int col) {
   if (stmt.GetColumnType(col) == sql::ColumnType::kNull) {
     return {};
@@ -135,7 +130,7 @@ std::vector<uint8_t> ReadBlobColumn(sql::Statement& stmt, int col) {
 
 HistoryStore::HistoryStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(MakeVirtualTableOptions(), sql::Database::Tag("OpenHistory")) {}
+      db_(sql::DatabaseOptions{}, sql::Database::Tag("History")) {}
 
 HistoryStore::~HistoryStore() {
   Close();
@@ -152,11 +147,10 @@ bool HistoryStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
+    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   static constexpr char kSchema[] = R"SQL(
-    PRAGMA journal_mode=WAL;
-    PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS urls(
       id INTEGER PRIMARY KEY,
       url TEXT UNIQUE NOT NULL,
@@ -178,23 +172,9 @@ bool HistoryStore::Open() {
     );
     CREATE INDEX IF NOT EXISTS idx_visits_url_time ON visits(url_id, time);
     CREATE INDEX IF NOT EXISTS idx_urls_last_visit ON urls(last_visit DESC, id DESC);
-    CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(
-      title, url, content='urls', content_rowid='id'
-    );
-    CREATE TRIGGER IF NOT EXISTS urls_ai AFTER INSERT ON urls BEGIN
-      INSERT INTO history_fts(rowid, title, url) VALUES (new.id, new.title, new.url);
-    END;
-    CREATE TRIGGER IF NOT EXISTS urls_au AFTER UPDATE OF title, url ON urls BEGIN
-      INSERT INTO history_fts(history_fts, rowid, title, url)
-        VALUES('delete', old.id, old.title, old.url);
-      INSERT INTO history_fts(rowid, title, url) VALUES (new.id, new.title, new.url);
-    END;
-    CREATE TRIGGER IF NOT EXISTS urls_ad AFTER DELETE ON urls BEGIN
-      INSERT INTO history_fts(history_fts, rowid, title, url)
-        VALUES('delete', old.id, old.title, old.url);
-    END;
   )SQL";
   if (!db_.Execute(kSchema)) {
+    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }
@@ -222,31 +202,47 @@ std::optional<int64_t> HistoryStore::RecordVisit(const std::string& url,
   if (!txn.Begin()) {
     return std::nullopt;
   }
-  {
-    sql::Statement upsert(db_.GetUniqueStatement(
-        "INSERT INTO urls(url, title, visit_count, typed_count, last_visit) "
-        "VALUES(?, ?, 1, ?, ?) "
-        "ON CONFLICT(url) DO UPDATE SET "
-        "title = CASE WHEN excluded.title <> '' THEN excluded.title ELSE urls.title END, "
-        "visit_count = urls.visit_count + 1, "
-        "typed_count = urls.typed_count + excluded.typed_count, "
-        "last_visit = excluded.last_visit"));
-    upsert.BindString(0, url);
-    upsert.BindString(1, title);
-    upsert.BindInt(2, typed ? 1 : 0);
-    upsert.BindDouble(3, time);
-    if (!upsert.Run()) {
-      return std::nullopt;
-    }
-  }
   int64_t url_id = 0;
   {
-    sql::Statement sel(db_.GetUniqueStatement("SELECT id FROM urls WHERE url = ?"));
+    sql::Statement sel(
+        db_.GetUniqueStatement("SELECT id FROM urls WHERE url = ?"));
     sel.BindString(0, url);
-    if (!sel.Step()) {
+    if (sel.Step()) {
+      url_id = sel.ColumnInt64(0);
+    }
+  }
+  if (url_id > 0) {
+    sql::Statement upd(db_.GetUniqueStatement(
+        "UPDATE urls SET "
+        "title = CASE WHEN ? <> '' THEN ? ELSE title END, "
+        "visit_count = visit_count + 1, "
+        "typed_count = typed_count + ?, "
+        "last_visit = ? "
+        "WHERE id = ?"));
+    upd.BindString(0, title);
+    upd.BindString(1, title);
+    upd.BindInt(2, typed ? 1 : 0);
+    upd.BindDouble(3, time);
+    upd.BindInt64(4, url_id);
+    if (!upd.Run()) {
+      LOG(ERROR) << "HistoryStore::RecordVisit update failed: "
+                 << db_.GetErrorMessage();
       return std::nullopt;
     }
-    url_id = sel.ColumnInt64(0);
+  } else {
+    sql::Statement ins_url(db_.GetUniqueStatement(
+        "INSERT INTO urls(url, title, visit_count, typed_count, last_visit) "
+        "VALUES(?, ?, 1, ?, ?)"));
+    ins_url.BindString(0, url);
+    ins_url.BindString(1, title);
+    ins_url.BindInt(2, typed ? 1 : 0);
+    ins_url.BindDouble(3, time);
+    if (!ins_url.Run()) {
+      LOG(ERROR) << "HistoryStore::RecordVisit insert url failed: "
+                 << db_.GetErrorMessage();
+      return std::nullopt;
+    }
+    url_id = db_.GetLastInsertRowId();
   }
   int64_t visit_id = 0;
   {
@@ -256,11 +252,15 @@ std::optional<int64_t> HistoryStore::RecordVisit(const std::string& url,
     ins.BindDouble(1, time);
     ins.BindString(2, transition);
     if (!ins.Run()) {
+      LOG(ERROR) << "HistoryStore::RecordVisit insert visit failed: "
+                 << db_.GetErrorMessage();
       return std::nullopt;
     }
     visit_id = db_.GetLastInsertRowId();
   }
   if (!txn.Commit()) {
+    LOG(ERROR) << "HistoryStore::RecordVisit commit failed: "
+               << db_.GetErrorMessage();
     return std::nullopt;
   }
   return visit_id;
@@ -313,25 +313,27 @@ std::vector<HistoryEntry> HistoryStore::Search(const std::string& query,
     return SubstringSearch(trimmed, limit);
   }
 
-  std::string fts_query;
-  for (size_t i = 0; i < tokens.size(); ++i) {
-    if (i > 0) fts_query.push_back(' ');
-    fts_query.push_back('"');
-    fts_query += tokens[i];
-    fts_query += "\"*";
-  }
-
   TimestampSec now = NowSec();
-  sql::Statement stmt(db_.GetUniqueStatement(
+  std::string sql_str =
       "SELECT u.id, u.url, u.title, u.visit_count, u.typed_count, u.last_visit "
-      "FROM history_fts f JOIN urls u ON u.id = f.rowid "
-      "WHERE history_fts MATCH ? "
-      "ORDER BY (u.visit_count + 3 * u.typed_count) * "
+      "FROM urls u WHERE 1=1";
+  for (size_t i = 0; i < tokens.size(); ++i) {
+    sql_str += " AND (u.title LIKE ? ESCAPE '\\' OR u.url LIKE ? ESCAPE '\\')";
+  }
+  sql_str +=
+      " ORDER BY (u.visit_count + 3 * u.typed_count) * "
       "(1.0 / (1.0 + MAX(0.0, (CAST(? AS REAL) - u.last_visit) / 86400.0))) DESC "
-      "LIMIT ?"));
-  stmt.BindString(0, fts_query);
-  stmt.BindDouble(1, now);
-  stmt.BindInt(2, limit);
+      "LIMIT ?";
+
+  sql::Statement stmt(db_.GetUniqueStatement(sql_str));
+  int bind_idx = 0;
+  for (const auto& token : tokens) {
+    std::string like = EscapeLikePattern(token);
+    stmt.BindString(bind_idx++, like);
+    stmt.BindString(bind_idx++, like);
+  }
+  stmt.BindDouble(bind_idx++, now);
+  stmt.BindInt(bind_idx++, limit);
 
   std::vector<HistoryEntry> rows;
   while (stmt.Step()) {
@@ -575,7 +577,7 @@ int64_t HistoryStore::UrlCount() {
 
 ArchiveStore::ArchiveStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("OpenArchive")) {}
+      db_(sql::DatabaseOptions{}, sql::Database::Tag("TabStateStorage")) {}
 
 ArchiveStore::~ArchiveStore() {
   Close();
@@ -592,6 +594,7 @@ bool ArchiveStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
+    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   sql::Transaction txn(&db_);
@@ -615,6 +618,7 @@ bool ArchiveStore::Open() {
     CREATE INDEX IF NOT EXISTS idx_archived_at ON archived_tabs(archived_at DESC);
   )SQL";
   if (!db_.Execute(kSchema)) {
+    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }
@@ -639,7 +643,7 @@ bool ArchiveStore::Open() {
     db_.Close();
     return false;
   }
-  db_.Execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;");
+  // WAL/locking/timeouts are managed by sql::DatabaseOptions.
   return true;
 }
 
@@ -717,7 +721,7 @@ std::vector<ArchivedTabRecord> ArchiveStore::List(
   }
   sql_str += " ORDER BY archived_at DESC, id LIMIT ? OFFSET ?";
 
-  sql::Statement stmt(db_.GetUniqueStatement(sql_str.c_str()));
+  sql::Statement stmt(db_.GetUniqueStatement(sql_str));
   int bind_idx = 0;
   if (!query.empty()) {
     std::string like = EscapeLikePattern(query);
@@ -873,7 +877,7 @@ int64_t ArchiveStore::Count() {
 
 SleepStore::SleepStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("OpenSleep")) {}
+      db_(sql::DatabaseOptions{}, sql::Database::Tag("TabStateStorage")) {}
 
 SleepStore::~SleepStore() {
   Close();
@@ -890,12 +894,10 @@ bool SleepStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
+    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   static constexpr char kSchema[] = R"SQL(
-    PRAGMA journal_mode=WAL;
-    PRAGMA synchronous=FULL;
-    PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS sleep_history(
       tab_id TEXT PRIMARY KEY,
       container BLOB NOT NULL,
@@ -915,6 +917,7 @@ bool SleepStore::Open() {
     );
   )SQL";
   if (!db_.Execute(kSchema)) {
+    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }
@@ -1067,7 +1070,7 @@ bool SleepStore::SetMeta(const std::string& key, const std::string& value) {
 
 DownloadHistoryStore::DownloadHistoryStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("OpenDownloads")) {}
+      db_(sql::DatabaseOptions{}, sql::Database::Tag("DownloadRecord")) {}
 
 DownloadHistoryStore::~DownloadHistoryStore() {
   Close();
@@ -1084,12 +1087,10 @@ bool DownloadHistoryStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
+    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   static constexpr char kSchema[] = R"SQL(
-    PRAGMA journal_mode=WAL;
-    PRAGMA synchronous=FULL;
-    PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS downloads(
       id TEXT PRIMARY KEY,
       started_at REAL NOT NULL,
@@ -1099,6 +1100,7 @@ bool DownloadHistoryStore::Open() {
     CREATE INDEX IF NOT EXISTS downloads_end ON downloads(ended_at DESC, id);
   )SQL";
   if (!db_.Execute(kSchema)) {
+    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }
@@ -1227,7 +1229,7 @@ bool DownloadHistoryStore::Clear(std::optional<TimestampSec> since,
 
 FaviconStore::FaviconStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("OpenFavicons")) {}
+      db_(sql::DatabaseOptions{}, sql::Database::Tag("Thumbnail")) {}
 
 FaviconStore::~FaviconStore() {
   Close();
@@ -1248,14 +1250,10 @@ bool FaviconStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
+    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   static constexpr char kSchema[] = R"SQL(
-    PRAGMA busy_timeout=3000;
-    PRAGMA journal_mode=TRUNCATE;
-    PRAGMA page_size=4096;
-    PRAGMA max_page_count=4096;
-    PRAGMA journal_size_limit=0;
     CREATE TABLE IF NOT EXISTS favicons(
       origin TEXT NOT NULL,
       page_key TEXT NOT NULL,
@@ -1272,6 +1270,7 @@ bool FaviconStore::Open() {
     CREATE INDEX IF NOT EXISTS favicon_age ON favicons(fetched_at);
   )SQL";
   if (!db_.Execute(kSchema)) {
+    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }
@@ -1339,13 +1338,9 @@ bool FaviconStore::Put(const std::string& page_url,
   }
   TimestampSec now = NowSec();
   sql::Statement stmt(db_.GetUniqueStatement(
-      "INSERT INTO favicons(origin, page_key, icon_url, png32, png64, "
+      "INSERT OR REPLACE INTO favicons(origin, page_key, icon_url, png32, png64, "
       "fetched_at, expires_at, status, copy_token, image_info) "
-      "VALUES(?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL) "
-      "ON CONFLICT(origin, page_key) DO UPDATE SET "
-      "icon_url=excluded.icon_url, png32=excluded.png32, png64=excluded.png64, "
-      "fetched_at=excluded.fetched_at, expires_at=excluded.expires_at, "
-      "status=excluded.status, copy_token=NULL, image_info=NULL"));
+      "VALUES(?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL)"));
   stmt.BindString(0, origin);
   stmt.BindString(1, page_key);
   if (icon_url.has_value()) {
@@ -1378,12 +1373,9 @@ bool FaviconStore::MarkMissing(const std::string& page_url) {
   }
   TimestampSec now = NowSec();
   sql::Statement stmt(db_.GetUniqueStatement(
-      "INSERT INTO favicons(origin, page_key, icon_url, png32, png64, "
+      "INSERT OR REPLACE INTO favicons(origin, page_key, icon_url, png32, png64, "
       "fetched_at, expires_at, status, copy_token, image_info) "
-      "VALUES(?, '', NULL, NULL, NULL, ?, ?, 1, NULL, NULL) "
-      "ON CONFLICT(origin, page_key) DO UPDATE SET "
-      "icon_url=NULL, png32=NULL, png64=NULL, "
-      "fetched_at=excluded.fetched_at, expires_at=excluded.expires_at, status=1"));
+      "VALUES(?, '', NULL, NULL, NULL, ?, ?, 1, NULL, NULL)"));
   stmt.BindString(0, key->first);
   stmt.BindDouble(1, now);
   stmt.BindDouble(2, now + 86400.0);

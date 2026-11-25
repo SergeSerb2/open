@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/extensions/extension_popup_types.h"
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/disable_reason.h"
@@ -24,6 +25,7 @@
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/manifest_handlers/description_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "open_unified/browser/open_browser_service.h"
 #include "open_unified/browser/open_tab_bridge.h"
@@ -71,7 +73,7 @@ ExtensionActionInfo OpenExtensionBridge::InfoFor(
   info.id = extension.id();
   info.name = extension.name();
   info.version = extension.VersionString();
-  info.description = extension.description();
+  info.description = extensions::DescriptionInfo::GetDescription(extension);
   info.enabled = extensions::ExtensionRegistry::Get(profile_)
                      ->enabled_extensions()
                      .Contains(extension.id());

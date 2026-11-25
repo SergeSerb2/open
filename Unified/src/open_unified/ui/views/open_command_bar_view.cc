@@ -313,6 +313,15 @@ std::u16string_view OpenCommandBarView::field_text() const {
   return field_->GetText();
 }
 
+void OpenCommandBarView::InsertText(const std::u16string& text) {
+  if (!presented_ || !field_) {
+    return;
+  }
+  field_->RequestFocus();
+  field_->InsertOrReplaceText(text);
+  ContentsChanged(field_, std::u16string(field_->GetText()));
+}
+
 // --- Query and completion --------------------------------------------------
 
 void OpenCommandBarView::RunQuery() {

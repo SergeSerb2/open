@@ -263,6 +263,7 @@ void MaybeProxyURLLoaderFactoryForAdBlock(
     content::RenderFrameHost* counting =
         subframe_navigation ? frame->GetParentOrOuterDocument() : frame;
     context.document = counting->GetWeakDocumentPtr();
+    context.frame_id = counting->GetGlobalId();
     context.has_document = true;
   }
   auto [receiver, remote] = factory_builder.Append();

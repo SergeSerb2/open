@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -232,8 +233,11 @@ class OpenTabBridge : public BrowserModel::Observer,
   // Loaded tabs: tab id -> WebContents (owned by its TabStripModel).
   std::map<ItemID, raw_ptr<content::WebContents>> contents_;
 
-  base::ScopedMultiSourceObservation<TabStripModel, TabStripModelObserver>
-      strip_observations_{this};
+  void AddObservedStrip(TabStripModel* strip);
+  void RemoveObservedStrip(TabStripModel* strip);
+  void ClearObservedStrips();
+
+  std::set<raw_ptr<TabStripModel>> observed_strips_;
   base::ScopedObservation<BrowserCollection, BrowserCollectionObserver>
       browser_collection_observation_{this};
   base::ObserverList<Observer> observers_;

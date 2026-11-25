@@ -48,6 +48,8 @@
 #include "ui/views/paint_info.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_observer.h"
+#include "ui/views/view_targeter.h"
+#include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/widget.h"
 
 namespace open_unified {
@@ -667,6 +669,41 @@ class OpenBrowserView::PlusMenuDelegate : public ui::SimpleMenuModel::Delegate {
   SpaceID space_id_;
 };
 
+// Transparent overlay layer placed above BrowserView's contents_container so
+// Command Bar, Peek, Find/Toasts, and the hover-reveal card sit above web
+// content without reparenting contents_container out of BrowserView.
+class OpenOverlayHostView : public views::View,
+                            public views::ViewTargeterDelegate {
+  METADATA_HEADER(OpenOverlayHostView, views::View)
+
+ public:
+  OpenOverlayHostView() {
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+    SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
+  }
+
+  // views::ViewTargeterDelegate:
+  bool DoesIntersectRect(const views::View* target,
+                         const gfx::Rect& rect) const override {
+    if (target != this) {
+      return views::ViewTargeterDelegate::DoesIntersectRect(target, rect);
+    }
+    for (const views::View* child : children()) {
+      if (!child->GetVisible() || !child->GetCanProcessEventsWithinSubtree()) {
+        continue;
+      }
+      if (child->bounds().Intersects(rect)) {
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
+BEGIN_METADATA(OpenOverlayHostView)
+END_METADATA
+
 // Keeps OpenBrowserView sized to the BrowserView it covers.
 class OpenBrowserView::BrowserViewTracker : public views::ViewObserver {
  public:
@@ -703,15 +740,25 @@ void OpenBrowserView::Install(BrowserView* browser_view,
   if (TopContainerView* top = browser_view->top_container()) {
     top->SetVisible(false);
   }
-  // The web contents (and devtools, find bar host) move into the panel.
-  if (views::View* contents = browser_view->contents_container()) {
-    if (views::View* parent = contents->parent()) {
-      view->browser_contents_container_ = contents;
-      view->SetWebContentsHost(parent->RemoveChildViewT(contents));
-    }
+  // Keep contents_container as a direct child of BrowserView (reparenting it
+  // out/back fires OnViewAddedToWidget a second time on TabModalDialogHost).
+  // Place OpenBrowserView behind it (theme, shadow, sidebar, split) and a
+  // hit-test-transparent OpenOverlayHostView above it (reveal card, overlays).
+  view->browser_contents_container_ = browser_view->contents_container();
+  browser_view->AddChildViewAt(std::move(owned), 0);
+  view->overlay_host_ =
+      browser_view->AddChildView(std::make_unique<OpenOverlayHostView>());
+  if (view->card_shadow_ && view->card_shadow_->parent() == view) {
+    view->card_shadow_ = view->overlay_host_->AddChildView(
+        view->RemoveChildViewT(view->card_shadow_.get()));
   }
-  browser_view->AddChildView(std::move(owned));
-  view->SetBoundsRect(browser_view->GetLocalBounds());
+  if (view->reveal_card_ && view->reveal_card_->parent() == view) {
+    view->reveal_card_ = view->overlay_host_->AddChildView(
+        view->RemoveChildViewT(view->reveal_card_.get()));
+  }
+  const gfx::Rect bounds = browser_view->GetLocalBounds();
+  view->SetBoundsRect(bounds);
+  view->overlay_host_->SetBoundsRect(bounds);
   view->browser_view_tracker_ =
       std::make_unique<BrowserViewTracker>(view, browser_view);
   view->ApplyWebCornerRadii();
@@ -724,13 +771,21 @@ void OpenBrowserView::Uninstall(BrowserView* browser_view) {
     return;
   }
   view->browser_view_tracker_.reset();
-  // Give the contents container back so BrowserView tears it down itself.
-  if (view->browser_contents_container_ && view->web_contents_host_ ==
-                                               view->browser_contents_container_) {
-    views::View* contents = view->web_contents_host_;
-    view->web_contents_host_ = nullptr;
+  if (view->sidebar_ && view->reveal_card_ &&
+      view->sidebar_->parent() == view->reveal_card_.get()) {
+    view->ReparentSidebar(false);
+  }
+  if (view->overlay_host_) {
+    views::View* host = view->overlay_host_;
+    view->overlay_host_ = nullptr;
+    view->card_shadow_ = nullptr;
+    view->reveal_card_ = nullptr;
+    view->overlays_.clear();
+    browser_view->RemoveChildViewT(host);
+  }
+  if (view->browser_contents_container_) {
+    view->browser_contents_container_->SetVisible(true);
     view->browser_contents_container_ = nullptr;
-    browser_view->AddChildView(view->panel_host_->RemoveChildViewT(contents));
   }
   if (TopContainerView* top = browser_view->top_container()) {
     top->SetVisible(true);
@@ -915,27 +970,33 @@ void OpenBrowserView::UpdatePanelChildren() {
   if (web_contents_host_) {
     web_contents_host_->SetVisible(!split);
   }
+  if (browser_contents_container_) {
+    browser_contents_container_->SetVisible(!split);
+  }
   panel_host_->InvalidateLayout();
   panel_host_->SchedulePaint();
 }
 
 views::View* OpenBrowserView::SetOverlay(OverlaySlot slot,
                                          std::unique_ptr<views::View> view) {
+  views::View* host = overlay_host_ ? overlay_host_.get() : this;
   if (auto it = overlays_.find(slot); it != overlays_.end()) {
     views::View* old = it->second;
     overlays_.erase(it);
-    RemoveChildViewT(old);
+    if (old->parent()) {
+      old->parent()->RemoveChildViewT(old);
+    }
   }
   if (!view) {
     return nullptr;
   }
-  views::View* added = AddChildView(std::move(view));
+  views::View* added = host->AddChildView(std::move(view));
   overlays_[slot] = added;
   // Z order: Find/Toasts < Peek < Command Bar, all above the card.
   for (OverlaySlot s : {OverlaySlot::kFindBarAndToasts, OverlaySlot::kPeek,
                         OverlaySlot::kCommandBar}) {
     if (auto it = overlays_.find(s); it != overlays_.end()) {
-      ReorderChildView(it->second, children().size());
+      host->ReorderChildView(it->second, host->children().size());
     }
   }
   LayoutOverlays();
@@ -1557,9 +1618,15 @@ void OpenBrowserView::SetClipsWindowCorners(bool clips) {
 void OpenBrowserView::LayoutPanel(const gfx::Rect& panel) {
   panel_host_->SetBoundsRect(panel);
   panel_shadow_->SetContentBounds(panel);
+  if (browser_contents_container_) {
+    browser_contents_container_->SetBoundsRect(panel);
+  }
 }
 
 void OpenBrowserView::LayoutOverlays() {
+  if (overlay_host_) {
+    overlay_host_->SetBoundsRect(bounds());
+  }
   for (const auto& [slot, view] : overlays_) {
     view->SetBoundsRect(slot == OverlaySlot::kFindBarAndToasts
                             ? panel_host_->bounds()

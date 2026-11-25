@@ -61,8 +61,8 @@ bool RewriteChromeToOpen(GURL* url, content::BrowserContext* browser_context) {
       !base::StartsWith(url->host(), kInternalHostPrefix)) {
     return false;
   }
-  const std::string open_host =
-      url->host().substr(sizeof(kInternalHostPrefix) - 1);
+  const std::string open_host(
+      url->host().substr(sizeof(kInternalHostPrefix) - 1));
   if (!IsOpenHost(open_host)) {
     return false;
   }
@@ -76,7 +76,7 @@ bool RewriteChromeToOpen(GURL* url, content::BrowserContext* browser_context) {
 // The pak entry "<host>.html" (Vite input name; Unified/webui/vite.config.ts).
 std::optional<int> PageResourceId(std::string_view host) {
   const std::string page = base::StrCat({host, ".html"});
-  for (const webui::ResourcePath& resource : kOpenWebuiResources) {
+  for (const ::webui::ResourcePath& resource : kOpenWebuiResources) {
     if (page == resource.path) {
       return resource.id;
     }

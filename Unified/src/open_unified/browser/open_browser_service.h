@@ -54,6 +54,7 @@ class RoutingEvaluator;
 class SleepStore;
 class SnapshotStore;
 class SuggestEngine;
+class SyncDataAdapter;
 class SyncEngine;
 
 // Runs |task| with the store on the store's sequence and |reply| with the
@@ -103,6 +104,8 @@ struct ProfileServices {
   base::SequenceBound<DocumentStore> documents;
 
   // UI thread; network work runs on its own runner.
+  // Declared before |sync| so SyncEngine is destroyed before its adapter.
+  std::unique_ptr<SyncDataAdapter> sync_adapter;
   std::unique_ptr<SyncEngine> sync;
   std::unique_ptr<OpenExtensionBridge> extensions;
 

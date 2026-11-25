@@ -180,27 +180,36 @@ class OpenClient:
     """Calls an open:// page's open.rpc channel from inside the page
     (chrome.send -> C++ handler -> window.__openRpcResolve), the same path
     the Preact frontend uses."""
-    script = """
-(async () => {
-  const method = %s, payload = %s;
-  const id = 900000 + Math.floor(Math.random() * 99999);
-  return await new Promise((resolve) => {
-    const previous = window.__openRpcResolve;
-    const timer = setTimeout(() => resolve({ok: false, error: 'timeout'}), %d);
+    req_id = 900000 + (abs(hash((method, time.monotonic()))) % 90000)
+    fire_script = """
+(() => {
+  const id = %d, method = %s, payload = %s;
+  window.__openE2ERpc = window.__openE2ERpc || {};
+  delete window.__openE2ERpc[id];
+  if (!window.__openE2EHooked) {
+    window.__openE2EHooked = true;
+    const prev = window.__openRpcResolve;
     window.__openRpcResolve = (requestId, ok, value) => {
-      if (requestId !== id) {
-        if (previous) previous(requestId, ok, value);
+      if (window.__openE2ERpc && requestId >= 900000) {
+        window.__openE2ERpc[requestId] = {ok: !!ok, value};
         return;
       }
-      clearTimeout(timer);
-      window.__openRpcResolve = previous;
-      resolve({ok, value});
+      if (prev) prev(requestId, ok, value);
     };
-    chrome.send('open.rpc', [id, method, payload]);
-  });
+  }
+  chrome.send('open.rpc', [id, method, payload]);
+  return id;
 })()
-""" % (json.dumps(method), json.dumps(payload), int(timeout * 1000))
-    result = self.call("eval", _timeout=timeout + 10, tab=tab, js=script)
+""" % (req_id, json.dumps(method), json.dumps(payload))
+    self.call("eval", _timeout=timeout + 5, tab=tab, js=fire_script)
+
+    def _poll():
+      res = self.call(
+          "eval", _timeout=10, tab=tab,
+          js=f"window.__openE2ERpc && window.__openE2ERpc[{req_id}] || null")
+      return res if isinstance(res, dict) else None
+
+    result = self.wait_until(_poll, timeout=timeout, what=f"webui rpc {method}")
     if not isinstance(result, dict) or not result.get("ok"):
       raise OpenError(method, json.dumps(result))
     return result.get("value")

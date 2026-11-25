@@ -4,7 +4,7 @@
 
 #include "open/adblock/renderer/open_adblock_renderer_agent.h"
 
-#if !defined(OFFICIAL_BUILD)
+#if !defined(OFFICIAL_BUILD) && defined(__APPLE__)
 #include <mach/mach.h>
 #endif
 
@@ -81,12 +81,16 @@ class RendererCostTimer {
 
 #if !defined(OFFICIAL_BUILD)
 uint64_t RendererFootprintBytes() {
+#if defined(__APPLE__)
   task_vm_info_data_t info = {};
   mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
   return task_info(mach_task_self(), TASK_VM_INFO,
                    reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS
              ? info.phys_footprint
              : 0;
+#else
+  return 0;
+#endif
 }
 #endif
 

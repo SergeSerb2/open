@@ -562,7 +562,12 @@ def suite_adblock(ctx: Context):
   check(loaded is False, "the ad script ran (not blocked)")
   check(ctx.fixtures.count("/ads/banner.js") == before,
         "the ad request reached the server")
-  stats = ctx.call("adblock-stats", tab=tab)
+  def _blocked_stats():
+    s = ctx.call("adblock-stats", tab=tab)
+    return s if s["blocked"] >= 1 else None
+
+  stats = ctx.client.wait_until(_blocked_stats, timeout=5,
+                                what="adblock blocked count")
   check(stats["blocked"] >= 1, f"no blocked request counted: {stats}")
   ctx.snapshot("adblock-blocked")
 

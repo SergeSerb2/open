@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 
@@ -486,11 +487,11 @@ class CalcParser {
       }
     }
     if (!saw_digit) return std::nullopt;
-    try {
-      return std::stod(std::string(s_.substr(start, pos_ - start)));
-    } catch (...) {
+    double value = 0.0;
+    if (!base::StringToDouble(s_.substr(start, pos_ - start), &value)) {
       return std::nullopt;
     }
+    return value;
   }
 
   std::string_view s_;

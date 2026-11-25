@@ -16,6 +16,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -56,6 +57,7 @@ struct AdBlockFactoryContext {
   // The document that counts this factory's stops. Frameless factories
   // (shared and service workers) have none and do not count (§7.5).
   content::WeakDocumentPtr document;
+  content::GlobalRenderFrameHostId frame_id;
   bool has_document = false;
 };
 

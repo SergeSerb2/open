@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -26,6 +27,8 @@ class OpenAdBlockTabHelper
   // tab's primary page; else drops them (§7.5: a lost count is fine, a
   // count of a closed document leaking into the next page is not).
   static void AddStopsForDocument(content::WeakDocumentPtr document,
+                                  content::GlobalRenderFrameHostId frame_id,
+                                  std::string top_host,
                                   int blocked,
                                   int redirected);
 

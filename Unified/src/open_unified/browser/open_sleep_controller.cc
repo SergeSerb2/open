@@ -8,7 +8,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/containers/span.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/pickle.h"
@@ -17,14 +19,19 @@
 #include "base/time/time.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
+#include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-shared.h"
+#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/restore_type.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "open_unified/browser/open_browser_service.h"
 #include "open_unified/browser/open_json.h"
 #include "open_unified/browser/open_model_util.h"
@@ -323,6 +330,9 @@ bool OpenSleepController::IsKeepAlive(const ItemID& tab_id,
 
 bool OpenSleepController::MayChromeDiscard(
     content::WebContents* contents) const {
+  if (discarding_internally_) {
+    return true;
+  }
   std::optional<ItemID> tab_id = OpenTabBridge::TabIdForWebContents(contents);
   if (!tab_id) {
     return true;
@@ -390,8 +400,17 @@ bool OpenSleepController::DoDiscard(const ItemID& tab_id) {
     return false;
   }
   SaveHistory(tab_id, contents);
-  contents->Discard(base::DoNothing());
-  return true;
+  if (base::FeatureList::IsEnabled(features::kWebContentsDiscard)) {
+    contents->Discard(base::DoNothing());
+    return true;
+  }
+  if (auto* unit = resource_coordinator::TabLifecycleUnitExternal::
+          FromWebContents(contents)) {
+    base::AutoReset<bool> allow(&discarding_internally_, true);
+    return unit->DiscardTab(
+        ::mojom::LifecycleUnitDiscardReason::EXTERNAL);
+  }
+  return false;
 }
 
 void OpenSleepController::DoDestroy(const ItemID& tab_id) {
@@ -487,21 +506,35 @@ void OpenSleepController::Discard(
     return;
   }
   SaveHistory(tab_id, contents);
-  contents->Discard(base::BindOnce(
+  auto finish = base::BindOnce(
       [](base::WeakPtr<OpenSleepController> self, ItemID tab_id,
-         base::OnceCallback<void(base::DictValue)> done) {
+         base::OnceCallback<void(base::DictValue)> done, bool ok) {
         if (!self) {
           return;
         }
-        model_util::UpdateLive(self->service_->model(), tab_id,
-                               [](TabLiveState& live) {
-                                 live.sleep_phase = SleepPhase::kSleeping;
-                                 live.is_loading = false;
-                                 live.is_audible = false;
-                               });
-        std::move(done).Run(self->StateFor(tab_id).Set("ok", true));
+        if (ok) {
+          model_util::UpdateLive(self->service_->model(), tab_id,
+                                 [](TabLiveState& live) {
+                                   live.sleep_phase = SleepPhase::kSleeping;
+                                   live.is_loading = false;
+                                   live.is_audible = false;
+                                 });
+        }
+        std::move(done).Run(self->StateFor(tab_id).Set("ok", ok));
       },
-      weak_factory_.GetWeakPtr(), tab_id, std::move(done)));
+      weak_factory_.GetWeakPtr(), tab_id, std::move(done));
+
+  if (base::FeatureList::IsEnabled(features::kWebContentsDiscard)) {
+    contents->Discard(base::BindOnce(std::move(finish), true));
+    return;
+  }
+  bool ok = false;
+  if (auto* unit = resource_coordinator::TabLifecycleUnitExternal::
+          FromWebContents(contents)) {
+    base::AutoReset<bool> allow(&discarding_internally_, true);
+    ok = unit->DiscardTab(::mojom::LifecycleUnitDiscardReason::EXTERNAL);
+  }
+  std::move(finish).Run(ok);
 }
 
 base::DictValue OpenSleepController::Capture(const ItemID& tab_id) {

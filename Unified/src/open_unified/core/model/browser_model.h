@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "open_unified/core/model/open_types.h"
 
 namespace open_unified {
@@ -392,7 +393,7 @@ class BrowserModel {
   std::unordered_set<std::string> unavailable_profile_dirs_;
 
   std::vector<Observer*> observers_;
-  ArchiveSink* archive_sink_ = nullptr;
+  raw_ptr<ArchiveSink> archive_sink_ = nullptr;
 
   std::vector<UndoStep> undo_stack_;
   std::vector<UndoStep> redo_stack_;

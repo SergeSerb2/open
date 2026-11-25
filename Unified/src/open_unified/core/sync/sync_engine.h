@@ -17,6 +17,7 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
@@ -818,7 +819,7 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
   std::unique_ptr<SyncHttpTransport> http_transport_;
   std::unique_ptr<SecretStore> secret_store_;
   std::unique_ptr<SyncWebSocketClient> ws_client_;
-  SyncDataAdapter* data_adapter_ = nullptr;
+  raw_ptr<SyncDataAdapter> data_adapter_ = nullptr;
   SnapshotCallback on_snapshot_changed_;
   StatusInfoObserver status_info_observer_;
 

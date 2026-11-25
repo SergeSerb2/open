@@ -23,15 +23,12 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "open/adblock/open_adblock_service.h"
 #include "open/adblock/open_adblock_types.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
 class BrowserContext;
 class WebContents;
 }  // namespace content
-
-namespace service_manager {
-class BinderRegistry;
-}  // namespace service_manager
 
 namespace open_unified {
 

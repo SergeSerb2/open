@@ -465,6 +465,7 @@ class OpenBrowserView : public views::View,
   raw_ptr<ResizeHandle> resize_handle_ = nullptr;
   raw_ptr<RevealCardView> reveal_card_ = nullptr;
   raw_ptr<views::View> web_contents_host_ = nullptr;
+  raw_ptr<views::View> overlay_host_ = nullptr;
   raw_ptr<views::View> split_container_ = nullptr;
   raw_ptr<OpenPanelSlideClient> split_slide_client_ = nullptr;
   std::map<OverlaySlot, raw_ptr<views::View>> overlays_;

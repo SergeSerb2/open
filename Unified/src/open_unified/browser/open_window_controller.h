@@ -195,6 +195,7 @@ class OpenWindowUi : public CommandBarDelegate,
                       std::optional<gfx::Rect> anchor_in_screen);
   void HideCommandBar();
   bool command_bar_shown() const;
+  void TypeInCommandBar(const std::u16string& text);
   // Return in the bar (automation `command-bar enter`): commits the
   // selected row like the real key path.
   void CommitCommandBar();

@@ -18,6 +18,7 @@
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
@@ -161,7 +162,7 @@ class LinuxSecretServiceHook {
   bool available() const { return available_; }
 
  private:
-  void* handle_ = nullptr;
+  raw_ptr<void> handle_ = nullptr;
   bool available_ = false;
 };
 
@@ -228,13 +229,12 @@ class OpenPlatformLinux final : public OpenPlatform {
 
   base::FilePath GetDefaultUserDataDir() override {
     auto env = base::Environment::Create();
-    std::string xdg_config;
-    if (env->GetVar("XDG_CONFIG_HOME", &xdg_config) && !xdg_config.empty()) {
-      return base::FilePath(xdg_config).AppendASCII("open");
+    if (auto xdg_config = env->GetVar("XDG_CONFIG_HOME");
+        xdg_config && !xdg_config->empty()) {
+      return base::FilePath(*xdg_config).AppendASCII("open");
     }
-    std::string home;
-    if (env->GetVar("HOME", &home) && !home.empty()) {
-      return base::FilePath(home).AppendASCII(".config").AppendASCII("open");
+    if (auto home = env->GetVar("HOME"); home && !home->empty()) {
+      return base::FilePath(*home).AppendASCII(".config").AppendASCII("open");
     }
     return base::FilePath("/tmp/open");
   }

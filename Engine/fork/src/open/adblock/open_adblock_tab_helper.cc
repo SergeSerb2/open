@@ -28,10 +28,27 @@ OpenAdBlockTabHelper* OpenAdBlockTabHelper::GetOrCreate(
 // static
 void OpenAdBlockTabHelper::AddStopsForDocument(
     content::WeakDocumentPtr document,
+    content::GlobalRenderFrameHostId frame_id,
+    std::string top_host,
     int blocked,
     int redirected) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::RenderFrameHost* rfh = document.AsRenderFrameHostIfValid();
+  if (!rfh && frame_id) {
+    // WillCreateURLLoaderFactory for kDocumentSubResource runs before commit,
+    // so the WeakDocumentPtr captured there may belong to the previous
+    // document on the same RenderFrameHost. Fall back to the active RFH when
+    // its committed primary main frame matches the factory's top_host.
+    content::RenderFrameHost* candidate =
+        content::RenderFrameHost::FromID(frame_id);
+    if (candidate && candidate->IsActive() && candidate->GetPage().IsPrimary()) {
+      const GURL committed =
+          candidate->GetMainFrame()->GetLastCommittedURL();
+      if (top_host.empty() || committed.host() == top_host) {
+        rfh = candidate;
+      }
+    }
+  }
   // Gone, or not the primary page (back/forward cache, prerender).
   if (!rfh || !rfh->GetPage().IsPrimary()) {
     return;

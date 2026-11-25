@@ -242,7 +242,7 @@ std::vector<Boost> OpenBoostController::MatchingBoosts(
   if (!url.SchemeIsHTTPOrHTTPS()) {
     return result;
   }
-  const std::string host = url.host();
+  const std::string host(url.host());
   for (const Boost& boost : boosts_[profile_id]) {
     if (boost.enabled && HostMatches(host, boost.host_pattern)) {
       result.push_back(boost);
@@ -394,7 +394,7 @@ bool OpenBoostController::StartZap(const std::string& boost_id,
                             [&](const Boost& b) { return b.id == boost_id; });
   const GURL url = contents->GetLastCommittedURL();
   if (boost == boosts.end() || !url.SchemeIsHTTPOrHTTPS() ||
-      !HostMatches(url.host(), boost->host_pattern)) {
+      !HostMatches(std::string(url.host()), boost->host_pattern)) {
     *message = "The active tab is not a page of this Boost's site.";
     return false;
   }

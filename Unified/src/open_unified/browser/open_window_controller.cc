@@ -1213,6 +1213,12 @@ bool OpenWindowUi::command_bar_shown() const {
   return command_bar_ && command_bar_->is_presented();
 }
 
+void OpenWindowUi::TypeInCommandBar(const std::u16string& text) {
+  if (command_bar_shown()) {
+    command_bar_->InsertText(text);
+  }
+}
+
 void OpenWindowUi::CommitCommandBar() {
   if (!command_bar_shown()) {
     return;

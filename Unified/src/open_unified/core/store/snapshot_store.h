@@ -12,6 +12,7 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
@@ -81,7 +82,7 @@ class SnapshotStore {
   base::FilePath file_path_;
 
   base::OneShotTimer save_timer_;
-  const BrowserModel* dirty_model_ = nullptr;
+  raw_ptr<const BrowserModel> dirty_model_ = nullptr;
   std::optional<base::TimeTicks> dirty_since_;
   base::RepeatingCallback<void(const std::string&)> on_save_failure_;
 };

@@ -111,7 +111,7 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
   // Classify absence using the file-open error, not PathExists(): permission,
   // symlink, malformed-pointer and manifest/SHA errors must fail open rather
   // than leave a context waiting for an unpublished generation.
-  const auto pointer_path = root.Append("current.json");
+  const auto pointer_path = root.AppendASCII("current.json");
   if (base::IsLink(pointer_path)) {
     *error = "read current.json: symbolic link refused";
     return std::nullopt;
@@ -125,7 +125,7 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
     }
     return std::nullopt;
   }
-  auto pointer_text = ReadBounded(root.Append("current.json"), kMaxPointerBytes);
+  auto pointer_text = ReadBounded(root.AppendASCII("current.json"), kMaxPointerBytes);
   if (!pointer_text) {
     *error = "read current.json: missing or too large";
     return std::nullopt;
@@ -144,13 +144,13 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
   generation.number = *number;
   generation.manifest_sha256 = *manifest_sha;
   generation.dir =
-      root.Append("generations").Append(base::NumberToString(*number));
+      root.AppendASCII("generations").AppendASCII(base::NumberToString(*number));
   if (base::IsLink(generation.dir) || !base::DirectoryExists(generation.dir)) {
     *error = "read generation: missing directory";
     return std::nullopt;
   }
   auto manifest_text =
-      ReadBounded(generation.dir.Append("manifest.json"), kMaxManifestBytes);
+      ReadBounded(generation.dir.AppendASCII("manifest.json"), kMaxManifestBytes);
   if (!manifest_text || Sha256Hex(*manifest_text) != *manifest_sha) {
     *error = "read manifest.json: missing or SHA-256 mismatch";
     return std::nullopt;
@@ -211,7 +211,7 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
   std::sort(entries.begin(), entries.end(),
             [](const Entry& a, const Entry& b) { return a.name < b.name; });
   for (const Entry& entry : entries) {
-    auto text = ReadBounded(generation.dir.Append(entry.name), kMaxListBytes);
+    auto text = ReadBounded(generation.dir.AppendUTF8(entry.name), kMaxListBytes);
     if (!text || text->size() != static_cast<size_t>(entry.bytes) ||
         Sha256Hex(*text) != entry.sha256) {
       *error = "read " + entry.name + ": size or SHA-256 mismatch";
@@ -222,7 +222,7 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
   }
   if (resources) {
     auto text =
-        ReadBounded(generation.dir.Append(resources->name), kMaxResourcesBytes);
+        ReadBounded(generation.dir.AppendUTF8(resources->name), kMaxResourcesBytes);
     if (!text || text->size() != static_cast<size_t>(resources->bytes) ||
         Sha256Hex(*text) != resources->sha256) {
       *error = "read resources.json: size or SHA-256 mismatch";
@@ -279,8 +279,8 @@ base::DictValue MakeReceipt(const Generation& generation,
 // The generation's DAT, if its receipt matches the verified inputs.
 std::optional<std::string> ReadMatchingDat(const Generation& generation) {
   auto receipt_text =
-      ReadBounded(generation.dir.Append(kReceiptName), kMaxReceiptBytes);
-  auto dat = ReadBounded(generation.dir.Append(kDatName), kMaxDatBytes);
+      ReadBounded(generation.dir.AppendASCII(kReceiptName), kMaxReceiptBytes);
+  auto dat = ReadBounded(generation.dir.AppendASCII(kDatName), kMaxDatBytes);
   if (!receipt_text || !dat || dat->empty()) {
     return std::nullopt;
   }
@@ -480,10 +480,10 @@ OpenAdBlockService::BuildResult BuildOnBackground(
         // and is rebuilt from text. Failure keeps the in-memory engine.
         std::string receipt;
         if (!base::ImportantFileWriter::WriteFileAtomically(
-                generation->dir.Append(kDatName), dat) ||
+                generation->dir.AppendASCII(kDatName), dat) ||
             !base::JSONWriter::Write(MakeReceipt(*generation, dat), &receipt) ||
             !base::ImportantFileWriter::WriteFileAtomically(
-                generation->dir.Append(kReceiptName), receipt)) {
+                generation->dir.AppendASCII(kReceiptName), receipt)) {
           result.error = "write engine.dat: failed";
         }
       }

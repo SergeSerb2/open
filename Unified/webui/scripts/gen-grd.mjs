@@ -57,11 +57,11 @@ const includeLines = files.map((relPath) => {
   }
   usedIds.add(id);
   const esc = xmlEscape(relPath);
-  return `      <include name="${id}" file="${esc}" resource_path="${esc}" use_base_dir="false" type="BINDATA" />`;
+  return `      <include name="${id}" file="${esc}" resource_path="${esc}" use_base_dir="true" type="BINDATA" />`;
 });
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<grit latest_public_release="0" current_release="1" output_all_resource_defines="false">
+<grit latest_public_release="0" current_release="1">
   <outputs>
     <output filename="grit/open_webui_resources.h" type="rc_header">
       <emit emit_type='prepend'></emit>

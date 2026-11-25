@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "open_unified/core/model/open_types.h"
 
@@ -213,7 +214,7 @@ class BoostPickerCoordinator {
                                               std::string_view raw_json);
 
  private:
-  BoostStore* store_;
+  raw_ptr<BoostStore> store_;
   std::map<std::string, ZapPickerSession> sessions_;
 };
 

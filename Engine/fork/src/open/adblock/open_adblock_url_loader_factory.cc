@@ -808,7 +808,8 @@ void OpenAdBlockURLLoaderFactory::FlushStops() {
   // when the document is gone or not the primary page (§7.5).
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&OpenAdBlockTabHelper::AddStopsForDocument,
-                                context_.document, pending_blocked_,
+                                context_.document, context_.frame_id,
+                                context_.top_host, pending_blocked_,
                                 pending_redirected_));
   pending_blocked_ = 0;
   pending_redirected_ = 0;

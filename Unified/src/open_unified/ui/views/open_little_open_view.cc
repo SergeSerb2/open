@@ -29,6 +29,7 @@
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -399,7 +400,7 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
       u"Open in Space"));
 
   web_view_ = AddChildView(std::make_unique<views::WebView>());
-  web_view_->SetResizeBackgroundColor(SK_ColorWHITE);
+  web_view_->SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
 
   AddAccelerator(ui::Accelerator(ui::VKEY_O, secondary::kPrimaryModifier));
   SetMode(Mode::kBar);

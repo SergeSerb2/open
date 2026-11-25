@@ -141,7 +141,8 @@ class SafeSqliteTempCopy {
 
  private:
   base::ScopedTempDir temp_dir_;
-  sql::Database db_;
+  sql::Database db_{sql::DatabaseOptions{},
+                    sql::Database::Tag("FirefoxImporter")};
 };
 
 constexpr size_t kMaxProbeJsonBytes = 16 * 1024 * 1024;
@@ -499,10 +500,8 @@ std::vector<DetectedBrowser> BrowserImporter::ProbeInstalledBrowsers() {
   auto env = base::Environment::Create();
 
 #if BUILDFLAG(IS_WIN)
-  std::string local_app_data;
-  std::string roaming_app_data;
-  env->GetVar("LOCALAPPDATA", &local_app_data);
-  env->GetVar("APPDATA", &roaming_app_data);
+  std::string local_app_data = env->GetVar("LOCALAPPDATA").value_or("");
+  std::string roaming_app_data = env->GetVar("APPDATA").value_or("");
   if (!local_app_data.empty()) {
     base::FilePath lad = base::FilePath::FromUTF8Unsafe(local_app_data);
     candidates.push_back(
@@ -538,8 +537,7 @@ std::vector<DetectedBrowser> BrowserImporter::ProbeInstalledBrowsers() {
                           rad.AppendASCII("Mozilla").AppendASCII("Firefox")});
   }
 #elif BUILDFLAG(IS_MAC)
-  std::string home;
-  env->GetVar("HOME", &home);
+  std::string home = env->GetVar("HOME").value_or("");
   if (!home.empty()) {
     base::FilePath app_sup = base::FilePath(home)
                                  .AppendASCII("Library")
@@ -562,10 +560,8 @@ std::vector<DetectedBrowser> BrowserImporter::ProbeInstalledBrowsers() {
                           app_sup.AppendASCII("Firefox")});
   }
 #else  // Linux / POSIX
-  std::string home;
-  env->GetVar("HOME", &home);
-  std::string xdg_config;
-  env->GetVar("XDG_CONFIG_HOME", &xdg_config);
+  std::string home = env->GetVar("HOME").value_or("");
+  std::string xdg_config = env->GetVar("XDG_CONFIG_HOME").value_or("");
   base::FilePath config_root =
       !xdg_config.empty()
           ? base::FilePath(xdg_config)

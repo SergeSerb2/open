@@ -117,6 +117,7 @@ class OpenSleepController : public OpenTabBridge::Observer {
   std::map<ItemID, bool> audible_;
   base::RepeatingTimer tick_timer_;
   bool started_ = false;
+  bool discarding_internally_ = false;
   base::WeakPtrFactory<OpenSleepController> weak_factory_{this};
 };
 

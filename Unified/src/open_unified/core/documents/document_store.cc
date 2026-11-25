@@ -287,7 +287,7 @@ std::optional<EaselDocument> DocumentStore::LoadEasel(
     // Move refused oversized/unreadable file aside so fresh edits never lose it.
     std::string refused_name =
         "document.refused-" +
-        base::NumberToString(base::Time::Now().InSecondsSinceUnixEpoch()) +
+        base::NumberToString(base::Time::Now().InMillisecondsSinceUnixEpoch() / 1000) +
         ".json";
     base::Move(path, path.DirName().AppendASCII(refused_name));
     return std::nullopt;
@@ -297,7 +297,7 @@ std::optional<EaselDocument> DocumentStore::LoadEasel(
   if (!doc || doc->id != base::ToLowerASCII(easel_id)) {
     std::string refused_name =
         "document.refused-" +
-        base::NumberToString(base::Time::Now().InSecondsSinceUnixEpoch()) +
+        base::NumberToString(base::Time::Now().InMillisecondsSinceUnixEpoch() / 1000) +
         ".json";
     base::Move(path, path.DirName().AppendASCII(refused_name));
     return std::nullopt;

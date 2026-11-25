@@ -84,6 +84,9 @@
 #include <ws2tcpip.h>
 // winsock2.h must come first.
 #include <afunix.h>
+#ifdef FindWindow
+#undef FindWindow
+#endif
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -455,7 +458,7 @@ std::optional<ItemID> ResolveTab(const base::DictValue& args,
   OpenBrowserService* service = Svc();
   BrowserModel& model = service->model();
   if (const std::string* id = args.FindString("tab")) {
-    if (model.FindNode(*id)) {
+    if (model.FindTab(*id) || model.FindNode(*id)) {
       return *id;
     }
     *error = "no tab " + *id;
@@ -736,6 +739,7 @@ void TypeIntoPage(content::WebContents* contents, const std::u16string& text) {
   if (!view) {
     return;
   }
+  contents->Focus();
   content::RenderWidgetHost* host = view->GetRenderWidgetHost();
   for (char16_t c : text) {
     input::NativeWebKeyboardEvent event(blink::WebInputEvent::Type::kChar,
@@ -753,17 +757,38 @@ void ClickAt(content::WebContents* contents, double x, double y) {
   if (!view) {
     return;
   }
+  contents->Focus();
   content::RenderWidgetHost* host = view->GetRenderWidgetHost();
-  for (auto type : {blink::WebInputEvent::Type::kMouseDown,
-                    blink::WebInputEvent::Type::kMouseUp}) {
-    blink::WebMouseEvent event(type, blink::WebInputEvent::kNoModifiers,
-                               ui::EventTimeForNow());
-    event.button = blink::WebPointerProperties::Button::kLeft;
-    event.click_count = 1;
-    event.SetPositionInWidget(static_cast<float>(x), static_cast<float>(y));
-    event.SetPositionInScreen(static_cast<float>(x), static_cast<float>(y));
-    host->ForwardMouseEvent(event);
-  }
+  const float fx = static_cast<float>(x);
+  const float fy = static_cast<float>(y);
+
+  blink::WebMouseEvent move(blink::WebInputEvent::Type::kMouseMove,
+                            blink::WebInputEvent::kNoModifiers,
+                            ui::EventTimeForNow());
+  move.pointer_type = blink::WebPointerProperties::PointerType::kMouse;
+  move.SetPositionInWidget(fx, fy);
+  move.SetPositionInScreen(fx, fy);
+  host->ForwardMouseEvent(move);
+
+  blink::WebMouseEvent down(blink::WebInputEvent::Type::kMouseDown,
+                            blink::WebInputEvent::kLeftButtonDown,
+                            ui::EventTimeForNow());
+  down.pointer_type = blink::WebPointerProperties::PointerType::kMouse;
+  down.button = blink::WebPointerProperties::Button::kLeft;
+  down.click_count = 1;
+  down.SetPositionInWidget(fx, fy);
+  down.SetPositionInScreen(fx, fy);
+  host->ForwardMouseEvent(down);
+
+  blink::WebMouseEvent up(blink::WebInputEvent::Type::kMouseUp,
+                          blink::WebInputEvent::kNoModifiers,
+                          ui::EventTimeForNow());
+  up.pointer_type = blink::WebPointerProperties::PointerType::kMouse;
+  up.button = blink::WebPointerProperties::Button::kLeft;
+  up.click_count = 1;
+  up.SetPositionInWidget(fx, fy);
+  up.SetPositionInScreen(fx, fy);
+  host->ForwardMouseEvent(up);
 }
 
 void WritePngAndReply(base::FilePath path,
@@ -1361,15 +1386,7 @@ void OpenAutomationServer::RegisterCommands() {
         BrowserView* browser_view = MainBrowserView();
         OpenWindowUi* ui = MainUi();
         if (browser_view && ui && ui->command_bar_shown()) {
-          // The command bar's field has focus: native key events.
-          views::Widget* widget = browser_view->GetWidget();
-          for (char16_t c : text) {
-            ui::KeyEvent event(ui::EventType::kKeyPressed, ui::VKEY_UNKNOWN,
-                               ui::DomCode::NONE, ui::EF_NONE,
-                               ui::DomKey::FromCharacter(c),
-                               base::TimeTicks::Now(), /*is_char=*/true);
-            widget->OnKeyEvent(&event);
-          }
+          ui->TypeInCommandBar(text);
           Ok(std::move(reply), base::DictValue().Set("target", "commandBar"));
           return;
         }

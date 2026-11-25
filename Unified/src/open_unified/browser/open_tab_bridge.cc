@@ -127,6 +127,7 @@ class OpenTabObserver : public content::WebContentsObserver,
     UpdateLive();
   }
   void OnBackgroundColorChanged() override { UpdateLive(); }
+  void WebContentsDestroyed() override { favicon_observation_.Reset(); }
 
   // favicon::FaviconDriverObserver:
   void OnFaviconUpdated(favicon::FaviconDriver* favicon_driver,
@@ -251,7 +252,7 @@ void OpenTabBridge::Shutdown() {
   started_ = false;
   service_->model().RemoveObserver(this);
   browser_collection_observation_.Reset();
-  strip_observations_.RemoveAllObservations();
+  ClearObservedStrips();
   windows_.clear();
   contents_.clear();
 }
@@ -283,7 +284,7 @@ void OpenTabBridge::AdoptStartupBrowsers() {
         WindowBrowsers& wb = windows_[main];
         if (!wb.by_profile.contains(*profile)) {
           wb.by_profile[*profile] = browser;
-          strip_observations_.AddObservation(browser->GetTabStripModel());
+          AddObservedStrip(browser->GetTabStripModel());
         }
         // Chromium's startup tabs (NTP, session restore, command-line URLs)
         // are not Open's; Open's model is the session.
@@ -338,7 +339,7 @@ BrowserWindowInterface* OpenTabBridge::EnsureBrowser(
     return nullptr;
   }
   wb.by_profile[profile_id] = browser;
-  strip_observations_.AddObservation(browser->GetTabStripModel());
+  AddObservedStrip(browser->GetTabStripModel());
   return browser;
 }
 
@@ -578,7 +579,6 @@ std::unique_ptr<content::WebContents> OpenTabBridge::CreateContentsFor(
   params.initially_hidden = true;
   std::unique_ptr<content::WebContents> contents =
       content::WebContents::Create(params);
-  TabHelpers::AttachTabHelpers(contents.get());
   AttachHandle(contents.get(), tab.id);
   if (tab.is_muted) {
     contents->SetAudioMuted(true);
@@ -1038,7 +1038,7 @@ void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
   if (!wb.by_profile.contains(*profile)) {
     wb.by_profile[*profile] = browser;
   }
-  strip_observations_.AddObservation(browser->GetTabStripModel());
+  AddObservedStrip(browser->GetTabStripModel());
 }
 
 void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
@@ -1047,15 +1047,35 @@ void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
       return entry.second == browser;
     });
   }
-  if (strip_observations_.IsObservingSource(browser->GetTabStripModel())) {
-    strip_observations_.RemoveObservation(browser->GetTabStripModel());
-  }
+  RemoveObservedStrip(browser->GetTabStripModel());
 }
 
 void OpenTabBridge::OnTabStripModelDestroyed(TabStripModel* tab_strip_model) {
-  if (strip_observations_.IsObservingSource(tab_strip_model)) {
-    strip_observations_.RemoveObservation(tab_strip_model);
+  RemoveObservedStrip(tab_strip_model);
+}
+
+void OpenTabBridge::AddObservedStrip(TabStripModel* strip) {
+  if (!strip || observed_strips_.contains(strip)) {
+    return;
   }
+  strip->AddObserver(this);
+  observed_strips_.insert(strip);
+}
+
+void OpenTabBridge::RemoveObservedStrip(TabStripModel* strip) {
+  if (!strip) {
+    return;
+  }
+  if (observed_strips_.erase(strip) > 0) {
+    strip->RemoveObserver(this);
+  }
+}
+
+void OpenTabBridge::ClearObservedStrips() {
+  for (TabStripModel* strip : observed_strips_) {
+    strip->RemoveObserver(this);
+  }
+  observed_strips_.clear();
 }
 
 // --- Page -> model -----------------------------------------------------------

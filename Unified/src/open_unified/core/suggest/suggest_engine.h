@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "open_unified/core/commands/command_registry.h"
 #include "open_unified/core/model/browser_model.h"
 #include "open_unified/core/model/open_types.h"
@@ -178,9 +179,9 @@ class SuggestEngine {
       const SuggestContext& context,
       const std::optional<ProfileID>& profile_id) const;
 
-  const BrowserModel* model_ = nullptr;
-  HistoryStore* history_store_ = nullptr;
-  const CommandRegistry* command_registry_ = nullptr;
+  raw_ptr<const BrowserModel> model_ = nullptr;
+  raw_ptr<HistoryStore> history_store_ = nullptr;
+  raw_ptr<const CommandRegistry> command_registry_ = nullptr;
   std::vector<HistoryEntry> recent_history_;
 };
 
