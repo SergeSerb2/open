@@ -509,15 +509,6 @@ public final class SidebarView: NSView {
         return convert(page.outline.rect(ofRow: row), from: page.outline)
     }
 
-    /// The focused page's "New Folder" button on the "New Tab" row, in this view.
-    public var newFolderButtonFrame: CGRect? {
-        guard let page = pager.currentPage else { return nil }
-        let row = page.outline.row(forItem: page.newTab)
-        guard row >= 0, let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? NewTabCellView,
-              !cell.newFolderButton.isHidden else { return nil }
-        return convert(cell.newFolderButton.bounds, from: cell.newFolderButton)
-    }
-
     /// Actual current-row highlight state, without creating an offscreen row.
     public func isCurrentRow(nodeID: ItemID) -> Bool {
         guard let page = pager.currentPage, let obj = context.model.node(id: nodeID)?.object else { return false }

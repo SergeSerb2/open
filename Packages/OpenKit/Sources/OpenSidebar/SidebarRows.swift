@@ -1251,26 +1251,15 @@ final class LiveFolderMoreCellView: SidebarCellView {
     }
 }
 
-/// "+ New Tab" row, with a trailing New Folder button in normal Spaces.
+/// "+ New Tab" row.
 @MainActor
 final class NewTabCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("newTab")
-    private static let newFolderIcon: NSImage? = {
-        let image = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: "New Folder")?
-            .withSymbolConfiguration(.init(pointSize: 13.5, weight: .medium))
-        image?.isTemplate = true
-        return image
-    }()
     let plus = GlyphView()
     let title = TextLabel()
     /// "⌘T" at the trailing edge while the pointer is over the row (reference
     /// New Tab row on hover; docs/re/onboarding.md §6, new_tab clip).
     let shortcutHint = TextLabel()
-    let newFolderButton = PlateButton(glyph: nil)
-
-    override var page: SpacePageView? {
-        didSet { newFolderButton.context = page?.context; rowStateChanged(); needsLayout = true }
-    }
 
     required init(frame: NSRect) {
         super.init(frame: frame)
@@ -1286,30 +1275,8 @@ final class NewTabCellView: SidebarCellView {
         shortcutHint.alignment = .right
         shortcutHint.text = { "⌘T" }
         shortcutHint.isHidden = true
-        newFolderButton.glyphView.image = { Self.newFolderIcon }
-        newFolderButton.plateRadius = 6
-        newFolderButton.plateColor = { _ in SidebarRole.rowPressed }
-        newFolderButton.glyphTint = { [weak self] _ in
-            guard let self else { return SidebarRole.newTabGlyph.nsColor }
-            return self.newFolderButton.isHovered ? self.titleColor() : SidebarRole.newTabGlyph.nsColor
-        }
-        newFolderButton.tooltip = { [weak self] in
-            guard let context = self?.context, let space = self?.page?.space else { return nil }
-            return Tooltip(title: "New Folder", keys: context.keys("new-folder", default: ["⇧", "⌘", "N"]),
-                           style: context.style(for: space))
-        }
-        newFolderButton.action = { [weak self] in
-            guard let page = self?.page else { return }
-            page.context.send(.newFolder(in: .spacePinned(page.space.id)))
-        }
-        newFolderButton.setAccessibilityLabel("New Folder")
-        newFolderButton.setAccessibilityIdentifier("sidebarNewFolderButton")
         rowStateChanged()
-        addSubview(plus); addSubview(title); addSubview(shortcutHint); addSubview(newFolderButton)
-    }
-
-    private var showsNewFolderButton: Bool {
-        !(context?.hidesSpaceChrome ?? false) && !(rowView?.isCurrent ?? false)
+        addSubview(plus); addSubview(title); addSubview(shortcutHint)
     }
 
     /// While the Cmd+T command bar is open the row is current and its label and
@@ -1321,26 +1288,15 @@ final class NewTabCellView: SidebarCellView {
         title.color = label
         shortcutHint.color = label
         shortcutHint.isHidden = !(rowView?.isHovered ?? false) || current
-        let showButton = showsNewFolderButton
-        if newFolderButton.isHidden == showButton {
-            newFolderButton.isHidden = !showButton
-            needsLayout = true
-        }
     }
 
     override func layout() {
         super.layout()
         let m = SpaceListMetrics.self
         plus.frame = CGRect(x: m.faviconX, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
-        let showButton = showsNewFolderButton
-        newFolderButton.isHidden = !showButton
-        newFolderButton.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - m.accessorySize,
-                                       y: m.accessoryY, width: m.accessorySize, height: m.accessorySize)
         let hintWidth: CGFloat = 40
-        let hintRight = showButton ? newFolderButton.frame.minX - 4 : bounds.width - 12
-        shortcutHint.frame = CGRect(x: hintRight - hintWidth, y: 0, width: hintWidth, height: m.rowHeight)
-        let titleRight = showButton ? (bounds.width - newFolderButton.frame.minX + 4) : m.titleTrailingInset
-        title.frame = CGRect(x: m.titleX, y: 0, width: max(0, bounds.width - m.titleX - titleRight), height: m.rowHeight)
+        shortcutHint.frame = CGRect(x: bounds.width - 12 - hintWidth, y: 0, width: hintWidth, height: m.rowHeight)
+        title.frame = CGRect(x: m.titleX, y: 0, width: max(0, bounds.width - m.titleX - m.titleTrailingInset), height: m.rowHeight)
     }
 }
 

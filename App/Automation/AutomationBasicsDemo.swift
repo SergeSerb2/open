@@ -77,7 +77,6 @@ extension AutomationController {
         "favoritesEmptyCard": sidebar.favoritesEmptyCard.map { box($0.bounds, in: $0) } ?? [],
         "dropFolder": sidebar.dropTargetFolderState ?? NSNull(),
         "newTab": sidebar.newTabRowFrame.map { box($0, in: sidebar) } ?? [],
-        "newFolderButton": sidebar.newFolderButtonFrame.map { box($0, in: sidebar) } ?? [],
         "sidebar": box(sidebar.bounds, in: sidebar), "page": box(page.bounds, in: page),
         "window": [target.frame.width, target.frame.height]] as [String: Any]
     case "space-icon":
