@@ -6,3 +6,5 @@ is_clang = true
 enable_precompiled_headers = false
 enable_resource_allowlist_generation = false
 use_thin_lto = false
+# Cross-compiling Win64 from Linux disables v8_context_snapshot; embed V8 startup data cleanly.
+v8_use_external_startup_data = false

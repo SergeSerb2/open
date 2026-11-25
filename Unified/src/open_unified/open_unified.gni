@@ -1,0 +1,21 @@
+# Copyright 2026 The Open Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Build arguments of the Open Unified Browser (Chromium 156.0.8078.48, no CEF).
+# Imported by //open_unified/BUILD.gn and by the Chromium build files that the
+# hook applier patches (Unified/scripts/apply-chromium-hooks.py, hook 0001).
+
+declare_args() {
+  # Builds Open's browser chrome, services and open:// WebUI into the
+  # Chromium binary (//chrome:dependencies gains //open_unified).
+  open_unified_browser = false
+
+  # Compiles OpenAutomationServer (docs/automation.md NDJSON protocol). The
+  # server still starts only with --automation-socket or --automation-port.
+  open_enable_automation = false
+}
+
+# Directory that unified-apply fills with the Vite build of Unified/webui
+# (open_webui_resources.grd plus the hashed assets it lists).
+open_unified_webui_resources_dir = "//open_unified/ui/webui/resources"

@@ -1,0 +1,261 @@
+#!/usr/bin/env bash
+# Copyright 2026 The Open Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# Puts Open Unified on top of a Chromium 156.0.8078.48 checkout:
+#   1. overlays Unified/src/open_unified/ -> src/open_unified/ and generates
+#      src/open_unified/sources.gni (core/, ui/design/, ui/views/ sources);
+#   2. copies the pure-Chromium ad-block engine Engine/fork/src/open/adblock/
+#      -> src/open/adblock/ (CEF-only files left out, GN visibility opened to
+#      //open_unified) and applies the Rust vendor patch
+#      Engine/fork/patches/rust/0001-adblock-vendor.patch;
+#   3. copies the Vite build Unified/webui/dist/ -> src/open_unified/ui/webui/
+#      resources/ (builds it first when missing or with --build-webui);
+#   4. runs Unified/scripts/apply-chromium-hooks.py (hooks 0001-0009).
+#
+# Idempotent: run it again after any change in Unified/ or Engine/fork.
+#
+# Usage: unified-apply [--root DIR] [--src DIR] [--build-webui] [--check]
+#                      [--skip-webui] [--skip-rust]
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+UNIFIED_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${UNIFIED_DIR}/.." && pwd)"
+# shellcheck source=/dev/null
+source "${UNIFIED_DIR}/VERSIONS"
+
+ROOT="${HOME}/${UNIFIED_ROOT_DEFAULT}"
+SRC=""
+BUILD_WEBUI=0
+CHECK=0
+SKIP_WEBUI=0
+SKIP_RUST=0
+
+usage() {
+  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --root) ROOT="$2"; shift 2 ;;
+    --root=*) ROOT="${1#*=}"; shift ;;
+    --src) SRC="$2"; shift 2 ;;
+    --src=*) SRC="${1#*=}"; shift ;;
+    --build-webui) BUILD_WEBUI=1; shift ;;
+    --skip-webui) SKIP_WEBUI=1; shift ;;
+    --skip-rust) SKIP_RUST=1; shift ;;
+    --check) CHECK=1; shift ;;
+    -h|--help) usage 0 ;;
+    *) echo "unified-apply: unknown argument $1" >&2; usage 2 ;;
+  esac
+done
+SRC="${SRC:-${ROOT}/src}"
+
+log() { printf '\033[1m[unified-apply]\033[0m %s\n' "$*"; }
+die() { printf '[unified-apply] error: %s\n' "$*" >&2; exit 1; }
+
+[[ -d "${SRC}/chrome" ]] || die "${SRC} is not a Chromium src directory"
+
+# --- 0. Version pin ----------------------------------------------------------
+version_file="${SRC}/chrome/VERSION"
+actual="$(awk -F= '{v[$1]=$2} END {print v["MAJOR"]"."v["MINOR"]"."v["BUILD"]"."v["PATCH"]}' "${version_file}")"
+[[ "${actual}" == "${CHROMIUM_TAG}" ]] ||
+  die "Chromium ${actual} at ${SRC}; Unified/VERSIONS pins ${CHROMIUM_TAG}"
+log "Chromium ${actual} at ${SRC}"
+
+copy_tree() {  # copy_tree FROM TO [--exclude PATTERN]...
+  # Mirrors FROM into TO (deletes what FROM no longer has); patterns match
+  # base names, or paths relative to FROM when they start with "/".
+  local from="$1" to="$2"; shift 2
+  python3 -I - "${from}" "${to}" "${CHECK}" "$@" <<'PY'
+import fnmatch, os, shutil, sys
+src, dst, check = sys.argv[1], sys.argv[2], sys.argv[3] == '1'
+excludes = [a for a in sys.argv[5::2]] if len(sys.argv) > 4 else []
+
+def excluded(rel, is_dir):
+  name = os.path.basename(rel)
+  for pattern in excludes:
+    if pattern.startswith('/'):
+      p = pattern.strip('/')
+      if rel == p or rel.startswith(p + '/'):
+        return True
+    elif fnmatch.fnmatch(name, pattern):
+      return True
+  return False
+
+changes = []
+wanted = set()
+for dirpath, dirnames, filenames in os.walk(src):
+  rel_dir = os.path.relpath(dirpath, src)
+  rel_dir = '' if rel_dir == '.' else rel_dir
+  dirnames[:] = [d for d in dirnames
+                 if not excluded(os.path.join(rel_dir, d), True)]
+  for name in filenames:
+    rel = os.path.join(rel_dir, name)
+    if excluded(rel, False):
+      continue
+    wanted.add(rel)
+    s, d = os.path.join(src, rel), os.path.join(dst, rel)
+    if os.path.exists(d) and os.path.getsize(d) == os.path.getsize(s):
+      with open(s, 'rb') as a, open(d, 'rb') as b:
+        if a.read() == b.read():
+          continue
+    changes.append('+ ' + rel)
+    if not check:
+      os.makedirs(os.path.dirname(d), exist_ok=True)
+      shutil.copy2(s, d)
+if os.path.isdir(dst):
+  for dirpath, dirnames, filenames in os.walk(dst):
+    rel_dir = os.path.relpath(dirpath, dst)
+    rel_dir = '' if rel_dir == '.' else rel_dir
+    dirnames[:] = [d for d in dirnames
+                   if not excluded(os.path.join(rel_dir, d), True)]
+    for name in filenames:
+      rel = os.path.join(rel_dir, name)
+      if rel not in wanted and not excluded(rel, False):
+        changes.append('- ' + rel)
+        if not check:
+          os.remove(os.path.join(dst, rel))
+verb = 'would change' if check else 'changed'
+print(f'    {len(changes)} file(s) {verb}')
+for line in changes[:20]:
+  print(f'      {line}')
+PY
+}
+
+# --- 1. //open_unified ----------------------------------------------------------
+log "overlay Unified/src/open_unified -> src/open_unified"
+copy_tree "${UNIFIED_DIR}/src/open_unified" "${SRC}/open_unified" \
+  --exclude '/ui/webui/resources/' --exclude '/sources.gni' \
+  --exclude '*_unittest*' --exclude '.DS_Store'
+
+generate_sources_gni() {
+  python3 -I - "${SRC}/open_unified" <<'PY'
+import os, sys
+root = sys.argv[1]
+SKIP = ('_unittest', '_browsertest', '_fuzzer', '_test.', '_perftest')
+PLATFORM = (('_win', 'is_win'), ('_linux', 'is_linux'), ('_mac', 'is_mac'),
+            ('_posix', 'is_posix'))
+
+def collect(*dirs):
+  common, by_platform = [], {}
+  for d in dirs:
+    base = os.path.join(root, d)
+    if not os.path.isdir(base):
+      continue
+    for dirpath, _, files in os.walk(base):
+      for name in sorted(files):
+        if not name.endswith(('.h', '.cc', '.mm')) or any(s in name for s in SKIP):
+          continue
+        rel = os.path.relpath(os.path.join(dirpath, name), root).replace(os.sep, '/')
+        stem = os.path.splitext(name)[0]
+        cond = next((c for suffix, c in PLATFORM if stem.endswith(suffix)), None)
+        if name.endswith('.mm'):
+          cond = 'is_mac'
+        (by_platform.setdefault(cond, []) if cond else common).append(rel)
+  return sorted(common), {k: sorted(v) for k, v in by_platform.items()}
+
+def emit(var, common, by_platform):
+  out = [f'{var} = [']
+  out += [f'  "{f}",' for f in common]
+  out.append(']')
+  for cond, files in sorted(by_platform.items()):
+    out.append(f'if ({cond}) {{')
+    out.append(f'  {var} += [')
+    out += [f'    "{f}",' for f in files]
+    out.append('  ]')
+    out.append('}')
+  return out
+
+lines = ['# Generated by Unified/scripts/unified-apply. Do not edit.',
+         '# Lists the sources of Tracks 2-5 for //open_unified/BUILD.gn.', '']
+lines += emit('open_unified_core_sources', *collect('core'))
+lines += emit('open_unified_ui_design_sources', *collect('ui/design'))
+lines += emit('open_unified_ui_views_sources', *collect('ui/views'))
+path = os.path.join(root, 'sources.gni')
+text = '\n'.join(lines) + '\n'
+if not os.path.exists(path) or open(path).read() != text:
+  open(path, 'w').write(text)
+counts = [len([l for l in lines if l.startswith('  "') or l.startswith('    "')])]
+print(f'    sources.gni: {counts[0]} files')
+PY
+}
+if [[ "${CHECK}" == 0 ]]; then
+  generate_sources_gni
+fi
+
+# --- 2. //open/adblock (pure Chromium) + Rust vendor patch ----------------------
+log "copy Engine/fork/src/open/adblock -> src/open/adblock (no CEF files)"
+# Stage first: the GN visibility edit happens on the staged copy, so the
+# mirror into src/ is a no-op when nothing changed (no GN regeneration).
+adblock_stage="$(mktemp -d)"
+trap 'rm -rf "${adblock_stage}"' EXIT
+cp -R "${REPO_ROOT}/Engine/fork/src/open/adblock/." "${adblock_stage}/"
+# The engine's targets are visible to //cef only; open them to Open Unified.
+python3 -I - "${adblock_stage}" <<'PY'
+import re, sys, os
+root = sys.argv[1]
+for rel in ('BUILD.gn', 'renderer/BUILD.gn', 'mojom/BUILD.gn'):
+  path = os.path.join(root, rel)
+  if not os.path.exists(path):
+    continue
+  text = open(path).read()
+  if '//open_unified/*' in text:
+    continue
+  new = re.sub(r'visibility = \[ "//cef/\*" \]',
+               'visibility = [\n    "//cef/*",\n    "//open_unified/*",\n  ]', text)
+  if '//open_unified/*' not in new:
+    new = re.sub(r'(\n(\s*)"//cef/\*",\n)', r'\1\2"//open_unified/*",\n',
+                 new)
+  if new != text:
+    open(path, 'w').write(new)
+    print(f'    visibility: {rel} += //open_unified/*')
+PY
+copy_tree "${adblock_stage}" "${SRC}/open/adblock" \
+  --exclude 'open_adblock_api.cc' --exclude 'open_adblock_api_proof.cc' \
+  --exclude 'open_adblock_profile_proof.cc' --exclude 'open_adblock_cache.h'
+if [[ "${CHECK}" == 0 && ! -f "${SRC}/open/BUILD.gn" ]]; then
+  cp "${REPO_ROOT}/Engine/fork/src/open/BUILD.gn" "${SRC}/open/BUILD.gn"
+fi
+
+if [[ "${SKIP_RUST}" == 0 ]]; then
+  rust_patch="${REPO_ROOT}/Engine/fork/patches/rust/0001-adblock-vendor.patch"
+  if git -C "${SRC}" apply --check --reverse "${rust_patch}" 2>/dev/null; then
+    log "Rust vendor patch (adblock ${ADBLOCK_CRATE_VERSION}): already applied"
+  elif git -C "${SRC}" apply --check "${rust_patch}" 2>/dev/null; then
+    if [[ "${CHECK}" == 1 ]]; then
+      log "Rust vendor patch: would apply"
+    else
+      git -C "${SRC}" apply "${rust_patch}"
+      log "Rust vendor patch: applied"
+    fi
+  else
+    die "Engine/fork/patches/rust/0001-adblock-vendor.patch does not apply"
+  fi
+fi
+
+# --- 3. open:// WebUI bundle -----------------------------------------------------
+if [[ "${SKIP_WEBUI}" == 0 ]]; then
+  webui="${UNIFIED_DIR}/webui"
+  if [[ "${BUILD_WEBUI}" == 1 || ! -f "${webui}/dist/open_webui_resources.grd" ]]; then
+    command -v pnpm >/dev/null || die "pnpm is needed to build Unified/webui"
+    log "build Unified/webui (tsrs check + Vite + GRD)"
+    (cd "${webui}" && pnpm install --frozen-lockfile && pnpm run check &&
+       pnpm run build)
+  fi
+  [[ -f "${webui}/dist/open_webui_resources.grd" ]] ||
+    die "Unified/webui/dist/open_webui_resources.grd is missing"
+  log "copy Unified/webui/dist -> src/open_unified/ui/webui/resources"
+  copy_tree "${webui}/dist" "${SRC}/open_unified/ui/webui/resources"
+fi
+
+# --- 4. Chromium hooks -----------------------------------------------------------
+log "Chromium hooks (Unified/patches/chromium/series)"
+hook_args=(--src "${SRC}")
+[[ "${CHECK}" == 1 ]] && hook_args+=(--check)
+python3 -I "${SCRIPT_DIR}/apply-chromium-hooks.py" "${hook_args[@]}"
+
+log "done. Next: Unified/scripts/unified-build --src ${SRC} --target linux-x64"

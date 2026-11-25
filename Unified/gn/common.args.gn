@@ -12,7 +12,7 @@ v8_symbol_level = 0
 chrome_pgo_phase = 0
 treat_warnings_as_errors = false
 disable_fieldtrial_testing_config = true
-enable_background_mode = false
+# Chromium 156 asserts enable_background_mode in chrome/browser/background/extensions/BUILD.gn.
 enable_downgrade_processing = false
 enable_nacl = false
 proprietary_codecs = true

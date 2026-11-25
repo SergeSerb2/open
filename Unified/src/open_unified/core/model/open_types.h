@@ -70,6 +70,13 @@ struct SpaceStyle {
 };
 
 struct SpaceTheme {
+  SpaceTheme();
+  SpaceTheme(const SpaceTheme&);
+  SpaceTheme(SpaceTheme&&) noexcept;
+  SpaceTheme& operator=(const SpaceTheme&);
+  SpaceTheme& operator=(SpaceTheme&&) noexcept;
+  ~SpaceTheme();
+
   std::optional<RGBAColor> light_background;
   std::optional<RGBAColor> dark_background;
   std::optional<RGBAColor> light_foreground;
@@ -90,6 +97,14 @@ enum class SpaceIconKind {
 };
 
 struct SpaceIcon {
+  SpaceIcon();
+  SpaceIcon(SpaceIconKind kind, std::string value);
+  SpaceIcon(const SpaceIcon&);
+  SpaceIcon(SpaceIcon&&) noexcept;
+  SpaceIcon& operator=(const SpaceIcon&);
+  SpaceIcon& operator=(SpaceIcon&&) noexcept;
+  ~SpaceIcon();
+
   SpaceIconKind kind = SpaceIconKind::kEmoji;
   std::string value;
 
@@ -104,6 +119,13 @@ enum class SleepPhase {
 };
 
 struct LiveItemInfo {
+  LiveItemInfo();
+  LiveItemInfo(const LiveItemInfo&);
+  LiveItemInfo(LiveItemInfo&&) noexcept;
+  LiveItemInfo& operator=(const LiveItemInfo&);
+  LiveItemInfo& operator=(LiveItemInfo&&) noexcept;
+  ~LiveItemInfo();
+
   std::string source_kind;  // e.g. "github_pr"
   std::string subtitle;
   std::string status_badge;
@@ -113,6 +135,13 @@ struct LiveItemInfo {
 };
 
 struct LiveFolderConfig {
+  LiveFolderConfig();
+  LiveFolderConfig(const LiveFolderConfig&);
+  LiveFolderConfig(LiveFolderConfig&&) noexcept;
+  LiveFolderConfig& operator=(const LiveFolderConfig&);
+  LiveFolderConfig& operator=(LiveFolderConfig&&) noexcept;
+  ~LiveFolderConfig();
+
   std::string provider;
   std::string query;
   int refresh_interval_sec = 300;
@@ -123,6 +152,13 @@ struct LiveFolderConfig {
 
 // Runtime-only tab telemetry (never serialized to browser.json).
 struct TabLiveState {
+  TabLiveState();
+  TabLiveState(const TabLiveState&);
+  TabLiveState(TabLiveState&&) noexcept;
+  TabLiveState& operator=(const TabLiveState&);
+  TabLiveState& operator=(TabLiveState&&) noexcept;
+  ~TabLiveState();
+
   bool has_web_content = false;
   bool has_loaded_in_this_launch = false;
   SleepPhase sleep_phase = SleepPhase::kPlaceholder;
@@ -141,6 +177,13 @@ struct TabLiveState {
 };
 
 struct Tab {
+  Tab();
+  Tab(const Tab&);
+  Tab(Tab&&) noexcept;
+  Tab& operator=(const Tab&);
+  Tab& operator=(Tab&&) noexcept;
+  ~Tab();
+
   ItemID id;
   std::string url;
   std::string title;
@@ -173,6 +216,13 @@ enum class SplitOrientation {
 };
 
 struct Split {
+  Split();
+  Split(const Split&);
+  Split(Split&&) noexcept;
+  Split& operator=(const Split&);
+  Split& operator=(Split&&) noexcept;
+  ~Split();
+
   ItemID id;
   SplitOrientation orientation = SplitOrientation::kHorizontal;
   std::vector<double> fractions;  // Normalized sum = 1.0; empty = equal
@@ -185,6 +235,13 @@ struct Split {
 struct SidebarNode;
 
 struct Folder {
+  Folder();
+  Folder(const Folder&);
+  Folder(Folder&&) noexcept;
+  Folder& operator=(const Folder&);
+  Folder& operator=(Folder&&) noexcept;
+  ~Folder();
+
   ItemID id;
   std::string title;
   bool is_expanded = false;
@@ -202,10 +259,15 @@ struct SidebarNode {
 
   std::variant<Tab, Folder, Split> data;
 
-  SidebarNode() : data(Tab{}) {}
-  explicit SidebarNode(Tab t) : data(std::move(t)) {}
-  explicit SidebarNode(Folder f) : data(std::move(f)) {}
-  explicit SidebarNode(Split s) : data(std::move(s)) {}
+  SidebarNode();
+  explicit SidebarNode(Tab t);
+  explicit SidebarNode(Folder f);
+  explicit SidebarNode(Split s);
+  SidebarNode(const SidebarNode&);
+  SidebarNode(SidebarNode&&) noexcept;
+  SidebarNode& operator=(const SidebarNode&);
+  SidebarNode& operator=(SidebarNode&&) noexcept;
+  ~SidebarNode();
 
   Kind kind() const {
     if (std::holds_alternative<Tab>(data)) return Kind::kTab;
@@ -245,6 +307,13 @@ enum class SleepMode {
 };
 
 struct CustomSearchEngine {
+  CustomSearchEngine();
+  CustomSearchEngine(const CustomSearchEngine&);
+  CustomSearchEngine(CustomSearchEngine&&) noexcept;
+  CustomSearchEngine& operator=(const CustomSearchEngine&);
+  CustomSearchEngine& operator=(CustomSearchEngine&&) noexcept;
+  ~CustomSearchEngine();
+
   std::string id;
   std::string name;
   std::string keyword;
@@ -254,6 +323,13 @@ struct CustomSearchEngine {
 };
 
 struct ProfileSettings {
+  ProfileSettings();
+  ProfileSettings(const ProfileSettings&);
+  ProfileSettings(ProfileSettings&&) noexcept;
+  ProfileSettings& operator=(const ProfileSettings&);
+  ProfileSettings& operator=(ProfileSettings&&) noexcept;
+  ~ProfileSettings();
+
   AutoArchiveInterval auto_archive_after = AutoArchiveInterval::kTwelveHours;
   AutoArchiveInterval little_open_auto_archive_after =
       AutoArchiveInterval::kSixHours;
@@ -268,6 +344,13 @@ struct ProfileSettings {
 };
 
 struct Profile {
+  Profile();
+  Profile(const Profile&);
+  Profile(Profile&&) noexcept;
+  Profile& operator=(const Profile&);
+  Profile& operator=(Profile&&) noexcept;
+  ~Profile();
+
   ProfileID id;
   std::string name;
   std::optional<SpaceIcon> icon;
@@ -278,6 +361,13 @@ struct Profile {
 };
 
 struct Space {
+  Space();
+  Space(const Space&);
+  Space(Space&&) noexcept;
+  Space& operator=(const Space&);
+  Space& operator=(Space&&) noexcept;
+  ~Space();
+
   SpaceID id;
   std::optional<std::string> title;
   std::optional<SpaceIcon> icon;
@@ -299,6 +389,13 @@ enum class WindowStyle {
 };
 
 struct BrowserWindowState {
+  BrowserWindowState();
+  BrowserWindowState(const BrowserWindowState&);
+  BrowserWindowState(BrowserWindowState&&) noexcept;
+  BrowserWindowState& operator=(const BrowserWindowState&);
+  BrowserWindowState& operator=(BrowserWindowState&&) noexcept;
+  ~BrowserWindowState();
+
   WindowID id;
   SpaceID focused_space_id;
   std::map<SpaceID, ItemID> selected_node_by_space;
@@ -321,6 +418,16 @@ enum class RoutingDestinationKind {
 };
 
 struct RoutingDestination {
+  RoutingDestination();
+  RoutingDestination(RoutingDestinationKind kind,
+                     std::optional<SpaceID> space_id = std::nullopt,
+                     std::optional<ProfileID> profile_id = std::nullopt);
+  RoutingDestination(const RoutingDestination&);
+  RoutingDestination(RoutingDestination&&) noexcept;
+  RoutingDestination& operator=(const RoutingDestination&);
+  RoutingDestination& operator=(RoutingDestination&&) noexcept;
+  ~RoutingDestination();
+
   RoutingDestinationKind kind = RoutingDestinationKind::kMostRecentSpace;
   std::optional<SpaceID> space_id;
   std::optional<ProfileID> profile_id;
@@ -329,6 +436,13 @@ struct RoutingDestination {
 };
 
 struct RoutingRule {
+  RoutingRule();
+  RoutingRule(const RoutingRule&);
+  RoutingRule(RoutingRule&&) noexcept;
+  RoutingRule& operator=(const RoutingRule&);
+  RoutingRule& operator=(RoutingRule&&) noexcept;
+  ~RoutingRule();
+
   RuleID id;
   std::string name;
   std::string host_pattern;
@@ -363,6 +477,13 @@ struct TreeChange {
     kSpaceProfileChanged,
   };
 
+  TreeChange();
+  TreeChange(const TreeChange&);
+  TreeChange(TreeChange&&) noexcept;
+  TreeChange& operator=(const TreeChange&);
+  TreeChange& operator=(TreeChange&&) noexcept;
+  ~TreeChange();
+
   Kind kind = Kind::kReload;
   NodeParent parent;
   size_t index = 0;
@@ -375,6 +496,13 @@ struct TreeChange {
 };
 
 struct ArchivedTabRecord {
+  ArchivedTabRecord();
+  ArchivedTabRecord(const ArchivedTabRecord&);
+  ArchivedTabRecord(ArchivedTabRecord&&) noexcept;
+  ArchivedTabRecord& operator=(const ArchivedTabRecord&);
+  ArchivedTabRecord& operator=(ArchivedTabRecord&&) noexcept;
+  ~ArchivedTabRecord();
+
   ItemID id;
   std::string url;
   std::string title;
@@ -388,6 +516,13 @@ struct ArchivedTabRecord {
 };
 
 struct HistoryEntry {
+  HistoryEntry();
+  HistoryEntry(const HistoryEntry&);
+  HistoryEntry(HistoryEntry&&) noexcept;
+  HistoryEntry& operator=(const HistoryEntry&);
+  HistoryEntry& operator=(HistoryEntry&&) noexcept;
+  ~HistoryEntry();
+
   int64_t id = 0;
   std::string url;
   std::string title;
@@ -397,6 +532,13 @@ struct HistoryEntry {
 };
 
 struct DownloadRecord {
+  DownloadRecord();
+  DownloadRecord(const DownloadRecord&);
+  DownloadRecord(DownloadRecord&&) noexcept;
+  DownloadRecord& operator=(const DownloadRecord&);
+  DownloadRecord& operator=(DownloadRecord&&) noexcept;
+  ~DownloadRecord();
+
   std::string id;
   std::string url;
   std::string filename;
@@ -420,12 +562,27 @@ struct BoostColorAdjustment {
 };
 
 struct ZappedElement {
+  ZappedElement();
+  ZappedElement(std::string id, std::string selector, std::string label);
+  ZappedElement(const ZappedElement&);
+  ZappedElement(ZappedElement&&) noexcept;
+  ZappedElement& operator=(const ZappedElement&);
+  ZappedElement& operator=(ZappedElement&&) noexcept;
+  ~ZappedElement();
+
   std::string id;
   std::string selector;
   std::string label;
 };
 
 struct Boost {
+  Boost();
+  Boost(const Boost&);
+  Boost(Boost&&) noexcept;
+  Boost& operator=(const Boost&);
+  Boost& operator=(Boost&&) noexcept;
+  ~Boost();
+
   std::string id;
   ProfileID profile_id;
   std::string name;
@@ -444,6 +601,13 @@ struct Boost {
 
 // NoteDocument (Packages/OpenKit/Sources/OpenDocuments/NoteDocument.swift).
 struct NoteFormatRange {
+  NoteFormatRange();
+  NoteFormatRange(const NoteFormatRange&);
+  NoteFormatRange(NoteFormatRange&&) noexcept;
+  NoteFormatRange& operator=(const NoteFormatRange&);
+  NoteFormatRange& operator=(NoteFormatRange&&) noexcept;
+  ~NoteFormatRange();
+
   std::string type;  // bold, italic, underline, strikethrough, h1..h3, link, bulletList, numberedList, image
   int location = 0;  // UTF-16 offset
   int length = 0;    // UTF-16 length
@@ -452,6 +616,13 @@ struct NoteFormatRange {
 };
 
 struct NoteDocument {
+  NoteDocument();
+  NoteDocument(const NoteDocument&);
+  NoteDocument(NoteDocument&&) noexcept;
+  NoteDocument& operator=(const NoteDocument&);
+  NoteDocument& operator=(NoteDocument&&) noexcept;
+  ~NoteDocument();
+
   int format_version = 1;
   std::string id;
   std::string title;
@@ -463,6 +634,13 @@ struct NoteDocument {
 
 // EaselDocument (docs/easels.md).
 struct EaselElement {
+  EaselElement();
+  EaselElement(const EaselElement&);
+  EaselElement(EaselElement&&) noexcept;
+  EaselElement& operator=(const EaselElement&);
+  EaselElement& operator=(EaselElement&&) noexcept;
+  ~EaselElement();
+
   std::string id;
   std::string type;  // "text", "image", "rect", "ellipse", "arrow", "freehand", "live_card"
   double x = 0.0;
@@ -478,6 +656,13 @@ struct EaselElement {
 };
 
 struct EaselDocument {
+  EaselDocument();
+  EaselDocument(const EaselDocument&);
+  EaselDocument(EaselDocument&&) noexcept;
+  EaselDocument& operator=(const EaselDocument&);
+  EaselDocument& operator=(EaselDocument&&) noexcept;
+  ~EaselDocument();
+
   int format_version = 1;
   std::string id;
   std::string title;

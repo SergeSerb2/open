@@ -1,0 +1,21 @@
+{
+  "name": "@open-browser/webui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "check": "tsrs --noEmit -p tsconfig.json",
+    "build": "vite build && node scripts/gen-grd.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 4173"
+  },
+  "dependencies": {
+    "preact": "^10.26.4"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "tsrs": "7.1.0-beta.tsrs5",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
+  }
+}

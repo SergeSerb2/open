@@ -1,0 +1,253 @@
+.welcome-shell {
+  min-height: 100vh;
+  background: var(--bg-canvas);
+  position: relative;
+  padding: 24px 31px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-x: hidden;
+}
+
+.welcome-top-links {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.welcome-layout {
+  display: grid;
+  grid-template-columns: 336px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  max-width: 1240px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.welcome-left {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.welcome-heading {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.welcome-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.welcome-step {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  border-radius: 14px;
+  min-height: 72px;
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-med);
+}
+
+.welcome-step:hover {
+  background: var(--bg-card-elevated);
+}
+
+.welcome-step.is-active {
+  border-color: var(--open-accent);
+  box-shadow: var(--shadow-card);
+  background: var(--bg-card-elevated);
+}
+
+.welcome-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.welcome-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--open-accent-soft);
+  color: var(--open-accent);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.welcome-step.is-active .welcome-step-num {
+  background: var(--open-accent);
+  color: #ffffff;
+}
+
+.welcome-step-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.welcome-step-body {
+  margin: 0;
+  padding-left: 36px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.welcome-keycaps {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 36px;
+}
+
+.welcome-keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--border-subtle);
+}
+
+.welcome-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--border-subtle);
+}
+
+.welcome-progress-fill {
+  height: 100%;
+  background: var(--open-accent);
+  transform-origin: left center;
+}
+
+/* Right 16:10 Interactive Visual Stage */
+.welcome-stage-panel {
+  aspect-ratio: 16 / 10;
+  border-radius: 18px;
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(145deg, #1b1e38 0%, #262b57 52%, #191a26 100%);
+  box-shadow: var(--shadow-modal);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  color: #ffffff;
+}
+
+.welcome-stage-canvas {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  background: rgba(15, 16, 26, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: 14px;
+  transition: filter 280ms ease;
+}
+
+.welcome-stage-canvas.is-ended {
+  filter: blur(5px) brightness(0.65);
+}
+
+.welcome-replay-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(10, 11, 20, 0.35);
+}
+
+@media (max-width: 900px) {
+  .welcome-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Help & Resources (open://welcome/help) */
+.welcome-help {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 640px;
+  width: 100%;
+  margin: 24px auto 0;
+}
+
+.welcome-help-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.welcome-help-lede {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.welcome-help-card {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.welcome-help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+  padding: 10px 18px;
+  font-size: 13.5px;
+}
+
+.welcome-help-row + .welcome-help-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.welcome-help-row .welcome-keycaps {
+  margin-left: 0;
+  flex-shrink: 0;
+}
+
+.welcome-help-actions {
+  display: flex;
+  gap: 10px;
+}
