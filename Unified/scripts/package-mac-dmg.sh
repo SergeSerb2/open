@@ -475,6 +475,17 @@ detect_icon_source() {
   fi
 }
 
+detect_adblock_source() {
+  local cand
+  for cand in "${SRC}/open_unified/adblock_resources" "${REPO_ROOT}/Vendor/adblock"; do
+    if [[ -f "${cand}/easylist.txt" && -f "${cand}/easyprivacy.txt" && -f "${cand}/resources.json" ]]; then
+      printf '%s\n' "${cand}"
+      return 0
+    fi
+  done
+  printf '\n'
+}
+
 # Emits NUL-delimited records: "<pass>\t<role>\t<path>\0" in strict inside-out order.
 collect_signing_targets() {
   local app_root="$1"
@@ -674,6 +685,7 @@ entitlement_for_role() {
 
 if [[ "${DRY_RUN}" == 1 ]]; then
   ICON_PLAN="$(detect_icon_source)"
+  ADBLOCK_PLAN="$(detect_adblock_source)"
   log "DRY RUN — validating inputs, bundle layout, entitlements, and release plan"
   log "  Host:             ${HOST_OS} (${HOST_ARCH})"
   log "  Input .app:       ${APP_PATH}"
@@ -696,6 +708,11 @@ if [[ "${DRY_RUN}" == 1 ]]; then
     log "  Notarization:     enabled (profile: ${NOTARY_PROFILE})"
   fi
   log "  Icon source:      ${ICON_PLAN}"
+  if [[ -n "${ADBLOCK_PLAN}" ]]; then
+    log "  AdBlock lists:    ${ADBLOCK_PLAN} -> Contents/Resources/adblock/"
+  else
+    log "  AdBlock lists:    none found (run tools/fetch-adblock-lists.sh or unified-apply)"
+  fi
   if [[ -n "${PUBLISH_REPO}" ]]; then
     log "  Publish repo:     ${PUBLISH_REPO} (GitHub Pre-Release, NEVER --latest)"
     log "  Publish tag:      ${TAG}"
@@ -839,6 +856,31 @@ fi
 
 if [[ "${ICON_INSTALLED}" == 0 ]]; then
   warn "Open AppIcon.icns was not installed; preserving bundle's existing CFBundleIconFile"
+fi
+
+# Bundle pinned AdBlock filter lists + resources.json into Contents/Resources/adblock/.
+ADBLOCK_SRC_DIR="$(detect_adblock_source)"
+if [[ -z "${ADBLOCK_SRC_DIR}" && -x "${REPO_ROOT}/tools/fetch-adblock-lists.sh" ]]; then
+  log "fetching bundled AdBlock filter lists via tools/fetch-adblock-lists.sh"
+  if "${REPO_ROOT}/tools/fetch-adblock-lists.sh"; then
+    ADBLOCK_SRC_DIR="$(detect_adblock_source)"
+  else
+    warn "tools/fetch-adblock-lists.sh failed; AdBlock lists will not be bundled"
+  fi
+fi
+if [[ -n "${ADBLOCK_SRC_DIR}" ]]; then
+  ADBLOCK_DST_DIR="${STAGED_APP}/Contents/Resources/adblock"
+  mkdir -p "${ADBLOCK_DST_DIR}"
+  adblock_count=0
+  for name in easylist.txt easyprivacy.txt resources.json; do
+    if [[ -f "${ADBLOCK_SRC_DIR}/${name}" ]]; then
+      install -m 0644 "${ADBLOCK_SRC_DIR}/${name}" "${ADBLOCK_DST_DIR}/${name}"
+      adblock_count=$((adblock_count + 1))
+    fi
+  done
+  log "bundled ${adblock_count} AdBlock resource file(s) from ${ADBLOCK_SRC_DIR} -> Contents/Resources/adblock/"
+else
+  warn "bundled AdBlock resources not found (easylist.txt, easyprivacy.txt, resources.json); fresh installs will download on demand"
 fi
 
 # Update Open.app/Contents/Info.plist with Open branding & version.

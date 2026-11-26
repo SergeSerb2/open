@@ -25,11 +25,14 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
+#include "open_unified/browser/platform/open_platform.h"
 #include "open_unified/core/model/open_types.h"
 #include "open_unified/ui/design/open_motion.h"
 #include "open_unified/ui/design/open_theme_math.h"
@@ -141,8 +144,9 @@ struct OpenMenuTarget {
     kSwitcherItem,  // space_id
     kPlusButton,    // space_id (falls back to Open's default plus menu)
     kToolbarMore,
-    kUrlField,
+    kUrlField,       // URL pill right-click (Copy URL, Site Controls, ...)
     kToolbarAction,  // text = action id
+    kLibrary,        // bottom-bar Library button right-click (media sources)
   };
   Kind kind = Kind::kNode;
   ItemID node_id;
@@ -352,6 +356,18 @@ class OpenBrowserView : public views::View,
   // Linux translucent frameless windows clip to the 16 pt window corner.
   void SetClipsWindowCorners(bool clips);
 
+  // --- Tab (HTML5) fullscreen ---------------------------------------------------
+  // While a page is fullscreen (video, requestFullscreen), the web panel
+  // fills the whole window full-bleed: no sidebar, no traffic lights, no
+  // 10 pt inset, corner radius or shadow. Layout() also derives it from
+  // BrowserView::IsFullscreen() and the active WebContents, so callers that
+  // observe FullscreenController only need to call this to force a relayout.
+  void SetTabFullscreen(bool fullscreen);
+  bool IsTabFullscreen() const;
+
+  // macOS: the native behind-window material shows under the theme tint.
+  bool translucent_window() const { return translucent_window_; }
+
   // --- OpenSidebarContext ----------------------------------------------------------
   const OpenSpaceThemeState& ThemeStateFor(const SpaceID& space_id) override;
   SpaceID FocusedSpaceId() const override;
@@ -391,6 +407,9 @@ class OpenBrowserView : public views::View,
   void OnThemeChanged() override;
 
   // --- views::WidgetObserver ---------------------------------------------------------
+  // Kept for API compatibility; the active look follows
+  // Widget::ShouldPaintAsActive() (OnPaintAsActiveChanged), so a Command Bar
+  // or Find bar child window never paints the browser window inactive.
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -418,6 +437,17 @@ class OpenBrowserView : public views::View,
   void ApplySidebarOffset(double offset);
   void ApplyPanelSlide(double progress);
   void NotifyTrafficLights();
+  // Window active look (theme, card, sidebar, traffic-light rings).
+  void OnPaintAsActiveChanged();
+  // Tab fullscreen: full-bleed panel on enter, Open's frame on exit.
+  void ApplyTabFullscreen(bool fullscreen);
+  // Empty Space: no active tab hides Chromium's contents container so the
+  // empty-panel canvas shows (never a raw blank page or NTP).
+  bool HasActiveTab() const;
+  // macOS live window material (OpenPlatform::UpdateWindowEffects).
+  void UpdateWindowMaterial();
+  // Drops Chromium's opaque frame paint so the material shows through.
+  void EnableTranslucentChrome();
 
   // Sidebar mode and width.
   void SyncFromWindowState(bool animate);
@@ -499,6 +529,18 @@ class OpenBrowserView : public views::View,
   bool clips_window_corners_ = false;
   bool window_active_ = true;
   bool widget_visible_ = false;
+  base::CallbackListSubscription paint_as_active_subscription_;
+
+  // Tab fullscreen: set by SetTabFullscreen(); applied_ is what Layout() did.
+  bool tab_fullscreen_ = false;
+  bool tab_fullscreen_applied_ = false;
+
+  // macOS window material.
+  bool translucent_window_ = false;
+#if BUILDFLAG(IS_MAC)
+  bool translucent_chrome_enabled_ = false;
+  std::optional<WindowMaterialSpec> applied_material_;
+#endif
 
   // Theme cache per Space (cleared on theme or appearance changes).
   std::map<SpaceID, OpenSpaceThemeState> theme_cache_;

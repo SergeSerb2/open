@@ -2,6 +2,7 @@
 // Open Account & Sync v1 Engine implementation.
 
 #include "open_unified/core/sync/sync_engine.h"
+#include "open_unified/core/sync/sync_ws_client.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1494,6 +1495,10 @@ base::DictValue SyncCollectionCodecs::EncodeAdBlockConfig(
     for (const auto& dom : excl) eval.Append(dom);
     pd.Set("excludedDomains", std::move(eval));
 
+    if (!prof.custom_rules.empty()) {
+      pd.Set("customRules", prof.custom_rules);
+    }
+
     profiles.Set(pid, std::move(pd));
   }
   d.Set("profiles", std::move(profiles));
@@ -1520,6 +1525,9 @@ SyncCollectionCodecs::DecodeAdBlockConfig(const base::DictValue& dict) {
         for (const auto& item : *e) {
           if (item.is_string()) prof.excluded_domains.push_back(item.GetString());
         }
+      }
+      if (const auto* cr = pd->FindString("customRules")) {
+        prof.custom_rules = *cr;
       }
       out.profiles[pid] = std::move(prof);
     }
@@ -2159,6 +2167,25 @@ SyncEngine::SyncEngine(base::FilePath data_root,
       secret_store_ && secret_store_->UsesFileBackend();
 }
 
+void SyncEngine::SetWebSocketClient(
+    std::unique_ptr<SyncWebSocketClient> ws_client) {
+  StopWebSocket();
+  ws_client_ = std::move(ws_client);
+  if (ws_client_ && is_signed_in() && !state_->awaiting_initial_choice &&
+      status_ != SyncStatusKind::kNeedsReauth) {
+    StartWebSocket();
+  }
+}
+
+void SyncEngine::SetNetworkContextProvider(
+    base::RepeatingCallback<network::mojom::NetworkContext*()> provider) {
+  if (!provider) {
+    SetWebSocketClient(nullptr);
+    return;
+  }
+  SetWebSocketClient(CreateChromiumSyncWebSocketClient(std::move(provider)));
+}
+
 void SyncEngine::SetCredentialAccountKey(std::string account_key) {
   credential_account_key_ = std::move(account_key);
 }
@@ -2202,6 +2229,33 @@ SyncStatusInfo SyncEngine::Status() const {
     info.error_message = snapshot_.status_message;
   }
   return info;
+}
+
+SyncDetailedStatus SyncEngine::GetDetailedStatus() const {
+  SyncDetailedStatus out;
+  const SyncStatusInfo basic = Status();
+  out.signed_in = snapshot_.is_signed_in;
+  out.state = basic.state;
+  out.status_message = snapshot_.status_message;
+  out.email = snapshot_.email.value_or("");
+  out.display_name = snapshot_.display_name.value_or("");
+  out.server_url = snapshot_.server_url;
+  out.device_id = snapshot_.device_id.value_or("");
+  out.device_name = snapshot_.device_name.value_or("");
+  out.last_sync_at_ms = snapshot_.last_sync_at_ms;
+  out.last_pulled_revision = snapshot_.last_pulled_revision;
+  out.pending_push_count = pending_push_count_;
+  out.websocket_connected =
+      ws_connected_ && (!ws_client_ || ws_client_->IsConnected());
+  out.initial_sync_required = snapshot_.pending_initial_choice.has_value();
+  out.pending_initial_choice = snapshot_.pending_initial_choice;
+  out.devices = snapshot_.devices;
+  out.categories = snapshot_.categories.enabled;
+  out.pending_extension_installs = snapshot_.pending_extension_installs;
+  out.warnings = snapshot_.warnings;
+  out.is_busy = snapshot_.is_busy;
+  out.error_message = basic.error_message;
+  return out;
 }
 
 void SyncEngine::ConfigureServer(std::string url,
@@ -2616,6 +2670,9 @@ void SyncEngine::PublishSnapshot() {
   next.uses_file_credential_store =
       secret_store_ && secret_store_->UsesFileBackend();
   next.is_busy = sync_in_flight_;
+  next.websocket_connected =
+      ws_connected_ && (!ws_client_ || ws_client_->IsConnected());
+  next.pending_push_count = pending_push_count_;
   snapshot_ = std::move(next);
   if (on_snapshot_changed_) {
     on_snapshot_changed_.Run(snapshot_);
@@ -2636,6 +2693,7 @@ void SyncEngine::ClearLocalSession(SyncStatusKind new_status,
   ++session_generation_;
   push_debounce_timer_.Stop();
   push_burst_started_ms_ = 0;
+  pending_push_count_ = 0;
   StopWebSocket();
   DeleteCredentialsFromStore();
   DeleteStateFromDisk();
@@ -4051,6 +4109,13 @@ void SyncEngine::ChangePassword(const std::string& current_password,
           new_password, revoke_other_sessions, std::move(callback)));
 }
 
+void SyncEngine::ChangePassword(const std::string& current_password,
+                                const std::string& new_password,
+                                ResultCallback callback) {
+  ChangePassword(current_password, new_password,
+                 /*revoke_other_sessions=*/true, std::move(callback));
+}
+
 void SyncEngine::UpdateDisplayName(const std::string& display_name,
                                    ResultCallback callback) {
   if (!is_signed_in()) {
@@ -4333,12 +4398,17 @@ void SyncEngine::SyncNow(ResultCallback callback) {
   StartSyncPass(/*round=*/0, std::nullopt);
 }
 
+void SyncEngine::PullNow(ResultCallback callback) {
+  SyncNow(std::move(callback));
+}
+
 void SyncEngine::SchedulePush(std::string_view /*reason*/) {
   if (!is_signed_in() || is_applying_remote_ ||
       state_->awaiting_initial_choice ||
       status_ == SyncStatusKind::kNeedsReauth) {
     return;
   }
+  ++pending_push_count_;
   int64_t now_ms = NowEpochMs();
   if (push_burst_started_ms_ == 0) {
     push_burst_started_ms_ = now_ms;
@@ -4356,6 +4426,20 @@ void SyncEngine::SchedulePush(std::string_view /*reason*/) {
             self->SyncNow();
           },
           weak_factory_.GetWeakPtr()));
+}
+
+void SyncEngine::ScheduleCollectionPush(std::string_view collection,
+                                        std::string_view item_id) {
+  if (auto col = SyncCollectionFromString(collection);
+      col.has_value() && state_ && !state_->categories.IsEnabled(*col)) {
+    return;
+  }
+  std::string reason(collection);
+  if (!item_id.empty()) {
+    reason.push_back(':');
+    reason.append(item_id);
+  }
+  SchedulePush(reason);
 }
 
 void SyncEngine::SetCategoryEnabled(SyncCategory category, bool enabled) {
@@ -5675,6 +5759,7 @@ void SyncEngine::FinishSyncPass(bool ok,
                                 const std::string& error_message) {
   sync_in_flight_ = false;
   if (ok) {
+    pending_push_count_ = 0;
     SetStatus(SyncStatusKind::kIdle, "Up to date");
   } else if (status_ != SyncStatusKind::kNeedsReauth) {
     SetStatus(SyncStatusKind::kError, error_message);
@@ -5714,6 +5799,7 @@ void SyncEngine::StartWebSocket() {
 void SyncEngine::StopWebSocket() {
   ws_reconnect_timer_.Stop();
   ws_ping_timer_.Stop();
+  ws_connected_ = false;
   if (ws_client_) {
     ws_client_->Disconnect();
   }
@@ -5744,6 +5830,8 @@ void SyncEngine::HandleWebSocketTextFrame(std::string_view json_text) {
 
 void SyncEngine::OnWsConnected(int server_revision, int reset_revision) {
   ws_backoff_seconds_ = kWsMinBackoffSec;
+  ws_connected_ = true;
+  PublishSnapshot();
   if (!is_signed_in() || state_->awaiting_initial_choice) return;
   if (server_revision > state_->last_pulled_revision ||
       reset_revision > state_->last_reset_revision) {
@@ -5776,12 +5864,14 @@ void SyncEngine::OnWsDisconnected(int close_code,
                                   const std::string& reason,
                                   int http_status) {
   ws_ping_timer_.Stop();
+  ws_connected_ = false;
   if (!is_signed_in()) return;
   if (close_code == kSyncWsSessionRevokedCloseCode ||
       reason == "session_revoked") {
     OnWsSessionRevoked();
     return;
   }
+  PublishSnapshot();
   ScheduleWebSocketReconnect(/*force_refresh=*/http_status == 401);
 }
 

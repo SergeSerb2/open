@@ -41,6 +41,19 @@ sk_sp<SkImage> MakeFieldImage(const ThemeStyle& style,
                               bool is_active,
                               bool card_tint = false,
                               int resolution = tuning::kFieldResolution);
+// The live window tint (port of ThemeField.makeWindowTint): the theme over
+// the system's behind-window material. The fitted coverage is kept, the
+// constant underlay gray is removed, and the default dark (corner) field
+// gets the C14-T native-material correction (-0.129, -0.123, -0.127 per
+// channel, times coverage) so the wallpaper glows through subtly. Always
+// built active: the material owns the window's active state. Premultiplied
+// 64 x 64 F16; editor fills that blend in display space are tagged Display
+// P3, everything else extended sRGB.
+sk_sp<SkImage> MakeWindowTintImage(const ThemeStyle& style,
+                                   const gfx::SizeF& window_size,
+                                   int resolution = tuning::kFieldResolution);
+// True when the window tint of `style` is tagged Display P3.
+bool WindowTintUsesDisplayP3(const ThemeStyle& style);
 // Bilinear field stretched over `window_rect` (pixel centers map to uv).
 sk_sp<SkShader> MakeFieldShader(const sk_sp<SkImage>& field,
                                 const gfx::RectF& window_rect);
@@ -81,6 +94,14 @@ class ThemePainter {
   bool SetStyle(const ThemeStyle& style);
   bool SetActive(bool is_active);
   bool SetCardTint(bool card_tint);
+  // macOS translucent browser windows: a vibrant theme paints the window
+  // tint (MakeWindowTintImage) over the native material instead of the
+  // opaque field. Non-vibrant themes (Incognito) stay opaque. The layer
+  // must then not fill its bounds opaquely (see PaintsOpaque()).
+  bool SetTranslucentWindow(bool translucent);
+  bool translucent_window() const { return translucent_window_; }
+  // False while the window tint is painted.
+  bool PaintsOpaque() const;
   const ThemeStyle& style() const { return style_; }
 
   // Fills `dest` (canvas coordinates). The field maps to `window_rect`, also
@@ -97,6 +118,7 @@ class ThemePainter {
   ThemeStyle style_;
   bool is_active_ = true;
   bool card_tint_ = false;
+  bool translucent_window_ = false;
   std::optional<gfx::SizeF> field_size_;
   cc::PaintImage field_;
   float tile_scale_ = 0;

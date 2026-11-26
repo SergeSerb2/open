@@ -10,6 +10,7 @@
 #ifndef OPEN_UNIFIED_UI_DESIGN_OPEN_GLYPHS_H_
 #define OPEN_UNIFIED_UI_DESIGN_OPEN_GLYPHS_H_
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -18,6 +19,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/image/image_skia.h"
 
 namespace gfx {
 class Canvas;
@@ -53,10 +55,51 @@ enum class Glyph {
   kWindowMinimize,
   kWindowZoom,
   kPuzzle,       // extension without icon
+  kEyeglasses,   // Incognito header mark (SF eyeglasses on macOS)
 };
 
 // The measured ink box of a glyph, in points.
 gfx::SizeF InkSize(Glyph glyph);
+
+// --- System symbols (macOS SF Symbols) -------------------------------------
+// On macOS every sidebar glyph that Icons.swift maps to an SF Symbol is drawn
+// from the real system symbol at the Spec's point size and weight (tuned so
+// the 1x ink matches Arc's measured ink box). Library, folders, the planet
+// mark and the window glyphs stay Open's own vectors. Windows and Linux draw
+// the Skia paths below.
+
+enum class SymbolWeight { kRegular, kMedium, kSemibold, kBold };
+
+struct SymbolSpec {
+  const char* name = nullptr;
+  float point_size = 0;
+  SymbolWeight weight = SymbolWeight::kRegular;
+};
+
+// The Icons.swift spec of `glyph`, or nullopt for Open's own vectors.
+std::optional<SymbolSpec> SystemSymbolFor(Glyph glyph);
+
+// The SF Symbol for a named Space icon identifier (NamedSpaceIcons.swift),
+// "circle.dotted" for unknown names.
+std::string_view NamedSpaceIconSymbol(std::string_view name);
+
+// A template image (black ink with alpha) of the system symbol `name`,
+// rasterized for every supported scale and cached. Null when the platform
+// has no system symbols (Windows, Linux) or the name is unknown.
+// Implemented in open_glyphs_mac.mm on macOS.
+gfx::ImageSkia SystemSymbolImage(std::string_view name,
+                                 float point_size,
+                                 SymbolWeight weight);
+
+// Draws the system symbol `name` tinted with `color`, centered in `bounds`
+// (plus `offset`). Returns false (draws nothing) when it is unavailable.
+bool DrawSystemSymbol(gfx::Canvas* canvas,
+                      std::string_view name,
+                      float point_size,
+                      SymbolWeight weight,
+                      const gfx::RectF& bounds,
+                      SkColor color,
+                      gfx::Vector2dF offset = gfx::Vector2dF());
 
 // Draws `glyph` with its ink box centered in `bounds` (plus `offset`).
 void Draw(gfx::Canvas* canvas,
@@ -72,10 +115,12 @@ void DrawLetterTile(gfx::Canvas* canvas,
                     SkColor background,
                     SkColor foreground);
 
-// A Space icon: emoji text, the planet mark for "planet"/unknown named
-// icons, a dot for SF Symbol names (not portable), else the title's first
-// letter. `opacity` multiplies the color; `grayscale` desaturates (other
-// Spaces in the bottom switcher are gray at 0.55).
+// A Space icon: emoji text; SF Symbol and named icons as the real system
+// symbol on macOS (NodeIconRenderer: point size = box height - 3, Medium);
+// Open's planet mark when no icon is set and wherever a symbol is not
+// available (Windows, Linux). Never the title's first letter. `title` is
+// kept for API compatibility. `opacity` multiplies the color; `grayscale`
+// desaturates (other Spaces in the bottom switcher are gray at 0.55).
 void DrawSpaceIcon(gfx::Canvas* canvas,
                    const SpaceIcon* icon,
                    std::u16string_view title,

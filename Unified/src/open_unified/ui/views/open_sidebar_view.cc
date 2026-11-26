@@ -5,14 +5,17 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <numbers>
 #include <set>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_shader.h"
+#include "cc/paint/path_effect.h"
 #include "open_unified/ui/design/open_glyphs.h"
 #include "open_unified/ui/design/open_metrics.h"
 #include "open_unified/ui/design/open_motion.h"
@@ -22,6 +25,7 @@
 #include "open_unified/ui/views/open_space_pager_view.h"
 #include "open_unified/ui/views/open_tab_tree_view.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
+#include "third_party/skia/include/core/SkPathBuilder.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
@@ -88,6 +92,25 @@ Rgba TileHover(const OpenSpaceThemeState& s) {
 }
 // Peek dims the toolbar row and the bottom bar. guess: 0.4.
 constexpr float kPeekDimOpacity = 0.4f;
+// Incognito URL field: white 15 % (docs/incognito.md S10-P5, measured).
+constexpr Rgba kIncognitoFieldFill = Rgba::White(0.15);
+
+// SelectionShadow (SidebarRows.swift): light content only, black 0.20,
+// radius 1.5, 1 pt down. Dark content uses the borderless frosted plate.
+void DrawSelectionShadow(gfx::Canvas* canvas,
+                         const gfx::RectF& rect,
+                         float radius,
+                         float alpha) {
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(SkColorSetA(
+      SK_ColorBLACK, static_cast<U8CPU>(std::lround(0.20f * alpha * 255))));
+  flags.setImageFilter(sk_make_sp<cc::BlurPaintFilter>(
+      0.75f, 0.75f, SkTileMode::kDecal, nullptr));
+  gfx::RectF shadow = rect;
+  shadow.Offset(0, 1);
+  canvas->DrawRoundRect(shadow, radius, flags);
+}
 
 gfx::Rect ToRect(const m::Frame& f) {
   return gfx::ToEnclosingRect(gfx::RectF(f.x, f.y, f.w, f.h));
@@ -178,6 +201,16 @@ class OpenSidebarView::ToolbarButton : public views::Button {
       SchedulePaint();
     }
   }
+  // Download progress ring (Library button): 0..1, nullopt hides it.
+  void SetProgressRing(std::optional<double> progress) {
+    if (progress) {
+      progress = std::clamp(*progress, 0.0, 1.0);
+    }
+    if (progress_ != progress) {
+      progress_ = progress;
+      SchedulePaint();
+    }
+  }
 
   // views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override {
@@ -224,14 +257,39 @@ class OpenSidebarView::ToolbarButton : public views::Button {
                      glyph_ == glyphs::Glyph::kStop;
     glyphs::Draw(canvas, glyph_, bounds, Sk(color),
                  gfx::Vector2dF(0, low ? 1 : 0));
+    PaintProgressRing(canvas, s);
   }
 
  private:
+  // guess: a 2 pt ring at r 13 inside the 32 pt plate, the track at the
+  // glyph color 0.20, progress in the Space's contrast accent clockwise from
+  // 12 o'clock (Arc's Library download ring; capture pending).
+  void PaintProgressRing(gfx::Canvas* canvas, const OpenSpaceThemeState& s) {
+    if (!progress_) {
+      return;
+    }
+    const gfx::PointF c = gfx::RectF(GetLocalBounds()).CenterPoint();
+    const float r = std::min(width(), height()) / 2.0f - 3.0f;
+    cc::PaintFlags pen;
+    pen.setAntiAlias(true);
+    pen.setStyle(cc::PaintFlags::kStroke_Style);
+    pen.setStrokeWidth(2);
+    pen.setStrokeCap(cc::PaintFlags::kRound_Cap);
+    pen.setColor(Sk(s.roles.bottom_glyph, 0.20f));
+    canvas->DrawCircle(c, r, pen);
+    pen.setColor(Sk(s.contrast_accent));
+    SkPathBuilder arc;
+    arc.arcTo(SkRect::MakeLTRB(c.x() - r, c.y() - r, c.x() + r, c.y() + r),
+              -90, static_cast<float>(360 * *progress_), /*forceMoveTo=*/true);
+    canvas->DrawPath(arc.detach(), pen);
+  }
+
   raw_ptr<OpenSidebarContext> context_;
   glyphs::Glyph glyph_;
   Role role_;
   gfx::ImageSkia image_;
   bool dimmed_ = false;
+  std::optional<double> progress_;
 };
 
 BEGIN_METADATA(OpenSidebarView, ToolbarButton)
@@ -386,13 +444,16 @@ END_METADATA
 // UrlPillView: [8, 46, W - 16, 36], radius 10. Coordinates below are local
 // to the pill (sidebar x - 8, y - 46).
 
-class OpenSidebarView::UrlPillView : public views::View {
+class OpenSidebarView::UrlPillView : public views::View,
+                                     public views::ContextMenuController {
   METADATA_HEADER(UrlPillView, views::View)
 
  public:
   explicit UrlPillView(OpenSidebarView* sidebar) : sidebar_(sidebar) {
     OpenSidebarContext* ctx = sidebar->context_;
     SetNotifyEnterExitOnChild(true);
+    // Right-click: the URL field menu (Copy URL, Site Controls, ...).
+    set_context_menu_controller(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kTextField);
     GetViewAccessibility().SetName(u"Address and search bar");
     copy_ = AddChildView(std::make_unique<ToolbarButton>(
@@ -482,8 +543,11 @@ class OpenSidebarView::UrlPillView : public views::View {
     const OpenSpaceThemeState& s =
         sidebar_->context_->ThemeStateFor(sidebar_->context_->FocusedSpaceId());
     const gfx::RectF bounds(GetLocalBounds());
-    FillRoundRect(canvas, bounds, m::url_field::kCornerRadius,
-                  Sk(hovered_ ? s.roles.field_hover : s.roles.field_fill));
+    // Incognito: the measured white 15 % at rest and on hover.
+    const Rgba fill = sidebar_->IsIncognito()
+                          ? kIncognitoFieldFill
+                          : (hovered_ ? s.roles.field_hover : s.roles.field_fill);
+    FillRoundRect(canvas, bounds, m::url_field::kCornerRadius, Sk(fill));
     const Tab* tab = ActiveTab();
     const float text_y_frame = m::url_field::kTextY - m::url_field::kY;
     if (IsBlankPage(tab)) {
@@ -555,6 +619,20 @@ class OpenSidebarView::UrlPillView : public views::View {
     }
     sidebar_->context_->Send(OpenIntent::CommandBar(
         CommandBarSource::kUrlField, GetBoundsInScreen()));
+  }
+
+  // views::ContextMenuController:
+  void ShowContextMenuForViewImpl(
+      views::View* source,
+      const gfx::Point& point,
+      ui::mojom::MenuSourceType source_type) override {
+    OpenMenuTarget target;
+    target.kind = OpenMenuTarget::Kind::kUrlField;
+    target.space_id = sidebar_->context_->FocusedSpaceId();
+    if (const Tab* tab = ActiveTab()) {
+      target.node_id = tab->id;
+    }
+    sidebar_->context_->ShowSidebarMenu(target, this, point, source_type);
   }
 
  private:
@@ -728,6 +806,11 @@ class OpenSidebarView::FavoriteTileView : public views::View,
     Rgba fill = s.roles.tile_fill;
     if (selected || for_drag) {
       fill = s.roles.active_plate;
+      // Light content: the selected card lifts with the row shadow; dark
+      // content keeps the borderless frosted plate.
+      if (!IsDark(s)) {
+        DrawSelectionShadow(canvas, bounds, m::favorites::kCornerRadius, 1.0f);
+      }
     } else if (hovered_) {
       fill = TileHover(s);
     }
@@ -736,9 +819,15 @@ class OpenSidebarView::FavoriteTileView : public views::View,
     if (!tab) {
       return;
     }
+    const std::u16string* subtitle = sidebar_->FavoriteSubtitle(tab_id_);
     const float ink = m::favorites::kIconInkSize;
-    const gfx::RectF icon(bounds.CenterPoint().x() - ink / 2,
-                          bounds.CenterPoint().y() - ink / 2, ink, ink);
+    // With a Live Calendar countdown the icon moves up (0.40 of the tile)
+    // and the plate sits under it (FavoritesView.swift; guess, capture
+    // pending).
+    const float icon_cy =
+        subtitle ? bounds.height() * 0.40f : bounds.CenterPoint().y();
+    const gfx::RectF icon(bounds.CenterPoint().x() - ink / 2, icon_cy - ink / 2,
+                          ink, ink);
     const gfx::ImageSkia image = ctx->FaviconFor(*tab);
     if (!image.isNull()) {
       const gfx::Rect r = gfx::ToEnclosingRect(icon);
@@ -748,11 +837,63 @@ class OpenSidebarView::FavoriteTileView : public views::View,
       glyphs::DrawLetterTile(canvas, icon, DisplayHost(tab->url),
                              Sk(s.roles.title, 0.15f), Sk(s.roles.title));
     }
-    if (tab->live_state.is_audible && !tab->is_muted) {
+    if (subtitle && !for_drag) {
+      PaintSubtitle(canvas, *subtitle, selected, IsDark(s));
+    }
+    const std::u16string* badge = sidebar_->FavoriteBadge(tab_id_);
+    if (badge && !hovered_ && !for_drag) {
+      PaintBadge(canvas, *badge, s);
+    } else if (tab->live_state.is_audible && !tab->is_muted) {
       glyphs::Draw(canvas, glyphs::Glyph::kSpeaker,
                    gfx::RectF(bounds.right() - 18, 3, 15, 11),
                    Sk(s.roles.title, 0.6f));
     }
+  }
+
+  // LiveCalendarSubtitleView: 13 pt capsule, 9.5 pt semibold digits (9 here),
+  // 4 pt above the bottom; selected white 0.90 / ink #212121, else black or
+  // white 0.07.
+  void PaintSubtitle(gfx::Canvas* canvas,
+                     const std::u16string& text,
+                     bool selected,
+                     bool dark) {
+    const gfx::FontList& font =
+        typography::Make(9, gfx::Font::Weight::SEMIBOLD);
+    const float w = gfx::Canvas::GetStringWidth(text, font) + 10.0f;
+    const float h = 13;
+    const gfx::RectF plate((width() - w) / 2, height() - h - 4, w, h);
+    Rgba fill, ink;
+    if (selected) {
+      fill = Rgba{0.963, 0.976, 0.996, 0.90};
+      ink = Rgba{0.13, 0.13, 0.13, 1};
+    } else if (dark) {
+      fill = Rgba::White(0.07);
+      ink = Rgba{0.87, 0.89, 0.92, 0.70};
+    } else {
+      fill = Rgba::Black(0.07);
+      ink = Rgba{0.13, 0.13, 0.13, 1};
+    }
+    FillRoundRect(canvas, plate, h / 2, Sk(fill));
+    canvas->DrawStringRectWithFlags(text, font, Sk(ink),
+                                    gfx::ToEnclosingRect(plate),
+                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
+
+  // FavoriteBadgeView: a 14 pt capsule at the top-right, inset 3 pt, white
+  // 9 pt bold digits. The app badge fills are Wave B's (guess: the Space's
+  // contrast accent until then).
+  void PaintBadge(gfx::Canvas* canvas,
+                  const std::u16string& text,
+                  const OpenSpaceThemeState& s) {
+    const gfx::FontList& font = typography::Make(9, gfx::Font::Weight::BOLD);
+    const float h = 14;
+    const float w =
+        std::max(h, static_cast<float>(gfx::Canvas::GetStringWidth(text, font)) + 8);
+    const gfx::RectF plate(width() - w - 3, 3, w, h);
+    FillRoundRect(canvas, plate, h / 2, Sk(s.contrast_accent));
+    canvas->DrawStringRectWithFlags(text, font, SK_ColorWHITE,
+                                    gfx::ToEnclosingRect(plate),
+                                    gfx::Canvas::TEXT_ALIGN_CENTER);
   }
 
   raw_ptr<OpenSidebarView> sidebar_;
@@ -763,6 +904,154 @@ class OpenSidebarView::FavoriteTileView : public views::View,
 BEGIN_METADATA(OpenSidebarView, FavoriteTileView)
 END_METADATA
 
+// "Drag to add Favorites" (FavoritesEmptyStateView.swift, measured A3 /
+// C-report-s10): [7, 7, W - 14, 95], radius 12, dashed 5/5 outline, a star
+// disc, title 13 Semibold, body at 0.70, an "x" at [W - 23, 9, 14, 14] in
+// card coordinates. Held-over drop target: content at half, solid border.
+
+class OpenSidebarView::FavoritesEmptyStateView : public views::View {
+  METADATA_HEADER(FavoritesEmptyStateView, views::View)
+
+ public:
+  explicit FavoritesEmptyStateView(OpenSidebarView* sidebar)
+      : sidebar_(sidebar) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
+    GetViewAccessibility().SetName(kTitle);
+    GetViewAccessibility().SetDescription(std::u16string(kBody));
+  }
+
+  void SetDropTarget(bool drop_target) {
+    if (drop_target_ != drop_target) {
+      drop_target_ = drop_target;
+      SchedulePaint();
+    }
+  }
+
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override {
+    OpenSidebarContext* ctx = sidebar_->context_;
+    const OpenSpaceThemeState& s = ctx->ThemeStateFor(ctx->FocusedSpaceId());
+    const bool dark = IsDark(s);
+    const float fade = drop_target_ ? 0.5f : 1.0f;
+    const Rgba title = s.roles.title;
+    // Light content: the title ink x 3.35 per channel (the bright accent).
+    const Rgba disc =
+        dark ? title
+             : Rgba{std::min(1.0, title.r * 3.35), std::min(1.0, title.g * 3.35),
+                    std::min(1.0, title.b * 3.35), 1};
+    gfx::RectF card(GetLocalBounds());
+    card.Inset(0.5f);
+    FillRoundRect(canvas, card, 12,
+                  Sk(dark ? Rgba::Black(0.12) : Rgba::White(0.14)));
+    cc::PaintFlags outline;
+    outline.setAntiAlias(true);
+    outline.setStyle(cc::PaintFlags::kStroke_Style);
+    outline.setStrokeWidth(1);
+    if (drop_target_) {
+      outline.setColor(Sk(Rgba::White(dark ? 0.35 : 0.55)));
+    } else {
+      outline.setColor(Sk(dark ? Rgba::White(0.28) : disc.WithAlpha(0.30)));
+      static constexpr float kDash[2] = {5, 5};
+      outline.setPathEffect(cc::PathEffect::MakeDash(kDash, 2, 0));
+    }
+    canvas->DrawRoundRect(card, 12, outline);
+
+    // Star disc, 16.5 pt at the top center (card y 12.5).
+    const float d = 16.5f;
+    const gfx::PointF c(width() / 2.0f, 12.5f + d / 2);
+    cc::PaintFlags disc_fill;
+    disc_fill.setAntiAlias(true);
+    disc_fill.setColor(Sk(disc, fade));
+    canvas->DrawCircle(c, d / 2, disc_fill);
+    SkPathBuilder star;
+    for (int i = 0; i < 10; ++i) {
+      const float r = (i % 2 == 0) ? 5.2f : 2.2f;
+      const float a = static_cast<float>(-std::numbers::pi / 2 + i * std::numbers::pi / 5);
+      const SkPoint p = SkPoint::Make(c.x() + r * std::cos(a),
+                                      c.y() + r * std::sin(a));
+      i == 0 ? star.moveTo(p) : star.lineTo(p);
+    }
+    star.close();
+    cc::PaintFlags star_fill;
+    star_fill.setAntiAlias(true);
+    star_fill.setColor(
+        Sk(dark ? Rgba::Hex(0x262471) : Rgba::White(1), fade));
+    canvas->DrawPath(star.detach(), star_fill);
+
+    const gfx::FontList& title_font =
+        typography::Make(13, gfx::Font::Weight::SEMIBOLD);
+    canvas->DrawStringRectWithFlags(
+        kTitle, title_font, Sk(title, fade),
+        gfx::Rect(11, 34, std::max(0, width() - 22), 17),
+        gfx::Canvas::TEXT_ALIGN_CENTER);
+    const gfx::FontList& body_font =
+        typography::Make(12, gfx::Font::Weight::NORMAL);
+    const int body_w = std::min(150, std::max(0, width() - 22));
+    canvas->DrawStringRectWithFlags(
+        std::u16string(kBody), body_font, Sk(title, 0.70f * fade),
+        gfx::Rect((width() - body_w) / 2, 54, body_w, 32),
+        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::MULTI_LINE);
+
+    const gfx::RectF dismiss = DismissRect();
+    if (dismiss_hovered_) {
+      cc::PaintFlags plate;
+      plate.setAntiAlias(true);
+      plate.setColor(Sk(dark ? Rgba::White(0.12) : Rgba::Black(0.06)));
+      canvas->DrawCircle(dismiss.CenterPoint(), dismiss.width() / 2, plate);
+    }
+    cc::PaintFlags x;
+    x.setAntiAlias(true);
+    x.setStyle(cc::PaintFlags::kStroke_Style);
+    x.setStrokeWidth(1.4f);
+    x.setStrokeCap(cc::PaintFlags::kRound_Cap);
+    x.setColor(Sk(title, 0.70f * fade));
+    gfx::RectF ink = dismiss;
+    ink.Inset(4.0f);
+    canvas->DrawLine(ink.origin(), ink.bottom_right(), x);
+    canvas->DrawLine(ink.top_right(), ink.bottom_left(), x);
+  }
+
+  void OnMouseMoved(const ui::MouseEvent& event) override {
+    const bool over = DismissRect().Contains(gfx::PointF(event.location()));
+    if (over != dismiss_hovered_) {
+      dismiss_hovered_ = over;
+      SchedulePaint();
+    }
+  }
+  void OnMouseExited(const ui::MouseEvent& event) override {
+    if (dismiss_hovered_) {
+      dismiss_hovered_ = false;
+      SchedulePaint();
+    }
+  }
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    return event.IsOnlyLeftMouseButton() &&
+           DismissRect().Contains(gfx::PointF(event.location()));
+  }
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    if (event.IsOnlyLeftMouseButton() &&
+        DismissRect().Contains(gfx::PointF(event.location()))) {
+      sidebar_->DismissFavoritesEmptyState();
+    }
+  }
+
+ private:
+  static constexpr char16_t kTitle[] = u"Drag to add Favorites";
+  static constexpr char16_t kBody[] =
+      u"Favorites keep your most used sites and apps close";
+
+  gfx::RectF DismissRect() const {
+    return gfx::RectF(width() - 23, 9, 14, 14);
+  }
+
+  raw_ptr<OpenSidebarView> sidebar_;
+  bool drop_target_ = false;
+  bool dismiss_hovered_ = false;
+};
+
+BEGIN_METADATA(OpenSidebarView, FavoritesEmptyStateView)
+END_METADATA
+
 class OpenSidebarView::FavoritesView : public views::View {
   METADATA_HEADER(FavoritesView, views::View)
 
@@ -770,6 +1059,18 @@ class OpenSidebarView::FavoritesView : public views::View {
   explicit FavoritesView(OpenSidebarView* sidebar) : sidebar_(sidebar) {
     GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
     GetViewAccessibility().SetName(u"Favorites");
+    empty_card_ = AddChildView(
+        std::make_unique<FavoritesEmptyStateView>(sidebar));
+    empty_card_->SetVisible(false);
+  }
+
+  void SyncEmptyCard() {
+    const bool visible = sidebar_->IsFavoritesEmptyStateVisible();
+    if (empty_card_->GetVisible() != visible) {
+      empty_card_->SetVisible(visible);
+      InvalidateLayout();
+    }
+    empty_card_->SchedulePaint();
   }
 
   int count() const { return static_cast<int>(tiles_.size()); }
@@ -807,6 +1108,7 @@ class OpenSidebarView::FavoritesView : public views::View {
       tile->Refresh();
       tiles_.push_back(tile);
     }
+    SyncEmptyCard();
     PreferredSizeChanged();
     InvalidateLayout();
   }
@@ -814,6 +1116,13 @@ class OpenSidebarView::FavoritesView : public views::View {
   void RefreshTiles() {
     for (FavoriteTileView* t : tiles_) {
       t->SchedulePaint();
+    }
+    empty_card_->SchedulePaint();
+  }
+
+  void RefreshTile(const ItemID& id) {
+    if (auto it = by_id_.find(id); it != by_id_.end()) {
+      it->second->SchedulePaint();
     }
   }
 
@@ -825,6 +1134,10 @@ class OpenSidebarView::FavoritesView : public views::View {
   void Layout(PassKey) override {
     const float w = width();
     const int n = count();
+    if (empty_card_->GetVisible()) {
+      const m::Frame f = m::favorites::EmptyCardFrame(w);
+      empty_card_->SetBoundsRect(ToRect(f));
+    }
     if (n == 0) {
       return;
     }
@@ -842,7 +1155,8 @@ class OpenSidebarView::FavoritesView : public views::View {
 
   void PaintChildren(const views::PaintInfo& info) override {
     views::View::PaintChildren(info);
-    if (drop_index_ < 0) {
+    // The empty-state card shows the drop target itself.
+    if (drop_index_ < 0 || empty_card_->GetVisible()) {
       return;
     }
     ui::PaintRecorder recorder(info.context(), size());
@@ -876,11 +1190,13 @@ class OpenSidebarView::FavoritesView : public views::View {
       return ui::DragDropTypes::DRAG_NONE;
     }
     drop_index_ = IndexAt(event.location());
+    empty_card_->SetDropTarget(true);
     SchedulePaint();
     return ui::DragDropTypes::DRAG_MOVE;
   }
   void OnDragExited() override {
     drop_index_ = -1;
+    empty_card_->SetDropTarget(false);
     SchedulePaint();
   }
   views::View::DropCallback GetDropCallback(
@@ -888,6 +1204,7 @@ class OpenSidebarView::FavoritesView : public views::View {
     const std::optional<ItemID> id = sidebar_dnd::ReadNode(event.data());
     const int index = drop_index_;
     drop_index_ = -1;
+    empty_card_->SetDropTarget(false);
     SchedulePaint();
     if (!id || index < 0) {
       return base::NullCallback();
@@ -954,6 +1271,7 @@ class OpenSidebarView::FavoritesView : public views::View {
   }
 
   raw_ptr<OpenSidebarView> sidebar_;
+  raw_ptr<FavoritesEmptyStateView> empty_card_ = nullptr;
   std::map<ItemID, raw_ptr<FavoriteTileView>> by_id_;
   std::vector<raw_ptr<FavoriteTileView>> tiles_;
   int drop_index_ = -1;
@@ -1222,7 +1540,8 @@ END_METADATA
 // ---------------------------------------------------------------------------
 // BottomBarView: 50 pt.
 
-class OpenSidebarView::BottomBarView : public views::View {
+class OpenSidebarView::BottomBarView : public views::View,
+                                       public views::ContextMenuController {
   METADATA_HEADER(BottomBarView, views::View)
 
  public:
@@ -1237,6 +1556,8 @@ class OpenSidebarView::BottomBarView : public views::View {
             },
             base::Unretained(ctx)),
         glyphs::Glyph::kLibrary, u"Library", ToolbarButton::Role::kBottom));
+    // Right-click: Library media sources (OpenMenuTarget::Kind::kLibrary).
+    home_->set_context_menu_controller(this);
     strip_ = AddChildView(std::make_unique<SwitcherStripView>(sidebar));
     plus_ = AddChildView(std::make_unique<ToolbarButton>(
         ctx,
@@ -1246,6 +1567,30 @@ class OpenSidebarView::BottomBarView : public views::View {
   }
 
   SwitcherStripView* strip() const { return strip_; }
+  ToolbarButton* home() const { return home_; }
+
+  // Incognito: no Library and no Space switcher; "+" opens a new tab.
+  void SetIncognito(bool incognito) {
+    if (incognito_ == incognito) {
+      return;
+    }
+    incognito_ = incognito;
+    home_->SetVisible(!incognito);
+    strip_->SetVisible(!incognito);
+    plus_->SetTooltipText(incognito ? u"New Tab" : u"New…");
+    plus_->GetViewAccessibility().SetName(incognito ? u"New Tab" : u"New…");
+  }
+
+  // views::ContextMenuController:
+  void ShowContextMenuForViewImpl(
+      views::View* source,
+      const gfx::Point& point,
+      ui::mojom::MenuSourceType source_type) override {
+    OpenMenuTarget target;
+    target.kind = OpenMenuTarget::Kind::kLibrary;
+    target.space_id = sidebar_->context_->FocusedSpaceId();
+    sidebar_->context_->ShowSidebarMenu(target, home_, point, source_type);
+  }
 
   void Refresh() {
     strip_->Refresh();
@@ -1270,6 +1615,11 @@ class OpenSidebarView::BottomBarView : public views::View {
 
  private:
   void OnPlusPressed() {
+    if (incognito_) {
+      sidebar_->context_->Send(OpenIntent::CommandBar(
+          CommandBarSource::kPlusButton, plus_->GetBoundsInScreen()));
+      return;
+    }
     OpenMenuTarget target;
     target.kind = OpenMenuTarget::Kind::kPlusButton;
     target.space_id = sidebar_->context_->FocusedSpaceId();
@@ -1282,6 +1632,7 @@ class OpenSidebarView::BottomBarView : public views::View {
   raw_ptr<ToolbarButton> home_ = nullptr;
   raw_ptr<SwitcherStripView> strip_ = nullptr;
   raw_ptr<ToolbarButton> plus_ = nullptr;
+  bool incognito_ = false;
 };
 
 BEGIN_METADATA(OpenSidebarView, BottomBarView)
@@ -1307,6 +1658,7 @@ OpenSidebarView::OpenSidebarView(OpenSidebarContext* context)
   OnSpacesChanged();
   OnFavoritesChanged();
   OnActiveTabChanged();
+  ApplyIncognitoChrome();
 }
 
 OpenSidebarView::~OpenSidebarView() = default;
@@ -1333,7 +1685,105 @@ const Profile* OpenSidebarView::focused_profile() const {
 }
 
 float OpenSidebarView::favorites_section_height() const {
+  // Incognito windows show no Favorites (capture C10).
+  if (IsIncognito()) {
+    return m::favorites::kInset;
+  }
+  if (IsFavoritesEmptyStateVisible()) {
+    return m::favorites::kEmptyStateSectionHeight;
+  }
   return favorites_->SectionHeight(static_cast<float>(width()));
+}
+
+bool OpenSidebarView::IsIncognito() const {
+  return context_->controller()->IsIncognitoWindow(context_->window_id());
+}
+
+void OpenSidebarView::ApplyIncognitoChrome() {
+  const bool incognito = IsIncognito();
+  favorites_->SetVisible(!incognito);
+  bottom_bar_->SetIncognito(incognito);
+  InvalidateLayout();
+}
+
+bool OpenSidebarView::IsFavoritesEmptyStateVisible() const {
+  return favorites_empty_state_enabled_ && !favorites_empty_state_dismissed_ &&
+         !IsIncognito() && focused_profile() &&
+         focused_profile()->favorites.empty();
+}
+
+void OpenSidebarView::SetFavoritesEmptyStateEnabled(bool enabled) {
+  if (favorites_empty_state_enabled_ == enabled) {
+    return;
+  }
+  favorites_empty_state_enabled_ = enabled;
+  OnFavoritesChanged();
+}
+
+void OpenSidebarView::SetFavoritesEmptyStateDismissedCallback(
+    base::RepeatingClosure callback) {
+  favorites_empty_state_dismissed_callback_ = std::move(callback);
+}
+
+void OpenSidebarView::DismissFavoritesEmptyState() {
+  favorites_empty_state_dismissed_ = true;
+  OnFavoritesChanged();
+  if (favorites_empty_state_dismissed_callback_) {
+    favorites_empty_state_dismissed_callback_.Run();
+  }
+}
+
+void OpenSidebarView::SetLibraryDownloadProgress(
+    std::optional<double> progress) {
+  bottom_bar_->home()->SetProgressRing(progress);
+}
+
+views::View* OpenSidebarView::SetMediaPlayerStack(
+    std::unique_ptr<views::View> stack) {
+  if (media_stack_) {
+    views::View* old = media_stack_;
+    media_stack_ = nullptr;
+    RemoveChildViewT(old);
+  }
+  if (stack) {
+    // Above the pager, below the bottom bar's layer.
+    media_stack_ = AddChildViewAt(std::move(stack),
+                                  GetIndexOf(bottom_bar_.get()).value());
+  }
+  InvalidateLayout();
+  return media_stack_;
+}
+
+void OpenSidebarView::SetFavoriteSubtitle(const ItemID& tab_id,
+                                          const std::u16string& text) {
+  if (text.empty()) {
+    favorite_subtitles_.erase(tab_id);
+  } else {
+    favorite_subtitles_[tab_id] = text;
+  }
+  favorites_->RefreshTile(tab_id);
+}
+
+void OpenSidebarView::SetFavoriteBadge(const ItemID& tab_id,
+                                       const std::u16string& text) {
+  if (text.empty()) {
+    favorite_badges_.erase(tab_id);
+  } else {
+    favorite_badges_[tab_id] = text;
+  }
+  favorites_->RefreshTile(tab_id);
+}
+
+const std::u16string* OpenSidebarView::FavoriteSubtitle(
+    const ItemID& tab_id) const {
+  auto it = favorite_subtitles_.find(tab_id);
+  return it == favorite_subtitles_.end() ? nullptr : &it->second;
+}
+
+const std::u16string* OpenSidebarView::FavoriteBadge(
+    const ItemID& tab_id) const {
+  auto it = favorite_badges_.find(tab_id);
+  return it == favorite_badges_.end() ? nullptr : &it->second;
 }
 
 // --- Notifications -------------------------------------------------------------
@@ -1361,6 +1811,7 @@ void OpenSidebarView::OnSpacesChanged() {
       context_->window_id()));
   pager_->ForEachPage([](OpenTabTreeView* page) { page->OnSpaceChanged(); });
   bottom_bar_->Refresh();
+  ApplyIncognitoChrome();
 }
 
 void OpenSidebarView::OnSpaceThemeChanged(const SpaceID& space_id) {
@@ -1508,7 +1959,14 @@ void OpenSidebarView::Layout(PassKey) {
   favorites_->SetBounds(0, fav_top, w, fav_h);
   const int bar_h = static_cast<int>(m::bottom_bar::kHeight);
   const int pager_top = fav_top + fav_h;
-  pager_->SetBounds(0, pager_top, w, std::max(0, h - bar_h - pager_top));
+  int media_h = 0;
+  if (media_stack_ && media_stack_->GetVisible()) {
+    media_h = std::min(media_stack_->GetHeightForWidth(w),
+                       std::max(0, h - bar_h - pager_top));
+    media_stack_->SetBounds(0, h - bar_h - media_h, w, media_h);
+  }
+  pager_->SetBounds(0, pager_top, w,
+                    std::max(0, h - bar_h - media_h - pager_top));
   bottom_bar_->SetBounds(0, h - bar_h, w, bar_h);
 }
 

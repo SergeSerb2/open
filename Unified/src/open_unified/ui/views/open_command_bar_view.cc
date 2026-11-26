@@ -3,18 +3,24 @@
 #include "open_unified/ui/views/open_command_bar_view.h"
 
 #include <algorithm>
+#include <iterator>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
+#include "open_unified/ui/design/open_glyphs.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/range/range.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
@@ -63,6 +69,118 @@ constexpr int kInputKeycapPadding = 4;
 constexpr int kHintTrailing = 22;
 constexpr int kHintLabelGap = 10;
 constexpr int kHintKeyGap = 8;
+// (i) button: 21 pt from the trailing edge (InfoButton [W − 47, 19, 26, 26]),
+// 24 pt circle Light white / Dark #1C1C1B, shadow y 1 blur 3 black 18 %,
+// glyph white 0.57 on dark (CommandCard.info*).
+constexpr int kInfoTrailing = 21;
+constexpr SkColor kInfoFillDark = SkColorSetRGB(0x1C, 0x1C, 0x1B);
+// Privacy footer colors (CommandBarRole.footer*).
+constexpr SkColor kFooterBand = SK_ColorBLACK;
+constexpr SkColor kFooterButtonFill = SkColorSetRGB(0x30, 0x2F, 0x63);
+constexpr SkColor kFooterButtonEdge = SkColorSetRGB(0x63, 0x62, 0xAD);
+// Footer strings (CommandBarText, Presentation.swift).
+constexpr char16_t kPrivacyTitle[] =
+    u"We talk to your search engine to help us suggest results.";
+constexpr char16_t kPrivacyLearnMorePrefix[] =
+    u"Learn more about your data on Open ";
+constexpr char16_t kPrivacyLinkWord[] = u"here";
+constexpr char16_t kSearchSettings[] = u"Search Settings\u2026";
+constexpr char16_t kDismissNotice[] = u"Dismiss";
+
+CommandBarRowRole ToRowRole(SuggestionRole role) {
+  switch (role) {
+    case SuggestionRole::kRemoteQuery:
+    case SuggestionRole::kRemoteNavigation:
+      return CommandBarRowRole::kRemoteSuggestion;
+    case SuggestionRole::kExtensionAction:
+      return CommandBarRowRole::kExtensionAction;
+    case SuggestionRole::kExtensionSuggestion:
+      return CommandBarRowRole::kExtensionSuggestion;
+    case SuggestionRole::kDocument:
+      return CommandBarRowRole::kDocument;
+    case SuggestionRole::kNewDocument:
+      return CommandBarRowRole::kNewDocument;
+    case SuggestionRole::kQuickCreate:
+      return CommandBarRowRole::kQuickCreate;
+    case SuggestionRole::kExtensionKeyword:
+    case SuggestionRole::kDefault:
+      break;
+  }
+  return CommandBarRowRole::kDefault;
+}
+
+CommandBarRowKind ToRowKind(const Suggestion& s) {
+  switch (s.kind) {
+    case SuggestionKind::kNavigate:
+      return CommandBarRowKind::kNavigate;
+    case SuggestionKind::kSearch:
+      return s.role == SuggestionRole::kRemoteQuery
+                 ? CommandBarRowKind::kSearchSuggestion
+                 : CommandBarRowKind::kSearch;
+    case SuggestionKind::kSwitchToTab:
+      return s.tab_location == TabLocation::kSplitPane
+                 ? CommandBarRowKind::kSwitchToSplit
+                 : CommandBarRowKind::kSwitchToTab;
+    case SuggestionKind::kHistory:
+      return CommandBarRowKind::kHistory;
+    case SuggestionKind::kCalculator:
+      return CommandBarRowKind::kCalculator;
+    case SuggestionKind::kAction:
+      return CommandBarRowKind::kAction;
+    case SuggestionKind::kSiteSearch:
+    case SuggestionKind::kSiteSearchHint:
+      return CommandBarRowKind::kSiteSearch;
+  }
+  return CommandBarRowKind::kNavigate;
+}
+
+// The fallback glyph a row draws without a favicon (§3.3): magnifier for
+// searches, a bolt for actions, "=" for the calculator, the globe for pages.
+Glyph DefaultGlyphFor(const CommandBarRow& row) {
+  switch (row.role) {
+    case CommandBarRowRole::kExtensionAction:
+    case CommandBarRowRole::kExtensionSuggestion:
+      return Glyph::kPuzzle;
+    case CommandBarRowRole::kNewDocument:
+    case CommandBarRowRole::kQuickCreate:
+      return Glyph::kPlus;
+    case CommandBarRowRole::kDocument:
+      return Glyph::kSquare;
+    case CommandBarRowRole::kRemoteSuggestion:
+    case CommandBarRowRole::kDefault:
+      break;
+  }
+  switch (row.kind) {
+    case CommandBarRowKind::kSearch:
+    case CommandBarRowKind::kSearchSuggestion:
+    case CommandBarRowKind::kSiteSearch:
+      return Glyph::kSearch;
+    case CommandBarRowKind::kAction:
+      return Glyph::kBolt;
+    case CommandBarRowKind::kCalculator:
+      return Glyph::kEquals;
+    case CommandBarRowKind::kSwitchToSplit:
+      return Glyph::kSplit;
+    case CommandBarRowKind::kNavigate:
+    case CommandBarRowKind::kHistory:
+    case CommandBarRowKind::kSwitchToTab:
+    case CommandBarRowKind::kCurrentPage:
+      return Glyph::kGlobe;
+  }
+  return Glyph::kGlobe;
+}
+
+bool WantsFavicon(const CommandBarRow& row) {
+  switch (row.kind) {
+    case CommandBarRowKind::kNavigate:
+    case CommandBarRowKind::kHistory:
+    case CommandBarRowKind::kSwitchToTab:
+    case CommandBarRowKind::kCurrentPage:
+      return true;
+    default:
+      return false;
+  }
+}
 
 bool StartsWithIgnoringAsciiCase(std::u16string_view text,
                                  std::u16string_view prefix) {
@@ -155,6 +273,70 @@ const CardLayout& LayoutFor(bool inline_card) {
 
 }  // namespace
 
+bool CommandBarScopeTarget::is_extension() const {
+  return extension_id().has_value();
+}
+
+std::optional<std::string> CommandBarScopeTarget::extension_id() const {
+  if (scope != CommandBarScope::kSiteSearch) {
+    return std::nullopt;
+  }
+  return ExtensionIdFromScopeId(site_search_id);
+}
+
+// static
+CommandBarScopeTarget CommandBarScopeTarget::ForExtension(
+    const std::string& extension_id,
+    const std::u16string& name) {
+  CommandBarScopeTarget target;
+  target.scope = CommandBarScope::kSiteSearch;
+  target.site_search_id = ExtensionScopeId(extension_id);
+  target.title = name;
+  target.exact_keyword = true;
+  return target;
+}
+
+std::vector<CommandBarRow> CommandBarRowsFromSuggestions(
+    const std::vector<Suggestion>& suggestions) {
+  std::vector<CommandBarRow> rows;
+  rows.reserve(suggestions.size());
+  for (const Suggestion& suggestion : suggestions) {
+    if (suggestion.kind == SuggestionKind::kSiteSearchHint) {
+      continue;
+    }
+    CommandBarRow row;
+    row.id = suggestion.id;
+    row.kind = ToRowKind(suggestion);
+    row.role = ToRowRole(suggestion.role);
+    row.title = base::UTF8ToUTF16(suggestion.title);
+    row.subtitle = base::UTF8ToUTF16(suggestion.subtitle);
+    row.url = suggestion.url.value_or(std::string());
+    row.tab_id = suggestion.tab_id;
+    row.space_id = suggestion.space_id;
+    row.action_id = suggestion.action_id.value_or(std::string());
+    row.favicon_url = suggestion.favicon_page_url.value_or(std::string());
+    row.extension_id = suggestion.extension_id.value_or(std::string());
+    row.extension_content =
+        suggestion.extension_content.value_or(std::string());
+    row.document_id = suggestion.document_id.value_or(std::string());
+    if (suggestion.kind == SuggestionKind::kSwitchToTab) {
+      if (suggestion.tab_location == TabLocation::kSplitPane) {
+        row.badge = u"Switch to Split View";
+      } else {
+        row.badge = suggestion.space_title
+                        ? base::UTF8ToUTF16(*suggestion.space_title)
+                        : u"Switch to Tab";
+      }
+    }
+    if (!suggestion.shortcut_display.empty()) {
+      row.keycaps.push_back(base::UTF8ToUTF16(suggestion.shortcut_display));
+    }
+    row.fallback_glyph = DefaultGlyphFor(row);
+    rows.push_back(std::move(row));
+  }
+  return rows;
+}
+
 OpenCommandBarView::OpenCommandBarView(CommandBarDelegate* delegate)
     : delegate_(delegate) {
   SetVisible(false);
@@ -177,10 +359,69 @@ OpenCommandBarView::OpenCommandBarView(CommandBarDelegate* delegate)
                   secondary::WithAlpha(SK_ColorBLACK, 0.05f), 13.f);
   close->SetVisible(false);
   close_button_ = AddChildView(std::move(close));
+
+  auto make_painted = [this](views::Button::PressedCallback callback,
+                             secondary::PaintedButton::Painter painter,
+                             const std::u16string& name) {
+    auto button = std::make_unique<secondary::PaintedButton>(
+        std::move(callback), std::move(painter), name);
+    button->SetVisible(false);
+    return AddChildView(std::move(button));
+  };
+  info_button_ =
+      make_painted(base::BindRepeating(&OpenCommandBarView::TogglePrivacyFooter,
+                                       base::Unretained(this)),
+                   base::BindRepeating(&OpenCommandBarView::PaintInfoButton,
+                                       base::Unretained(this)),
+                   u"Command Bar Help");
+  info_button_->GetViewAccessibility().SetDescription(
+      u"Show how search suggestions use your search engine");
+  footer_settings_ = make_painted(
+      base::BindRepeating(&OpenCommandBarView::OpenSearchSettings,
+                          base::Unretained(this)),
+      base::BindRepeating(
+          [](OpenCommandBarView* self, gfx::Canvas* canvas,
+             const gfx::Rect& bounds, bool hovered) {
+            self->PaintFooterButton(canvas, bounds, hovered, kSearchSettings);
+          },
+          base::Unretained(this)),
+      kSearchSettings);
+  footer_dismiss_ = make_painted(
+      base::BindRepeating(&OpenCommandBarView::DismissPrivacyNotice,
+                          base::Unretained(this)),
+      base::BindRepeating(
+          [](OpenCommandBarView* self, gfx::Canvas* canvas,
+             const gfx::Rect& bounds, bool hovered) {
+            self->PaintFooterButton(canvas, bounds, hovered, kDismissNotice);
+          },
+          base::Unretained(this)),
+      kDismissNotice);
+  // "here": a transparent hit target over the drawn word (FooterLink).
+  footer_link_ = make_painted(
+      base::BindRepeating(&OpenCommandBarView::OpenPrivacyPage,
+                          base::Unretained(this)),
+      base::BindRepeating([](gfx::Canvas*, const gfx::Rect&, bool) {}),
+      kPrivacyLinkWord);
+  footer_link_->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
 }
 
 OpenCommandBarView::~OpenCommandBarView() {
   field_->set_controller(nullptr);
+}
+
+// static
+gfx::Rect OpenCommandBarView::ComputeCardBounds(
+    const gfx::Size& size,
+    CommandBarMode mode,
+    size_t row_count,
+    const std::optional<gfx::Rect>& anchor,
+    bool shows_footer) {
+  gfx::Rect card = ComputeCardBounds(size, mode, row_count, anchor);
+  if (shows_footer && mode != CommandBarMode::kLittleOpen && !anchor &&
+      row_count < m::kFooterGrowthRowLimit) {
+    card.set_height(card.height() + m::kFooterHeight);
+  }
+  return card;
 }
 
 // static
@@ -212,8 +453,25 @@ void OpenCommandBarView::Present(const CommandBarRequest& request) {
   inline_anchor_ = request.mode == CommandBarMode::kEditCurrentUrl
                        ? request.inline_anchor
                        : std::nullopt;
+  // Keyboard Cmd/Ctrl+L or a pill click: the pill's screen rect, resolved
+  // into this view now and on every layout (ResolveScreenAnchor()).
+  anchor_in_screen_ =
+      request.mode == CommandBarMode::kEditCurrentUrl && !request.inline_anchor
+          ? request.anchor_in_screen
+          : std::nullopt;
+  ResolveScreenAnchor();
   appearance_ = request.appearance;
   current_favicon_ = request.current_favicon;
+  if (current_favicon_.isNull() && favicon_lookup_ &&
+      request.mode == CommandBarMode::kEditCurrentUrl) {
+    const GURL page(base::UTF16ToUTF8(request.initial_text));
+    if (page.is_valid()) {
+      current_favicon_ = favicon_lookup_.Run(page);
+    }
+  }
+  allows_remote_ = request.allows_remote_suggestions;
+  shows_privacy_link_ = request.shows_privacy_link;
+  shows_footer_ = false;  // The footer never opens by itself (D14).
   presented_ = true;
   scope_ = CommandBarScope::kNone;
   scope_from_command_ = false;
@@ -286,13 +544,25 @@ void OpenCommandBarView::DismissInternal(
   }
   presented_ = false;
   SetVisible(false);
+  const bool left_extension_scope = is_extension_scope();
+  const std::string extension_id =
+      ExtensionIdFromScopeId(site_search_id_).value_or(std::string());
   field_->SetText(std::u16string());
   field_->ClearEditHistory();
   typed_.clear();
   completion_.clear();
   scope_ = CommandBarScope::kNone;
+  site_search_id_.clear();
   results_ = {};
+  shows_footer_ = false;
+  anchor_in_screen_.reset();
   if (delegate_) {
+    // A commit inside an extension scope ends its session through the
+    // intent (onInputEntered); any other close cancels it.
+    if (left_extension_scope && reason != CommandBarDismissReason::kCommitted) {
+      delegate_->OnCommandBarExtensionScopeChanged(extension_id,
+                                                   /*entered=*/false);
+    }
     delegate_->OnCommandBarDismissed(reason, click_location);
   }
 }
@@ -303,6 +573,255 @@ void OpenCommandBarView::UpdateResults(uint64_t generation,
     return;
   }
   ApplyResults(std::move(results));
+}
+
+void OpenCommandBarView::UpdateRemoteRows(
+    uint64_t generation,
+    std::vector<CommandBarRow> remote_rows) {
+  if (!presented_ || generation != generation_) {
+    return;
+  }
+  UpdateResults(std::move(remote_rows));
+}
+
+void OpenCommandBarView::UpdateResults(std::vector<CommandBarRow> remote_rows) {
+  if (!presented_) {
+    return;
+  }
+  // Remote rows never enter the Tabs, Actions or extension scopes.
+  if (scope_ == CommandBarScope::kActions || scope_ == CommandBarScope::kTabs ||
+      is_extension_scope()) {
+    return;
+  }
+  for (CommandBarRow& row : remote_rows) {
+    row.role = CommandBarRowRole::kRemoteSuggestion;
+  }
+  NormalizeRows(remote_rows);
+  FillFavicons(remote_rows);
+
+  CommandBarResults next = results_;
+  std::vector<CommandBarRow>& rows = next.rows;
+  // Where the old remote block started (or after the typed search row, or
+  // after row 1): the new block goes there, so nothing above it moves.
+  size_t insert_at = rows.empty() ? 0 : 1;
+  bool found_block = false;
+  for (size_t i = 0; i < rows.size(); ++i) {
+    if (rows[i].role == CommandBarRowRole::kRemoteSuggestion) {
+      insert_at = i;
+      found_block = true;
+      break;
+    }
+  }
+  if (!found_block) {
+    for (size_t i = 0; i < rows.size(); ++i) {
+      if (rows[i].kind == CommandBarRowKind::kSearch) {
+        insert_at = i + 1;
+        break;
+      }
+    }
+  }
+  // Row 1 never changes under the user (it carries the inline completion).
+  insert_at = std::max<size_t>(insert_at, rows.empty() ? 0 : 1);
+  // Old remote rows all sit at or after `insert_at` (row 1 stays).
+  std::vector<CommandBarRow> kept;
+  kept.reserve(rows.size() + remote_rows.size());
+  for (size_t i = 0; i < rows.size(); ++i) {
+    if (i == 0 || rows[i].role != CommandBarRowRole::kRemoteSuggestion) {
+      kept.push_back(std::move(rows[i]));
+    }
+  }
+  rows = std::move(kept);
+  insert_at = std::min(insert_at, rows.size());
+  // Drop remote rows that repeat a local row (same id, URL or title+kind).
+  std::erase_if(remote_rows, [&](const CommandBarRow& remote) {
+    return std::any_of(rows.begin(), rows.end(), [&](const CommandBarRow& r) {
+      return r.id == remote.id || (!r.url.empty() && r.url == remote.url) ||
+             (r.title == remote.title &&
+              (r.kind == CommandBarRowKind::kSearch ||
+               r.kind == CommandBarRowKind::kSearchSuggestion));
+    });
+  });
+  rows.insert(rows.begin() + static_cast<std::ptrdiff_t>(insert_at),
+              std::make_move_iterator(remote_rows.begin()),
+              std::make_move_iterator(remote_rows.end()));
+
+  // ApplyResults keeps the highlighted row: by id after a move, else row 1.
+  ApplyResults(std::move(next));
+}
+
+void OpenCommandBarView::SetFaviconLookup(GetFaviconForUrlCallback callback) {
+  favicon_lookup_ = std::move(callback);
+}
+
+void OpenCommandBarView::UpdateFavicon(const GURL& page_url,
+                                       const gfx::ImageSkia& icon) {
+  if (!presented_ || icon.isNull() || !page_url.is_valid()) {
+    return;
+  }
+  bool changed = false;
+  for (CommandBarRow& row : results_.rows) {
+    const std::string& key =
+        row.favicon_url.empty() ? row.url : row.favicon_url;
+    if (row.icon.isNull() && !key.empty() && GURL(key) == page_url) {
+      row.icon = icon;
+      changed = true;
+    }
+  }
+  if (mode_ == CommandBarMode::kEditCurrentUrl && current_favicon_.isNull() &&
+      GURL(base::UTF16ToUTF8(field_->GetText())) == page_url) {
+    current_favicon_ = icon;
+    changed = true;
+  }
+  if (changed) {
+    SchedulePaint();
+  }
+}
+
+void OpenCommandBarView::FillFavicons(std::vector<CommandBarRow>& rows) const {
+  if (!favicon_lookup_) {
+    return;
+  }
+  for (CommandBarRow& row : rows) {
+    if (!row.icon.isNull() || row.kind == CommandBarRowKind::kSwitchToSplit) {
+      continue;
+    }
+    const bool wants = WantsFavicon(row) || !row.favicon_url.empty();
+    if (!wants) {
+      continue;
+    }
+    const GURL page(row.favicon_url.empty() ? row.url : row.favicon_url);
+    if (page.is_valid()) {
+      row.icon = favicon_lookup_.Run(page);
+    }
+  }
+}
+
+void OpenCommandBarView::NormalizeRows(std::vector<CommandBarRow>& rows) const {
+  for (CommandBarRow& row : rows) {
+    // Rows built without a glyph choice (the default globe) get the glyph of
+    // their kind: magnifier for searches, bolt for actions, and so on.
+    if (row.fallback_glyph == Glyph::kGlobe) {
+      row.fallback_glyph = DefaultGlyphFor(row);
+    }
+    if (row.favicon_url.empty() && WantsFavicon(row)) {
+      row.favicon_url = row.url;
+    }
+  }
+}
+
+bool OpenCommandBarView::is_extension_scope() const {
+  return scope_ == CommandBarScope::kSiteSearch &&
+         ExtensionIdFromScopeId(site_search_id_).has_value();
+}
+
+bool OpenCommandBarView::shows_info_button() const {
+  return presented_ && allows_remote_ && !shows_footer_ && !is_inline() &&
+         mode_ != CommandBarMode::kLittleOpen && HintWidth() == 0;
+}
+
+void OpenCommandBarView::SetAllowsRemoteSuggestions(bool allowed) {
+  if (allows_remote_ == allowed) {
+    return;
+  }
+  allows_remote_ = allowed;
+  if (!allowed) {
+    shows_footer_ = false;
+  }
+  InvalidateLayout();
+  SchedulePaint();
+}
+
+void OpenCommandBarView::ResolveScreenAnchor() {
+  if (!anchor_in_screen_ || !GetWidget()) {
+    return;
+  }
+  gfx::Point origin = anchor_in_screen_->origin();
+  views::View::ConvertPointFromScreen(this, &origin);
+  const gfx::Rect local(origin, anchor_in_screen_->size());
+  // A pill outside this view (sidebar hidden, another screen) gives the
+  // centered card instead.
+  if (local.IsEmpty() || !GetLocalBounds().Intersects(local)) {
+    inline_anchor_.reset();
+  } else {
+    inline_anchor_ = local;
+  }
+}
+
+// --- Privacy footer
+// ------------------------------------------------------------
+
+void OpenCommandBarView::TogglePrivacyFooter() {
+  // (i) or Cmd/Ctrl+I; the panel changes in one frame (D12).
+  if (!presented_ || !allows_remote_ || mode_ == CommandBarMode::kLittleOpen ||
+      is_inline()) {
+    return;
+  }
+  shows_footer_ = !shows_footer_;
+  EnsureSelectedVisible();
+  InvalidateLayout();
+  SchedulePaint();
+  if (!shows_footer_) {
+    field_->RequestFocus();
+  }
+}
+
+void OpenCommandBarView::OpenSearchSettings() {
+  if (!presented_) {
+    return;
+  }
+  base::WeakPtr<OpenCommandBarView> weak = weak_factory_.GetWeakPtr();
+  Dismiss(CommandBarDismissReason::kProgrammatic);
+  if (weak && delegate_) {
+    delegate_->OnCommandBarOpenSearchSettings();
+  }
+}
+
+void OpenCommandBarView::DismissPrivacyNotice() {
+  if (!presented_ || !shows_footer_) {
+    return;
+  }
+  shows_footer_ = false;
+  InvalidateLayout();
+  SchedulePaint();
+  field_->RequestFocus();
+  base::WeakPtr<OpenCommandBarView> weak = weak_factory_.GetWeakPtr();
+  if (delegate_) {
+    delegate_->OnCommandBarDismissPrivacyNotice();
+  }
+  if (weak && presented_) {
+    RunQuery();  // So remote rows can arrive now.
+  }
+}
+
+void OpenCommandBarView::OpenPrivacyPage() {
+  if (!presented_ || !shows_privacy_link_) {
+    return;
+  }
+  base::WeakPtr<OpenCommandBarView> weak = weak_factory_.GetWeakPtr();
+  Dismiss(CommandBarDismissReason::kProgrammatic);
+  if (weak && delegate_) {
+    delegate_->OnCommandBarOpenPrivacyPage();
+  }
+}
+
+gfx::Rect OpenCommandBarView::FooterRect() const {
+  if (!shows_footer_) {
+    return gfx::Rect();
+  }
+  return gfx::Rect(card_.x(), card_.bottom() - m::kFooterHeight, card_.width(),
+                   m::kFooterHeight);
+}
+
+gfx::Rect OpenCommandBarView::FooterLinkRect() const {
+  const gfx::Rect band = FooterRect();
+  if (band.IsEmpty() || !shows_privacy_link_) {
+    return gfx::Rect();
+  }
+  const gfx::FontList body = secondary::FontOfSize(13);
+  const int prefix = secondary::TextWidth(kPrivacyLearnMorePrefix, body);
+  return gfx::Rect(band.x() + m::kFooterTextX + prefix,
+                   band.y() + m::kFooterLine2Top,
+                   secondary::TextWidth(kPrivacyLinkWord, body), 16);
 }
 
 void OpenCommandBarView::EnterScope(const CommandBarScopeTarget& target) {
@@ -354,7 +873,15 @@ void OpenCommandBarView::RunQuery() {
   query.site_search_id = site_search_id_;
   query.allows_inline_completion = allows_inline_;
   query.generation = ++generation_;
+  base::WeakPtr<OpenCommandBarView> weak = weak_factory_.GetWeakPtr();
   ApplyResults(delegate_->QuerySuggestions(query));
+  // Search-engine rows arrive later through UpdateRemoteRows(); the delegate
+  // cancels the previous request and applies SuggestEngine's privacy gate.
+  if (weak && presented_ && allows_remote_ && delegate_ &&
+      scope_ != CommandBarScope::kActions && scope_ != CommandBarScope::kTabs &&
+      !is_extension_scope()) {
+    delegate_->OnCommandBarRemoteQuery(query);
+  }
 }
 
 void OpenCommandBarView::ApplyResults(CommandBarResults results) {
@@ -366,6 +893,8 @@ void OpenCommandBarView::ApplyResults(CommandBarResults results) {
   if (results_.rows.size() > m::kMaxRows) {
     results_.rows.resize(m::kMaxRows);
   }
+  NormalizeRows(results_.rows);
+  FillFavicons(results_.rows);
   // Before the user moves, the selection stays on row 1; after a move it
   // follows the same suggestion id (commandbar.md §4 "Later snapshots").
   selected_ = 0;
@@ -514,8 +1043,22 @@ bool OpenCommandBarView::HandleKeyEvent(views::Textfield* sender,
                         (event.key_code() == ui::VKEY_INSERT && shift);
   switch (event.key_code()) {
     case ui::VKEY_ESCAPE:
+      // Esc closes the open footer first, then the bar.
+      if (shows_footer_) {
+        TogglePrivacyFooter();
+        return true;
+      }
       Dismiss(CommandBarDismissReason::kEscape);
       return true;
+
+    case ui::VKEY_I:
+      // Cmd/Ctrl+I toggles the privacy footer (CC-42, D14).
+      if (secondary::HasPrimaryModifier(event.flags()) && !shift &&
+          allows_remote_) {
+        TogglePrivacyFooter();
+        return true;
+      }
+      return false;
 
     case ui::VKEY_RETURN:
       Commit(selected_, event.flags());
@@ -635,6 +1178,12 @@ std::optional<CommandBarScopeTarget> OpenCommandBarView::TabScopeTarget()
 void OpenCommandBarView::EnterScopeInternal(
     const CommandBarScopeTarget& target,
     const std::u16string& restore_text) {
+  const std::optional<std::string> old_extension =
+      ExtensionIdFromScopeId(site_search_id_);
+  if (old_extension && delegate_) {
+    delegate_->OnCommandBarExtensionScopeChanged(*old_extension,
+                                                 /*entered=*/false);
+  }
   scope_ = target.scope;
   site_search_id_ = target.site_search_id;
   scope_title_ = target.title.empty() ? ScopeTitle(target.scope) : target.title;
@@ -646,10 +1195,24 @@ void OpenCommandBarView::EnterScopeInternal(
   SetFieldText(std::u16string(), 0, 0);
   UpdatePlaceholder();
   InvalidateLayout();
+  if (std::optional<std::string> extension = target.extension_id();
+      extension && delegate_) {
+    base::WeakPtr<OpenCommandBarView> weak = weak_factory_.GetWeakPtr();
+    delegate_->OnCommandBarExtensionScopeChanged(*extension, /*entered=*/true);
+    if (!weak || !presented_) {
+      return;
+    }
+  }
   RunQuery();
 }
 
 void OpenCommandBarView::ExitScope() {
+  if (std::optional<std::string> extension =
+          ExtensionIdFromScopeId(site_search_id_);
+      extension && delegate_) {
+    delegate_->OnCommandBarExtensionScopeChanged(*extension,
+                                                 /*entered=*/false);
+  }
   std::u16string text;
   if (scope_from_command_) {
     // A scope opened by command gives an empty Cmd+T bar.
@@ -672,7 +1235,9 @@ void OpenCommandBarView::ExitScope() {
 }
 
 void OpenCommandBarView::UpdatePlaceholder() {
-  if (scope_ != CommandBarScope::kNone) {
+  if (is_extension_scope()) {
+    field_->SetPlaceholderText(u"Type a command for " + scope_title_ + u"…");
+  } else if (scope_ != CommandBarScope::kNone) {
     field_->SetPlaceholderText(u"Search…");
   } else if (mode_ == CommandBarMode::kSearchTabs) {
     field_->SetPlaceholderText(u"Search Tabs…");
@@ -702,10 +1267,21 @@ void OpenCommandBarView::MoveSelection(int delta) {
 }
 
 void OpenCommandBarView::EnsureSelectedVisible() {
+  // While the footer covers the list bottom, the highlighted row stays above
+  // the band (CommandBarController.togglePrivacyFooter).
+  size_t visible = m::kMaxVisibleRows;
+  if (shows_footer_ && results_.rows.size() >= m::kFooterGrowthRowLimit) {
+    const CardLayout& l = LayoutFor(is_inline());
+    const int list_room =
+        std::max(0, kNewTabLayout.PanelHeight(std::min<size_t>(
+                        results_.rows.size(), m::kMaxVisibleRows)) -
+                        m::kFooterHeight - l.list_top());
+    visible = std::max<size_t>(1, static_cast<size_t>(list_room / l.row_pitch));
+  }
   if (selected_ < scroll_) {
     scroll_ = selected_;
-  } else if (selected_ >= scroll_ + m::kMaxVisibleRows) {
-    scroll_ = selected_ + 1 - m::kMaxVisibleRows;
+  } else if (selected_ >= scroll_ + visible) {
+    scroll_ = selected_ + 1 - visible;
   }
 }
 
@@ -757,7 +1333,7 @@ void OpenCommandBarView::UpdateCard() {
   const size_t rows = mode_ == CommandBarMode::kLittleOpen
                           ? m::kMaxVisibleRows
                           : results_.rows.size();
-  card_ = ComputeCardBounds(size(), mode_, rows, inline_anchor_);
+  card_ = ComputeCardBounds(size(), mode_, rows, inline_anchor_, shows_footer_);
 }
 
 gfx::Rect OpenCommandBarView::ChipRect() const {
@@ -789,15 +1365,27 @@ int OpenCommandBarView::HintWidth() const {
 }
 
 void OpenCommandBarView::Layout(PassKey) {
+  // The Cmd/Ctrl+L card follows the URL pill (sidebar resize, window move).
+  ResolveScreenAnchor();
   UpdateCard();
   const CardLayout& l = LayoutFor(is_inline());
+  if (field_->GetFontList().GetFontSize() != l.input_font) {
+    // The pill moved off screen (centered card) or back (inline editor).
+    field_->SetFontList(secondary::FontOfSize(l.input_font));
+  }
   const gfx::Rect chip = ChipRect();
   const int field_x =
       chip.IsEmpty() ? card_.x() + l.text_x() : chip.right() + m::kChipToText;
-  const int right = card_.right() - l.padding_right - HintWidth() -
-                    (mode_ == CommandBarMode::kLittleOpen
-                         ? m::kLittleOpenCloseTrailing - l.padding_right
-                         : 0);
+  const bool info = shows_info_button();
+  // The (i) button sits 21 pt from the edge; the field stops 10 pt before it
+  // (CommandBarMetrics.textFieldTrailingGap). While the footer shows, the
+  // button hides and the field takes its place (CC-42).
+  const int right =
+      card_.right() - l.padding_right - HintWidth() -
+      (mode_ == CommandBarMode::kLittleOpen
+           ? m::kLittleOpenCloseTrailing - l.padding_right
+           : 0) -
+      (info ? kInfoTrailing + m::kInfoButtonSize + 10 - l.padding_right : 0);
   const int field_h = field_->GetFontList().GetHeight() + 6;
   field_->SetBoundsRect(gfx::Rect(field_x,
                                   card_.y() + (l.input_height - field_h) / 2,
@@ -807,6 +1395,28 @@ void OpenCommandBarView::Layout(PassKey) {
         gfx::Rect(card_.right() - m::kLittleOpenCloseTrailing,
                   card_.y() + m::kLittleOpenCloseY, m::kLittleOpenCloseSize,
                   m::kLittleOpenCloseSize));
+  }
+  info_button_->SetVisible(info);
+  if (info) {
+    info_button_->SetBoundsRect(
+        gfx::Rect(card_.right() - kInfoTrailing - m::kInfoButtonSize,
+                  card_.y() + (l.input_height - m::kInfoButtonSize) / 2,
+                  m::kInfoButtonSize, m::kInfoButtonSize));
+  }
+  const gfx::Rect band = FooterRect();
+  footer_settings_->SetVisible(!band.IsEmpty());
+  footer_dismiss_->SetVisible(!band.IsEmpty());
+  footer_link_->SetVisible(!band.IsEmpty() && shows_privacy_link_);
+  if (!band.IsEmpty()) {
+    const gfx::Rect dismiss(
+        band.right() - m::kFooterDismissTrailing - m::kFooterDismissButtonWidth,
+        band.y() + m::kFooterButtonTop, m::kFooterDismissButtonWidth,
+        m::kFooterButtonHeight);
+    footer_dismiss_->SetBoundsRect(dismiss);
+    footer_settings_->SetBoundsRect(gfx::Rect(
+        dismiss.x() - m::kFooterButtonGap - m::kFooterSettingsButtonWidth,
+        dismiss.y(), m::kFooterSettingsButtonWidth, m::kFooterButtonHeight));
+    footer_link_->SetBoundsRect(FooterLinkRect());
   }
 }
 
@@ -822,6 +1432,10 @@ std::optional<size_t> OpenCommandBarView::RowAt(const gfx::Point& point) const {
   const size_t visible = std::min<size_t>(
       results_.rows.size() - std::min(scroll_, results_.rows.size()),
       m::kMaxVisibleRows);
+  const gfx::Rect band = FooterRect();
+  if (!band.IsEmpty() && band.Contains(point)) {
+    return std::nullopt;  // The band takes every click (rows behind it don't).
+  }
   for (size_t i = 0; i < visible; ++i) {
     // Hit area covers the 4 pt gap below each row so no dead stripes.
     gfx::Rect hit = RowRect(i);
@@ -886,6 +1500,104 @@ void OpenCommandBarView::OnPaint(gfx::Canvas* canvas) {
   PaintInputRow(canvas);
   PaintRows(canvas);
   canvas->Restore();
+  if (shows_footer_) {
+    PaintFooter(canvas);
+  }
+}
+
+void OpenCommandBarView::PaintFooter(gfx::Canvas* canvas) {
+  const gfx::Rect band = FooterRect();
+  if (band.IsEmpty()) {
+    return;
+  }
+  // A black band over the list bottom, clipped by the panel corner.
+  canvas->Save();
+  canvas->sk_canvas()->clipRRect(
+      SkRRect::MakeRectXY(gfx::RectToSkRect(card_), m::kCornerRadius,
+                          m::kCornerRadius),
+      true);
+  canvas->FillRect(band, kFooterBand);
+  const SkColor icon_color = secondary::WithAlpha(SK_ColorWHITE, 0.5f);
+  const gfx::RectF icon(band.x() + m::kFooterIconX, band.y() + m::kFooterIconY,
+                        m::kFooterIconSize, m::kFooterIconSize);
+  if (!glyphs::DrawSystemSymbol(canvas, "info.circle", 13.f,
+                                glyphs::SymbolWeight::kRegular, icon,
+                                icon_color)) {
+    secondary::StrokeRoundRect(canvas, icon, m::kFooterIconSize / 2.f,
+                               icon_color, 1.f);
+    secondary::DrawText(
+        canvas, u"i", secondary::FontOfSize(10, gfx::Font::Weight::BOLD),
+        icon_color, gfx::ToEnclosingRect(icon), gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
+  const int text_x = band.x() + m::kFooterTextX;
+  const int text_right =
+      footer_settings_->x() > text_x ? footer_settings_->x() - 8 : band.right();
+  secondary::DrawText(canvas, kPrivacyTitle,
+                      secondary::FontOfSize(13, gfx::Font::Weight::BOLD),
+                      secondary::WithAlpha(SK_ColorWHITE, 0.93f),
+                      gfx::Rect(text_x, band.y() + m::kFooterLine1Top,
+                                text_right - text_x, 16));
+  if (shows_privacy_link_) {
+    const gfx::FontList body = secondary::FontOfSize(13);
+    const SkColor body_color = secondary::WithAlpha(SK_ColorWHITE, 0.5f);
+    const int line_y = band.y() + m::kFooterLine2Top;
+    const int prefix = secondary::TextWidth(kPrivacyLearnMorePrefix, body);
+    const int word = secondary::TextWidth(kPrivacyLinkWord, body);
+    secondary::DrawText(canvas, kPrivacyLearnMorePrefix, body, body_color,
+                        gfx::Rect(text_x, line_y, prefix, 16));
+    secondary::DrawText(canvas, kPrivacyLinkWord, body, body_color,
+                        gfx::Rect(text_x + prefix, line_y, word, 16));
+    secondary::DrawText(canvas, u".", body, body_color,
+                        gfx::Rect(text_x + prefix + word, line_y,
+                                  secondary::TextWidth(u".", body), 16));
+    // "here" is underlined in the text color (S2 18/0044, guess).
+    canvas->FillRect(gfx::Rect(text_x + prefix, line_y + 14, word, 1),
+                     body_color);
+  }
+  canvas->Restore();
+}
+
+void OpenCommandBarView::PaintFooterButton(gfx::Canvas* canvas,
+                                           const gfx::Rect& bounds,
+                                           bool hovered,
+                                           const std::u16string& title) {
+  const gfx::RectF r(bounds);
+  secondary::FillRoundRect(
+      canvas, r, m::kFooterButtonRadius,
+      hovered ? secondary::Mix(kFooterButtonFill, SK_ColorWHITE, 0.08f)
+              : kFooterButtonFill);
+  gfx::RectF edge = r;
+  edge.Inset(0.5f);
+  secondary::StrokeRoundRect(canvas, edge, m::kFooterButtonRadius - 0.5f,
+                             kFooterButtonEdge, 1.f);
+  secondary::DrawText(canvas, title, secondary::FontOfSize(13),
+                      secondary::WithAlpha(SK_ColorWHITE, 0.9f), bounds,
+                      gfx::Canvas::TEXT_ALIGN_CENTER);
+}
+
+void OpenCommandBarView::PaintInfoButton(gfx::Canvas* canvas,
+                                         const gfx::Rect& bounds,
+                                         bool hovered) {
+  const float d = m::kInfoCircleDiameter;
+  const gfx::RectF circle(bounds.CenterPoint().x() - d / 2.f,
+                          bounds.CenterPoint().y() - d / 2.f, d, d);
+  SkColor fill = appearance_.dark ? kInfoFillDark : SK_ColorWHITE;
+  if (hovered) {
+    fill = secondary::Mix(
+        fill, appearance_.dark ? SK_ColorWHITE : SK_ColorBLACK, 0.06f);
+  }
+  secondary::FillRoundRectWithShadow(canvas, circle, d / 2.f, fill,
+                                     secondary::WithAlpha(SK_ColorBLACK, 0.18f),
+                                     1.f, 3.f);
+  const SkColor ink = appearance_.dark
+                          ? secondary::WithAlpha(SK_ColorWHITE, 0.57f)
+                          : secondary_text_color();
+  if (!glyphs::DrawSystemSymbol(canvas, "info", 11.f,
+                                glyphs::SymbolWeight::kSemibold, circle, ink)) {
+    secondary::DrawText(
+        canvas, u"i", secondary::FontOfSize(13, gfx::Font::Weight::BOLD), ink,
+        gfx::ToEnclosingRect(circle), gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
 }
 
 void OpenCommandBarView::PaintInputRow(gfx::Canvas* canvas) {

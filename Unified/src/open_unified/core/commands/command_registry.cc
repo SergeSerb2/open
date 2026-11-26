@@ -6,6 +6,7 @@
 #include <cctype>
 #include <map>
 #include <set>
+#include <unordered_set>
 #include <utility>
 
 #include "base/files/file_util.h"
@@ -82,6 +83,81 @@ bool IsKnownArcDuplicatePair(const std::vector<std::string>& ids) {
          s == std::set<std::string>{"little-open-global",
                                     "new-little-open-window"} ||
          s == std::set<std::string>{"show-fonts", "new-tab"};
+}
+
+// Arc 1.172.2 runtime menu-bar titles where they differ from the command's own
+// title (MenuBuilder.swift arcMenuTitles).
+std::string ArcMenuTitle(std::string_view id, const std::string& fallback) {
+  static const std::unordered_map<std::string_view, const char*> kArcTitles = {
+      {"hide-others", "Hide Other Windows"},
+      {"save-page-as", "Save Page As"},
+      {"print", "Print"},
+      {"find-and-replace", "Find and Replace"},
+      {"collapse-pinned-section", "Collapse Pinned Tabs"},
+      {"cast", "Cast"},
+      {"clear-unpinned-tabs", "Clear Today"},
+      {"view-archive", "View Archive…"},
+      {"minimize-window", "Minimize Window"},
+      {"view-library", "Open Library…"},
+      {"view-downloads", "View Downloads…"},
+      {"view-media", "View Media…"},
+      {"view-boosts", "View Boosts…"},
+      {"view-easels-notes", "View Easels & Notes…"},
+      {"help-center", "Visit Help Center"},
+      {"export-notes", "Export Notes"},
+  };
+  auto it = kArcTitles.find(id);
+  return it != kArcTitles.end() ? std::string(it->second) : fallback;
+}
+
+// Items Arc 1.172.2 keeps in the menu bar only as hidden key-equivalent
+// carriers (MenuBuilder.swift hiddenInMenu).
+bool IsHiddenInMenu(std::string_view id) {
+  static const std::unordered_set<std::string_view> kHidden = {
+      "open-extensions-picker",
+      "new-boost",
+      "edit-boost",
+      "new-legacy-boost",
+      "boost-gallery",
+      "reveal-current-tab",
+      "expand-pinned-section",
+      "exit-modal",
+      "duplicate-tab",
+      "rename-tab",
+      "reset-tab",
+      "cycle-tab-forward",
+      "cycle-tab-backward",
+      "tab-switcher-forward",
+      "tab-switcher-backward",
+      "expand-all-folders",
+      "collapse-all-folders",
+      "peek-email",
+      "join-meeting",
+      "open-in-current-space",
+      "release-notes",
+  };
+  return kHidden.contains(id);
+}
+
+// System / AppKit responder commands that belong to OS windowing or native
+// text editing rather than OpenWindowUi's FocusManager accelerator table.
+bool IsSystemOrAppKitOnlyCommand(CommandId cid) {
+  switch (cid) {
+    case CommandId::kAboutOpen:
+    case CommandId::kHideOpen:
+    case CommandId::kHideOthers:
+    case CommandId::kShowAll:
+    case CommandId::kQuitOpen:
+    case CommandId::kCloseWindow:
+    case CommandId::kMinimizeWindow:
+    case CommandId::kZoomWindow:
+    case CommandId::kBringAllToFront:
+    case CommandId::kToggleFullScreen:
+    case CommandId::kExitModal:
+      return true;
+    default:
+      return false;
+  }
 }
 
 KeyboardShortcut Primary(std::string key) {
@@ -170,6 +246,8 @@ uint32_t KeyboardShortcut::ModifiersFromNames(
       mods |= kModShift;
     } else if (n == "command" || n == "cmd" || n == "meta" || n == "super") {
       mods |= kModMeta;
+    } else if (n == "mod" || n == "primary") {
+      mods |= kModPrimary;
     }
   }
   return mods;
@@ -178,6 +256,133 @@ uint32_t KeyboardShortcut::ModifiersFromNames(
 bool KeyboardShortcut::operator<(const KeyboardShortcut& other) const {
   if (modifiers != other.modifiers) return modifiers < other.modifiers;
   return key < other.key;
+}
+
+// static
+AvailabilityPredicate CommandRegistry::ParseAvailabilityPredicate(
+    std::string_view enabled_key) {
+  if (enabled_key == "hasCurrentTab") {
+    return AvailabilityPredicate::kHasCurrentTab;
+  }
+  if (enabled_key == "currentTabPinned") {
+    return AvailabilityPredicate::kCurrentTabPinned;
+  }
+  if (enabled_key == "currentTabInToday") {
+    return AvailabilityPredicate::kCurrentTabInToday;
+  }
+  if (enabled_key == "currentTabHasPinnedURL") {
+    return AvailabilityPredicate::kCurrentTabHasPinnedUrl;
+  }
+  if (enabled_key == "currentTabIsFavorite") {
+    return AvailabilityPredicate::kCurrentTabIsFavorite;
+  }
+  if (enabled_key == "currentTabNotFavorite") {
+    return AvailabilityPredicate::kCurrentTabNotFavorite;
+  }
+  if (enabled_key == "currentTabInSplit") {
+    return AvailabilityPredicate::kCurrentTabInSplit;
+  }
+  if (enabled_key == "hasMultipleSpaces") {
+    return AvailabilityPredicate::kHasMultipleSpaces;
+  }
+  if (enabled_key == "canGoBack") {
+    return AvailabilityPredicate::kCanGoBack;
+  }
+  if (enabled_key == "canGoForward") {
+    return AvailabilityPredicate::kCanGoForward;
+  }
+  if (enabled_key == "textFieldFocused") {
+    return AvailabilityPredicate::kTextFieldFocused;
+  }
+  if (enabled_key == "hasHistory") {
+    return AvailabilityPredicate::kHasHistory;
+  }
+  if (enabled_key == "hasWebPage") {
+    return AvailabilityPredicate::kHasWebPage;
+  }
+  if (enabled_key == "isTracing") {
+    return AvailabilityPredicate::kIsTracing;
+  }
+  if (enabled_key == "notTracing") {
+    return AvailabilityPredicate::kNotTracing;
+  }
+  return AvailabilityPredicate::kAlways;
+}
+
+// static
+std::optional<KeyboardShortcut> CommandRegistry::ParseShortcutString(
+    std::string_view text) {
+  std::string_view trimmed = base::TrimWhitespaceASCII(text, base::TRIM_ALL);
+  if (trimmed.empty()) {
+    return std::nullopt;
+  }
+
+  // Split on '+' while preserving a trailing literal '+' (e.g. "Cmd++" or "+").
+  std::vector<std::string> tokens;
+  size_t pos = 0;
+  while (pos < trimmed.size()) {
+    if (trimmed[pos] == '+' && pos == trimmed.size() - 1) {
+      tokens.emplace_back("+");
+      break;
+    }
+    size_t plus = trimmed.find('+', pos);
+    if (plus == std::string_view::npos) {
+      std::string_view part =
+          base::TrimWhitespaceASCII(trimmed.substr(pos), base::TRIM_ALL);
+      if (!part.empty()) {
+        tokens.emplace_back(part);
+      }
+      break;
+    }
+    std::string_view part =
+        base::TrimWhitespaceASCII(trimmed.substr(pos, plus - pos),
+                                  base::TRIM_ALL);
+    if (!part.empty()) {
+      tokens.emplace_back(part);
+    } else if (plus == trimmed.size() - 1) {
+      tokens.emplace_back("+");
+    }
+    pos = plus + 1;
+  }
+
+  if (tokens.empty()) {
+    return std::nullopt;
+  }
+
+  KeyboardShortcut shortcut;
+  for (size_t i = 0; i + 1 < tokens.size(); ++i) {
+    std::string mod = base::ToLowerASCII(tokens[i]);
+    if (mod == "mod" || mod == "primary") {
+      shortcut.modifiers |= kModPrimary;
+    } else if (mod == "cmd" || mod == "command" || mod == "meta" ||
+               mod == "super") {
+      shortcut.modifiers |= kModMeta;
+    } else if (mod == "ctrl" || mod == "control") {
+      shortcut.modifiers |= kModCtrl;
+    } else if (mod == "opt" || mod == "option" || mod == "alt") {
+      shortcut.modifiers |= kModAlt;
+    } else if (mod == "shift") {
+      shortcut.modifiers |= kModShift;
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  std::string key = base::ToLowerASCII(tokens.back());
+  if (key == "esc") {
+    key = "escape";
+  } else if (key == "enter") {
+    key = "return";
+  } else if (key == "plus") {
+    key = "+";
+  } else if (key == "minus") {
+    key = "-";
+  }
+  if (key.empty()) {
+    return std::nullopt;
+  }
+  shortcut.key = std::move(key);
+  return shortcut.Normalized();
 }
 
 CommandRegistry::CommandRegistry() {
@@ -192,13 +397,24 @@ CommandRegistry::CommandRegistry() {
     def.command_id = cid;
     def.id = std::move(id);
     def.title = std::move(title);
+    def.menu_title = ArcMenuTitle(def.id, def.title);
     def.menu_path = std::move(menu);
     def.default_shortcuts = std::move(shortcuts);
     def.scope = scope;
     def.is_customizable = customizable;
+    def.availability_predicate = ParseAvailabilityPredicate(enabled_key);
     def.enabled_key = std::move(enabled_key);
     def.aliases = std::move(aliases);
     def.is_reserved = reserved;
+    def.hidden_in_menu = IsHiddenInMenu(def.id);
+    // Active window/sidebar/command-bar commands with shortcuts (or
+    // customizable bindings) register dynamically on OpenWindowUi's FocusManager,
+    // excluding OS/AppKit responder items and web text-editing commands.
+    def.is_window_accelerator =
+        !def.is_reserved && def.scope != CommandScope::kWebContent &&
+        def.scope != CommandScope::kGlobal &&
+        !IsSystemOrAppKitOnlyCommand(cid) &&
+        (!def.default_shortcuts.empty() || def.is_customizable);
     def.default_priority = prio;
     size_t idx = commands_.size();
     index_by_enum_[cid] = idx;
@@ -206,7 +422,7 @@ CommandRegistry::CommandRegistry() {
     commands_.push_back(std::move(def));
   };
 
-  // --- App menu ---
+  // --- App menu (9) ---
   add(CommandId::kAboutOpen, "about-open", "About Open", {"Open"}, {});
   add(CommandId::kSetDefaultBrowser, "set-default-browser",
       "Set as Default Browser", {"Open"}, {}, CommandScope::kWindow, false,
@@ -225,7 +441,7 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kShowAll, "show-all", "Show All", {"Open"}, {});
   add(CommandId::kQuitOpen, "quit-open", "Quit Open", {"Open"}, {Primary("q")});
 
-  // --- File menu ---
+  // --- File menu (23) ---
   add(CommandId::kNewTab, "new-tab", "New Tab…", {"File"}, {Primary("t")},
       CommandScope::kWindow, true, "always", {"Open New Tab", "Create Tab"});
   add(CommandId::kOpenCommandBar, "open-command-bar", "Open Command Bar",
@@ -249,7 +465,8 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kNewNoteInSplit, "new-note-in-split", "New Note (in Split)",
       {"File"}, {KeyboardShortcut{"n", kModCtrl | kModAlt}.Normalized()},
       CommandScope::kWindow, true, "always",
-      {"Create Note in Split View", "Note Split", "Scratchpad Split"});
+      {"Create Note in Split View", "Note Split", "Scratchpad Split",
+       "New Note in Split"});
   add(CommandId::kNewEasel, "new-easel", "New Easel", {"File"},
       {CtrlShift("e")}, CommandScope::kWindow, false, "always",
       {"Easel", "Create Easel", "Canvas", "Scrapbook"});
@@ -283,11 +500,14 @@ CommandRegistry::CommandRegistry() {
       {"Boost", "Create Boost", "Boost the Current Page"});
   add(CommandId::kEditBoost, "edit-boost", "Edit Boost", {"File"}, {},
       CommandScope::kWindow, false, "hasCurrentTab", {"Boost"});
+  add(CommandId::kNewLegacyBoost, "new-legacy-boost",
+      "New Legacy Boost (Advanced)", {"File"}, {}, CommandScope::kWindow, false,
+      "hasCurrentTab");
   add(CommandId::kBoostGallery, "boost-gallery", "Boost Gallery", {"File"}, {},
       CommandScope::kWindow, false, "always",
       {"Boosts Gallery", "Boosts Store"});
 
-  // --- Edit menu ---
+  // --- Edit menu (18) ---
   add(CommandId::kUndo, "undo", "Undo", {"Edit"}, {Primary("z")},
       CommandScope::kWebContent, false, "textFieldFocused");
   add(CommandId::kRedo, "redo", "Redo", {"Edit"}, {PrimaryShift("z")},
@@ -328,8 +548,15 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kFindAndReplace, "find-and-replace", "Find and Replace…",
       {"Edit", "Find"}, {PrimaryAlt("f")}, CommandScope::kWindow, false,
       "hasCurrentTab");
+  add(CommandId::kUseSelectionToFind, "use-selection-to-find",
+      "Use Selection to Find", {"Edit", "Find"}, {}, CommandScope::kWebContent);
+  add(CommandId::kJumpToSelection, "jump-to-selection", "Jump to Selection",
+      {"Edit", "Find"}, {Primary("j")}, CommandScope::kWebContent);
+  add(CommandId::kEmojiAndSymbols, "emoji-and-symbols", "Emoji & Symbols",
+      {"Edit"}, {KeyboardShortcut{"space", kModMeta | kModCtrl}.Normalized()},
+      CommandScope::kWebContent);
 
-  // --- View menu ---
+  // --- View menu (24) ---
   add(CommandId::kToggleSidebar, "toggle-sidebar", "Show/Hide Sidebar",
       {"View"}, {Primary("s")}, CommandScope::kWindow, true, "always",
       {"Toggle Sidebar", "Hide Sidebar", "Show Sidebar"});
@@ -374,6 +601,9 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kSeparateFromSplitView, "separate-from-split-view",
       "Separate Page from Split View", {"View"}, {}, CommandScope::kWindow,
       false, "currentTabInSplit", {"Separate from Split View"});
+  add(CommandId::kRevealTabInSidebar, "reveal-tab-in-sidebar",
+      "Reveal Tab in Sidebar", {"Tabs"}, {}, CommandScope::kWindow, false,
+      "hasCurrentTab");
   add(CommandId::kRevealCurrentTab, "reveal-current-tab", "Reveal Current Tab",
       {"View"}, {Ctrl("space")}, CommandScope::kWindow, false, "hasCurrentTab",
       {"Reveal Tab in Sidebar", "Focus Sidebar", "Show Tab in Sidebar"});
@@ -389,6 +619,8 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kClearCookiesAndRefresh, "clear-cookies-and-refresh",
       "Clear Cookies and Refresh", {"View"}, {}, CommandScope::kWindow, false,
       "hasCurrentTab", {"Clear Cookies"});
+  add(CommandId::kCast, "cast", "Cast…", {"View"}, {}, CommandScope::kWindow,
+      false, "hasCurrentTab");
   add(CommandId::kExitModal, "exit-modal", "Exit", {"View"},
       {KeyboardShortcut{"escape", kModNone}}, CommandScope::kCommandBar);
   add(CommandId::kAppearanceAutomatic, "appearance-automatic", "Automatic",
@@ -401,7 +633,7 @@ CommandRegistry::CommandRegistry() {
       {"View", "Appearance"}, {}, CommandScope::kWindow, false, "always",
       {"Dark Mode"});
 
-  // --- Spaces menu ---
+  // --- Spaces menu (7) ---
   add(CommandId::kNewSpace, "new-space", "New Space…", {"Spaces"}, {},
       CommandScope::kWindow, false, "always",
       {"Create New Space", "Create Space", "Add Space"});
@@ -421,7 +653,7 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kChangeProfile, "change-profile", "Change Profile", {"Spaces"},
       {}, CommandScope::kWindow, false, "always", {"Move Space to Profile"});
 
-  // --- Tabs menu ---
+  // --- Tabs menu (18) ---
   add(CommandId::kPinUnpinTab, "pin-unpin-tab", "Pin/Unpin Tab", {"Tabs"},
       {Primary("d")}, CommandScope::kWindow, true, "hasCurrentTab",
       {"Pin Tab", "Unpin Tab", "Pin", "Unpin"});
@@ -470,7 +702,7 @@ CommandRegistry::CommandRegistry() {
       "Open Little Open or Peek in…", {"Tabs"}, {Primary("o")},
       CommandScope::kWindow, false, "hasCurrentTab");
 
-  // --- Archive / Navigation ---
+  // --- Archive / Navigation (5) ---
   add(CommandId::kGoBack, "go-back", "Go Back", {"Archive"},
 #if BUILDFLAG(IS_MAC)
       {Primary("["), Primary("left")},
@@ -494,7 +726,7 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kClearArchive, "clear-archive", "Clear Archive", {"Archive"},
       {}, CommandScope::kWindow, false, "always", {"Delete Archive"});
 
-  // --- Extensions ---
+  // --- Extensions (3) ---
   add(CommandId::kOpenExtensionsPicker, "open-extensions-picker",
       "Open Extensions", {"Extensions"}, {Primary("e")}, CommandScope::kWindow,
       true, "always",
@@ -506,7 +738,7 @@ CommandRegistry::CommandRegistry() {
       {"Extensions"}, {}, CommandScope::kWindow, false, "always",
       {"Chrome Web Store"});
 
-  // --- Window ---
+  // --- Window (9) ---
   add(CommandId::kViewDownloads, "view-downloads", "View Downloads", {"Window"},
       {PrimaryShift("j")}, CommandScope::kWindow, false, "always",
       {"Downloads"});
@@ -523,8 +755,10 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kMinimizeWindow, "minimize-window", "Minimize", {"Window"},
       {Primary("m")});
   add(CommandId::kZoomWindow, "zoom-window", "Zoom", {"Window"}, {});
+  add(CommandId::kBringAllToFront, "bring-all-to-front", "Bring All to Front",
+      {"Window"}, {});
 
-  // --- Help & Developer ---
+  // --- Help (11) ---
   add(CommandId::kExportNotes, "export-notes", "Export Notes…", {"Help"}, {},
       CommandScope::kWindow, false, "always",
       {"Export Notes", "Backup Notes", "Download Notes"});
@@ -533,9 +767,24 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kKeyboardShortcutsEdu, "keyboard-shortcuts-edu",
       "Essential Keyboard Shortcuts", {"Help"}, {}, CommandScope::kWindow,
       false, "always", {"Keyboard Shortcuts", "Keyboard", "Shortcuts"});
+  add(CommandId::kGettingStarted, "getting-started", "Getting Started",
+      {"Help"}, {});
+  add(CommandId::kContactTeam, "contact-team", "Contact the Team", {"Help"},
+      {});
+  add(CommandId::kReleaseNotes, "release-notes", "Release Notes", {"Help"}, {});
   add(CommandId::kTaskManager, "task-manager", "Open Task Manager",
       {"Help", "Troubleshooting"}, {}, CommandScope::kWindow, false, "always",
       {"Task Manager", "CPU", "Memory", "RAM"});
+  add(CommandId::kRecordTrace, "record-trace", "Record Trace",
+      {"Help", "Troubleshooting"}, {});
+  add(CommandId::kCancelTrace, "cancel-trace", "Cancel Trace",
+      {"Help", "Troubleshooting"}, {});
+  add(CommandId::kCopyOpenInfo, "copy-open-info", "Copy Open Info",
+      {"Help", "Troubleshooting"}, {});
+  add(CommandId::kRevealOpenData, "reveal-open-data", "Reveal Open Data",
+      {"Help", "Troubleshooting"}, {});
+
+  // --- Developer submenu (View > Developer, 7) ---
   add(CommandId::kDeveloperTools, "developer-tools", "Developer Tools",
       {"View", "Developer"},
 #if BUILDFLAG(IS_MAC)
@@ -572,8 +821,72 @@ CommandRegistry::CommandRegistry() {
       CommandScope::kWindow, false, "hasCurrentTab");
   add(CommandId::kToggleDeveloperMode, "toggle-developer-mode",
       "Toggle Developer Mode", {"View", "Developer"}, {Ctrl("d")});
+  add(CommandId::kNetworkInspector, "network-inspector", "Network Inspector",
+      {"View", "Developer"}, {}, CommandScope::kWindow, false, "hasCurrentTab");
+  add(CommandId::kAllowJsAppleEvents, "allow-js-apple-events",
+      "Allow JavaScript from Apple Events", {"View", "Developer"}, {});
 
-  // --- Code-only commands ---
+  // --- Text submenus (21) ---
+  add(CommandId::kShowSpelling, "show-spelling", "Show Spelling and Grammar",
+      {"Edit", "Spelling and Grammar"}, {Primary(":")},
+      CommandScope::kWebContent);
+  add(CommandId::kCheckSpelling, "check-spelling", "Check Document Now",
+      {"Edit", "Spelling and Grammar"}, {Primary(";")},
+      CommandScope::kWebContent);
+  add(CommandId::kCheckSpellingWhileTyping, "check-spelling-while-typing",
+      "Check Spelling While Typing", {"Edit", "Spelling and Grammar"}, {},
+      CommandScope::kWebContent);
+  add(CommandId::kCheckGrammar, "check-grammar", "Check Grammar With Spelling",
+      {"Edit", "Spelling and Grammar"}, {}, CommandScope::kWebContent);
+  add(CommandId::kCorrectSpellingAutomatically,
+      "correct-spelling-automatically", "Correct Spelling Automatically",
+      {"Edit", "Spelling and Grammar"}, {}, CommandScope::kWebContent);
+  add(CommandId::kShowSubstitutions, "show-substitutions", "Show Substitutions",
+      {"Edit", "Substitutions"}, {}, CommandScope::kWebContent);
+  add(CommandId::kSmartCopyPaste, "smart-copy-paste", "Smart Copy/Paste",
+      {"Edit", "Substitutions"}, {}, CommandScope::kWebContent);
+  add(CommandId::kSmartQuotes, "smart-quotes", "Smart Quotes",
+      {"Edit", "Substitutions"}, {}, CommandScope::kWebContent);
+  add(CommandId::kSmartDashes, "smart-dashes", "Smart Dashes",
+      {"Edit", "Substitutions"}, {}, CommandScope::kWebContent);
+  add(CommandId::kSmartLinks, "smart-links", "Smart Links",
+      {"Edit", "Substitutions"}, {}, CommandScope::kWebContent);
+  add(CommandId::kTextReplacement, "text-replacement", "Text Replacement",
+      {"Edit", "Substitutions"}, {}, CommandScope::kWebContent);
+  add(CommandId::kDataDetectors, "data-detectors", "Data Detectors",
+      {"Edit", "Substitutions"}, {}, CommandScope::kWebContent);
+  add(CommandId::kMakeUpperCase, "make-upper-case", "Make Upper Case",
+      {"Edit", "Transformations"}, {}, CommandScope::kWebContent);
+  add(CommandId::kMakeLowerCase, "make-lower-case", "Make Lower Case",
+      {"Edit", "Transformations"}, {}, CommandScope::kWebContent);
+  add(CommandId::kCapitalize, "capitalize", "Capitalize",
+      {"Edit", "Transformations"}, {}, CommandScope::kWebContent);
+  add(CommandId::kStartSpeaking, "start-speaking", "Start Speaking",
+      {"Edit", "Speech"}, {}, CommandScope::kWebContent);
+  add(CommandId::kStopSpeaking, "stop-speaking", "Stop Speaking",
+      {"Edit", "Speech"}, {}, CommandScope::kWebContent);
+  add(CommandId::kFontBold, "font-bold", "Bold", {"Edit", "Format", "Font"},
+      {Primary("b")}, CommandScope::kWebContent);
+  add(CommandId::kFontItalic, "font-italic", "Italic",
+      {"Edit", "Format", "Font"}, {Primary("i")}, CommandScope::kWebContent);
+  add(CommandId::kFontUnderline, "font-underline", "Underline",
+      {"Edit", "Format", "Font"}, {Primary("u")}, CommandScope::kWebContent);
+  add(CommandId::kShowFonts, "show-fonts", "Show Fonts",
+      {"Edit", "Format", "Font"}, {Primary("t")}, CommandScope::kWebContent);
+
+  // --- Code-only commands (44) ---
+  add(CommandId::kImportArcNotes, "import-arc-notes",
+      "Import Arc Notes Export…", {}, {}, CommandScope::kWindow, false,
+      "always", {"Import Notes", "Arc Notes", "Restore Notes"});
+  add(CommandId::kChangeSpaceIcon, "change-space-icon", "Change Space Icon…",
+      {}, {}, CommandScope::kWindow, false, "always",
+      {"Space Icon", "Change Icon", "Emoji"});
+  add(CommandId::kShowLittleOpenWindows, "show-little-open-windows",
+      "Show Little Open Windows", {}, {});
+  add(CommandId::kCloseLittleOpenWindows, "close-little-open-windows",
+      "Close Little Open Windows", {}, {});
+  add(CommandId::kExtensionShortcuts, "extension-shortcuts",
+      "Extension Shortcuts", {}, {});
   add(CommandId::kAddToFavorites, "add-to-favorites", "Add to Favorites", {},
       {}, CommandScope::kWindow, false, "currentTabNotFavorite",
       {"Favorite", "Move to Favorites"});
@@ -603,6 +916,8 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kLittleOpenGlobal, "little-open-global",
       "Show Little Open (Global)", {}, {PrimaryAlt("n")}, CommandScope::kGlobal,
       false, "always", {"Little Open", "Little Arc"});
+  add(CommandId::kShowShortcutsOverlay, "show-shortcuts-overlay",
+      "Show Shortcuts While Holding Command", {}, {}, CommandScope::kWindow);
   add(CommandId::kAccountSync, "account-sync", "Account & Sync…", {}, {},
       CommandScope::kWindow, false, "always",
       {"Sync", "Arc Sync", "Sign In", "Open Account", "Cloud Sync"});
@@ -652,10 +967,18 @@ CommandRegistry::CommandRegistry() {
       "Previous Split Pane", {}, {CtrlShift("[")}, CommandScope::kWindow, false,
       "currentTabInSplit");
 
-  // Reserved out-of-scope Arc shortcut
+  // --- Reserved out-of-scope Arc commands (4) ---
   add(CommandId::kReservedNewChatGptMessage, "reserved-new-chatgpt-message",
       "New ChatGPT Message (reserved)", {}, {PrimaryAlt("g")},
       CommandScope::kWindow, false, "always", {}, /*reserved=*/true);
+  add(CommandId::kReservedSendToDia, "reserved-send-to-dia",
+      "Send to Dia (reserved)", {}, {}, CommandScope::kWindow, false, "always",
+      {}, /*reserved=*/true);
+  add(CommandId::kReservedShareArc, "reserved-share-arc",
+      "Share App (reserved)", {}, {}, CommandScope::kWindow, false, "always",
+      {}, /*reserved=*/true);
+  add(CommandId::kReservedSignOut, "reserved-sign-out", "Sign Out (reserved)",
+      {}, {}, CommandScope::kWindow, false, "always", {}, /*reserved=*/true);
 }
 
 CommandRegistry::~CommandRegistry() = default;
@@ -669,6 +992,30 @@ const CommandDefinition* CommandRegistry::FindByStringId(
     std::string_view id) const {
   auto it = index_by_string_.find(std::string(id));
   return it != index_by_string_.end() ? &commands_[it->second] : nullptr;
+}
+
+std::vector<const CommandDefinition*>
+CommandRegistry::WindowAcceleratorCommands() const {
+  std::vector<const CommandDefinition*> out;
+  out.reserve(commands_.size());
+  for (const CommandDefinition& cmd : commands_) {
+    if (cmd.is_window_accelerator) {
+      out.push_back(&cmd);
+    }
+  }
+  return out;
+}
+
+std::vector<const CommandDefinition*> CommandRegistry::MenuCommands(
+    std::string_view top_level_menu) const {
+  std::vector<const CommandDefinition*> out;
+  for (const CommandDefinition& cmd : commands_) {
+    if (!cmd.is_reserved && !cmd.menu_path.empty() &&
+        cmd.menu_path.front() == top_level_menu) {
+      out.push_back(&cmd);
+    }
+  }
+  return out;
 }
 
 std::vector<KeyboardShortcut> CommandRegistry::EffectiveShortcuts(
@@ -719,6 +1066,59 @@ bool CommandRegistry::SetOverride(std::string_view command_id,
   }
   overrides_[def->id] = std::move(override_val);
   return true;
+}
+
+bool CommandRegistry::ClearBinding(CommandId id) {
+  const CommandDefinition* def = FindById(id);
+  if (!def) {
+    return false;
+  }
+  return ClearBinding(def->id);
+}
+
+bool CommandRegistry::ClearBinding(std::string_view command_id) {
+  const CommandDefinition* def = FindByStringId(command_id);
+  if (!def || def->is_reserved) {
+    return false;
+  }
+  KeyBindingOverride cleared;
+  if (auto it = overrides_.find(def->id); it != overrides_.end()) {
+    cleared.priority = it->second.priority;
+  }
+  // Empty shortcuts vector explicitly unassigns the command's shortcut.
+  overrides_[def->id] = std::move(cleared);
+  return true;
+}
+
+bool CommandRegistry::SetBinding(CommandId id, std::string_view shortcut_str) {
+  const CommandDefinition* def = FindById(id);
+  if (!def) {
+    return false;
+  }
+  return SetBinding(def->id, shortcut_str);
+}
+
+bool CommandRegistry::SetBinding(std::string_view command_id,
+                                 std::string_view shortcut_str) {
+  const CommandDefinition* def = FindByStringId(command_id);
+  if (!def || def->is_reserved) {
+    return false;
+  }
+  std::string_view trimmed =
+      base::TrimWhitespaceASCII(shortcut_str, base::TRIM_ALL);
+  if (trimmed.empty()) {
+    return ClearBinding(def->id);
+  }
+  std::optional<KeyboardShortcut> parsed = ParseShortcutString(trimmed);
+  if (!parsed.has_value()) {
+    return false;
+  }
+  KeyBindingOverride updated;
+  if (auto it = overrides_.find(def->id); it != overrides_.end()) {
+    updated.priority = it->second.priority;
+  }
+  updated.shortcuts.push_back(std::move(*parsed));
+  return SetOverride(def->id, std::move(updated));
 }
 
 void CommandRegistry::ResetOverride(std::string_view command_id) {

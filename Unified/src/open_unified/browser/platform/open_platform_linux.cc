@@ -262,6 +262,33 @@ class OpenPlatformLinux final : public OpenPlatform {
 
 }  // namespace
 
+// --- OpenPlatform defaults (Windows and Linux have no native window
+// material, no movable window buttons, and no per-app URL source). ---------
+
+bool OpenPlatform::UpdateWindowEffects(views::Widget*,
+                                       const WindowMaterialSpec&) {
+  return false;
+}
+
+void OpenPlatform::PlaceWindowButtons(views::Widget*,
+                                      const gfx::Point&,
+                                      bool,
+                                      bool) {}
+
+void OpenPlatform::SetWindowButtonsTone(views::Widget*, bool, bool) {}
+
+bool OpenPlatform::IsIncreaseContrastEnabled() {
+  return false;
+}
+
+bool OpenPlatform::SetAppIcon(const std::string&) {
+  return false;
+}
+
+std::string OpenPlatform::ResolveExternalUrlSourceApp() {
+  return std::string();
+}
+
 // static
 OpenPlatform* OpenPlatform::Get() {
   static base::NoDestructor<OpenPlatformLinux> instance;

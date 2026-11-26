@@ -1,7 +1,8 @@
 // Copyright 2026 The Open Authors. All rights reserved.
-// Complete Open command registry, platform-aware default shortcuts,
-// JSON override persistence (State/keybindings.json), priority routing
-// (0.4s double-press for site-then-browser), and conflict detection.
+// Complete Open command registry (1:1 parity with CommandRegistry.swift),
+// platform-aware default shortcuts, Arc menu metadata, JSON override
+// persistence (State/keybindings.json), priority routing (0.4s double-press
+// for site-then-browser), and conflict detection.
 
 #ifndef OPEN_UNIFIED_CORE_COMMANDS_COMMAND_REGISTRY_H_
 #define OPEN_UNIFIED_CORE_COMMANDS_COMMAND_REGISTRY_H_
@@ -22,7 +23,7 @@ namespace open_unified {
 enum class CommandId {
   kUnknown = 0,
 
-  // App menu
+  // App menu (9)
   kAboutOpen,
   kSetDefaultBrowser,
   kSettings,
@@ -33,7 +34,7 @@ enum class CommandId {
   kShowAll,
   kQuitOpen,
 
-  // File menu
+  // File menu (23)
   kNewTab,
   kOpenCommandBar,
   kNewWindow,
@@ -55,9 +56,10 @@ enum class CommandId {
   kNewProfile,
   kNewBoost,
   kEditBoost,
+  kNewLegacyBoost,
   kBoostGallery,
 
-  // Edit menu
+  // Edit menu (18)
   kUndo,
   kRedo,
   kCut,
@@ -73,8 +75,11 @@ enum class CommandId {
   kFindNext,
   kFindPrevious,
   kFindAndReplace,
+  kUseSelectionToFind,
+  kJumpToSelection,
+  kEmojiAndSymbols,
 
-  // View menu
+  // View menu (24)
   kToggleSidebar,
   kToggleToolbar,
   kToggleFullScreen,
@@ -88,17 +93,19 @@ enum class CommandId {
   kCloseSplitPane,
   kExpandCurrentSplit,
   kSeparateFromSplitView,
+  kRevealTabInSidebar,
   kRevealCurrentTab,
   kExpandPinnedSection,
   kCollapsePinnedSection,
   kClearCacheAndRefresh,
   kClearCookiesAndRefresh,
+  kCast,
   kExitModal,
   kAppearanceAutomatic,
   kAppearanceLight,
   kAppearanceDark,
 
-  // Spaces menu
+  // Spaces menu (7)
   kNewSpace,
   kNextSpace,
   kPreviousSpace,
@@ -107,7 +114,7 @@ enum class CommandId {
   kEditTheme,
   kChangeProfile,
 
-  // Tabs menu
+  // Tabs menu (18)
   kPinUnpinTab,
   kNextTab,
   kPreviousTab,
@@ -127,19 +134,19 @@ enum class CommandId {
   kJoinMeeting,
   kOpenInCurrentSpace,
 
-  // Archive / Navigation menu
+  // Archive / Navigation menu (5)
   kGoBack,
   kGoForward,
   kViewArchive,
   kViewHistory,
   kClearArchive,
 
-  // Extensions menu
+  // Extensions menu (3)
   kOpenExtensionsPicker,
   kManageExtensions,
   kAddExtension,
 
-  // Window menu
+  // Window menu (9)
   kViewDownloads,
   kViewLibrary,
   kViewMedia,
@@ -148,19 +155,59 @@ enum class CommandId {
   kViewEaselsNotes,
   kMinimizeWindow,
   kZoomWindow,
+  kBringAllToFront,
 
-  // Help / Developer
+  // Help menu (11)
   kExportNotes,
   kHelpCenter,
   kKeyboardShortcutsEdu,
+  kGettingStarted,
+  kContactTeam,
+  kReleaseNotes,
   kTaskManager,
+  kRecordTrace,
+  kCancelTrace,
+  kCopyOpenInfo,
+  kRevealOpenData,
+
+  // Developer submenu (View > Developer, 7)
   kDeveloperTools,
   kJavaScriptConsole,
   kViewSource,
   kInspectElements,
   kToggleDeveloperMode,
+  kNetworkInspector,
+  kAllowJsAppleEvents,
 
-  // Code-only & Quick navigation
+  // Text submenus (Edit > Spelling/Substitutions/Transformations/Speech/Format, 21)
+  kShowSpelling,
+  kCheckSpelling,
+  kCheckSpellingWhileTyping,
+  kCheckGrammar,
+  kCorrectSpellingAutomatically,
+  kShowSubstitutions,
+  kSmartCopyPaste,
+  kSmartQuotes,
+  kSmartDashes,
+  kSmartLinks,
+  kTextReplacement,
+  kDataDetectors,
+  kMakeUpperCase,
+  kMakeLowerCase,
+  kCapitalize,
+  kStartSpeaking,
+  kStopSpeaking,
+  kFontBold,
+  kFontItalic,
+  kFontUnderline,
+  kShowFonts,
+
+  // Code-only & Quick navigation (44)
+  kImportArcNotes,
+  kChangeSpaceIcon,
+  kShowLittleOpenWindows,
+  kCloseLittleOpenWindows,
+  kExtensionShortcuts,
   kAddToFavorites,
   kRemoveFromFavorites,
   kReplacePinnedUrl,
@@ -172,6 +219,7 @@ enum class CommandId {
   kManagePasswords,
   kSearchSettings,
   kLittleOpenGlobal,
+  kShowShortcutsOverlay,
   kAccountSync,
   kSyncNow,
 
@@ -203,8 +251,13 @@ enum class CommandId {
   kNextSplitPane,
   kPreviousSplitPane,
 
-  // Reserved out-of-scope Arc shortcuts
+  // Reserved out-of-scope Arc commands (4)
   kReservedNewChatGptMessage,
+  kReservedSendToDia,
+  kReservedShareArc,
+  kReservedSignOut,
+
+  kCommandIdCount,
 };
 
 enum class CommandScope {
@@ -221,6 +274,26 @@ enum class ShortcutPriority {
   kBrowser,          // "browser"
   kSite,             // "site"
   kSiteThenBrowser,  // "site-then-browser" (0.4s double-press)
+};
+
+// Typed availability predicate mirroring EnabledKey in Command.swift.
+enum class AvailabilityPredicate {
+  kAlways = 0,
+  kHasCurrentTab,
+  kCurrentTabPinned,
+  kCurrentTabInToday,
+  kCurrentTabHasPinnedUrl,
+  kCurrentTabIsFavorite,
+  kCurrentTabNotFavorite,
+  kCurrentTabInSplit,
+  kHasMultipleSpaces,
+  kCanGoBack,
+  kCanGoForward,
+  kTextFieldFocused,
+  kHasHistory,
+  kHasWebPage,
+  kIsTracing,
+  kNotTracing,
 };
 
 enum ModifierFlags : uint32_t {
@@ -253,15 +326,28 @@ struct CommandDefinition {
   CommandId command_id = CommandId::kUnknown;
   std::string id;  // Stable kebab-case id matching CommandRegistry.swift
   std::string title;
+  // Runtime menu-bar title matching MenuBuilder.arcMenuTitles (equals |title|
+  // when Arc's menu bar uses the command's own title).
+  std::string menu_title;
   std::vector<std::string> menu_path;
   std::vector<KeyboardShortcut> default_shortcuts;
   CommandScope scope = CommandScope::kWindow;
   bool is_customizable = false;
   std::string enabled_key = "always";
+  AvailabilityPredicate availability_predicate = AvailabilityPredicate::kAlways;
   std::vector<std::string> aliases;
   bool is_reserved = false;
+  // True when MenuBuilder keeps the item in the menu bar only as a hidden key
+  // equivalent carrier (MenuBuilder.hiddenInMenu).
+  bool hidden_in_menu = false;
+  // True when OpenWindowUi should register this command's effective shortcuts
+  // on the window FocusManager dynamically from CommandRegistry.
+  bool is_window_accelerator = false;
   ShortcutPriority default_priority = ShortcutPriority::kBrowser;
 };
+
+// Alias for Wave B / UI consumers that refer to CommandInfo.
+using CommandInfo = CommandDefinition;
 
 struct KeyBindingOverride {
   std::vector<KeyboardShortcut> shortcuts;
@@ -316,6 +402,17 @@ class CommandRegistry {
   const CommandDefinition* FindById(CommandId id) const;
   const CommandDefinition* FindByStringId(std::string_view id) const;
 
+  // Dynamic queries for OpenWindowUi accelerator registration and macOS
+  // MainMenuBuilder.
+  std::vector<const CommandDefinition*> WindowAcceleratorCommands() const;
+  std::vector<const CommandDefinition*> MenuCommands(
+      std::string_view top_level_menu) const;
+
+  static AvailabilityPredicate ParseAvailabilityPredicate(
+      std::string_view enabled_key);
+  static std::optional<KeyboardShortcut> ParseShortcutString(
+      std::string_view text);
+
   // Effective bindings (overrides take precedence over defaults).
   std::vector<KeyboardShortcut> EffectiveShortcuts(CommandId id) const;
   std::vector<KeyboardShortcut> EffectiveShortcuts(std::string_view id) const;
@@ -324,6 +421,15 @@ class CommandRegistry {
 
   // Override mutations.
   bool SetOverride(std::string_view command_id, KeyBindingOverride override_val);
+  // Clears/unassigns a command's shortcut cleanly (stores an empty override so
+  // EffectiveShortcuts returns {} while preserving any custom priority).
+  bool ClearBinding(CommandId id);
+  bool ClearBinding(std::string_view command_id);
+  // Sets a command's shortcut from a display/config string (e.g. "Mod+Shift+T").
+  // Passing an empty (or whitespace-only) string clears/unassigns the binding
+  // via ClearBinding() and succeeds for any valid non-reserved command.
+  bool SetBinding(CommandId id, std::string_view shortcut_str);
+  bool SetBinding(std::string_view command_id, std::string_view shortcut_str);
   void ResetOverride(std::string_view command_id);
   void ResetAllOverrides();
   const std::unordered_map<std::string, KeyBindingOverride>& overrides() const {

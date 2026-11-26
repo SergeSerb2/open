@@ -290,6 +290,445 @@ std::string CanonicalPathFromUrl(std::string_view url) {
   return path.empty() ? "/" : std::string(path);
 }
 
+std::string CanonicalUrlString(std::string_view url) {
+  std::string trimmed;
+  base::TrimWhitespaceASCII(url, base::TRIM_ALL, &trimmed);
+  size_t sep = trimmed.find("://");
+  if (sep == std::string::npos) {
+    return trimmed;
+  }
+  std::string scheme = base::ToLowerASCII(trimmed.substr(0, sep));
+  std::string_view rest = std::string_view(trimmed).substr(sep + 3);
+  size_t auth_end = rest.find_first_of("/?#");
+  std::string_view authority =
+      auth_end == std::string_view::npos ? rest : rest.substr(0, auth_end);
+  std::string_view tail =
+      auth_end == std::string_view::npos ? "" : rest.substr(auth_end);
+  // Strip fragment for canonical dedupe comparison; keep path and query.
+  size_t hash = tail.find('#');
+  if (hash != std::string_view::npos) {
+    tail = tail.substr(0, hash);
+  }
+  std::string norm_auth = base::ToLowerASCII(authority);
+  // Strip default ports.
+  if (scheme == "https" && base::EndsWith(norm_auth, ":443")) {
+    norm_auth.resize(norm_auth.size() - 4);
+  } else if (scheme == "http" && base::EndsWith(norm_auth, ":80")) {
+    norm_auth.resize(norm_auth.size() - 3);
+  }
+  std::string result = scheme + "://" + norm_auth;
+  if (tail.empty()) {
+    result.push_back('/');
+  } else {
+    if (tail.front() != '/') {
+      result.push_back('/');
+    }
+    result.append(tail);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// PeekPolicy
+
+PeekClickContext::PeekClickContext() = default;
+PeekClickContext::PeekClickContext(const PeekClickContext&) = default;
+PeekClickContext::PeekClickContext(PeekClickContext&&) noexcept = default;
+PeekClickContext& PeekClickContext::operator=(const PeekClickContext&) =
+    default;
+PeekClickContext& PeekClickContext::operator=(PeekClickContext&&) noexcept =
+    default;
+PeekClickContext::~PeekClickContext() = default;
+
+namespace {
+
+bool IsIpv4Literal(std::string_view host) {
+  int dots = 0;
+  for (char c : host) {
+    if (c == '.') {
+      ++dots;
+    } else if (c < '0' || c > '9') {
+      return false;
+    }
+  }
+  return dots == 3;
+}
+
+bool IsTwoPartPublicSuffix(std::string_view sld, std::string_view tld) {
+  static constexpr std::pair<std::string_view, std::string_view> kSuffixes[] = {
+      {"co", "uk"},   {"org", "uk"},  {"ac", "uk"},   {"gov", "uk"},
+      {"com", "au"},  {"net", "au"},  {"org", "au"},  {"co", "jp"},
+      {"ne", "jp"},   {"or", "jp"},   {"co", "kr"},   {"com", "br"},
+      {"com", "cn"},  {"co", "nz"},   {"co", "in"},   {"com", "sg"},
+      {"com", "mx"},  {"com", "tw"},  {"com", "hk"},  {"co", "za"},
+      {"co", "il"},   {"com", "tr"},  {"com", "ar"},  {"com", "pl"},
+      {"com", "ua"},  {"co", "id"},   {"com", "my"},  {"co", "th"},
+      {"com", "vn"},  {"com", "ph"},  {"com", "co"},  {"com", "pe"},
+      {"edu", "au"},  {"gov", "au"},
+  };
+  for (const auto& [a, b] : kSuffixes) {
+    if (sld == a && tld == b) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string CanonicalQueryLower(std::string_view url) {
+  size_t q = url.find('?');
+  if (q == std::string_view::npos) {
+    return {};
+  }
+  std::string_view rest = url.substr(q + 1);
+  size_t hash = rest.find('#');
+  if (hash != std::string_view::npos) {
+    rest = rest.substr(0, hash);
+  }
+  return base::ToLowerASCII(rest);
+}
+
+std::string PercentDecode(std::string_view input) {
+  std::string out;
+  out.reserve(input.size());
+  auto hex_val = [](char c) -> int {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+  };
+  for (size_t i = 0; i < input.size(); ++i) {
+    if (input[i] == '%' && i + 2 < input.size()) {
+      int hi = hex_val(input[i + 1]);
+      int lo = hex_val(input[i + 2]);
+      if (hi >= 0 && lo >= 0) {
+        out.push_back(static_cast<char>((hi << 4) | lo));
+        i += 2;
+        continue;
+      }
+    }
+    out.push_back(input[i]);
+  }
+  return out;
+}
+
+}  // namespace
+
+// static
+bool PeekPolicy::IsAuthenticationFlow(std::string_view url) {
+  auto host_opt = CanonicalHostFromUrl(url);
+  if (!host_opt.has_value()) {
+    return false;
+  }
+  const std::string& host = *host_opt;
+
+  // Known SSO / Identity Provider hosts.
+  static constexpr std::string_view kExactAuthHosts[] = {
+      "accounts.google.com",      "login.microsoftonline.com",
+      "login.live.com",           "appleid.apple.com",
+      "idmsa.apple.com",          "login.salesforce.com",
+      "signin.aws.amazon.com",    "accounts.spotify.com",
+      "id.atlassian.com",         "auth.atlassian.com",
+      "github.com/login",
+  };
+  for (std::string_view h : kExactAuthHosts) {
+    if (host == h) {
+      return true;
+    }
+  }
+  static constexpr std::string_view kAuthHostSuffixes[] = {
+      "auth0.com",        "okta.com",          "oktapreview.com",
+      "onelogin.com",     "duosecurity.com",   "pingidentity.com",
+      "b2clogin.com",     "clerk.accounts.dev",
+  };
+  for (std::string_view suffix : kAuthHostSuffixes) {
+    if (host == suffix ||
+        base::EndsWith(host, std::string(".") + std::string(suffix),
+                       base::CompareCase::SENSITIVE)) {
+      return true;
+    }
+  }
+  // Subdomain prefixes strongly indicative of SSO/OAuth endpoints.
+  static constexpr std::string_view kAuthHostPrefixes[] = {
+      "sso.", "oauth.", "auth.", "accounts.", "login.", "signin.",
+  };
+  for (std::string_view prefix : kAuthHostPrefixes) {
+    if (base::StartsWith(host, prefix, base::CompareCase::SENSITIVE)) {
+      return true;
+    }
+  }
+
+  // OAuth / OIDC / SAML path patterns.
+  const std::string path = base::ToLowerASCII(CanonicalPathFromUrl(url));
+  static constexpr std::string_view kAuthPaths[] = {
+      "/oauth",       "/oauth2",         "/authorize",
+      "/login/oauth", "/saml",           "/sso",
+      "/oidc",        "/connect/authorize", "/v2/authorize",
+      "/auth/realms/", "/signin",        "/sign-in",
+  };
+  for (std::string_view ap : kAuthPaths) {
+    if (path == ap ||
+        base::StartsWith(path, std::string(ap) + "/",
+                         base::CompareCase::SENSITIVE) ||
+        (ap.back() == '/' &&
+         base::StartsWith(path, ap, base::CompareCase::SENSITIVE))) {
+      return true;
+    }
+  }
+
+  // Query parameters characteristic of OAuth2 / OIDC / SAML redirects.
+  const std::string query = CanonicalQueryLower(url);
+  if (!query.empty()) {
+    const bool has_client_id =
+        query.find("client_id=") != std::string::npos;
+    const bool has_oauth_param =
+        query.find("redirect_uri=") != std::string::npos ||
+        query.find("response_type=") != std::string::npos;
+    if ((has_client_id && has_oauth_param) ||
+        query.find("samlrequest=") != std::string::npos) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// static
+std::optional<std::string> PeekPolicy::RegistrableDomain(std::string_view url) {
+  auto host_opt = CanonicalHostFromUrl(url);
+  if (!host_opt.has_value()) {
+    return std::nullopt;
+  }
+  const std::string& host = *host_opt;
+  if (host.find(':') != std::string::npos || IsIpv4Literal(host)) {
+    return host;
+  }
+  std::vector<std::string_view> labels;
+  size_t pos = 0;
+  while (pos <= host.size()) {
+    size_t dot = host.find('.', pos);
+    if (dot == std::string::npos) {
+      labels.push_back(std::string_view(host).substr(pos));
+      break;
+    }
+    labels.push_back(std::string_view(host).substr(pos, dot - pos));
+    pos = dot + 1;
+  }
+  if (labels.size() <= 2) {
+    return host;
+  }
+  const size_t n = labels.size();
+  if (IsTwoPartPublicSuffix(labels[n - 2], labels[n - 1]) && n >= 3) {
+    return std::string(labels[n - 3]) + "." + std::string(labels[n - 2]) + "." +
+           std::string(labels[n - 1]);
+  }
+  return std::string(labels[n - 2]) + "." + std::string(labels[n - 1]);
+}
+
+// static
+PeekDecision PeekPolicy::Evaluate(const PeekClickContext& click) {
+  if (click.shift_held && click.peek_shift_enabled) {
+    return PeekDecision::kPeek;
+  }
+  if (click.is_authentication_flow || IsAuthenticationFlow(click.target_url)) {
+    return PeekDecision::kNavigate;
+  }
+  if (click.source_is_pinned_or_favorite && click.peek_other_sites_enabled &&
+      click.source_url.has_value()) {
+    auto source_domain = RegistrableDomain(*click.source_url);
+    auto target_domain = RegistrableDomain(click.target_url);
+    if (source_domain.has_value() && target_domain.has_value() &&
+        *source_domain != *target_domain) {
+      return PeekDecision::kPeek;
+    }
+  }
+  return PeekDecision::kNavigate;
+}
+
+// static
+bool PeekPolicy::ShouldOpenInPeek(std::string_view target_url,
+                                  const Tab* source_tab,
+                                  bool source_is_pinned_or_favorite,
+                                  bool shift_click,
+                                  bool peek_other_sites_enabled,
+                                  bool peek_shift_enabled) {
+  PeekClickContext ctx;
+  ctx.source_is_pinned_or_favorite = source_is_pinned_or_favorite;
+  if (source_tab && !source_tab->url.empty()) {
+    ctx.source_url = source_tab->url;
+  }
+  ctx.target_url = std::string(target_url);
+  ctx.shift_held = shift_click;
+  ctx.peek_other_sites_enabled = peek_other_sites_enabled;
+  ctx.peek_shift_enabled = peek_shift_enabled;
+  return Evaluate(ctx) == PeekDecision::kPeek;
+}
+
+// ---------------------------------------------------------------------------
+// DeepLinkAction, Mailto, Google Meet, Deduper, DecisionLog
+
+DeepLinkAction::DeepLinkAction() = default;
+DeepLinkAction::DeepLinkAction(const DeepLinkAction&) = default;
+DeepLinkAction::DeepLinkAction(DeepLinkAction&&) noexcept = default;
+DeepLinkAction& DeepLinkAction::operator=(const DeepLinkAction&) = default;
+DeepLinkAction& DeepLinkAction::operator=(DeepLinkAction&&) noexcept = default;
+DeepLinkAction::~DeepLinkAction() = default;
+
+DeepLinkAction ParseDeepLink(std::string_view url) {
+  DeepLinkAction action;
+  std::string trimmed;
+  base::TrimWhitespaceASCII(url, base::TRIM_ALL, &trimmed);
+  size_t colon = trimmed.find(':');
+  if (colon == std::string::npos) {
+    return action;
+  }
+  std::string scheme = base::ToLowerASCII(trimmed.substr(0, colon));
+  if (scheme != "open" && scheme != "open-browser") {
+    return action;
+  }
+  action.raw_url = trimmed;
+  std::string_view rest = std::string_view(trimmed).substr(colon + 1);
+  if (base::StartsWith(rest, "//", base::CompareCase::SENSITIVE)) {
+    rest = rest.substr(2);
+  }
+  // Drop query and fragment when splitting route segments.
+  size_t q = rest.find_first_of("?#");
+  std::string_view route_part =
+      q == std::string_view::npos ? rest : rest.substr(0, q);
+
+  std::vector<std::string> parts;
+  size_t pos = 0;
+  while (pos <= route_part.size()) {
+    size_t slash = route_part.find('/', pos);
+    std::string_view seg =
+        slash == std::string_view::npos
+            ? route_part.substr(pos)
+            : route_part.substr(pos, slash - pos);
+    if (!seg.empty()) {
+      parts.push_back(PercentDecode(seg));
+    }
+    if (slash == std::string_view::npos) {
+      break;
+    }
+    pos = slash + 1;
+  }
+  if (parts.empty()) {
+    action.kind = DeepLinkKind::kUnknown;
+    return action;
+  }
+  action.route = base::ToLowerASCII(parts.front());
+  if (parts.size() > 1) {
+    std::string arg;
+    for (size_t i = 1; i < parts.size(); ++i) {
+      if (i > 1) arg.push_back('/');
+      arg += parts[i];
+    }
+    action.argument = std::move(arg);
+  }
+
+  if (action.route == "quit") {
+    action.kind = DeepLinkKind::kQuit;
+  } else if (action.route == "restart") {
+    action.kind = DeepLinkKind::kRestart;
+  } else if (action.route == "space") {
+    action.kind = DeepLinkKind::kSpace;
+  } else if (action.route == "welcome") {
+    action.kind = DeepLinkKind::kWelcome;
+  } else if (action.route == "little-open" || action.route == "littleopen") {
+    action.kind = DeepLinkKind::kLittleOpen;
+  } else if (scheme == "open" &&
+             (action.route == "settings" || action.route == "library" ||
+              action.route == "onboarding" || action.route == "boosts" ||
+              action.route == "note" || action.route == "easel")) {
+    action.kind = DeepLinkKind::kWebUI;
+  } else {
+    action.kind = DeepLinkKind::kUnknown;
+  }
+  return action;
+}
+
+bool IsMailtoUrl(std::string_view url) {
+  if (url.size() > 64 * 1024) {
+    return false;
+  }
+  std::string trimmed;
+  base::TrimWhitespaceASCII(url, base::TRIM_ALL, &trimmed);
+  return base::StartsWith(trimmed, "mailto:",
+                          base::CompareCase::INSENSITIVE_ASCII);
+}
+
+bool IsGoogleMeetUrl(std::string_view url) {
+  size_t sep = url.find("://");
+  if (sep == std::string_view::npos) {
+    return false;
+  }
+  std::string scheme = base::ToLowerASCII(url.substr(0, sep));
+  if (scheme != "http" && scheme != "https") {
+    return false;
+  }
+  auto host = CanonicalHostFromUrl(url);
+  return host.has_value() && *host == "meet.google.com";
+}
+
+bool HasGoogleMeetRule(const BrowserModel& model) {
+  for (const RoutingRule& rule : model.routing_rules()) {
+    if (RoutingEvaluator::MatchesHostPattern("meet.google.com",
+                                             rule.host_pattern)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+ExternalLinkDeduper::ExternalLinkDeduper() = default;
+ExternalLinkDeduper::~ExternalLinkDeduper() = default;
+
+bool ExternalLinkDeduper::IsDuplicateAndRecord(
+    std::string_view url,
+    const std::optional<std::string>& source_app_id,
+    TimestampSec now) {
+  // Prune stale entries older than kWindowSeconds.
+  for (auto it = recent_.begin(); it != recent_.end();) {
+    if ((now - it->second) >= kWindowSeconds || (now - it->second) < -1.0) {
+      it = recent_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  std::string source_key = NormalizeAppId(source_app_id);
+  if (source_key.empty()) {
+    source_key = "?";
+  }
+  std::string key = CanonicalUrlString(url) + "|" + source_key;
+  if (recent_.contains(key)) {
+    ++duplicates_dropped_;
+    return true;
+  }
+  recent_[std::move(key)] = now;
+  return false;
+}
+
+void ExternalLinkDeduper::Clear() {
+  recent_.clear();
+  duplicates_dropped_ = 0;
+}
+
+RoutingDecisionLog::RoutingDecisionLog() = default;
+RoutingDecisionLog::~RoutingDecisionLog() = default;
+
+void RoutingDecisionLog::Record(RoutingDecision decision) {
+  entries_.push_back(std::move(decision));
+  while (entries_.size() > kMaxEntries) {
+    entries_.pop_front();
+  }
+}
+
+std::optional<RoutingDecision> RoutingDecisionLog::latest() const {
+  if (entries_.empty()) {
+    return std::nullopt;
+  }
+  return entries_.back();
+}
+
 bool RoutingEvaluator::MatchesHostPattern(std::string_view host,
                                           std::string_view raw_pattern) {
   // IPv6 literals are excluded from host-rule matching.

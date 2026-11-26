@@ -3,7 +3,7 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ProfileSummary, RGBAColor, SpaceStyle, ThemeAppearance, ThemeTexture, ThemeWheel } from './bridge';
-import { CloseIcon, SearchIcon } from './icons';
+import { ChevronDownIcon, CloseIcon, GlobeIcon, PersonIcon, SearchIcon } from './icons';
 import { formatShortcut, isMacPlatform, shortcutFromKeyboardEvent } from './shortcuts';
 
 // --- Color & OKLab-approximated Space Theme Math ---
@@ -191,8 +191,10 @@ export function ProfilePill({
 }: ProfilePillProps): JSX.Element {
   const active = profiles.find((p) => p.id === selectedProfileId);
   return (
-    <label class="open-profile-pill" title="Scope setting to Profile">
-      <span aria-hidden="true">{selectedProfileId === 'all' ? '🌐' : (active?.icon.value ?? '👤')}</span>
+    <label class="open-profile-pill" title="The Profile these settings apply to">
+      <span class="open-profile-pill-glyph" aria-hidden="true">
+        {selectedProfileId === 'all' ? <GlobeIcon size={13} /> : <ProfileGlyph profile={active} size={13} />}
+      </span>
       <select
         aria-label="Select Profile"
         value={selectedProfileId}
@@ -205,8 +207,26 @@ export function ProfilePill({
           </option>
         ))}
       </select>
+      <span class="open-profile-pill-chevron" aria-hidden="true">
+        <ChevronDownIcon size={11} />
+      </span>
     </label>
   );
+}
+
+/**
+ * A Profile's icon: its emoji when the user chose one, otherwise a line
+ * person glyph (named and symbol icons have no WebUI artwork).
+ */
+export function ProfileGlyph({ profile, size = 14 }: { profile?: ProfileSummary; size?: number }): JSX.Element {
+  if (profile?.icon.kind === 'emoji' && profile.icon.value) {
+    return (
+      <span class="open-profile-glyph-emoji" style={{ fontSize: `${size}px` }}>
+        {profile.icon.value}
+      </span>
+    );
+  }
+  return <PersonIcon size={size} />;
 }
 
 // --- SearchInput ---

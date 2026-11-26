@@ -26,9 +26,11 @@
 #include <string_view>
 #include <vector>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "open_unified/core/model/open_types.h"
+#include "open_unified/core/suggest/suggest_engine.h"
 #include "open_unified/ui/views/open_split_container_view.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -38,6 +40,7 @@
 #include "ui/gfx/range/range.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/view.h"
+#include "url/gurl.h"
 
 namespace views {
 class Textfield;
@@ -77,6 +80,27 @@ inline constexpr int kChipPaddingX = 10;
 inline constexpr int kChipToText = 13;
 // Input caps pasted or typed text at 2,048 characters.
 inline constexpr size_t kMaxInputLength = 2048;
+// (i) button [W − 47, 19, 26, 26] drawing a 24 pt circle (F0063).
+inline constexpr int kInfoButtonSize = 26;
+inline constexpr int kInfoCircleDiameter = 24;
+// Privacy footer (CC-42, S2 18/0044): a black band [0, H − 61, W, 61];
+// panels with fewer than 2 rows grow by it. Buttons "Search Settings…"
+// [W − 223.5, H − 49.5, 132, 37] and "Dismiss" [W − 82.5, H − 49.5, 72, 37].
+inline constexpr int kFooterHeight = 61;
+inline constexpr size_t kFooterGrowthRowLimit = 2;
+inline constexpr int kFooterTextX = 46;
+inline constexpr int kFooterLine1Top = 13;
+inline constexpr int kFooterLine2Top = 31;
+inline constexpr int kFooterIconX = 18;
+inline constexpr int kFooterIconY = 24;
+inline constexpr int kFooterIconSize = 13;
+inline constexpr int kFooterButtonTop = 12;  // 61 − 49.5, on the pixel grid.
+inline constexpr int kFooterButtonHeight = 37;
+inline constexpr int kFooterSettingsButtonWidth = 132;
+inline constexpr int kFooterDismissButtonWidth = 72;
+inline constexpr int kFooterDismissTrailing = 10;
+inline constexpr int kFooterButtonGap = 9;
+inline constexpr int kFooterButtonRadius = 8;
 }  // namespace command_bar_metrics
 
 enum class CommandBarMode {
@@ -124,9 +148,22 @@ enum class CommandBarDismissReason {
 
 // One suggestion row, produced by Track 2's SuggestEngine through the
 // delegate. The bar never ranks: it shows rows in the order given.
+// Why a row exists beyond its kind (kinds stay fixed: callers switch on them
+// exhaustively). Mirrors SuggestionRole.
+enum class CommandBarRowRole {
+  kDefault,
+  kRemoteSuggestion,     // kSearchSuggestion / kNavigate from the engine.
+  kExtensionAction,      // kAction: action_id "extension-action:<id>".
+  kExtensionSuggestion,  // kSiteSearch inside an extension keyword scope.
+  kDocument,             // kNavigate: an Easel or Note.
+  kNewDocument,          // kNavigate: "New Google Doc" (opens `url`).
+  kQuickCreate,          // kAction: New Easel / Note / Boost / Space.
+};
+
 struct CommandBarRow {
   std::string id;  // Stable across snapshots (keeps a moved selection).
   CommandBarRowKind kind = CommandBarRowKind::kNavigate;
+  CommandBarRowRole role = CommandBarRowRole::kDefault;
   std::u16string title;
   // Drawn as "— <subtitle>" after the title.
   std::u16string subtitle;
@@ -144,6 +181,13 @@ struct CommandBarRow {
   std::optional<ItemID> tab_id;
   std::optional<SpaceID> space_id;
   std::string action_id;
+  // Page whose favicon the row shows when `icon` is null (defaults to
+  // `url` for page rows); looked up through the favicon callback.
+  std::string favicon_url;
+  std::string extension_id;
+  // Extension omnibox rows: the text for chrome.omnibox.onInputEntered.
+  std::string extension_content;
+  std::string document_id;
 };
 
 struct CommandBarScopeTarget {
@@ -153,6 +197,13 @@ struct CommandBarScopeTarget {
   // True when the typed word is the site's exact name or keyword (the
   // trailing hint then reads "Tab or Space").
   bool exact_keyword = false;
+
+  // An extension omnibox keyword scope: kSiteSearch with a site_search_id
+  // of "extension:<id>" (ExtensionScopeId()).
+  bool is_extension() const;
+  std::optional<std::string> extension_id() const;
+  static CommandBarScopeTarget ForExtension(const std::string& extension_id,
+                                            const std::u16string& name);
 };
 
 struct CommandBarQuery {
@@ -192,8 +243,29 @@ struct CommandBarRequest {
   // Cmd/Ctrl+L with the sidebar shown: the URL pill in this view's
   // coordinates. Empty: the centered New Tab card.
   std::optional<gfx::Rect> inline_anchor;
+  // The same pill in screen coordinates (keyboard Cmd/Ctrl+L, a click on the
+  // sidebar URL pill). Converted into this view on present and on every
+  // layout, so the card follows a sidebar resize. `inline_anchor` wins.
+  std::optional<gfx::Rect> anchor_in_screen;
   secondary::Appearance appearance;
+  // Remote search suggestions are on for this Profile and window: the input
+  // row shows the (i) button and Cmd/Ctrl+I opens the privacy footer.
+  bool allows_remote_suggestions = false;
+  // The footer's "Learn more … here." line links to Open's privacy page.
+  bool shows_privacy_link = false;
 };
+
+// Favicon for a page URL (FaviconStore / ContentFaviconDriver / platform
+// favicon service). Returns a null image when none is known yet; deliver a
+// late one through OpenCommandBarView::UpdateFavicon().
+using GetFaviconForUrlCallback =
+    base::RepeatingCallback<gfx::ImageSkia(const GURL& page_url)>;
+
+// Converts SuggestEngine rows (local or FetchRemoteSuggestions() results)
+// into bar rows: kinds, roles, badges, keycaps and favicon URLs. Site Search
+// hints are skipped (they belong in CommandBarResults::site_search_hint).
+std::vector<CommandBarRow> CommandBarRowsFromSuggestions(
+    const std::vector<Suggestion>& suggestions);
 
 class CommandBarDelegate {
  public:
@@ -217,6 +289,22 @@ class CommandBarDelegate {
   virtual void OnCommandBarDismissed(
       CommandBarDismissReason reason,
       std::optional<gfx::Point> click_location) = 0;
+
+  // Optional hooks (default: nothing).
+  // Each committed text change that may want remote rows: start
+  // SuggestEngine::FetchRemoteSuggestions() and answer with
+  // UpdateRemoteRows(query.generation, ...). Cancel the previous request.
+  virtual void OnCommandBarRemoteQuery(const CommandBarQuery& query) {}
+  // Privacy footer: "Search Settings…" (the bar has closed), "Dismiss"
+  // (record open.general.searchSuggestNoticeDismissed), and "here".
+  virtual void OnCommandBarOpenSearchSettings() {}
+  virtual void OnCommandBarDismissPrivacyNotice() {}
+  virtual void OnCommandBarOpenPrivacyPage() {}
+  // An extension keyword scope was entered (start the omnibox session:
+  // OmniboxAPI onInputStarted) or left without committing (onInputCancelled).
+  virtual void OnCommandBarExtensionScopeChanged(
+      const std::string& extension_id,
+      bool entered) {}
 };
 
 class OpenCommandBarView : public views::View,
@@ -239,6 +327,30 @@ class OpenCommandBarView : public views::View,
   // Late rows for the query with `generation` (remote suggestions). Ignored
   // when the text changed since.
   void UpdateResults(uint64_t generation, CommandBarResults results);
+  // Merges search-engine rows into the current snapshot without a jarring
+  // jump: row 1 and the inline completion stay, the previous remote rows are
+  // replaced in place (after the typed search row), and a moved selection
+  // keeps its row id. Applies to the current text (see generation()).
+  void UpdateResults(std::vector<CommandBarRow> remote_rows);
+  // The same, ignored unless `generation` is the current query's.
+  void UpdateRemoteRows(uint64_t generation,
+                        std::vector<CommandBarRow> remote_rows);
+  // The current query's generation (CommandBarQuery::generation).
+  uint64_t generation() const { return generation_; }
+
+  // Favicons: rows with a null icon ask `callback` for their page's icon
+  // when they arrive; UpdateFavicon() fills a late icon into every row (and
+  // the Cmd/Ctrl+L input icon) of that page.
+  void SetFaviconLookup(GetFaviconForUrlCallback callback);
+  void UpdateFavicon(const GURL& page_url, const gfx::ImageSkia& icon);
+
+  // Privacy footer (CC-42, D14): only the (i) button and Cmd/Ctrl+I show
+  // it; it never opens by itself.
+  void TogglePrivacyFooter();
+  bool shows_privacy_footer() const { return shows_footer_; }
+  // Updates the remote-suggestion permission (after the notice dismissal).
+  void SetAllowsRemoteSuggestions(bool allowed);
+  bool allows_remote_suggestions() const { return allows_remote_; }
   // Enters a scope from code (e.g. a "Search Actions" command).
   void EnterScope(const CommandBarScopeTarget& target);
   void SetAppearance(const secondary::Appearance& appearance);
@@ -258,6 +370,13 @@ class OpenCommandBarView : public views::View,
                                      CommandBarMode mode,
                                      size_t row_count,
                                      const std::optional<gfx::Rect>& anchor);
+  // The same with the privacy footer open: panels with fewer than 2 rows
+  // grow by its 61 pt (the band covers the list bottom otherwise).
+  static gfx::Rect ComputeCardBounds(const gfx::Size& size,
+                                     CommandBarMode mode,
+                                     size_t row_count,
+                                     const std::optional<gfx::Rect>& anchor,
+                                     bool shows_footer);
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
@@ -274,6 +393,26 @@ class OpenCommandBarView : public views::View,
 
  private:
   bool is_inline() const { return inline_anchor_.has_value(); }
+  bool is_extension_scope() const;
+  // The (i) button shows: remote suggestions on, centered card, no Site
+  // Search hint, footer closed.
+  bool shows_info_button() const;
+  void ResolveScreenAnchor();
+  void FillFavicons(std::vector<CommandBarRow>& rows) const;
+  void NormalizeRows(std::vector<CommandBarRow>& rows) const;
+  void PaintFooter(gfx::Canvas* canvas);
+  void PaintFooterButton(gfx::Canvas* canvas,
+                         const gfx::Rect& bounds,
+                         bool hovered,
+                         const std::u16string& title);
+  void PaintInfoButton(gfx::Canvas* canvas,
+                       const gfx::Rect& bounds,
+                       bool hovered);
+  void OpenSearchSettings();
+  void DismissPrivacyNotice();
+  void OpenPrivacyPage();
+  gfx::Rect FooterRect() const;
+  gfx::Rect FooterLinkRect() const;
 
   void DismissInternal(CommandBarDismissReason reason,
                        std::optional<gfx::Point> click_location);
@@ -314,6 +453,15 @@ class OpenCommandBarView : public views::View,
   raw_ptr<CommandBarDelegate> delegate_;
   raw_ptr<views::Textfield> field_ = nullptr;
   raw_ptr<secondary::GlyphButton> close_button_ = nullptr;
+  raw_ptr<secondary::PaintedButton> info_button_ = nullptr;
+  raw_ptr<secondary::PaintedButton> footer_settings_ = nullptr;
+  raw_ptr<secondary::PaintedButton> footer_dismiss_ = nullptr;
+  raw_ptr<secondary::PaintedButton> footer_link_ = nullptr;
+  GetFaviconForUrlCallback favicon_lookup_;
+  std::optional<gfx::Rect> anchor_in_screen_;
+  bool allows_remote_ = false;
+  bool shows_footer_ = false;
+  bool shows_privacy_link_ = false;
 
   bool presented_ = false;
   CommandBarMode mode_ = CommandBarMode::kNewTab;

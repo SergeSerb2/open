@@ -360,9 +360,17 @@ void BrowserModel::RebuildContainerIndexMaps() {
   for (size_t i = 0; i < spaces_.size(); ++i) {
     space_index_by_id_.emplace(spaces_[i].id, i);
   }
+  incognito_space_index_by_id_.clear();
+  for (size_t i = 0; i < incognito_spaces_.size(); ++i) {
+    incognito_space_index_by_id_.emplace(incognito_spaces_[i].id, i);
+  }
   window_index_by_id_.clear();
   for (size_t i = 0; i < windows_.size(); ++i) {
     window_index_by_id_.emplace(windows_[i].id, i);
+  }
+  incognito_window_index_by_id_.clear();
+  for (size_t i = 0; i < incognito_windows_.size(); ++i) {
+    incognito_window_index_by_id_.emplace(incognito_windows_[i].id, i);
   }
 }
 
@@ -379,6 +387,16 @@ void BrowserModel::RebuildIndex() {
     }
   }
   for (const Space& space : spaces_) {
+    NodeParent pinned_parent{NodeParentKind::kSpacePinned, space.id};
+    for (size_t i = 0; i < space.pinned.size(); ++i) {
+      RegisterSubtree(space.pinned[i], pinned_parent, i);
+    }
+    NodeParent today_parent{NodeParentKind::kSpaceToday, space.id};
+    for (size_t i = 0; i < space.today.size(); ++i) {
+      RegisterSubtree(space.today[i], today_parent, i);
+    }
+  }
+  for (const Space& space : incognito_spaces_) {
     NodeParent pinned_parent{NodeParentKind::kSpacePinned, space.id};
     for (size_t i = 0; i < space.pinned.size(); ++i) {
       RegisterSubtree(space.pinned[i], pinned_parent, i);
@@ -471,34 +489,54 @@ const Profile* BrowserModel::FindProfile(const ProfileID& id) const {
 
 Space* BrowserModel::FindSpace(const SpaceID& id) {
   auto it = space_index_by_id_.find(id);
-  if (it == space_index_by_id_.end() || it->second >= spaces_.size()) {
-    return nullptr;
+  if (it != space_index_by_id_.end() && it->second < spaces_.size()) {
+    return &spaces_[it->second];
   }
-  return &spaces_[it->second];
+  auto inc = incognito_space_index_by_id_.find(id);
+  if (inc != incognito_space_index_by_id_.end() &&
+      inc->second < incognito_spaces_.size()) {
+    return &incognito_spaces_[inc->second];
+  }
+  return nullptr;
 }
 
 const Space* BrowserModel::FindSpace(const SpaceID& id) const {
   auto it = space_index_by_id_.find(id);
-  if (it == space_index_by_id_.end() || it->second >= spaces_.size()) {
-    return nullptr;
+  if (it != space_index_by_id_.end() && it->second < spaces_.size()) {
+    return &spaces_[it->second];
   }
-  return &spaces_[it->second];
+  auto inc = incognito_space_index_by_id_.find(id);
+  if (inc != incognito_space_index_by_id_.end() &&
+      inc->second < incognito_spaces_.size()) {
+    return &incognito_spaces_[inc->second];
+  }
+  return nullptr;
 }
 
 BrowserWindowState* BrowserModel::FindWindow(const WindowID& id) {
   auto it = window_index_by_id_.find(id);
-  if (it == window_index_by_id_.end() || it->second >= windows_.size()) {
-    return nullptr;
+  if (it != window_index_by_id_.end() && it->second < windows_.size()) {
+    return &windows_[it->second];
   }
-  return &windows_[it->second];
+  auto inc = incognito_window_index_by_id_.find(id);
+  if (inc != incognito_window_index_by_id_.end() &&
+      inc->second < incognito_windows_.size()) {
+    return &incognito_windows_[inc->second];
+  }
+  return nullptr;
 }
 
 const BrowserWindowState* BrowserModel::FindWindow(const WindowID& id) const {
   auto it = window_index_by_id_.find(id);
-  if (it == window_index_by_id_.end() || it->second >= windows_.size()) {
-    return nullptr;
+  if (it != window_index_by_id_.end() && it->second < windows_.size()) {
+    return &windows_[it->second];
   }
-  return &windows_[it->second];
+  auto inc = incognito_window_index_by_id_.find(id);
+  if (inc != incognito_window_index_by_id_.end() &&
+      inc->second < incognito_windows_.size()) {
+    return &incognito_windows_[inc->second];
+  }
+  return nullptr;
 }
 
 bool BrowserModel::HasNode(const ItemID& id) const {
@@ -801,6 +839,28 @@ bool BrowserModel::IsFavorite(const ItemID& tab_id) const {
   return parent.has_value() && parent->kind == NodeParentKind::kFavorites;
 }
 
+bool BrowserModel::IsIncognitoWindow(const WindowID& window_id) const {
+  const BrowserWindowState* window = FindWindow(window_id);
+  return window && window->is_incognito;
+}
+
+bool BrowserModel::IsIncognitoSpace(const SpaceID& space_id) const {
+  return incognito_space_index_by_id_.find(space_id) !=
+         incognito_space_index_by_id_.end();
+}
+
+bool BrowserModel::IsIncognitoNode(const ItemID& id) const {
+  auto parent = GetParent(id);
+  if (!parent.has_value()) {
+    return false;
+  }
+  auto sec = SectionOf(*parent);
+  return sec.has_value() &&
+         (sec->kind == NodeParentKind::kSpacePinned ||
+          sec->kind == NodeParentKind::kSpaceToday) &&
+         IsIncognitoSpace(sec->owner_id);
+}
+
 bool BrowserModel::IsSelectable(const ItemID& id,
                                 const SpaceID& space_id) const {
   auto it = index_.find(id);
@@ -855,14 +915,23 @@ std::optional<ItemID> BrowserModel::SidebarSelectionId(const ItemID& id) const {
 
 std::string BrowserModel::DisplayTitleForSpace(const SpaceID& space_id) const {
   auto it = space_index_by_id_.find(space_id);
-  if (it == space_index_by_id_.end()) {
-    return "Space";
+  if (it != space_index_by_id_.end() && it->second < spaces_.size()) {
+    const Space& space = spaces_[it->second];
+    if (space.title.has_value() && !space.title->empty()) {
+      return *space.title;
+    }
+    return "Space " + std::to_string(it->second + 1);
   }
-  const Space& space = spaces_[it->second];
-  if (space.title.has_value() && !space.title->empty()) {
-    return *space.title;
+  auto inc = incognito_space_index_by_id_.find(space_id);
+  if (inc != incognito_space_index_by_id_.end() &&
+      inc->second < incognito_spaces_.size()) {
+    const Space& space = incognito_spaces_[inc->second];
+    if (space.title.has_value() && !space.title->empty()) {
+      return *space.title;
+    }
+    return "Incognito";
   }
-  return "Space " + std::to_string(it->second + 1);
+  return "Space";
 }
 
 std::optional<SpaceID> BrowserModel::MostRecentlyFocusedSpace(
@@ -1194,6 +1263,14 @@ std::vector<BrowserModel::SelectionSlot> BrowserModel::RetargetSelections(
       }
     }
   }
+  for (BrowserWindowState& window : incognito_windows_) {
+    for (auto& [space_id, selected_id] : window.selected_node_by_space) {
+      if (selected_id == old_id) {
+        selected_id = new_id;
+        moved.push_back({window.id, space_id});
+      }
+    }
+  }
   return moved;
 }
 
@@ -1300,12 +1377,14 @@ ItemID BrowserModel::NewTab(const SpaceID& space_id,
     return {};
   }
   size_t slot = *inserted_pos;
-  PushUndo(
-      "New Tab",
-      [id](BrowserModel& m) { return m.DetachNode(id).has_value(); },
-      [tab, parent, slot](BrowserModel& m) {
-        return m.AttachNode(SidebarNode(tab), parent, slot).has_value();
-      });
+  if (!IsIncognitoSpace(space_id)) {
+    PushUndo(
+        "New Tab",
+        [id](BrowserModel& m) { return m.DetachNode(id).has_value(); },
+        [tab, parent, slot](BrowserModel& m) {
+          return m.AttachNode(SidebarNode(tab), parent, slot).has_value();
+        });
+  }
   return id;
 }
 
@@ -1454,16 +1533,22 @@ bool BrowserModel::CloseTab(const ItemID& id) {
   if (!parent.has_value()) {
     return false;
   }
+  const bool incognito = IsIncognitoNode(id);
   if (parent->kind == NodeParentKind::kSplitPane) {
     ItemID split_id = parent->owner_id;
     std::vector<ArchivedTabRecord> records;
-    if (const Tab* tab = FindTab(id)) {
-      CollectArchiveRecords(SidebarNode(*tab), *parent, "closed", NowSec(),
-                            &records);
+    if (!incognito) {
+      if (const Tab* tab = FindTab(id)) {
+        CollectArchiveRecords(SidebarNode(*tab), *parent, "closed", NowSec(),
+                              &records);
+      }
     }
     auto taken = TakePane(id, split_id);
     if (!taken.has_value()) {
       return false;
+    }
+    if (incognito) {
+      return true;
     }
     if (archive_sink_ && !records.empty()) {
       archive_sink_->OnArchiveTabs(records);
@@ -1499,16 +1584,21 @@ bool BrowserModel::CloseTab(const ItemID& id) {
   }
 
   std::vector<ArchivedTabRecord> records;
-  if (const SidebarNode* node = FindNode(id)) {
-    CollectArchiveRecords(*node, *parent, "closed", NowSec(), &records);
-  } else if (const Tab* tab = FindTab(id)) {
-    CollectArchiveRecords(SidebarNode(*tab), *parent, "closed", NowSec(),
-                          &records);
+  if (!incognito) {
+    if (const SidebarNode* node = FindNode(id)) {
+      CollectArchiveRecords(*node, *parent, "closed", NowSec(), &records);
+    } else if (const Tab* tab = FindTab(id)) {
+      CollectArchiveRecords(SidebarNode(*tab), *parent, "closed", NowSec(),
+                            &records);
+    }
   }
 
   auto detached = DetachNode(id);
   if (!detached.has_value()) {
     return false;
+  }
+  if (incognito) {
+    return true;
   }
   if (archive_sink_ && !records.empty()) {
     archive_sink_->OnArchiveTabs(records);
@@ -3068,6 +3158,65 @@ bool BrowserModel::DeleteSpace(const SpaceID& space_id, bool archive_tabs) {
   return true;
 }
 
+bool BrowserModel::ReorderSpaces(const std::vector<SpaceID>& ordered_ids) {
+  if (ordered_ids.empty() || spaces_.size() <= 1) {
+    return false;
+  }
+
+  std::unordered_set<SpaceID> seen;
+  seen.reserve(ordered_ids.size());
+  for (const SpaceID& id : ordered_ids) {
+    if (space_index_by_id_.find(id) == space_index_by_id_.end()) {
+      return false;
+    }
+    if (!seen.insert(id).second) {
+      return false;
+    }
+  }
+
+  std::vector<SpaceID> old_order;
+  old_order.reserve(spaces_.size());
+  for (const Space& space : spaces_) {
+    old_order.push_back(space.id);
+  }
+
+  std::vector<SpaceID> new_order;
+  new_order.reserve(spaces_.size());
+  for (const SpaceID& id : ordered_ids) {
+    new_order.push_back(id);
+  }
+  for (const Space& space : spaces_) {
+    if (seen.find(space.id) == seen.end()) {
+      new_order.push_back(space.id);
+    }
+  }
+
+  if (new_order == old_order) {
+    return false;
+  }
+
+  std::vector<Space> reordered;
+  reordered.reserve(spaces_.size());
+  for (const SpaceID& id : new_order) {
+    size_t idx = space_index_by_id_.at(id);
+    reordered.push_back(std::move(spaces_[idx]));
+  }
+  spaces_ = std::move(reordered);
+  RebuildContainerIndexMaps();
+
+  TreeChange reload;
+  reload.kind = TreeChange::Kind::kReload;
+  reload.parent = NodeParent{NodeParentKind::kSpaceToday, spaces_.front().id};
+  reload.space_id = spaces_.front().id;
+  Emit(reload);
+
+  PushUndo(
+      "Reorder Spaces",
+      [old_order](BrowserModel& m) { return m.ReorderSpaces(old_order); },
+      [new_order](BrowserModel& m) { return m.ReorderSpaces(new_order); });
+  return true;
+}
+
 bool BrowserModel::MoveSpaceToProfile(const SpaceID& space_id,
                                       const ProfileID& profile_id) {
   Space* space = FindSpace(space_id);
@@ -3310,7 +3459,9 @@ bool BrowserModel::SweepExpiredList(std::vector<SidebarNode>& list,
   return list_changed;
 }
 
-size_t BrowserModel::ArchiveExpiredTabs(TimestampSec now) {
+size_t BrowserModel::ArchiveExpiredTabs(
+    TimestampSec now,
+    std::vector<ItemID>* archived_tab_ids_out) {
   std::set<ItemID> shown = ComputeShownTabIds();
   std::vector<ArchivedTabRecord> archived;
   std::vector<NodeParent> changed_parents;
@@ -3333,6 +3484,13 @@ size_t BrowserModel::ArchiveExpiredTabs(TimestampSec now) {
     }
   }
 
+  if (archived_tab_ids_out) {
+    archived_tab_ids_out->reserve(archived_tab_ids_out->size() +
+                                  archived.size());
+    for (const ArchivedTabRecord& rec : archived) {
+      archived_tab_ids_out->push_back(rec.id);
+    }
+  }
   if (archive_sink_ && !archived.empty()) {
     archive_sink_->OnArchiveTabs(archived);
   }
@@ -3345,6 +3503,54 @@ size_t BrowserModel::ArchiveExpiredTabs(TimestampSec now) {
   return archived.size();
 }
 
+std::optional<TimestampSec> BrowserModel::NextAutoArchiveExpiry(
+    TimestampSec now) const {
+  std::set<ItemID> shown = ComputeShownTabIds();
+  std::optional<TimestampSec> earliest;
+  std::function<void(const std::vector<SidebarNode>&, double)> scan =
+      [&](const std::vector<SidebarNode>& list, double threshold) {
+        for (const SidebarNode& node : list) {
+          if (const Tab* tab = node.as_tab()) {
+            if (shown.count(tab->id) > 0 || tab->live_item_url.has_value()) {
+              continue;
+            }
+            const TimestampSec expiry = tab->last_active_at + threshold;
+            if (!earliest.has_value() || expiry < *earliest) {
+              earliest = expiry;
+            }
+          } else if (const Folder* folder = node.as_folder()) {
+            scan(folder->children, threshold);
+          } else if (const Split* split = node.as_split()) {
+            for (const Tab& pane : split->panes) {
+              if (shown.count(pane.id) > 0) {
+                continue;
+              }
+              const TimestampSec expiry = pane.last_active_at + threshold;
+              if (!earliest.has_value() || expiry < *earliest) {
+                earliest = expiry;
+              }
+            }
+          }
+        }
+      };
+
+  for (const Space& space : spaces_) {
+    const Profile* profile = FindProfile(space.profile_id);
+    if (!profile) {
+      continue;
+    }
+    auto threshold = AutoArchiveSeconds(profile->settings.auto_archive_after);
+    if (!threshold.has_value()) {
+      continue;
+    }
+    scan(space.today, *threshold);
+  }
+  if (earliest.has_value() && *earliest < now) {
+    return now;
+  }
+  return earliest;
+}
+
 // --- Focus & Selection ---
 
 bool BrowserModel::FocusSpace(const WindowID& window_id,
@@ -3353,41 +3559,48 @@ bool BrowserModel::FocusSpace(const WindowID& window_id,
   if (!window || !FindSpace(space_id)) {
     return false;
   }
+  const bool incognito = window->is_incognito || IsIncognitoSpace(space_id);
   SpaceID old_space = window->focused_space_id;
   if (old_space == space_id) {
-    RecordFocusedSpace(space_id);
+    if (!incognito) {
+      RecordFocusedSpace(space_id);
+    }
     return true;
   }
-  RecordFocusedSpace(space_id);
+  if (!incognito) {
+    RecordFocusedSpace(space_id);
+  }
   window->focused_space_id = space_id;
   TreeChange change;
   change.kind = TreeChange::Kind::kUpdate;
   change.space_id = space_id;
   Emit(change);
-  PushUndo(
-      "Switch Space",
-      [window_id, old_space](BrowserModel& m) {
-        BrowserWindowState* w = m.FindWindow(window_id);
-        if (!w || !m.FindSpace(old_space)) return false;
-        w->focused_space_id = old_space;
-        m.RecordFocusedSpace(old_space);
-        TreeChange c;
-        c.kind = TreeChange::Kind::kUpdate;
-        c.space_id = old_space;
-        m.Emit(c);
-        return true;
-      },
-      [window_id, space_id](BrowserModel& m) {
-        BrowserWindowState* w = m.FindWindow(window_id);
-        if (!w || !m.FindSpace(space_id)) return false;
-        w->focused_space_id = space_id;
-        m.RecordFocusedSpace(space_id);
-        TreeChange c;
-        c.kind = TreeChange::Kind::kUpdate;
-        c.space_id = space_id;
-        m.Emit(c);
-        return true;
-      });
+  if (!incognito) {
+    PushUndo(
+        "Switch Space",
+        [window_id, old_space](BrowserModel& m) {
+          BrowserWindowState* w = m.FindWindow(window_id);
+          if (!w || !m.FindSpace(old_space)) return false;
+          w->focused_space_id = old_space;
+          m.RecordFocusedSpace(old_space);
+          TreeChange c;
+          c.kind = TreeChange::Kind::kUpdate;
+          c.space_id = old_space;
+          m.Emit(c);
+          return true;
+        },
+        [window_id, space_id](BrowserModel& m) {
+          BrowserWindowState* w = m.FindWindow(window_id);
+          if (!w || !m.FindSpace(space_id)) return false;
+          w->focused_space_id = space_id;
+          m.RecordFocusedSpace(space_id);
+          TreeChange c;
+          c.kind = TreeChange::Kind::kUpdate;
+          c.space_id = space_id;
+          m.Emit(c);
+          return true;
+        });
+  }
   return true;
 }
 
@@ -3401,6 +3614,7 @@ bool BrowserModel::SelectNode(const WindowID& window_id,
   if (node_id.has_value() && !IsSelectable(*node_id, space_id)) {
     return false;
   }
+  const bool incognito = window->is_incognito || IsIncognitoSpace(space_id);
   std::optional<ItemID> old_sel;
   auto it = window->selected_node_by_space.find(space_id);
   if (it != window->selected_node_by_space.end()) {
@@ -3425,38 +3639,40 @@ bool BrowserModel::SelectNode(const WindowID& window_id,
     change.node_id = *node_id;
   }
   Emit(change);
-  PushUndo(
-      "Select Tab",
-      [window_id, space_id, old_sel](BrowserModel& m) {
-        BrowserWindowState* w = m.FindWindow(window_id);
-        if (!w) return false;
-        if (old_sel.has_value()) {
-          w->selected_node_by_space[space_id] = *old_sel;
-          m.StampVisibleTabs(*old_sel, NowSec());
-        } else {
-          w->selected_node_by_space.erase(space_id);
-        }
-        TreeChange c;
-        c.kind = TreeChange::Kind::kUpdate;
-        c.space_id = space_id;
-        m.Emit(c);
-        return true;
-      },
-      [window_id, space_id, node_id](BrowserModel& m) {
-        BrowserWindowState* w = m.FindWindow(window_id);
-        if (!w) return false;
-        if (node_id.has_value()) {
-          w->selected_node_by_space[space_id] = *node_id;
-          m.StampVisibleTabs(*node_id, NowSec());
-        } else {
-          w->selected_node_by_space.erase(space_id);
-        }
-        TreeChange c;
-        c.kind = TreeChange::Kind::kUpdate;
-        c.space_id = space_id;
-        m.Emit(c);
-        return true;
-      });
+  if (!incognito) {
+    PushUndo(
+        "Select Tab",
+        [window_id, space_id, old_sel](BrowserModel& m) {
+          BrowserWindowState* w = m.FindWindow(window_id);
+          if (!w) return false;
+          if (old_sel.has_value()) {
+            w->selected_node_by_space[space_id] = *old_sel;
+            m.StampVisibleTabs(*old_sel, NowSec());
+          } else {
+            w->selected_node_by_space.erase(space_id);
+          }
+          TreeChange c;
+          c.kind = TreeChange::Kind::kUpdate;
+          c.space_id = space_id;
+          m.Emit(c);
+          return true;
+        },
+        [window_id, space_id, node_id](BrowserModel& m) {
+          BrowserWindowState* w = m.FindWindow(window_id);
+          if (!w) return false;
+          if (node_id.has_value()) {
+            w->selected_node_by_space[space_id] = *node_id;
+            m.StampVisibleTabs(*node_id, NowSec());
+          } else {
+            w->selected_node_by_space.erase(space_id);
+          }
+          TreeChange c;
+          c.kind = TreeChange::Kind::kUpdate;
+          c.space_id = space_id;
+          m.Emit(c);
+          return true;
+        });
+  }
   return true;
 }
 
@@ -3715,14 +3931,16 @@ bool BrowserModel::UpdateProfileSettings(const ProfileID& profile_id,
 // --- Window Mutations ---
 
 WindowID BrowserModel::CreateWindow(const SpaceID& focused_space_id,
-                                    WindowStyle style) {
-  if (!FindSpace(focused_space_id)) {
+                                    WindowStyle style,
+                                    bool register_undo) {
+  if (!FindSpace(focused_space_id) || IsIncognitoSpace(focused_space_id)) {
     return {};
   }
   BrowserWindowState window;
   window.id = GenerateUuidV4();
   window.focused_space_id = focused_space_id;
   window.style = style;
+  window.is_incognito = false;
   window.last_focused_at = NowSec();
   const WindowID window_id = window.id;
   BrowserWindowState copy = window;
@@ -3730,26 +3948,151 @@ WindowID BrowserModel::CreateWindow(const SpaceID& focused_space_id,
   RebuildContainerIndexMaps();
   CommitVisibilityTransition();
 
-  PushUndo(
-      "New Window",
-      [window_id](BrowserModel& m) { return m.CloseWindow(window_id); },
-      [copy](BrowserModel& m) {
-        if (m.FindWindow(copy.id)) return false;
-        m.windows_.push_back(copy);
-        m.RebuildContainerIndexMaps();
-        m.CommitVisibilityTransition();
-        return true;
-      });
+  if (register_undo) {
+    PushUndo(
+        "New Window",
+        [window_id](BrowserModel& m) { return m.CloseWindow(window_id); },
+        [copy](BrowserModel& m) {
+          if (m.FindWindow(copy.id)) return false;
+          m.windows_.push_back(copy);
+          m.RebuildContainerIndexMaps();
+          m.CommitVisibilityTransition();
+          return true;
+        });
+  }
   return window_id;
 }
 
+WindowID BrowserModel::CreateIncognitoWindow(
+    const ProfileID& parent_profile_id) {
+  ProfileID resolved_profile = parent_profile_id;
+  if (resolved_profile.empty() || !FindProfile(resolved_profile)) {
+    const Profile* def = DefaultProfile();
+    if (!def) {
+      return {};
+    }
+    resolved_profile = def->id;
+  }
+  Space space;
+  space.id = GenerateUuidV4();
+  space.title = "Incognito";
+  space.profile_id = resolved_profile;
+  space.theme.style = SpaceStyle{};
+  space.theme.style->appearance = ThemeAppearance::kDark;
+  const SpaceID space_id = space.id;
+  incognito_spaces_.push_back(std::move(space));
+
+  BrowserWindowState window;
+  window.id = GenerateUuidV4();
+  window.focused_space_id = space_id;
+  window.style = WindowStyle::kStandard;
+  window.is_incognito = true;
+  window.incognito_profile_id = resolved_profile;
+  window.last_focused_at = NowSec();
+  const WindowID window_id = window.id;
+  incognito_windows_.push_back(std::move(window));
+
+  RebuildContainerIndexMaps();
+  TreeChange change;
+  change.kind = TreeChange::Kind::kUpdate;
+  change.space_id = space_id;
+  Emit(change);
+  return window_id;
+}
+
+WindowID BrowserModel::RestoreLastClosedWindow() {
+  if (!last_closed_window_.has_value()) {
+    return {};
+  }
+  BrowserWindowState restored = std::move(*last_closed_window_);
+  last_closed_window_.reset();
+  if (!FindSpace(restored.focused_space_id) ||
+      IsIncognitoSpace(restored.focused_space_id)) {
+    if (spaces_.empty()) {
+      return {};
+    }
+    restored.focused_space_id = spaces_.front().id;
+  }
+  for (auto it = restored.selected_node_by_space.begin();
+       it != restored.selected_node_by_space.end();) {
+    if (!IsSelectable(it->second, it->first)) {
+      it = restored.selected_node_by_space.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  restored.id = GenerateUuidV4();
+  restored.is_incognito = false;
+  restored.incognito_profile_id.reset();
+  restored.last_focused_at = NowSec();
+  const WindowID window_id = restored.id;
+  windows_.push_back(std::move(restored));
+  RebuildContainerIndexMaps();
+  CommitVisibilityTransition();
+  TreeChange change;
+  change.kind = TreeChange::Kind::kUpdate;
+  change.space_id = windows_.back().focused_space_id;
+  Emit(change);
+  return window_id;
+}
+
+void BrowserModel::ResetWindowsForCleanLaunch(
+    const SpaceID& focused_space_id,
+    const std::map<SpaceID, ItemID>& selected_nodes) {
+  SpaceID target_space = focused_space_id;
+  if (target_space.empty() || !FindSpace(target_space) ||
+      IsIncognitoSpace(target_space)) {
+    if (spaces_.empty()) {
+      return;
+    }
+    target_space = spaces_.front().id;
+  }
+  BrowserWindowState fresh;
+  fresh.id = GenerateUuidV4();
+  fresh.focused_space_id = target_space;
+  fresh.selected_node_by_space = selected_nodes;
+  fresh.style = WindowStyle::kStandard;
+  fresh.is_incognito = false;
+  fresh.last_focused_at = NowSec();
+  windows_.clear();
+  windows_.push_back(std::move(fresh));
+  RebuildContainerIndexMaps();
+  CommitVisibilityTransition();
+}
+
 bool BrowserModel::CloseWindow(const WindowID& window_id) {
+  auto inc_it = incognito_window_index_by_id_.find(window_id);
+  if (inc_it != incognito_window_index_by_id_.end()) {
+    const size_t slot = inc_it->second;
+    const SpaceID inc_space_id = incognito_windows_[slot].focused_space_id;
+    incognito_windows_.erase(incognito_windows_.begin() +
+                             static_cast<std::ptrdiff_t>(slot));
+    auto sp_it = incognito_space_index_by_id_.find(inc_space_id);
+    if (sp_it != incognito_space_index_by_id_.end() &&
+        sp_it->second < incognito_spaces_.size()) {
+      const Space& doomed = incognito_spaces_[sp_it->second];
+      for (const SidebarNode& n : doomed.pinned) {
+        UnregisterSubtree(n);
+      }
+      for (const SidebarNode& n : doomed.today) {
+        UnregisterSubtree(n);
+      }
+      incognito_spaces_.erase(incognito_spaces_.begin() +
+                              static_cast<std::ptrdiff_t>(sp_it->second));
+    }
+    RebuildContainerIndexMaps();
+    return true;
+  }
+
   auto it = window_index_by_id_.find(window_id);
   if (it == window_index_by_id_.end()) {
     return false;
   }
   size_t slot = it->second;
   BrowserWindowState saved = std::move(windows_[slot]);
+  if (saved.style == WindowStyle::kStandard && !saved.is_incognito) {
+    last_closed_window_ = saved;
+  }
   windows_.erase(windows_.begin() + static_cast<std::ptrdiff_t>(slot));
   RebuildContainerIndexMaps();
   CommitVisibilityTransition();
@@ -3766,6 +4109,33 @@ bool BrowserModel::CloseWindow(const WindowID& window_id) {
         return true;
       },
       [window_id](BrowserModel& m) { return m.CloseWindow(window_id); });
+  return true;
+}
+
+bool BrowserModel::SetWindowFrame(const WindowID& window_id,
+                                  double x,
+                                  double y,
+                                  double width,
+                                  double height) {
+  BrowserWindowState* window = FindWindow(window_id);
+  if (!window || !std::isfinite(x) || !std::isfinite(y) ||
+      !std::isfinite(width) || !std::isfinite(height) || width <= 0.0 ||
+      height <= 0.0) {
+    return false;
+  }
+  window->frame_x = x;
+  window->frame_y = y;
+  window->frame_width = width;
+  window->frame_height = height;
+  return true;
+}
+
+bool BrowserModel::TouchWindowFocus(const WindowID& window_id) {
+  BrowserWindowState* window = FindWindow(window_id);
+  if (!window) {
+    return false;
+  }
+  window->last_focused_at = NowSec();
   return true;
 }
 

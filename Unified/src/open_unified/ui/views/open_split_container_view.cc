@@ -10,19 +10,28 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "cc/paint/paint_flags.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "open_unified/ui/design/open_glyphs.h"
+#include "open_unified/ui/views/open_tab_tree_view.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "third_party/skia/include/core/SkRRect.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -525,6 +534,30 @@ void PaintGlyph(gfx::Canvas* canvas,
                 {0.52f, 0.42f}},
                /*close=*/true);
       break;
+    case Glyph::kStar:
+      Polyline(b, g,
+               {{0.50f, 0.14f},
+                {0.61f, 0.37f},
+                {0.86f, 0.40f},
+                {0.68f, 0.58f},
+                {0.72f, 0.84f},
+                {0.50f, 0.71f},
+                {0.28f, 0.84f},
+                {0.32f, 0.58f},
+                {0.14f, 0.40f},
+                {0.39f, 0.37f}},
+               /*close=*/true);
+      break;
+    case Glyph::kDownload:
+      Polyline(b, g, {{0.50f, 0.18f}, {0.50f, 0.70f}});
+      Polyline(b, g, {{0.30f, 0.52f}, {0.50f, 0.72f}, {0.70f, 0.52f}});
+      Polyline(b, g, {{0.22f, 0.82f}, {0.78f, 0.82f}});
+      break;
+    case Glyph::kStack:
+      RoundRectPath(b, g.R(0.18f, 0.28f, 0.74f, 0.84f), g.S(0.08f));
+      Polyline(b, g,
+               {{0.30f, 0.18f}, {0.82f, 0.18f}, {0.82f, 0.70f}});
+      break;
   }
   canvas->DrawPath(b.detach(), stroke);
   SkPath dots = filled.detach();
@@ -568,6 +601,12 @@ void GlyphButton::SetGlyphSize(float size) {
 
 void GlyphButton::SetGlyphOffset(const gfx::Vector2dF& offset) {
   glyph_offset_ = offset;
+  SchedulePaint();
+}
+
+void GlyphButton::SetSystemSymbol(std::string symbol_name, float point_size) {
+  system_symbol_name_ = std::move(symbol_name);
+  system_symbol_point_size_ = point_size;
   SchedulePaint();
 }
 
@@ -626,6 +665,15 @@ void GlyphButton::PaintButtonContents(gfx::Canvas* canvas) {
       bounds.x() + (bounds.width() - glyph_size_) / 2.f + glyph_offset_.x(),
       bounds.y() + (bounds.height() - glyph_size_) / 2.f + glyph_offset_.y(),
       glyph_size_, glyph_size_);
+  if (!system_symbol_name_.empty()) {
+    const float pt = system_symbol_point_size_ > 0.f ? system_symbol_point_size_
+                                                     : glyph_size_;
+    if (glyphs::DrawSystemSymbol(canvas, system_symbol_name_, pt,
+                                 glyphs::SymbolWeight::kMedium, bounds, color,
+                                 glyph_offset_)) {
+      return;
+    }
+  }
   PaintGlyph(canvas, glyph_, box, color);
 }
 
@@ -663,23 +711,45 @@ END_METADATA
 
 // --- OverlayWidgetHost -----------------------------------------------------
 
+// static
+bool OverlayWidgetHost::DefaultActivatableFor(std::string_view name) {
+  // Toasts and the Ctrl+Tab switcher never take key focus from the page.
+  return name != "OpenToasts" && name != "OpenTabSwitcher";
+}
+
 OverlayWidgetHost::OverlayWidgetHost(views::Widget* parent,
                                      std::unique_ptr<views::View> contents,
-                                     std::string_view name) {
+                                     std::string_view name)
+    : OverlayWidgetHost(parent,
+                        std::move(contents),
+                        name,
+                        DefaultActivatableFor(name)) {}
+
+OverlayWidgetHost::OverlayWidgetHost(views::Widget* parent,
+                                     std::unique_ptr<views::View> contents,
+                                     std::string_view name,
+                                     bool activatable)
+    : activatable_(activatable), parent_(parent) {
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_CONTROL);
   params.SetParent(parent);
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
+  params.activatable = activatable
+                           ? views::Widget::InitParams::Activatable::kYes
+                           : views::Widget::InitParams::Activatable::kNo;
   params.name = std::string(name);
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(params));
   contents_ = widget_->SetContentsView(std::move(contents));
   observation_.Observe(contents_.get());
+  widget_observation_.Observe(widget_.get());
 }
 
 OverlayWidgetHost::~OverlayWidgetHost() {
+  widget_observation_.Reset();
+  paint_as_active_lock_.reset();
   observation_.Reset();
   contents_ = nullptr;
   widget_.reset();
@@ -695,11 +765,43 @@ void OverlayWidgetHost::SetAnchor(const gfx::Rect& anchor_in_parent,
 void OverlayWidgetHost::Show() {
   ApplyBounds();
   widget_->StackAtTop();
-  widget_->Show();
+  if (activatable_) {
+    // Lock before the overlay takes key status, so the parent never paints
+    // one inactive frame.
+    UpdatePaintAsActiveLock(true);
+    widget_->Show();
+  } else {
+    widget_->ShowInactive();
+  }
 }
 
 void OverlayWidgetHost::Hide() {
   widget_->Hide();
+  UpdatePaintAsActiveLock(false);
+}
+
+void OverlayWidgetHost::UpdatePaintAsActiveLock(bool visible) {
+  if (!activatable_ || !parent_) {
+    paint_as_active_lock_.reset();
+    return;
+  }
+  if (visible && !paint_as_active_lock_) {
+    paint_as_active_lock_ = parent_->LockPaintAsActive();
+  } else if (!visible) {
+    paint_as_active_lock_.reset();
+  }
+}
+
+void OverlayWidgetHost::OnWidgetVisibilityChanged(views::Widget* widget,
+                                                  bool visible) {
+  // Also covers callers that show or hide widget() directly.
+  UpdatePaintAsActiveLock(visible);
+}
+
+void OverlayWidgetHost::OnWidgetDestroying(views::Widget* widget) {
+  paint_as_active_lock_.reset();
+  widget_observation_.Reset();
+  parent_ = nullptr;
 }
 
 bool OverlayWidgetHost::IsVisible() const {
@@ -990,12 +1092,52 @@ void OpenPaneChromeView::SetFocusRequestCallback(
   focus_callback_ = std::move(callback);
 }
 
+void OpenPaneChromeView::SetDragSwapCallback(DragCallback callback) {
+  drag_swap_callback_ = std::move(callback);
+}
+
 bool OpenPaneChromeView::OnMousePressed(const ui::MouseEvent& event) {
-  // A click on the bar's empty area focuses its pane.
+  // A click on the bar's empty area focuses its pane; dragging the bar across
+  // another pane swaps them.
   if (focus_callback_) {
     focus_callback_.Run();
   }
+  if (event.IsOnlyLeftMouseButton() && role_ == Role::kPane &&
+      state_.pane_count >= 2 && drag_swap_callback_) {
+    drag_press_origin_ = event.location();
+    drag_swap_active_ = false;
+  }
   return true;
+}
+
+bool OpenPaneChromeView::OnMouseDragged(const ui::MouseEvent& event) {
+  if (!drag_swap_callback_ || role_ != Role::kPane || state_.pane_count < 2) {
+    return false;
+  }
+  const gfx::Vector2d delta = event.location() - drag_press_origin_;
+  if (!drag_swap_active_ &&
+      (std::abs(delta.x()) >= 12 || std::abs(delta.y()) >= 12)) {
+    drag_swap_active_ = true;
+  }
+  if (drag_swap_active_) {
+    drag_swap_callback_.Run(event.location(), /*finished=*/false);
+    return true;
+  }
+  return false;
+}
+
+void OpenPaneChromeView::OnMouseReleased(const ui::MouseEvent& event) {
+  if (drag_swap_active_ && drag_swap_callback_) {
+    drag_swap_active_ = false;
+    drag_swap_callback_.Run(event.location(), /*finished=*/true);
+  }
+}
+
+void OpenPaneChromeView::OnMouseCaptureLost() {
+  if (drag_swap_active_ && drag_swap_callback_) {
+    drag_swap_active_ = false;
+    drag_swap_callback_.Run(drag_press_origin_, /*finished=*/true);
+  }
 }
 
 void OpenPaneChromeView::Press(Control control) {
@@ -1146,10 +1288,199 @@ class FocusRingView : public views::View {
 BEGIN_METADATA(FocusRingView)
 END_METADATA
 
-// One pane: optional bar, the live WebView (or a placeholder fill), and the
-// focus ring. Observes its WebContents for loading, history and background
-// color so the bar stays current without a model round trip.
-class SplitPaneView : public views::View, public content::WebContentsObserver {
+// Translucent Space-accented drop preview overlay rendered above all panes
+// while dragging a sidebar tab, link, or pane handle over the content panel.
+class SplitDropOverlayView : public views::View {
+  METADATA_HEADER(SplitDropOverlayView, views::View)
+
+ public:
+  SplitDropOverlayView() {
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+    SetCanProcessEventsWithinSubtree(false);
+    GetViewAccessibility().SetIsInvisible(true);
+    SetVisible(false);
+  }
+
+  void SetPreview(std::optional<SplitDropZone> zone,
+                  const gfx::Rect& preview_rect,
+                  SkColor accent) {
+    zone_ = zone;
+    preview_rect_ = preview_rect;
+    accent_ = accent;
+    SetVisible(zone_.has_value() && !preview_rect_.IsEmpty());
+    SchedulePaint();
+  }
+
+  void OnPaint(gfx::Canvas* canvas) override {
+    if (!zone_ || preview_rect_.IsEmpty()) {
+      return;
+    }
+    gfx::RectF card(preview_rect_);
+    card.Inset(4.f);
+    if (card.IsEmpty()) {
+      return;
+    }
+    constexpr float kRadius = 8.f;
+    secondary::FillRoundRect(canvas, card, kRadius,
+                             secondary::WithAlpha(accent_, 0.16f));
+    secondary::StrokeRoundRect(canvas, card, kRadius,
+                               secondary::WithAlpha(accent_, 0.72f), 2.f);
+
+    std::u16string label;
+    switch (*zone_) {
+      case SplitDropZone::kLeft:
+        label = u"Split Left";
+        break;
+      case SplitDropZone::kRight:
+        label = u"Split Right";
+        break;
+      case SplitDropZone::kTop:
+        label = u"Split Top";
+        break;
+      case SplitDropZone::kBottom:
+        label = u"Split Bottom";
+        break;
+      case SplitDropZone::kReplacePane:
+        label = u"Swap / Replace";
+        break;
+    }
+    const gfx::FontList font =
+        secondary::FontOfSize(13, gfx::Font::Weight::MEDIUM);
+    const int pill_w =
+        std::min(static_cast<int>(card.width()) - 24,
+                 secondary::TextWidth(label, font) + 28);
+    constexpr int kPillH = 30;
+    if (pill_w >= 48 && card.height() >= kPillH + 16) {
+      const gfx::Rect pill(
+          static_cast<int>(card.x() + (card.width() - pill_w) / 2.f),
+          static_cast<int>(card.y() + (card.height() - kPillH) / 2.f), pill_w,
+          kPillH);
+      secondary::FillRoundRect(canvas, gfx::RectF(pill), kPillH / 2.f,
+                               secondary::WithAlpha(accent_, 0.90f));
+      secondary::DrawText(canvas, label, font, SK_ColorWHITE, pill,
+                          gfx::Canvas::TEXT_ALIGN_CENTER);
+    }
+  }
+
+ private:
+  std::optional<SplitDropZone> zone_;
+  gfx::Rect preview_rect_;
+  SkColor accent_ = SkColorSetRGB(0x6F, 0x66, 0xD9);
+};
+
+BEGIN_METADATA(SplitDropOverlayView)
+END_METADATA
+
+// Interactive empty-pane fallback card shown when a split pane has no loaded
+// tab yet ("Drop a tab or press ⌘T" + "Open Command Bar" button).
+class EmptyPanePlaceholderView : public views::View {
+  METADATA_HEADER(EmptyPanePlaceholderView, views::View)
+
+ public:
+  EmptyPanePlaceholderView(base::RepeatingClosure on_focus,
+                           base::RepeatingClosure on_open_command_bar)
+      : on_focus_(std::move(on_focus)),
+        on_open_command_bar_(std::move(on_open_command_bar)) {
+    button_ = AddChildView(std::make_unique<secondary::PaintedButton>(
+        base::BindRepeating(&EmptyPanePlaceholderView::OnOpenPressed,
+                            base::Unretained(this)),
+        base::BindRepeating(&EmptyPanePlaceholderView::PaintActionButton,
+                            base::Unretained(this)),
+        u"Open Command Bar"));
+  }
+
+  void SetColors(SkColor page_bg, SkColor accent) {
+    page_bg_ = page_bg;
+    accent_ = accent;
+    SchedulePaint();
+    if (button_) {
+      button_->SchedulePaint();
+    }
+  }
+
+  void Layout(PassKey) override {
+    const gfx::Rect b = GetLocalBounds();
+    constexpr int kButtonW = 168;
+    constexpr int kButtonH = 32;
+    const int btn_x = b.x() + (b.width() - kButtonW) / 2;
+    const int btn_y = b.y() + b.height() / 2 + 12;
+    button_->SetBoundsRect(gfx::Rect(btn_x, btn_y, kButtonW, kButtonH));
+  }
+
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    if (on_focus_) {
+      on_focus_.Run();
+    }
+    return true;
+  }
+
+  void OnPaint(gfx::Canvas* canvas) override {
+    const gfx::Rect b = GetLocalBounds();
+    const bool dark = secondary::IsDark(page_bg_);
+    const SkColor ink = dark ? SK_ColorWHITE : SK_ColorBLACK;
+
+    // Centered subtle dashed/rounded placeholder frame.
+    const int card_w = std::min(320, std::max(0, b.width() - 32));
+    const int card_h = std::min(148, std::max(0, b.height() - 32));
+    if (card_w > 60 && card_h > 60) {
+      const gfx::RectF card(b.x() + (b.width() - card_w) / 2.f,
+                            b.y() + (b.height() - card_h) / 2.f, card_w,
+                            card_h);
+      secondary::FillRoundRect(canvas, card, 12.f,
+                               secondary::WithAlpha(ink, dark ? 0.05f : 0.03f));
+      secondary::StrokeRoundRect(
+          canvas, card, 12.f, secondary::WithAlpha(ink, dark ? 0.16f : 0.12f),
+          1.f);
+    }
+
+    const std::u16string hint =
+        u"Drop a tab or press " + secondary::PrimaryShortcutLabel(u'T');
+    const gfx::Rect text_rect(b.x() + 20, b.y() + b.height() / 2 - 28,
+                              std::max(0, b.width() - 40), 24);
+    secondary::DrawText(
+        canvas, hint, secondary::FontOfSize(14, gfx::Font::Weight::MEDIUM),
+        secondary::WithAlpha(ink, 0.72f), text_rect,
+        gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
+
+ private:
+  void OnOpenPressed() {
+    if (on_focus_) {
+      on_focus_.Run();
+    }
+    if (on_open_command_bar_) {
+      on_open_command_bar_.Run();
+    }
+  }
+
+  void PaintActionButton(gfx::Canvas* canvas,
+                         const gfx::Rect& bounds,
+                         bool hovered) {
+    const SkColor fill = secondary::WithAlpha(accent_, hovered ? 0.95f : 0.82f);
+    secondary::FillRoundRect(canvas, gfx::RectF(bounds), 8.f, fill);
+    secondary::DrawText(canvas, u"Open Command Bar",
+                        secondary::FontOfSize(13, gfx::Font::Weight::MEDIUM),
+                        SK_ColorWHITE, bounds, gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
+
+  base::RepeatingClosure on_focus_;
+  base::RepeatingClosure on_open_command_bar_;
+  raw_ptr<secondary::PaintedButton> button_ = nullptr;
+  SkColor page_bg_ = SK_ColorWHITE;
+  SkColor accent_ = SkColorSetRGB(0x6F, 0x66, 0xD9);
+};
+
+BEGIN_METADATA(EmptyPanePlaceholderView)
+END_METADATA
+
+// One pane: optional bar, the live WebView (or an empty-pane placeholder),
+// optional docked/overlaid DevTools view, and the focus ring. Observes its
+// WebContents for loading, history and background color so the bar stays
+// current without a model round trip.
+class SplitPaneView : public views::View,
+                      public content::WebContentsObserver,
+                      public views::ViewObserver {
   METADATA_HEADER(SplitPaneView, views::View)
 
  public:
@@ -1161,7 +1492,15 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
                             base::Unretained(this))));
     chrome_->SetFocusRequestCallback(base::BindRepeating(
         &SplitPaneView::RequestFocusFromBar, base::Unretained(this)));
+    chrome_->SetDragSwapCallback(base::BindRepeating(
+        &SplitPaneView::OnChromeDragSwap, base::Unretained(this)));
     web_view_ = AddChildView(std::make_unique<views::WebView>());
+    empty_placeholder_ = AddChildView(std::make_unique<EmptyPanePlaceholderView>(
+        base::BindRepeating(&SplitPaneView::RequestFocusFromBar,
+                            base::Unretained(this)),
+        base::BindRepeating(&SplitPaneView::RequestEmptyPaneCommandBar,
+                            base::Unretained(this))));
+    empty_placeholder_->SetVisible(false);
     ring_ = AddChildView(std::make_unique<FocusRingView>());
     ring_->SetVisible(false);
     AttachWebContents();
@@ -1171,12 +1510,14 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
   SplitPaneView& operator=(const SplitPaneView&) = delete;
 
   ~SplitPaneView() override {
+    ClearDevToolsOverlay();
     Observe(nullptr);
     web_view_->SetWebContents(nullptr);
   }
 
   const ItemID& tab_id() const { return spec_.tab_id; }
   views::WebView* web_view() { return web_view_; }
+  views::View* devtools_overlay() const { return devtools_view_; }
 
   // Releases the shown WebContents when the next Update() brings another, so
   // the old one is free before any pane attaches it. Update() then sees a
@@ -1207,6 +1548,9 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
   void Update(const SplitPaneSpec& spec, const Context& context) {
     const bool contents_changed = spec.web_contents != spec_.web_contents;
     const bool bar_changed = context.show_bar != context_.show_bar;
+    const bool placeholder_changed =
+        spec.is_empty_placeholder != spec_.is_empty_placeholder ||
+        spec.is_sleeping != spec_.is_sleeping;
     spec_ = spec;
     context_ = context;
     if (contents_changed) {
@@ -1216,11 +1560,26 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
     chrome_->SetRole(context_.role);
     ring_->SetVisible(context_.show_ring && context_.focused);
     ring_->SetColor(context_.ring_color);
+    UpdateEmptyPlaceholder();
     RefreshChrome();
-    if (bar_changed || contents_changed) {
+    if (bar_changed || contents_changed || placeholder_changed) {
       applied_radii_.reset();
       InvalidateLayout();
     }
+    SchedulePaint();
+  }
+
+  void SetBarVisible(bool show_bar, OpenPaneChromeView::Role role) {
+    if (context_.show_bar == show_bar && context_.role == role) {
+      return;
+    }
+    context_.show_bar = show_bar;
+    context_.role = role;
+    chrome_->SetVisible(show_bar);
+    chrome_->SetRole(role);
+    RefreshChrome();
+    applied_radii_.reset();
+    InvalidateLayout();
     SchedulePaint();
   }
 
@@ -1235,6 +1594,7 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
 
   void SetBackgroundOverride(SkColor color) {
     spec_.page_background = color;
+    UpdateEmptyPlaceholder();
     RefreshChrome();
     SchedulePaint();
   }
@@ -1249,6 +1609,71 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
     RefreshChrome();
   }
 
+  void SetDevToolsOverlay(views::View* devtools_view,
+                          PaneDevToolsDock dock,
+                          float ratio) {
+    ClearDevToolsOverlay();
+    if (!devtools_view) {
+      return;
+    }
+    devtools_dock_ = dock;
+    devtools_ratio_ = std::clamp(ratio, 0.15f, 0.80f);
+    devtools_view_ = devtools_view;
+    devtools_owned_ = false;
+    if (devtools_view->parent() != this) {
+      // Non-owned external view: observe its lifetime, lay it out in our
+      // coordinates if already added to our subtree.
+      devtools_observation_.Observe(devtools_view);
+    } else {
+      devtools_observation_.Observe(devtools_view);
+      ReorderChildView(ring_, children().size() - 1);
+    }
+    InvalidateLayout();
+    SchedulePaint();
+  }
+
+  void SetDevToolsOverlayOwned(std::unique_ptr<views::View> devtools_view,
+                               PaneDevToolsDock dock,
+                               float ratio) {
+    ClearDevToolsOverlay();
+    if (!devtools_view) {
+      return;
+    }
+    devtools_dock_ = dock;
+    devtools_ratio_ = std::clamp(ratio, 0.15f, 0.80f);
+    devtools_view_ = AddChildView(std::move(devtools_view));
+    devtools_owned_ = true;
+    devtools_observation_.Observe(devtools_view_.get());
+    ReorderChildView(ring_, children().size() - 1);
+    InvalidateLayout();
+    SchedulePaint();
+  }
+
+  void ClearDevToolsOverlay() {
+    devtools_observation_.Reset();
+    if (devtools_view_) {
+      views::View* doomed = devtools_view_.ExtractAsDangling();
+      const bool owned = devtools_owned_;
+      devtools_owned_ = false;
+      if (owned && doomed->parent() == this) {
+        RemoveChildViewT(doomed);
+      }
+      InvalidateLayout();
+      SchedulePaint();
+    }
+  }
+
+  // views::ViewObserver:
+  void OnViewIsDeleting(views::View* observed_view) override {
+    if (observed_view == devtools_view_) {
+      devtools_observation_.Reset();
+      devtools_view_ = nullptr;
+      devtools_owned_ = false;
+      InvalidateLayout();
+      SchedulePaint();
+    }
+  }
+
   // views::View:
   void Layout(PassKey) override {
     const gfx::Rect bounds = GetLocalBounds();
@@ -1258,8 +1683,47 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
           gfx::Rect(0, 0, bounds.width(), split_metrics::kBarHeight));
       top = split_metrics::kBarHeight;
     }
-    web_view_->SetBoundsRect(
-        gfx::Rect(0, top, bounds.width(), std::max(0, bounds.height() - top)));
+    gfx::Rect content_area(0, top, bounds.width(),
+                           std::max(0, bounds.height() - top));
+    gfx::Rect page_rect = content_area;
+    if (devtools_view_ && devtools_view_->GetVisible()) {
+      gfx::Rect devtools_rect;
+      switch (devtools_dock_) {
+        case PaneDevToolsDock::kBottom: {
+          const int dt_h = std::max(
+              100, static_cast<int>(
+                       std::lround(content_area.height() * devtools_ratio_)));
+          const int clamped_h = std::min(dt_h, content_area.height());
+          page_rect.set_height(content_area.height() - clamped_h);
+          devtools_rect = gfx::Rect(content_area.x(), page_rect.bottom(),
+                                    content_area.width(), clamped_h);
+          break;
+        }
+        case PaneDevToolsDock::kRight: {
+          const int dt_w = std::max(
+              160, static_cast<int>(
+                       std::lround(content_area.width() * devtools_ratio_)));
+          const int clamped_w = std::min(dt_w, content_area.width());
+          page_rect.set_width(content_area.width() - clamped_w);
+          devtools_rect = gfx::Rect(page_rect.right(), content_area.y(),
+                                    clamped_w, content_area.height());
+          break;
+        }
+        case PaneDevToolsDock::kOverlay:
+          devtools_rect = content_area;
+          break;
+      }
+      if (devtools_view_->parent() == this) {
+        devtools_view_->SetBoundsRect(devtools_rect);
+      } else if (devtools_view_->parent()) {
+        gfx::Point origin = devtools_rect.origin();
+        views::View::ConvertPointToTarget(this, devtools_view_->parent(),
+                                          &origin);
+        devtools_view_->SetBoundsRect(gfx::Rect(origin, devtools_rect.size()));
+      }
+    }
+    web_view_->SetBoundsRect(page_rect);
+    empty_placeholder_->SetBoundsRect(page_rect);
     ring_->SetBoundsRect(bounds);
     ApplyCornerRadii();
   }
@@ -1277,6 +1741,7 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
     RefreshChrome();
   }
   void OnBackgroundColorChanged() override {
+    UpdateEmptyPlaceholder();
     RefreshChrome();
     SchedulePaint();
   }
@@ -1286,6 +1751,8 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
   void WebContentsDestroyed() override {
     spec_.web_contents = nullptr;
     web_view_->SetWebContents(nullptr);
+    web_view_->SetVisible(false);
+    UpdateEmptyPlaceholder();
     RefreshChrome();
   }
 
@@ -1296,9 +1763,18 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
     if (web_view_->web_contents() != contents) {
       web_view_->SetWebContents(contents);
     }
-    web_view_->SetVisible(contents != nullptr);
+    web_view_->SetVisible(contents != nullptr && !spec_.is_empty_placeholder);
+    UpdateEmptyPlaceholder();
     applied_radii_.reset();
     ApplyCornerRadii();
+  }
+
+  void UpdateEmptyPlaceholder() {
+    const bool show_empty =
+        spec_.is_empty_placeholder ||
+        (spec_.web_contents == nullptr && !spec_.is_sleeping);
+    empty_placeholder_->SetVisible(show_empty);
+    empty_placeholder_->SetColors(PageColor(), context_.ring_color);
   }
 
   void ApplyCornerRadii() {
@@ -1369,6 +1845,16 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
 
   void RequestFocusFromBar() { container_->OnPaneFocused(spec_.tab_id); }
 
+  void RequestEmptyPaneCommandBar() {
+    container_->OnEmptyPaneOpenCommandBar(spec_.tab_id);
+  }
+
+  void OnChromeDragSwap(const gfx::Point& location_in_chrome, bool finished) {
+    gfx::Point in_container = location_in_chrome;
+    views::View::ConvertPointToTarget(chrome_, container_, &in_container);
+    container_->OnPaneChromeDragSwap(spec_.tab_id, in_container, finished);
+  }
+
   void OnChromeCommand(PaneCommand command, views::View* anchor) {
     container_->OnPaneCommand(spec_.tab_id, command, anchor);
   }
@@ -1378,6 +1864,13 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
   Context context_;
   raw_ptr<OpenPaneChromeView> chrome_ = nullptr;
   raw_ptr<views::WebView> web_view_ = nullptr;
+  raw_ptr<EmptyPanePlaceholderView> empty_placeholder_ = nullptr;
+  raw_ptr<views::View> devtools_view_ = nullptr;
+  bool devtools_owned_ = false;
+  PaneDevToolsDock devtools_dock_ = PaneDevToolsDock::kBottom;
+  float devtools_ratio_ = 0.35f;
+  base::ScopedObservation<views::View, views::ViewObserver>
+      devtools_observation_{this};
   raw_ptr<FocusRingView> ring_ = nullptr;
   std::optional<gfx::RoundedCornersF> applied_radii_;
 };
@@ -1527,9 +2020,73 @@ OpenSplitContainerView::OpenSplitContainerView(
     OpenSplitContainerDelegate* delegate)
     : delegate_(delegate) {
   GetViewAccessibility().SetName(u"Page content");
+  drop_overlay_ =
+      AddChildView(std::make_unique<split_internal::SplitDropOverlayView>());
 }
 
 OpenSplitContainerView::~OpenSplitContainerView() = default;
+
+// static
+SplitDropZone OpenSplitContainerView::ComputeDropZoneAt(
+    const gfx::Rect& bounds,
+    const gfx::Point& point) {
+  if (bounds.IsEmpty()) {
+    return SplitDropZone::kReplacePane;
+  }
+  const int edge_x =
+      std::min(bounds.width() / 2,
+               std::max(80, static_cast<int>(bounds.width() * 0.25)));
+  const int edge_y =
+      std::min(bounds.height() / 2,
+               std::max(80, static_cast<int>(bounds.height() * 0.25)));
+  const int local_x = point.x() - bounds.x();
+  const int local_y = point.y() - bounds.y();
+  if (local_x < edge_x) {
+    return SplitDropZone::kLeft;
+  }
+  if (local_x > bounds.width() - edge_x) {
+    return SplitDropZone::kRight;
+  }
+  if (local_y < edge_y) {
+    return SplitDropZone::kTop;
+  }
+  if (local_y > bounds.height() - edge_y) {
+    return SplitDropZone::kBottom;
+  }
+  return SplitDropZone::kReplacePane;
+}
+
+// static
+gfx::Rect OpenSplitContainerView::ComputeDropPreviewRect(
+    const gfx::Rect& container_bounds,
+    const std::vector<gfx::Rect>& pane_bounds,
+    SplitDropZone zone,
+    std::optional<size_t> target_pane_index) {
+  if (container_bounds.IsEmpty()) {
+    return gfx::Rect();
+  }
+  const gfx::Rect target =
+      (target_pane_index && *target_pane_index < pane_bounds.size())
+          ? pane_bounds[*target_pane_index]
+          : container_bounds;
+  switch (zone) {
+    case SplitDropZone::kLeft:
+      return gfx::Rect(target.x(), target.y(), target.width() / 2,
+                       target.height());
+    case SplitDropZone::kRight:
+      return gfx::Rect(target.x() + target.width() / 2, target.y(),
+                       target.width() - target.width() / 2, target.height());
+    case SplitDropZone::kTop:
+      return gfx::Rect(target.x(), target.y(), target.width(),
+                       target.height() / 2);
+    case SplitDropZone::kBottom:
+      return gfx::Rect(target.x(), target.y() + target.height() / 2,
+                       target.width(), target.height() - target.height() / 2);
+    case SplitDropZone::kReplacePane:
+      return target;
+  }
+  return target;
+}
 
 // static
 std::vector<gfx::Rect> OpenSplitContainerView::ComputePaneFrames(
@@ -1686,8 +2243,141 @@ void OpenSplitContainerView::SetPresentation(SplitPresentation presentation) {
     panes_[i]->Update(presentation_.panes[i], context);
   }
   SyncDividers();
+  if (drop_overlay_) {
+    ReorderChildView(drop_overlay_, children().size() - 1);
+  }
+  UpdateDropOverlay();
   InvalidateLayout();
   SchedulePaint();
+}
+
+void OpenSplitContainerView::SetSinglePaneToolbarVisible(bool shows_toolbar) {
+  if (presentation_.show_single_pane_toolbar == shows_toolbar) {
+    return;
+  }
+  presentation_.show_single_pane_toolbar = shows_toolbar;
+  if (!is_split() && panes_.size() == 1 && panes_[0]) {
+    panes_[0]->SetBarVisible(shows_toolbar, OpenPaneChromeView::Role::kToolbar);
+  }
+}
+
+void OpenSplitContainerView::SetDropZonePreview(
+    std::optional<SplitDropZone> zone,
+    std::optional<size_t> target_pane_index) {
+  if (drop_zone_preview_ == zone &&
+      drop_target_pane_index_ == target_pane_index) {
+    return;
+  }
+  drop_zone_preview_ = zone;
+  drop_target_pane_index_ = target_pane_index;
+  UpdateDropOverlay();
+}
+
+void OpenSplitContainerView::SetDropOverlayAccentColor(SkColor color) {
+  drop_overlay_accent_ = color;
+  UpdateDropOverlay();
+}
+
+bool OpenSplitContainerView::SwapPanes(size_t index_a, size_t index_b) {
+  if (index_a >= panes_.size() || index_b >= panes_.size() ||
+      index_a == index_b) {
+    return false;
+  }
+  std::swap(panes_[index_a], panes_[index_b]);
+  if (index_a < presentation_.panes.size() &&
+      index_b < presentation_.panes.size()) {
+    std::swap(presentation_.panes[index_a], presentation_.panes[index_b]);
+  }
+  if (index_a < live_fractions_.size() && index_b < live_fractions_.size()) {
+    std::swap(live_fractions_[index_a], live_fractions_[index_b]);
+  }
+  if (index_a < presentation_.fractions.size() &&
+      index_b < presentation_.fractions.size()) {
+    std::swap(presentation_.fractions[index_a],
+              presentation_.fractions[index_b]);
+  }
+  for (size_t i = 0; i < panes_.size(); ++i) {
+    ReorderChildView(panes_[i], i);
+  }
+  if (drop_overlay_) {
+    ReorderChildView(drop_overlay_, children().size() - 1);
+  }
+  const bool split = is_split();
+  ApplyFrames(ComputePaneFrames(GetLocalBounds(), presentation_.orientation,
+                                live_fractions_, panes_.size(),
+                                split ? split_metrics::kGap : 0,
+                                split_metrics::kMinimumPane));
+  SchedulePaint();
+  if (delegate_ && presentation_.split_id) {
+    delegate_->OnPanesSwapped(*presentation_.split_id, index_a, index_b);
+  }
+  return true;
+}
+
+views::WebView* OpenSplitContainerView::GetWebViewForPane(size_t index) {
+  return index < panes_.size() && panes_[index] ? panes_[index]->web_view()
+                                                : nullptr;
+}
+
+OpenPaneChromeView* OpenSplitContainerView::GetPaneChromeForPane(size_t index) {
+  return index < panes_.size() && panes_[index] ? panes_[index]->chrome()
+                                                : nullptr;
+}
+
+std::optional<ItemID> OpenSplitContainerView::GetTabIdForPane(
+    size_t index) const {
+  if (index >= panes_.size() || !panes_[index]) {
+    return std::nullopt;
+  }
+  return panes_[index]->tab_id();
+}
+
+void OpenSplitContainerView::SetPaneDevToolsOverlay(size_t index,
+                                                    views::View* devtools_view,
+                                                    PaneDevToolsDock dock,
+                                                    float ratio) {
+  if (index < panes_.size() && panes_[index]) {
+    panes_[index]->SetDevToolsOverlay(devtools_view, dock, ratio);
+  }
+}
+
+void OpenSplitContainerView::SetPaneDevToolsOverlay(const ItemID& tab_id,
+                                                    views::View* devtools_view,
+                                                    PaneDevToolsDock dock,
+                                                    float ratio) {
+  if (auto index = FindPaneIndex(tab_id)) {
+    SetPaneDevToolsOverlay(*index, devtools_view, dock, ratio);
+  }
+}
+
+void OpenSplitContainerView::SetPaneDevToolsOverlayOwned(
+    size_t index,
+    std::unique_ptr<views::View> devtools_view,
+    PaneDevToolsDock dock,
+    float ratio) {
+  if (index < panes_.size() && panes_[index]) {
+    panes_[index]->SetDevToolsOverlayOwned(std::move(devtools_view), dock,
+                                           ratio);
+  }
+}
+
+void OpenSplitContainerView::ClearPaneDevToolsOverlay(size_t index) {
+  if (index < panes_.size() && panes_[index]) {
+    panes_[index]->ClearDevToolsOverlay();
+  }
+}
+
+void OpenSplitContainerView::ClearPaneDevToolsOverlay(const ItemID& tab_id) {
+  if (auto index = FindPaneIndex(tab_id)) {
+    ClearPaneDevToolsOverlay(*index);
+  }
+}
+
+views::View* OpenSplitContainerView::GetPaneDevToolsOverlay(
+    size_t index) const {
+  return index < panes_.size() && panes_[index]
+             ? panes_[index]->devtools_overlay()
+             : nullptr;
 }
 
 void OpenSplitContainerView::SetFocusedPane(const ItemID& tab_id) {
@@ -1741,11 +2431,16 @@ std::vector<gfx::Rect> OpenSplitContainerView::GetPaneBounds() const {
 }
 
 void OpenSplitContainerView::Layout(PassKey) {
+  if (drop_overlay_) {
+    drop_overlay_->SetBoundsRect(GetLocalBounds());
+  }
   if (panes_.empty()) {
+    UpdateDropOverlay();
     return;
   }
   if (!drag_current_frames_.empty()) {
     ApplyFrames(drag_current_frames_);
+    UpdateDropOverlay();
     return;
   }
   const bool split = is_split();
@@ -1753,6 +2448,110 @@ void OpenSplitContainerView::Layout(PassKey) {
                                 live_fractions_, panes_.size(),
                                 split ? split_metrics::kGap : 0,
                                 split_metrics::kMinimumPane));
+  UpdateDropOverlay();
+}
+
+bool OpenSplitContainerView::GetDropFormats(
+    int* formats,
+    std::set<ui::ClipboardFormatType>* format_types) {
+  *formats = ui::OSExchangeData::URL;
+  format_types->insert(sidebar_dnd::NodeFormat());
+  return true;
+}
+
+bool OpenSplitContainerView::CanDrop(const ui::OSExchangeData& data) {
+  return data.HasCustomFormat(sidebar_dnd::NodeFormat()) ||
+         data.HasURL(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
+}
+
+void OpenSplitContainerView::OnDragEntered(const ui::DropTargetEvent& event) {
+  dnd_tab_id_ = sidebar_dnd::ReadNode(event.data());
+  dnd_url_ = GURL();
+  if (!dnd_tab_id_) {
+    const std::vector<ui::ClipboardUrlInfo> urls =
+        event.data().GetURLs(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
+    if (!urls.empty()) {
+      dnd_url_ = urls.front().url;
+    }
+  }
+}
+
+int OpenSplitContainerView::OnDragUpdated(const ui::DropTargetEvent& event) {
+  if (!dnd_tab_id_ && !dnd_url_.is_valid()) {
+    OnDragEntered(event);
+  }
+  const SplitDropZone zone =
+      ComputeDropZoneAt(GetLocalBounds(), event.location());
+  const std::optional<size_t> pane_idx =
+      zone == SplitDropZone::kReplacePane ? PaneIndexAtPoint(event.location())
+                                          : std::nullopt;
+  if (delegate_ &&
+      !delegate_->CanDropInSplit(dnd_tab_id_, dnd_url_, zone, pane_idx)) {
+    SetDropZonePreview(std::nullopt);
+    return ui::DragDropTypes::DRAG_NONE;
+  }
+  SetDropZonePreview(zone, pane_idx);
+  return dnd_tab_id_ ? ui::DragDropTypes::DRAG_MOVE
+                     : ui::DragDropTypes::DRAG_COPY |
+                           ui::DragDropTypes::DRAG_LINK;
+}
+
+void OpenSplitContainerView::OnDragExited() {
+  dnd_tab_id_.reset();
+  dnd_url_ = GURL();
+  SetDropZonePreview(std::nullopt);
+}
+
+views::View::DropCallback OpenSplitContainerView::GetDropCallback(
+    const ui::DropTargetEvent& event) {
+  const std::optional<SplitDropZone> zone = drop_zone_preview_;
+  const std::optional<size_t> target_pane = drop_target_pane_index_;
+  std::optional<ItemID> tab_id = dnd_tab_id_;
+  GURL url = dnd_url_;
+  OnDragExited();
+  if (!zone || !delegate_) {
+    return base::NullCallback();
+  }
+  return base::BindOnce(&OpenSplitContainerView::PerformDrop,
+                        weak_factory_.GetWeakPtr(), std::move(tab_id),
+                        std::move(url), *zone, target_pane);
+}
+
+void OpenSplitContainerView::PerformDrop(
+    std::optional<ItemID> dragged_tab_id,
+    GURL dragged_url,
+    SplitDropZone zone,
+    std::optional<size_t> target_pane_index,
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+  const bool accepted =
+      delegate_ && delegate_->OnDropInSplit(dragged_tab_id, dragged_url, zone,
+                                            target_pane_index);
+  if (!accepted) {
+    output_drag_op = ui::mojom::DragOperation::kNone;
+    return;
+  }
+  output_drag_op = dragged_tab_id ? ui::mojom::DragOperation::kMove
+                                  : ui::mojom::DragOperation::kCopy;
+}
+
+void OpenSplitContainerView::UpdateDropOverlay() {
+  if (!drop_overlay_) {
+    return;
+  }
+  if (!drop_zone_preview_) {
+    drop_overlay_->SetPreview(std::nullopt, gfx::Rect(),
+                              presentation_.focus_ring_color);
+    return;
+  }
+  const SkColor accent =
+      drop_overlay_accent_.value_or(presentation_.focus_ring_color);
+  const gfx::Rect preview =
+      ComputeDropPreviewRect(GetLocalBounds(), GetPaneBounds(),
+                             *drop_zone_preview_, drop_target_pane_index_);
+  drop_overlay_->SetPreview(drop_zone_preview_, preview, accent);
+  ReorderChildView(drop_overlay_, children().size() - 1);
 }
 
 void OpenSplitContainerView::ApplyFrames(const std::vector<gfx::Rect>& frames) {
@@ -1798,6 +2597,26 @@ split_internal::SplitPaneView* OpenSplitContainerView::FindPane(
     }
   }
   return nullptr;
+}
+
+std::optional<size_t> OpenSplitContainerView::FindPaneIndex(
+    const ItemID& tab_id) const {
+  for (size_t i = 0; i < panes_.size(); ++i) {
+    if (panes_[i] && panes_[i]->tab_id() == tab_id) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<size_t> OpenSplitContainerView::PaneIndexAtPoint(
+    const gfx::Point& point) const {
+  for (size_t i = 0; i < panes_.size(); ++i) {
+    if (panes_[i] && panes_[i]->bounds().Contains(point)) {
+      return i;
+    }
+  }
+  return std::nullopt;
 }
 
 void OpenSplitContainerView::BeginDividerDrag(size_t pair_index) {
@@ -1915,6 +2734,33 @@ void OpenSplitContainerView::OnPaneFocused(const ItemID& tab_id) {
   SetFocusedPane(tab_id);
   if (changed && delegate_) {
     delegate_->OnPaneFocusRequested(presentation_.split_id, tab_id);
+  }
+}
+
+void OpenSplitContainerView::OnEmptyPaneOpenCommandBar(const ItemID& tab_id) {
+  OnPaneFocused(tab_id);
+  if (delegate_) {
+    delegate_->OnEmptyPaneOpenCommandBar(presentation_.split_id, tab_id);
+  }
+}
+
+void OpenSplitContainerView::OnPaneChromeDragSwap(
+    const ItemID& source_tab_id,
+    const gfx::Point& point_in_container,
+    bool finished) {
+  const std::optional<size_t> source_idx = FindPaneIndex(source_tab_id);
+  const std::optional<size_t> target_idx = PaneIndexAtPoint(point_in_container);
+  if (!finished) {
+    if (source_idx && target_idx && *source_idx != *target_idx) {
+      SetDropZonePreview(SplitDropZone::kReplacePane, *target_idx);
+    } else {
+      SetDropZonePreview(std::nullopt);
+    }
+    return;
+  }
+  SetDropZonePreview(std::nullopt);
+  if (source_idx && target_idx && *source_idx != *target_idx) {
+    SwapPanes(*source_idx, *target_idx);
   }
 }
 

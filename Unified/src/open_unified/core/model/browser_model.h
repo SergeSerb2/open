@@ -94,7 +94,18 @@ class BrowserModel {
   // --- State Accessors ---
   const std::vector<Profile>& profiles() const { return profiles_; }
   const std::vector<Space>& spaces() const { return spaces_; }
+  // Persistent (non-incognito) windows serialized to browser.json.
   const std::vector<BrowserWindowState>& windows() const { return windows_; }
+  // Ephemeral in-memory Incognito windows and spaces (never persisted).
+  const std::vector<BrowserWindowState>& incognito_windows() const {
+    return incognito_windows_;
+  }
+  const std::vector<Space>& incognito_spaces() const {
+    return incognito_spaces_;
+  }
+  const std::optional<BrowserWindowState>& last_closed_window() const {
+    return last_closed_window_;
+  }
   const std::vector<RoutingRule>& routing_rules() const {
     return routing_rules_;
   }
@@ -140,6 +151,9 @@ class BrowserModel {
 
   bool IsPinned(const ItemID& tab_id) const;
   bool IsFavorite(const ItemID& tab_id) const;
+  bool IsIncognitoWindow(const WindowID& window_id) const;
+  bool IsIncognitoSpace(const SpaceID& space_id) const;
+  bool IsIncognitoNode(const ItemID& id) const;
   bool IsSelectable(const ItemID& id, const SpaceID& space_id) const;
   std::optional<ItemID> SelectedNodeId(const SpaceID& space_id,
                                        const WindowID& window_id) const;
@@ -225,11 +239,14 @@ class BrowserModel {
       std::optional<SpaceTheme> theme = std::nullopt,
       std::optional<ProfileID> profile_id = std::nullopt);
   bool DeleteSpace(const SpaceID& space_id, bool archive_tabs = true);
+  bool ReorderSpaces(const std::vector<SpaceID>& ordered_ids);
   bool MoveSpaceToProfile(const SpaceID& space_id,
                           const ProfileID& profile_id);
   size_t ClearToday(const SpaceID& space_id,
                     const std::set<ItemID>& keeping = {});
-  size_t ArchiveExpiredTabs(TimestampSec now);
+  size_t ArchiveExpiredTabs(TimestampSec now,
+                            std::vector<ItemID>* archived_tab_ids_out = nullptr);
+  std::optional<TimestampSec> NextAutoArchiveExpiry(TimestampSec now) const;
 
   // --- Focus & Selection ---
   bool FocusSpace(const WindowID& window_id, const SpaceID& space_id);
@@ -250,8 +267,25 @@ class BrowserModel {
 
   // --- Window Mutations ---
   WindowID CreateWindow(const SpaceID& focused_space_id,
-                        WindowStyle style = WindowStyle::kStandard);
+                        WindowStyle style = WindowStyle::kStandard,
+                        bool register_undo = true);
+  // Creates an ephemeral in-memory Incognito window + private Incognito Space
+  // scoped to |parent_profile_id|. Never persisted to browser.json or undo.
+  WindowID CreateIncognitoWindow(const ProfileID& parent_profile_id);
+  // Restores the most recently closed normal window (e.g., on Dock reopen).
+  WindowID RestoreLastClosedWindow();
+  // Replaces persisted windows with one clean standard window for startup when
+  // general.restoreWindows is disabled.
+  void ResetWindowsForCleanLaunch(
+      const SpaceID& focused_space_id,
+      const std::map<SpaceID, ItemID>& selected_nodes = {});
   bool CloseWindow(const WindowID& window_id);
+  bool SetWindowFrame(const WindowID& window_id,
+                      double x,
+                      double y,
+                      double width,
+                      double height);
+  bool TouchWindowFocus(const WindowID& window_id);
   bool SetSidebarWidth(const WindowID& window_id, double width);
   bool SetSidebarMode(const WindowID& window_id,
                       SidebarMode mode,
@@ -378,6 +412,9 @@ class BrowserModel {
   std::vector<Profile> profiles_;
   std::vector<Space> spaces_;
   std::vector<BrowserWindowState> windows_;
+  std::vector<Space> incognito_spaces_;
+  std::vector<BrowserWindowState> incognito_windows_;
+  std::optional<BrowserWindowState> last_closed_window_;
   std::vector<RoutingRule> routing_rules_;
   RoutingDestination default_destination_{
       RoutingDestinationKind::kLittleOpen, std::nullopt, std::nullopt};
@@ -388,8 +425,10 @@ class BrowserModel {
   std::unordered_map<ItemID, NodeIndexEntry> index_;
   std::unordered_map<ItemID, NodeParent> parent_by_id_;
   std::unordered_map<SpaceID, size_t> space_index_by_id_;
+  std::unordered_map<SpaceID, size_t> incognito_space_index_by_id_;
   std::unordered_map<ProfileID, size_t> profile_index_by_id_;
   std::unordered_map<WindowID, size_t> window_index_by_id_;
+  std::unordered_map<WindowID, size_t> incognito_window_index_by_id_;
   std::unordered_set<std::string> unavailable_profile_dirs_;
 
   std::vector<Observer*> observers_;

@@ -4,12 +4,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "cc/paint/color_filter.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "open_unified/ui/design/open_typography.h"
+#include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "third_party/skia/include/core/SkRRect.h"
@@ -112,6 +115,161 @@ void DrawSpeakerBody(gfx::Canvas* canvas, const cc::PaintFlags& flags) {
 
 }  // namespace
 
+std::optional<SymbolSpec> SystemSymbolFor(Glyph glyph) {
+  using W = SymbolWeight;
+  // Icons.swift Glyph.spec: symbol, point size, weight.
+  switch (glyph) {
+    case Glyph::kSidebarToggle:
+      return SymbolSpec{"sidebar.left", 16, W::kMedium};
+    case Glyph::kBack:
+      return SymbolSpec{"arrow.left", 16, W::kRegular};
+    case Glyph::kForward:
+      return SymbolSpec{"arrow.right", 16, W::kRegular};
+    case Glyph::kReload:
+      return SymbolSpec{"arrow.clockwise", 16, W::kRegular};
+    case Glyph::kStop:
+      return SymbolSpec{"xmark", 13, W::kRegular};
+    case Glyph::kMore:
+      return SymbolSpec{"ellipsis", 13, W::kBold};
+    case Glyph::kMagnifier:
+      return SymbolSpec{"magnifyingglass", 12.5f, W::kRegular};
+    case Glyph::kLink:
+      return SymbolSpec{"link", 14, W::kMedium};
+    case Glyph::kSiteControls:
+      return SymbolSpec{"slider.horizontal.2.square", 18, W::kRegular};
+    case Glyph::kPlus:
+      return SymbolSpec{"plus", 13.5f, W::kMedium};
+    case Glyph::kBottomPlus:
+      return SymbolSpec{"plus", 17, W::kMedium};
+    case Glyph::kClose:
+      return SymbolSpec{"xmark", 13, W::kSemibold};
+    case Glyph::kMinus:
+      return SymbolSpec{"minus", 17, W::kSemibold};
+    case Glyph::kChevronDown:
+      return SymbolSpec{"chevron.down", 12, W::kBold};
+    case Glyph::kChevronRight:
+      return SymbolSpec{"chevron.right", 12, W::kBold};
+    case Glyph::kArrowDown:
+      return SymbolSpec{"arrow.down", 9, W::kSemibold};
+    case Glyph::kSpeaker:
+      return SymbolSpec{"speaker.wave.3", 14, W::kRegular};
+    case Glyph::kSpeakerMuted:
+      return SymbolSpec{"speaker.slash", 15.5f, W::kRegular};
+    case Glyph::kPuzzle:
+      return SymbolSpec{"puzzlepiece.extension", 16, W::kRegular};
+    case Glyph::kEyeglasses:
+      return SymbolSpec{"eyeglasses", 14, W::kMedium};
+    // Open's own vectors (CustomIcon): no system symbol.
+    case Glyph::kLibrary:
+    case Glyph::kFolderClosed:
+    case Glyph::kFolderOpen:
+    case Glyph::kPlanet:
+    case Glyph::kWindowClose:
+    case Glyph::kWindowMinimize:
+    case Glyph::kWindowZoom:
+      return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+std::string_view NamedSpaceIconSymbol(std::string_view name) {
+  // NamedSpaceIcons.symbols (Open's identifier -> SF Symbol map).
+  static constexpr std::pair<std::string_view, std::string_view> kMap[] = {
+      {"star", "star"},
+      {"bookmark", "bookmark"},
+      {"heart", "heart"},
+      {"flag", "flag"},
+      {"flash", "bolt"},
+      {"triangle", "triangle"},
+      {"medical", "cross.case"},
+      {"notifications", "bell"},
+      {"bulb", "lightbulb"},
+      {"shapes", "square.on.circle"},
+      {"grid", "square.grid.2x2"},
+      {"apps", "square.grid.3x3"},
+      {"layers", "square.3.layers.3d"},
+      {"server", "server.rack"},
+      {"albums", "square.stack"},
+      {"copy", "doc.on.doc"},
+      {"folder", "folder"},
+      {"fileTrayFull", "tray.full"},
+      {"calendar", "calendar"},
+      {"mail", "envelope"},
+      {"checkbox", "checkmark.square"},
+      {"document", "doc"},
+      {"book", "book"},
+      {"chatBubbleEllipses", "ellipsis.bubble"},
+      {"people", "person.2"},
+      {"terminal", "terminal"},
+      {"construction", "hammer"},
+      {"square", "square"},
+      {"ellipse", "circle"},
+      {"moon", "moon"},
+      {"sunny", "sun.max"},
+      {"planet", "globe.americas"},
+      {"leaf", "leaf"},
+      {"cloud", "cloud.fill"},
+      {"gift", "gift"},
+      {"restaurant", "fork.knife"},
+      {"barbell", "dumbbell"},
+      {"airplane", "airplane"},
+      {"musicalNote", "music.note"},
+      {"colorPallete", "paintpalette"},
+      {"video", "video"},
+      {"bandage", "bandage"},
+      {"code", "chevron.left.forwardslash.chevron.right"},
+      {"baseball", "baseball"},
+      {"cloudOutline", "cloud"},
+      {"bonfire", "flame"},
+      {"pizza", "fork.knife.circle"},
+      {"skull", "exclamationmark.triangle"},
+      {"receipt", "receipt"},
+      {"thumbsUp", "hand.thumbsup"},
+      {"train", "tram"},
+      {"github", "chevron.left.forwardslash.chevron.right"},
+      {"linear", "line.3.horizontal"},
+      {"figma", "square.stack.3d.up"},
+      {"search", "magnifyingglass"},
+  };
+  for (const auto& [key, symbol] : kMap) {
+    if (key == name) {
+      return symbol;
+    }
+  }
+  return "circle.dotted";
+}
+
+#if !BUILDFLAG(IS_MAC)
+gfx::ImageSkia SystemSymbolImage(std::string_view, float, SymbolWeight) {
+  return gfx::ImageSkia();
+}
+#endif
+
+bool DrawSystemSymbol(gfx::Canvas* canvas,
+                      std::string_view name,
+                      float point_size,
+                      SymbolWeight weight,
+                      const gfx::RectF& bounds,
+                      SkColor color,
+                      gfx::Vector2dF offset) {
+  const gfx::ImageSkia image = SystemSymbolImage(name, point_size, weight);
+  if (image.isNull()) {
+    return false;
+  }
+  // Pixel-aligned at the symbol's own size, centered like drawTinted.
+  const float x = bounds.x() + (bounds.width() - image.width()) / 2 + offset.x();
+  const float y =
+      bounds.y() + (bounds.height() - image.height()) / 2 + offset.y();
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  // Template ink: keep its coverage, take the tint's color and alpha.
+  flags.setColorFilter(cc::ColorFilter::MakeBlend(SkColor4f::FromColor(color),
+                                                  SkBlendMode::kSrcIn));
+  canvas->DrawImageInt(image, static_cast<int>(std::lround(x)),
+                       static_cast<int>(std::lround(y)), flags);
+  return true;
+}
+
 gfx::SizeF InkSize(Glyph glyph) {
   switch (glyph) {
     case Glyph::kSidebarToggle:
@@ -162,6 +320,8 @@ gfx::SizeF InkSize(Glyph glyph) {
       return {6, 6};
     case Glyph::kPuzzle:
       return {14, 14};
+    case Glyph::kEyeglasses:
+      return {18, 8};
   }
   return {12, 12};
 }
@@ -171,6 +331,14 @@ void Draw(gfx::Canvas* canvas,
           const gfx::RectF& bounds,
           SkColor color,
           gfx::Vector2dF offset) {
+#if BUILDFLAG(IS_MAC)
+  if (const std::optional<SymbolSpec> spec = SystemSymbolFor(glyph)) {
+    if (DrawSystemSymbol(canvas, spec->name, spec->point_size, spec->weight,
+                         bounds, color, offset)) {
+      return;
+    }
+  }
+#endif
   const gfx::SizeF ink = InkSize(glyph);
   const float ox = bounds.x() + (bounds.width() - ink.width()) / 2 + offset.x();
   const float oy =
@@ -332,13 +500,16 @@ void Draw(gfx::Canvas* canvas,
       break;
     }
     case Glyph::kPlanet: {
-      const cc::PaintFlags pen = Stroke(color, 1.3f);
-      Circle(canvas, 7.0f, 7.0f, 4.4f, pen);
+      // Open's default Space mark (CustomIcon.planet): a filled sphere,
+      // 0.66 of the box, with a ring tilted -18 degrees.
+      const float w = 14.0f, h = 14.0f;
+      Circle(canvas, w / 2, h / 2, w * 0.33f, Fill(color));
       canvas->sk_canvas()->save();
-      canvas->sk_canvas()->translate(7.0f, 7.0f);
-      canvas->sk_canvas()->rotate(-20.0f);
-      canvas->sk_canvas()->drawOval(SkRect::MakeLTRB(-6.6f, -2.0f, 6.6f, 2.0f),
-                                    pen);
+      canvas->sk_canvas()->translate(w / 2, h / 2);
+      canvas->sk_canvas()->rotate(-18.0f);
+      canvas->sk_canvas()->drawOval(
+          SkRect::MakeXYWH(-w * 0.58f, -h * 0.16f, w * 1.16f, h * 0.32f),
+          Stroke(color, std::max(1.0f, w * 0.07f)));
       canvas->sk_canvas()->restore();
       break;
     }
@@ -355,6 +526,16 @@ void Draw(gfx::Canvas* canvas,
       const cc::PaintFlags pen = Stroke(color, 1.1f);
       Line(canvas, 3.0f, 0.4f, 3.0f, 5.6f, pen);
       Line(canvas, 0.4f, 3.0f, 5.6f, 3.0f, pen);
+      break;
+    }
+    case Glyph::kEyeglasses: {
+      // Two round lenses and a bridge (Open's own vector).
+      const cc::PaintFlags pen = Stroke(color, 1.4f);
+      Circle(canvas, 4.2f, 4.4f, 3.3f, pen);
+      Circle(canvas, 13.8f, 4.4f, 3.3f, pen);
+      Arc(canvas, 9.0f, 4.6f, 1.6f, 200.0f, 140.0f, pen);
+      Line(canvas, 0.9f, 3.4f, 0.3f, 1.6f, pen);
+      Line(canvas, 17.1f, 3.4f, 17.7f, 1.6f, pen);
       break;
     }
     case Glyph::kPuzzle: {
@@ -429,19 +610,28 @@ void DrawSpaceIcon(gfx::Canvas* canvas,
     canvas->DrawStringRectWithFlags(base::UTF8ToUTF16(icon->value), emoji_font,
                                     tint, gfx::ToEnclosingRect(r),
                                     gfx::Canvas::TEXT_ALIGN_CENTER);
-  } else if (!icon || icon->kind == SpaceIconKind::kNamed) {
-    if (!icon && !title.empty()) {
-      const std::u16string letter(title.substr(0, 1));
-      canvas->DrawStringRectWithFlags(
-          letter, typography::Make(12, gfx::Font::Weight::SEMIBOLD), tint,
-          gfx::ToEnclosingRect(box), gfx::Canvas::TEXT_ALIGN_CENTER);
-    } else {
-      Draw(canvas, Glyph::kPlanet, box, tint);
+  } else if (icon && !icon->value.empty() &&
+             (icon->kind == SpaceIconKind::kSymbol ||
+              icon->kind == SpaceIconKind::kNamed)) {
+    const std::string_view symbol = icon->kind == SpaceIconKind::kSymbol
+                                        ? std::string_view(icon->value)
+                                        : NamedSpaceIconSymbol(icon->value);
+    // NodeIconRenderer: point size = ink height - 3, Medium, where the ink
+    // is about 0.62 of the icon box (16 pt in the 26 pt header frame). An
+    // unknown symbol falls back to circle.dotted, then (no system symbols)
+    // to the planet mark.
+    const float point_size = std::clamp(
+        std::min(box.width(), box.height()) * 0.62f, 9.0f, 16.0f);
+    if (!DrawSystemSymbol(canvas, symbol, point_size, SymbolWeight::kMedium,
+                          box, tint) &&
+        !DrawSystemSymbol(canvas, "circle.dotted", point_size,
+                          SymbolWeight::kMedium, box, tint)) {
+      Draw(canvas, symbol == "eyeglasses" ? Glyph::kEyeglasses : Glyph::kPlanet,
+           box, tint);
     }
   } else {
-    // SF Symbol names are not portable: a neutral dot.
-    const float r = std::min(box.width(), box.height()) * 0.18f;
-    Circle(canvas, box.CenterPoint().x(), box.CenterPoint().y(), r, Fill(tint));
+    // No icon set: Open's planet mark, never a letter.
+    Draw(canvas, Glyph::kPlanet, box, tint);
   }
   if (needs_layer) {
     sk->restore();

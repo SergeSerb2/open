@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "content/public/browser/devtools_agent_host_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "open_unified/core/model/browser_model.h"
 #include "open_unified/core/model/open_types.h"
@@ -85,7 +86,8 @@ class OpenTabHandle : public content::WebContentsUserData<OpenTabHandle> {
 // chrome.tabs.remove), follows replacements and activations.
 class OpenTabBridge : public BrowserModel::Observer,
                       public TabStripModelObserver,
-                      public BrowserCollectionObserver {
+                      public BrowserCollectionObserver,
+                      public content::DevToolsAgentHostObserver {
  public:
   class Observer : public base::CheckedObserver {
    public:
@@ -119,10 +121,19 @@ class OpenTabBridge : public BrowserModel::Observer,
 
   // New Today tab at the top of the focused Space (Arc placement).
   ItemID OpenTab(const GURL& url, bool background);
+  // Per-window overload: opens the tab in |window_id|'s focused Space.
+  ItemID OpenTab(const GURL& url, bool background, const WindowID& window_id);
+  // Opens a tab directly in |space_id|, targeting |window_id| when given.
+  ItemID OpenTabInSpace(const GURL& url,
+                        const SpaceID& space_id,
+                        bool background,
+                        const std::optional<WindowID>& window_id = std::nullopt);
   // Selects a sidebar node (tab, split, or folder's peeked child) in the
-  // main window; loads it when needed.
+  // active/specified window; loads it when needed.
   bool SelectNode(const ItemID& node_id);
+  bool SelectNode(const ItemID& node_id, const WindowID& window_id);
   bool SelectIndex(size_t index);  // focused Space's OrderedTabIds()
+  bool SelectIndex(size_t index, const WindowID& window_id);
   // Cmd-W semantics: Today tabs archive; pinned/favorites unload and reset.
   bool CloseNode(const ItemID& node_id);
   bool TogglePin(const ItemID& tab_id);
@@ -132,21 +143,66 @@ class OpenTabBridge : public BrowserModel::Observer,
   bool Navigate(const ItemID& tab_id, const GURL& url);
   bool GoBack(const ItemID& tab_id);
   bool FocusSpace(const SpaceID& space_id);
+  bool FocusSpace(const SpaceID& space_id, const WindowID& window_id);
+
+  // Opens a new normal or Incognito OS window with its own distinct WindowID.
+  WindowID OpenNewWindow(
+      const std::optional<SpaceID>& space_id = std::nullopt);
+  WindowID OpenNewIncognitoWindow(
+      const std::optional<ProfileID>& parent_profile_id = std::nullopt,
+      const std::optional<GURL>& initial_url = std::nullopt);
+
+  // Transfers an already-live WebContents (e.g., from Peek Expand / Open in
+  // Split or Little Open "Open in Space") into a sidebar Today tab without
+  // reloading, preserving scroll position, POST results, and form state.
+  ItemID AdoptLiveWebContentsAsTab(
+      std::unique_ptr<content::WebContents> contents,
+      const SpaceID& space_id,
+      bool background = false,
+      const std::optional<WindowID>& window_id = std::nullopt,
+      std::optional<size_t> position = size_t{0});
+
+  // Detaches a live tab's WebContents from its TabStripModel without
+  // destroying it so it can be moved into another host (window/Peek/Split).
+  std::unique_ptr<content::WebContents> DetachWebContentsForTransfer(
+      const ItemID& tab_id,
+      bool remove_from_model = false);
 
   // Loads |tab_id| (creates its WebContents) without selecting it.
   content::WebContents* EnsureLoaded(const ItemID& tab_id);
+  content::WebContents* EnsureLoaded(const ItemID& tab_id,
+                                     const WindowID& preferred_window_id);
   // Drops the WebContents of |tab_id| (the tab stays in the sidebar as a
   // placeholder). Used by sleep (after capture) and pinned-tab close.
   void UnloadTab(const ItemID& tab_id);
+
+  // Closes all Chromium windows/tabs belonging to |profile_id| (including its
+  // OTR Incognito windows). Used during crash-safe profile deletion.
+  void CloseBrowsersForProfile(const ProfileID& profile_id);
+
+  // Refreshes media capture, DevTools, notifications, and unload-handler
+  // protection flags on all loaded tabs for OpenSleepController.
+  void RefreshProtectionStates();
+  void UpdateTabProtectionState(const ItemID& tab_id,
+                                content::WebContents* contents);
 
   // --- Lookups ---
   content::WebContents* WebContentsForTab(const ItemID& tab_id) const;
   static std::optional<ItemID> TabIdForWebContents(
       content::WebContents* contents);
   content::WebContents* ActiveWebContents() const;
+  content::WebContents* ActiveWebContentsForWindow(
+      const WindowID& window_id) const;
   std::optional<ItemID> ActiveTabId() const;
+  std::optional<ItemID> ActiveTabIdForWindow(const WindowID& window_id) const;
+  // Per-window Incognito check (inspects |window_id|'s own browser/model,
+  // never MainBrowser()).
+  bool IsIncognitoWindow(const WindowID& window_id) const;
+  // Currently active OS window, falling back to service_->MainWindowId().
+  WindowID FocusedWindowId() const;
   // The visible Browser of the main window (null before Start()).
   BrowserWindowInterface* MainBrowser() const;
+  BrowserWindowInterface* BrowserForWindow(const WindowID& window_id) const;
   BrowserWindowInterface* BrowserForTab(const ItemID& tab_id) const;
   // The Open window a Chromium Browser shows (null for Browsers Open does
   // not manage: popups, DevTools, app windows).
@@ -164,6 +220,10 @@ class OpenTabBridge : public BrowserModel::Observer,
                                  bool typed);
   void OnTabDocumentAvailable(const ItemID& tab_id,
                               content::WebContents* contents);
+  void OnTabVisibilityChanged(const ItemID& tab_id,
+                              content::WebContents* contents,
+                              bool visible);
+  void OnTabFormInteraction(const ItemID& tab_id);
 
   // BrowserModel::Observer:
   void OnTreeChanged(const TreeChange& change) override;
@@ -178,6 +238,15 @@ class OpenTabBridge : public BrowserModel::Observer,
   // BrowserCollectionObserver:
   void OnBrowserCreated(BrowserWindowInterface* browser) override;
   void OnBrowserClosed(BrowserWindowInterface* browser) override;
+
+  // content::DevToolsAgentHostObserver:
+  void DevToolsAgentHostAttached(
+      content::DevToolsAgentHost* agent_host) override;
+  void DevToolsAgentHostDetached(
+      content::DevToolsAgentHost* agent_host) override;
+
+  // Called by internal MediaStreamCaptureIndicator observer helper.
+  void OnMediaCaptureChanged(content::WebContents* web_contents);
 
  private:
   struct WindowBrowsers {
@@ -196,10 +265,11 @@ class OpenTabBridge : public BrowserModel::Observer,
     WindowID window;
     ProfileID profile;
     bool primary = false;
+    bool incognito = false;
   };
 
   BrowserWindowInterface* EnsureBrowser(const WindowID& window_id,
-                         const ProfileID& profile_id);
+                                        const ProfileID& profile_id);
   void AdoptStartupBrowsers();
   void ShowBrowserForSpace(const WindowID& window_id, const SpaceID& space_id);
   void ApplySelectionFromModel(const WindowID& window_id);
@@ -211,14 +281,18 @@ class OpenTabBridge : public BrowserModel::Observer,
   // ResyncBrowser() on a later task, if |browser| is still managed then
   // (looked up again: never a dangling pointer).
   void ResyncBrowserLater(BrowserWindowInterface* browser);
+  void ScrubNewTabPagesLater(BrowserWindowInterface* browser);
   void TrackBrowser(BrowserWindowInterface* browser,
                     const WindowID& window_id,
                     const ProfileID& profile_id,
-                    bool primary);
+                    bool primary,
+                    bool incognito = false);
   // Tracking only (map, observers); no model change. Runs for every
   // removal, including the bridge's own (|applying_|).
   void ForgetContents(const ItemID& tab_id, content::WebContents* contents);
-  // Ordered tab ids of every Space of |profile_id| (Spaces in model order).
+  // Ordered tab ids of every Space of |profile_id| (Spaces in model order),
+  // or the single private Space for an Incognito browser.
+  std::vector<ItemID> StripOrderFor(BrowserWindowInterface* browser) const;
   std::vector<ItemID> StripOrderFor(const ProfileID& profile_id) const;
   int TargetStripIndex(BrowserWindowInterface* browser,
                        const ItemID& tab_id) const;
@@ -234,12 +308,17 @@ class OpenTabBridge : public BrowserModel::Observer,
                         content::WebContents* contents,
                         int index);
   void OnChromiumClosedTab(content::WebContents* contents);
+  class MediaCaptureObserver;
+
   void PushLiveState(const ItemID& tab_id, content::WebContents* contents);
   std::optional<WindowID> WindowOfBrowser(
       BrowserWindowInterface* browser) const;
   std::optional<ProfileID> ProfileOfBrowser(
       BrowserWindowInterface* browser) const;
+  WindowID ResolveTargetWindowForTab(const ItemID& tab_id,
+                                     const WindowID& preferred) const;
   void EnsureNonEmpty(BrowserWindowInterface* browser);
+  void EnsureEmptyStatePresent(BrowserWindowInterface* browser);
 
   raw_ptr<OpenBrowserService> service_;
   bool started_ = false;
@@ -260,6 +339,7 @@ class OpenTabBridge : public BrowserModel::Observer,
   std::set<raw_ptr<TabStripModel>> observed_strips_;
   base::ScopedObservation<BrowserCollection, BrowserCollectionObserver>
       browser_collection_observation_{this};
+  std::unique_ptr<MediaCaptureObserver> media_capture_observer_;
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<OpenTabBridge> weak_factory_{this};
 };

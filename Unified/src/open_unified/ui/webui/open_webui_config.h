@@ -5,15 +5,20 @@
 #ifndef OPEN_UNIFIED_UI_WEBUI_OPEN_WEBUI_CONFIG_H_
 #define OPEN_UNIFIED_UI_WEBUI_OPEN_WEBUI_CONFIG_H_
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include "base/barrier_callback.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/expected.h"
 #include "base/values.h"
@@ -52,11 +57,83 @@ std::string InternalHost(std::string_view host);
 // The seven hosts of open_ipc_contract.h.
 const std::vector<std::string_view>& OpenHosts();
 
+// open://easel/asset/<doc_id>/<asset_id> and open://note/asset/<doc_id>/
+// <asset_id>: a document's image, from the Profile's DocumentStore
+// (Easels/<id>/images/, Notes/<id>.assets/) or <profile_dir>/documents/
+// assets/<doc_id>/<asset_id>. Ids are validated (no separators, no "..");
+// only png, jpeg, webp, gif and svg are served.
+bool IsDocumentAssetPath(std::string_view path);
+// "image/png" etc. for an asset filename; empty for any other type.
+std::string_view DocumentAssetMimeType(std::string_view filename);
+
 // Hook 0005 entry points.
 void RegisterOpenWebUIConfigs();
 void AddOpenURLHandlers(content::BrowserURLHandler* handler);
 
 class OpenWebUIMessageHandler;
+
+// --- All Profiles ------------------------------------------------------------
+//
+// Library pages send profile_id "all" for the merged view of every Profile
+// (History, Archive, Downloads, Media, Boosts, Easels and Notes). Each row a
+// domain returns then carries its own "profile_id", and row actions send that
+// id back.
+inline constexpr char kAllProfilesId[] = "all";
+
+// Runs |task| against the |member| store of every Profile in |profiles| (on
+// each store's sequence) and |done| on the calling sequence with one
+// (ProfileID, Result) pair per Profile that has services, in |profiles|
+// order. |done| always runs, also for an empty list.
+template <typename Store, typename Result>
+void RunOnProfileStores(
+    const std::vector<ProfileID>& profiles,
+    base::SequenceBound<Store> ProfileServices::* member,
+    base::RepeatingCallback<Result(Store*)> task,
+    base::OnceCallback<void(std::vector<std::pair<ProfileID, Result>>)> done) {
+  using Pair = std::pair<ProfileID, Result>;
+  OpenBrowserService* service = OpenBrowserService::Get();
+  std::vector<ProfileServices*> targets;
+  for (const ProfileID& id : profiles) {
+    if (ProfileServices* ps = service ? service->ProfileServicesFor(id)
+                                      : nullptr) {
+      targets.push_back(ps);
+    }
+  }
+  // Completion order is arbitrary; restore |profiles| order for stable merges.
+  auto ordered = base::BindOnce(
+      [](std::vector<ProfileID> order,
+         base::OnceCallback<void(std::vector<Pair>)> done,
+         std::vector<Pair> results) {
+        std::stable_sort(results.begin(), results.end(),
+                         [&order](const Pair& a, const Pair& b) {
+                           return std::find(order.begin(), order.end(),
+                                            a.first) <
+                                  std::find(order.begin(), order.end(),
+                                            b.first);
+                         });
+        std::move(done).Run(std::move(results));
+      },
+      profiles, std::move(done));
+  if (targets.empty()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(ordered), std::vector<Pair>()));
+    return;
+  }
+  auto barrier = base::BarrierCallback<Pair>(targets.size(), std::move(ordered));
+  for (ProfileServices* ps : targets) {
+    RunOnStore(ps->*member,
+               base::BindOnce(
+                   [](base::RepeatingCallback<Result(Store*)> task,
+                      Store* store) { return task.Run(store); },
+                   task),
+               base::BindOnce(
+                   [](ProfileID id, base::RepeatingCallback<void(Pair)> barrier,
+                      Result result) {
+                     barrier.Run(Pair(std::move(id), std::move(result)));
+                   },
+                   ps->id, barrier));
+  }
+}
 
 // --- RPC domains -------------------------------------------------------------
 //
@@ -90,7 +167,15 @@ class OpenRpcDomain {
   // The Open Profile of this page's Chromium Profile.
   ProfileID profile_id() const;
   // |payload|'s "profile_id" when present and known, else profile_id().
+  // "all" also maps to profile_id(); domains that can merge Profiles check
+  // WantsAllProfiles() / ProfilesFromPayload() first.
   ProfileID ProfileFromPayload(const base::DictValue& payload) const;
+  // True when |payload|'s "profile_id" is kAllProfilesId.
+  bool WantsAllProfiles(const base::DictValue& payload) const;
+  // Every Open Profile (model order) for "all", else the one Profile of
+  // ProfileFromPayload(). Never empty while the service runs.
+  std::vector<ProfileID> ProfilesFromPayload(
+      const base::DictValue& payload) const;
   content::WebUI* web_ui() const;
 
   static void ReplyOk(Reply reply, base::Value value);

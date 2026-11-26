@@ -30,16 +30,19 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "open_unified/core/model/open_types.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/font.h"
@@ -52,6 +55,9 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
+#include "url/gurl.h"
 
 namespace content {
 class WebContents;
@@ -60,6 +66,13 @@ class WebContents;
 namespace gfx {
 class Canvas;
 }  // namespace gfx
+
+namespace ui {
+class ClipboardFormatType;
+class DropTargetEvent;
+class LayerTreeOwner;
+class OSExchangeData;
+}  // namespace ui
 
 namespace views {
 class MenuRunner;
@@ -206,6 +219,9 @@ enum class Glyph {
   kCheck,
   kEquals,
   kBolt,
+  kStar,
+  kDownload,
+  kStack,
 };
 // `stroke_width` 0 picks a width from the glyph size (about 1/11 of it,
 // clamped to 1.2..2 pt).
@@ -240,6 +256,9 @@ class GlyphButton : public views::Button {
   void SetGlyphColor(SkColor color);
   void SetGlyphSize(float size);
   void SetGlyphOffset(const gfx::Vector2dF& offset);
+  // Optional macOS SF Symbol name rendered via open_unified::glyphs on macOS,
+  // falling back automatically to `glyph_` on Windows/Linux.
+  void SetSystemSymbol(std::string symbol_name, float point_size = 0.f);
   void SetPlate(Plate plate, SkColor fill, float radius);
   void SetHoverFill(SkColor fill);
   // Disabled glyphs draw at alpha 0.24 (PaneChromeView.ActionButton).
@@ -250,6 +269,8 @@ class GlyphButton : public views::Button {
 
  private:
   Glyph glyph_;
+  std::string system_symbol_name_;
+  float system_symbol_point_size_ = 0.f;
   SkColor glyph_color_ = SkColorSetA(SK_ColorBLACK, 0x8C);
   float glyph_size_ = 16.f;
   gfx::Vector2dF glyph_offset_;
@@ -290,7 +311,16 @@ class PaintedButton : public views::Button {
 // widget of `parent`. Bounds are in the parent widget's client coordinates.
 // The contents view's insets (an EmptyBorder) are treated as shadow margin:
 // the inset rect, not the widget, is aligned to the anchor.
-class OverlayWidgetHost : public views::ViewObserver {
+//
+// Focus: an activatable overlay (Command Bar, Find bar, Peek, Boost and
+// Space editors) takes key focus when shown, and holds
+// `parent->LockPaintAsActive()` while it is visible, so the browser window
+// never paints inactive (no dark flash, no grey traffic lights) under it.
+// A non-activatable overlay (toasts, the Ctrl+Tab switcher) is created with
+// Activatable::kNo and shown with ShowInactive(): it never steals keyboard
+// focus from the page.
+class OverlayWidgetHost : public views::ViewObserver,
+                          public views::WidgetObserver {
  public:
   enum class Alignment {
     kFill,       // Widget = anchor (full-window overlays).
@@ -299,9 +329,15 @@ class OverlayWidgetHost : public views::ViewObserver {
     kTopRight,   // Preferred size, at anchor's top-right corner.
   };
 
+  // `activatable` defaults by name: "OpenToasts" and "OpenTabSwitcher" are
+  // non-activatable, every other overlay is activatable.
   OverlayWidgetHost(views::Widget* parent,
                     std::unique_ptr<views::View> contents,
                     std::string_view name);
+  OverlayWidgetHost(views::Widget* parent,
+                    std::unique_ptr<views::View> contents,
+                    std::string_view name,
+                    bool activatable);
   OverlayWidgetHost(const OverlayWidgetHost&) = delete;
   OverlayWidgetHost& operator=(const OverlayWidgetHost&) = delete;
   ~OverlayWidgetHost() override;
@@ -314,13 +350,28 @@ class OverlayWidgetHost : public views::ViewObserver {
   void Show();
   void Hide();
   bool IsVisible() const;
+  bool activatable() const { return activatable_; }
+
+  // The default activation for an overlay `name` (see the constructor).
+  static bool DefaultActivatableFor(std::string_view name);
 
   // views::ViewObserver:
   void OnViewPreferredSizeChanged(views::View* observed_view) override;
 
+  // views::WidgetObserver:
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
+  void OnWidgetDestroying(views::Widget* widget) override;
+
  private:
   void ApplyBounds();
+  void UpdatePaintAsActiveLock(bool visible);
 
+  bool activatable_ = true;
+  raw_ptr<views::Widget> parent_ = nullptr;
+  // Held while an activatable overlay is visible.
+  std::unique_ptr<views::Widget::PaintAsActiveLock> paint_as_active_lock_;
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<views::View> contents_ = nullptr;
   gfx::Rect anchor_;
@@ -369,11 +420,25 @@ enum class PaneCommand {
   kClosePane,
 };
 
+enum class SplitDropZone {
+  kLeft,
+  kRight,
+  kTop,
+  kBottom,
+  kReplacePane,
+};
+
+enum class PaneDevToolsDock {
+  kBottom,
+  kRight,
+  kOverlay,
+};
+
 // One pane of the active Tab or Split.
 struct SplitPaneSpec {
   ItemID tab_id;
   // The live page, or null for a placeholder or sleeping tab (the pane then
-  // paints its page color only). Not owned.
+  // paints its page color or empty-pane fallback card). Not owned.
   raw_ptr<content::WebContents, DanglingUntriaged> web_contents = nullptr;
   // Bar label. Empty: derived from the committed URL host without "www.".
   // Track 6 passes "Note" / "Easel" for open:// pages (bug sweep r7 AB-06).
@@ -384,6 +449,12 @@ struct SplitPaneSpec {
   bool site_controls_available = true;
   // Notes have no shareable address: no Copy button.
   bool hides_copy = false;
+  // Explicit empty-pane placeholder (e.g., "Add Split View" with no tab yet).
+  // When true, or when `web_contents == nullptr && !is_sleeping`, the pane
+  // displays the empty-pane card ("Drop a tab or press Cmd/Ctrl+T").
+  bool is_empty_placeholder = false;
+  // True when `web_contents` is null only because the tab is sleeping/loading.
+  bool is_sleeping = false;
 };
 
 struct SplitPresentation {
@@ -426,6 +497,29 @@ class OpenSplitContainerDelegate {
                              const ItemID& tab_id,
                              PaneCommand command,
                              views::View* anchor) = 0;
+
+  // Optional Wave E4 callbacks (default no-op for backward compatibility):
+
+  // The user clicked "Open Command Bar" inside an empty placeholder pane.
+  virtual void OnEmptyPaneOpenCommandBar(const std::optional<ItemID>& split_id,
+                                         const ItemID& tab_id) {}
+  // Two panes swapped order via SwapPanes() or drag-handle swap.
+  virtual void OnPanesSwapped(const ItemID& split_id,
+                              size_t index_a,
+                              size_t index_b) {}
+  // Drag-to-split negotiation for sidebar tab or URL drags over the panel.
+  virtual bool CanDropInSplit(const std::optional<ItemID>& dragged_tab_id,
+                              const GURL& dragged_url,
+                              SplitDropZone zone,
+                              std::optional<size_t> target_pane_index) {
+    return false;
+  }
+  virtual bool OnDropInSplit(const std::optional<ItemID>& dragged_tab_id,
+                             const GURL& dragged_url,
+                             SplitDropZone zone,
+                             std::optional<size_t> target_pane_index) {
+    return false;
+  }
 };
 
 // The 32 pt bar on top of a split pane (or the single-pane content toolbar).
@@ -485,6 +579,12 @@ class OpenPaneChromeView : public views::View,
   // Runs when the bar or any of its controls is clicked (focuses the pane).
   void SetFocusRequestCallback(base::RepeatingClosure callback);
 
+  // Drag-handle pane swap callbacks (coordinates in this chrome view).
+  using DragCallback =
+      base::RepeatingCallback<void(const gfx::Point& location_in_chrome,
+                                   bool finished)>;
+  void SetDragSwapCallback(DragCallback callback);
+
   // The Site Control button: anchor for OpenSiteControlBubble.
   views::View* site_control_anchor();
   // True when a control is currently shown (automation and e2e frames).
@@ -498,6 +598,9 @@ class OpenPaneChromeView : public views::View,
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
+  void OnMouseReleased(const ui::MouseEvent& event) override;
+  void OnMouseCaptureLost() override;
 
   // ui::SimpleMenuModel::Delegate:
   void ExecuteCommand(int command_id, int event_flags) override;
@@ -512,6 +615,9 @@ class OpenPaneChromeView : public views::View,
   Role role_;
   CommandCallback callback_;
   base::RepeatingClosure focus_callback_;
+  DragCallback drag_swap_callback_;
+  gfx::Point drag_press_origin_;
+  bool drag_swap_active_ = false;
   State state_;
   std::vector<raw_ptr<secondary::GlyphButton>> buttons_;
   gfx::Rect host_rect_;
@@ -524,11 +630,14 @@ class OpenPaneChromeView : public views::View,
 namespace split_internal {
 class SplitPaneView;
 class SplitDividerView;
+class SplitDropOverlayView;
 }  // namespace split_internal
 
 // Hosts the active Tab (one pane) or Split (2..4 panes) in the content panel.
 //
-// Single tab: the page fills the bounds with a 6 pt rounded clip and no bar.
+// Single tab: the page fills the bounds with a 6 pt rounded clip and no bar
+// (or the 32 pt top mini-toolbar when `SetSinglePaneToolbarVisible(true)` is
+// set for View -> Show Toolbar).
 // Split: panes side by side (kHorizontal) or stacked (kVertical), 10 pt
 // gaps, 200 pt minimum pane (panes shrink equally when the panel is too
 // narrow), a 32 pt page-tinted bar per pane, and a 2 pt ring on the focused
@@ -554,6 +663,51 @@ class OpenSplitContainerView : public views::View {
   void SetPaneHostLabel(const ItemID& tab_id, const std::u16string& host);
   void SetPaneSiteControlsAvailable(const ItemID& tab_id, bool available);
 
+  // Shows or hides the single-pane top mini-toolbar (View -> Show Toolbar /
+  // toggle-toolbar) when not in Split View, without detaching the WebContents.
+  void SetSinglePaneToolbarVisible(bool shows_toolbar);
+  bool single_pane_toolbar_visible() const {
+    return presentation_.show_single_pane_toolbar;
+  }
+
+  // Drag-to-split translucent drop-target preview overlay.
+  void SetDropZonePreview(
+      std::optional<SplitDropZone> zone,
+      std::optional<size_t> target_pane_index = std::nullopt);
+  std::optional<SplitDropZone> drop_zone_preview() const {
+    return drop_zone_preview_;
+  }
+  std::optional<size_t> drop_target_pane_index() const {
+    return drop_target_pane_index_;
+  }
+  void SetDropOverlayAccentColor(SkColor color);
+
+  // Swaps two panes in place (2..4 panes) without detaching or reloading
+  // their WebContents. Notifies OpenSplitContainerDelegate::OnPanesSwapped.
+  bool SwapPanes(size_t index_a, size_t index_b);
+
+  // Indexed pane accessors and Split View DevTools hosting hooks.
+  size_t pane_count() const { return panes_.size(); }
+  views::WebView* GetWebViewForPane(size_t index);
+  OpenPaneChromeView* GetPaneChromeForPane(size_t index);
+  std::optional<ItemID> GetTabIdForPane(size_t index) const;
+  void SetPaneDevToolsOverlay(size_t index,
+                              views::View* devtools_view,
+                              PaneDevToolsDock dock = PaneDevToolsDock::kBottom,
+                              float ratio = 0.35f);
+  void SetPaneDevToolsOverlay(const ItemID& tab_id,
+                              views::View* devtools_view,
+                              PaneDevToolsDock dock = PaneDevToolsDock::kBottom,
+                              float ratio = 0.35f);
+  void SetPaneDevToolsOverlayOwned(
+      size_t index,
+      std::unique_ptr<views::View> devtools_view,
+      PaneDevToolsDock dock = PaneDevToolsDock::kBottom,
+      float ratio = 0.35f);
+  void ClearPaneDevToolsOverlay(size_t index);
+  void ClearPaneDevToolsOverlay(const ItemID& tab_id);
+  views::View* GetPaneDevToolsOverlay(size_t index) const;
+
   views::WebView* GetWebViewForTab(const ItemID& tab_id);
   OpenPaneChromeView* GetPaneChromeForTab(const ItemID& tab_id);
   // Pane frames in this view's coordinates, in pane order (automation).
@@ -562,6 +716,15 @@ class OpenSplitContainerView : public views::View {
   const std::vector<double>& current_fractions() const {
     return live_fractions_;
   }
+
+  // Pure drop-zone hit-testing (port of SplitDropOverlayView.zone(at:)).
+  static SplitDropZone ComputeDropZoneAt(const gfx::Rect& bounds,
+                                         const gfx::Point& point);
+  static gfx::Rect ComputeDropPreviewRect(
+      const gfx::Rect& container_bounds,
+      const std::vector<gfx::Rect>& pane_bounds,
+      SplitDropZone zone,
+      std::optional<size_t> target_pane_index);
 
   // Pure layout (port of SplitLayout.frames): integer boundaries, the last
   // pane takes the remainder; fractions are normalized; panes narrower than
@@ -577,6 +740,15 @@ class OpenSplitContainerView : public views::View {
 
   // views::View:
   void Layout(PassKey) override;
+  bool GetDropFormats(
+      int* formats,
+      std::set<ui::ClipboardFormatType>* format_types) override;
+  bool CanDrop(const ui::OSExchangeData& data) override;
+  void OnDragEntered(const ui::DropTargetEvent& event) override;
+  int OnDragUpdated(const ui::DropTargetEvent& event) override;
+  void OnDragExited() override;
+  views::View::DropCallback GetDropCallback(
+      const ui::DropTargetEvent& event) override;
 
  private:
   friend class split_internal::SplitDividerView;
@@ -592,20 +764,41 @@ class OpenSplitContainerView : public views::View {
                      PaneCommand command,
                      views::View* anchor);
   void OnPaneFocused(const ItemID& tab_id);
+  void OnEmptyPaneOpenCommandBar(const ItemID& tab_id);
+  void OnPaneChromeDragSwap(const ItemID& source_tab_id,
+                            const gfx::Point& point_in_container,
+                            bool finished);
+  void PerformDrop(std::optional<ItemID> dragged_tab_id,
+                   GURL dragged_url,
+                   SplitDropZone zone,
+                   std::optional<size_t> target_pane_index,
+                   const ui::DropTargetEvent& event,
+                   ui::mojom::DragOperation& output_drag_op,
+                   std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
 
   void ApplyFrames(const std::vector<gfx::Rect>& frames);
   void SyncDividers();
+  void UpdateDropOverlay();
   bool is_split() const { return presentation_.split_id.has_value(); }
   split_internal::SplitPaneView* FindPane(const ItemID& tab_id);
+  std::optional<size_t> FindPaneIndex(const ItemID& tab_id) const;
+  std::optional<size_t> PaneIndexAtPoint(const gfx::Point& point) const;
 
   raw_ptr<OpenSplitContainerDelegate> delegate_;
   SplitPresentation presentation_;
   std::vector<raw_ptr<split_internal::SplitPaneView>> panes_;
   std::vector<raw_ptr<split_internal::SplitDividerView>> dividers_;
+  raw_ptr<split_internal::SplitDropOverlayView> drop_overlay_ = nullptr;
+  std::optional<SplitDropZone> drop_zone_preview_;
+  std::optional<size_t> drop_target_pane_index_;
+  std::optional<SkColor> drop_overlay_accent_;
+  std::optional<ItemID> dnd_tab_id_;
+  GURL dnd_url_;
   std::vector<double> live_fractions_;
   // Drag state.
   std::vector<gfx::Rect> drag_initial_frames_;
   std::vector<gfx::Rect> drag_current_frames_;
+  base::WeakPtrFactory<OpenSplitContainerView> weak_factory_{this};
 };
 
 }  // namespace open_unified

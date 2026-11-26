@@ -409,6 +409,10 @@ struct BrowserWindowState {
   bool stay_on_top = false;
   bool shows_toolbar = true;
   std::optional<TimestampSec> last_focused_at;
+  // Ephemeral in-memory Incognito window (never persisted to browser.json).
+  bool is_incognito = false;
+  // Parent Profile for an Incognito window (nullopt for normal windows).
+  std::optional<ProfileID> incognito_profile_id;
 };
 
 enum class RoutingDestinationKind {

@@ -6,11 +6,13 @@
 #define OPEN_UNIFIED_BROWSER_OPEN_SLEEP_CONTROLLER_H_
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
 
 #include "base/functional/callback.h"
+#include "base/memory/memory_pressure_listener.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
@@ -82,6 +84,14 @@ class OpenSleepController : public OpenTabBridge::Observer {
 
   // Runs the scheduler now (a setting changed, a tab was hidden).
   void Tick();
+  // Immediately discards eligible background tabs under critical memory
+  // pressure (called by base::MemoryPressureListener and tests/automation).
+  size_t HandleCriticalMemoryPressure();
+
+  // Protection/visibility notifications from OpenTabBridge / OpenTabObserver.
+  void OnTabHidden(const ItemID& tab_id);
+  void OnTabUnloadHandlersChanged(const ItemID& tab_id, bool has_handlers);
+  void OnTabDownloadStateChanged(const ItemID& tab_id, bool is_downloading);
 
   // OpenTabBridge::Observer:
   void OnTabActivated(const ItemID& tab_id) override;
@@ -93,6 +103,7 @@ class OpenSleepController : public OpenTabBridge::Observer {
                                  content::WebContents* contents) override;
 
  private:
+  class MemoryPressureBridge;
   // SleepScheduler callbacks.
   bool DoFreeze(const ItemID& tab_id);
   bool DoDiscard(const ItemID& tab_id);
@@ -116,6 +127,7 @@ class OpenSleepController : public OpenTabBridge::Observer {
   SleepScheduler scheduler_;
   std::map<ItemID, bool> audible_;
   base::RepeatingTimer tick_timer_;
+  std::unique_ptr<MemoryPressureBridge> memory_pressure_bridge_;
   bool started_ = false;
   bool discarding_internally_ = false;
   base::WeakPtrFactory<OpenSleepController> weak_factory_{this};

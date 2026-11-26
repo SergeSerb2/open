@@ -14,6 +14,7 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "ui/gfx/geometry/point.h"
 
 namespace views {
 class Widget;
@@ -72,6 +73,32 @@ class SecretStore {
   virtual bool UsesFileBackend() const = 0;
 };
 
+// The live window material under a translucent browser window (macOS:
+// NSVisualEffectView behind-window blur plus a fitted gray wash, the port of
+// ThemeBackgroundView.updateWindowMaterial()). Every field is a theme or
+// window input; the adapter maps them to the measured C14-T fit.
+struct WindowMaterialSpec {
+  // The theme asks for the system material (ThemeStyle::is_vibrant). Off for
+  // Incognito and fully opaque themes: the theme field covers the window.
+  bool vibrant = true;
+  // Stored translucency selects the material (dark: legacy raw value 2,
+  // light: raw value 1).
+  bool dark_translucency = false;
+  // Window color scheme selects the wash and the material's appearance.
+  bool dark_scheme = false;
+  // The default (corner) theme has its own wash fit.
+  bool default_theme = true;
+  // The window paints as active (Widget::ShouldPaintAsActive(), so a Command
+  // Bar or Find bar child window does not turn the material inactive).
+  bool active = true;
+  bool operator==(const WindowMaterialSpec&) const = default;
+};
+
+// Arc's traffic-light centers (AX frames [12/35/58, 16, 16, 16]): x 20 / 43 /
+// 66, y 24, relative to the window's top-left corner, in points.
+inline constexpr int kWindowButtonCenterX[3] = {20, 43, 66};
+inline constexpr int kWindowButtonCenterY = 24;
+
 // Platform-specific OS integration facade.
 class OpenPlatform {
  public:
@@ -111,6 +138,48 @@ class OpenPlatform {
   // Applies native translucent / rounded / mica / vibrancy effects to a
   // top-level browser widget.
   virtual void ApplyWindowEffects(views::Widget* widget, bool dark_mode) = 0;
+
+  // Updates the live window material for a theme or activation change.
+  // Returns true when the native material now draws behind the window's
+  // content, so the views paint the translucent window tint
+  // (theme::ThemePainter::SetTranslucentWindow(true)) instead of the opaque
+  // field. Default: no native material (returns false).
+  virtual bool UpdateWindowEffects(views::Widget* widget,
+                                   const WindowMaterialSpec& spec);
+
+  // Places the native window buttons (macOS traffic lights). `origin` is the
+  // group's offset from Arc's resting place (kWindowButtonCenterX/Y): (0, 0)
+  // anchored, (5, 5) plus the card motion on the hover-reveal card, the live
+  // sidebar offset during the Cmd/Ctrl+S slide. `visible` false hides the
+  // buttons (sidebar hidden, no card). `dimmed` shows Arc's
+  // DimmedWindowControls look at rest (grey circles; the system buttons
+  // light up under the pointer). Native full screen is left to AppKit.
+  // No-op on Windows and Linux.
+  virtual void PlaceWindowButtons(views::Widget* widget,
+                                  const gfx::Point& origin,
+                                  bool visible,
+                                  bool dimmed);
+  // The tone of the dimmed circles: the Space's content appearance, and the
+  // window's paint-as-active state (the colored rings show only while
+  // active). No-op on Windows and Linux.
+  virtual void SetWindowButtonsTone(views::Widget* widget,
+                                    bool dark_content,
+                                    bool active);
+
+  // System "Increase contrast" (macOS
+  // NSWorkspace.accessibilityDisplayShouldIncreaseContrast). Default false.
+  virtual bool IsIncreaseContrastEnabled();
+
+  // Sets the running app's icon (macOS
+  // NSApplication.applicationIconImage) to the bundled alternate icon
+  // `icon_id` ("" restores the default). Default: no-op, returns false.
+  virtual bool SetAppIcon(const std::string& icon_id);
+
+  // For Air Traffic Control: the bundle id (macOS) of the app that asked the
+  // OS to open the URL being handled now, read from the current Apple Event's
+  // sender PID. Empty when unknown or on other platforms. Call it while the
+  // open-URL event is being handled.
+  virtual std::string ResolveExternalUrlSourceApp();
 
   // Returns the platform-standard default user data directory:
   // - Windows: %LOCALAPPDATA%\Open

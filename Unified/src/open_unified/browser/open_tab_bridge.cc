@@ -10,8 +10,14 @@
 
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/devtools/devtools_window.h"  // nogncheck
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_list/tab_removed_reason.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -20,12 +26,17 @@
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/favicon/core/favicon_driver_observer.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "open_unified/browser/open_browser_service.h"
@@ -33,6 +44,7 @@
 #include "open_unified/browser/open_sleep_controller.h"
 #include "open_unified/core/adblock/open_adblock_profile_service.h"
 #include "open_unified/core/store/sqlite_stores.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/base_window.h"
 #include "ui/base/page_transition_types.h"
@@ -46,6 +58,85 @@ namespace {
 RGBAColor ToRGBA(SkColor color) {
   return RGBAColor{SkColorGetR(color) / 255.0, SkColorGetG(color) / 255.0,
                    SkColorGetB(color) / 255.0, SkColorGetA(color) / 255.0};
+}
+
+bool IsChromiumNewTabUrl(const GURL& url) {
+  if (!url.is_valid()) {
+    return false;
+  }
+  if (url.SchemeIs("chrome") &&
+      base::EqualsCaseInsensitiveASCII(url.host(), "newtab")) {
+    return true;
+  }
+  if (url.SchemeIs("chrome-search") &&
+      base::StartsWith(url.host(), "local-ntp",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+    return true;
+  }
+  return false;
+}
+
+bool IsWebContentsCapturingMedia(content::WebContents* wc) {
+  if (!wc) {
+    return false;
+  }
+  if (wc->IsBeingCaptured()) {
+    return true;
+  }
+  MediaStreamCaptureIndicator* indicator =
+      MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator()
+          .get();
+  if (!indicator) {
+    return false;
+  }
+  return indicator->IsCapturingUserMedia(wc) ||
+         indicator->IsCapturingVideo(wc) || indicator->IsCapturingAudio(wc) ||
+         indicator->IsBeingMirrored(wc) || indicator->IsCapturingTab(wc) ||
+         indicator->IsCapturingWindow(wc) || indicator->IsCapturingDisplay(wc);
+}
+
+bool IsDevToolsOpenForWebContents(content::WebContents* wc) {
+  if (!wc) {
+    return false;
+  }
+  if (DevToolsWindow::GetInstanceForInspectedWebContents(wc) != nullptr ||
+      content::DevToolsAgentHost::IsDebuggerAttached(wc)) {
+    return true;
+  }
+  scoped_refptr<content::DevToolsAgentHost> agent =
+      content::DevToolsAgentHost::GetForTab(wc);
+  return agent && DevToolsWindow::FindDevToolsWindow(agent.get()) != nullptr;
+}
+
+bool AreNotificationsAllowedForWebContents(content::WebContents* wc) {
+  if (!wc) {
+    return false;
+  }
+  const GURL& url = wc->GetLastCommittedURL();
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
+    return false;
+  }
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(wc->GetBrowserContext());
+  return map && map->GetContentSetting(url, url,
+                                       ContentSettingsType::NOTIFICATIONS) ==
+                    CONTENT_SETTING_ALLOW;
+}
+
+void AppendNodeTabIds(const std::vector<SidebarNode>& nodes,
+                      std::vector<ItemID>* out) {
+  for (const SidebarNode& node : nodes) {
+    if (const Tab* tab = node.as_tab()) {
+      out->push_back(tab->id);
+    } else if (const Folder* folder = node.as_folder()) {
+      AppendNodeTabIds(folder->children, out);
+    } else if (const Split* split = node.as_split()) {
+      for (const Tab& pane : split->panes) {
+        out->push_back(pane.id);
+      }
+    }
+  }
 }
 
 // Marks the blank WebContents that keeps an otherwise empty TabStripModel
@@ -127,6 +218,28 @@ class OpenTabObserver : public content::WebContentsObserver,
     UpdateLive();
   }
   void OnBackgroundColorChanged() override { UpdateLive(); }
+  void OnVisibilityChanged(content::Visibility visibility) override {
+    if (bridge_) {
+      bridge_->OnTabVisibilityChanged(tab_id_, web_contents(),
+                                      visibility == content::Visibility::VISIBLE);
+    }
+  }
+  void DidGetUserInteraction(const blink::WebInputEvent& event) override {
+    const blink::WebInputEvent::Type type = event.GetType();
+    if (type != blink::WebInputEvent::Type::kKeyDown &&
+        type != blink::WebInputEvent::Type::kRawKeyDown &&
+        type != blink::WebInputEvent::Type::kChar) {
+      return;
+    }
+    const TimestampSec now = base::Time::Now().InSecondsFSinceUnixEpoch();
+    if (now - last_form_interaction_at_ < 1.0) {
+      return;
+    }
+    last_form_interaction_at_ = now;
+    if (bridge_) {
+      bridge_->OnTabFormInteraction(tab_id_);
+    }
+  }
   void WebContentsDestroyed() override { favicon_observation_.Reset(); }
 
   // favicon::FaviconDriverObserver:
@@ -183,12 +296,18 @@ class OpenTabObserver : public content::WebContentsObserver,
     }
     content::WebContents* wc = web_contents();
     std::optional<SkColor> background = wc->GetBackgroundColor();
+    const bool capturing = IsWebContentsCapturingMedia(wc);
+    const bool devtools = IsDevToolsOpenForWebContents(wc);
+    const bool notifications = AreNotificationsAllowedForWebContents(wc);
     model_util::UpdateLive(service->model(), tab_id_, [&](TabLiveState& live) {
       live.has_web_content = true;
       live.is_loading = wc->IsLoading();
       live.progress = wc->GetLoadProgress();
       live.is_audible = wc->IsCurrentlyAudible();
       live.is_crashed = wc->IsCrashed();
+      live.is_capturing_media = capturing;
+      live.devtools_open = devtools;
+      live.notifications_allowed = notifications;
       live.can_go_back = wc->GetController().CanGoBack();
       live.can_go_forward = wc->GetController().CanGoForward();
       if (!wc->IsLoading()) {
@@ -198,10 +317,15 @@ class OpenTabObserver : public content::WebContentsObserver,
         live.page_background_color = ToRGBA(*background);
       }
     });
+    if (OpenSleepController* sleep = service->sleep_controller()) {
+      sleep->OnTabUnloadHandlersChanged(
+          tab_id_, wc->NeedToFireBeforeUnloadOrUnloadEvents());
+    }
   }
 
   base::WeakPtr<OpenTabBridge> bridge_;
   ItemID tab_id_;
+  TimestampSec last_form_interaction_at_ = 0.0;
   base::ScopedObservation<favicon::FaviconDriver,
                           favicon::FaviconDriverObserver>
       favicon_observation_{this};
@@ -217,6 +341,55 @@ OpenTabHandle::OpenTabHandle(content::WebContents* contents, ItemID tab_id)
 OpenTabHandle::~OpenTabHandle() = default;
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(OpenTabHandle);
+
+// ---------------------------------------------------------------------------
+// OpenTabBridge::MediaCaptureObserver (kept separate to avoid inheriting from
+// base::CheckedObserver twice alongside BrowserCollectionObserver).
+
+class OpenTabBridge::MediaCaptureObserver final
+    : public MediaStreamCaptureIndicator::Observer {
+ public:
+  explicit MediaCaptureObserver(OpenTabBridge* bridge) : bridge_(bridge) {
+    if (MediaStreamCaptureIndicator* indicator =
+            MediaCaptureDevicesDispatcher::GetInstance()
+                ->GetMediaStreamCaptureIndicator()
+                .get()) {
+      observation_.Observe(indicator);
+    }
+  }
+  ~MediaCaptureObserver() override = default;
+
+  void OnIsCapturingVideoChanged(content::WebContents* web_contents,
+                                 bool /*is_capturing_video*/) override {
+    bridge_->OnMediaCaptureChanged(web_contents);
+  }
+  void OnIsCapturingAudioChanged(content::WebContents* web_contents,
+                                 bool /*is_capturing_audio*/) override {
+    bridge_->OnMediaCaptureChanged(web_contents);
+  }
+  void OnIsBeingMirroredChanged(content::WebContents* web_contents,
+                                bool /*is_being_mirrored*/) override {
+    bridge_->OnMediaCaptureChanged(web_contents);
+  }
+  void OnIsCapturingTabChanged(content::WebContents* web_contents,
+                               bool /*is_capturing_tab*/) override {
+    bridge_->OnMediaCaptureChanged(web_contents);
+  }
+  void OnIsCapturingWindowChanged(content::WebContents* web_contents,
+                                  bool /*is_capturing_window*/) override {
+    bridge_->OnMediaCaptureChanged(web_contents);
+  }
+  void OnIsCapturingDisplayChanged(content::WebContents* web_contents,
+                                   bool /*is_capturing_display*/) override {
+    bridge_->OnMediaCaptureChanged(web_contents);
+  }
+
+ private:
+  raw_ptr<OpenTabBridge> bridge_;
+  base::ScopedObservation<MediaStreamCaptureIndicator,
+                          MediaStreamCaptureIndicator::Observer>
+      observation_{this};
+};
 
 // ---------------------------------------------------------------------------
 // OpenTabBridge
@@ -242,6 +415,8 @@ void OpenTabBridge::Start() {
   service_->model().AddObserver(this);
   browser_collection_observation_.Observe(
       GlobalBrowserCollection::GetInstance());
+  media_capture_observer_ = std::make_unique<MediaCaptureObserver>(this);
+  content::DevToolsAgentHost::AddObserver(this);
   AdoptStartupBrowsers();
 }
 
@@ -252,6 +427,8 @@ void OpenTabBridge::Shutdown() {
   started_ = false;
   service_->model().RemoveObserver(this);
   browser_collection_observation_.Reset();
+  media_capture_observer_.reset();
+  content::DevToolsAgentHost::RemoveObserver(this);
   ClearObservedStrips();
   windows_.clear();
   browsers_.clear();
@@ -269,7 +446,17 @@ void OpenTabBridge::RemoveObserver(Observer* observer) {
 // --- Startup -----------------------------------------------------------------
 
 void OpenTabBridge::AdoptStartupBrowsers() {
-  const WindowID main = service_->MainWindowId();
+  BrowserModel& model = service_->model();
+  // Assign each startup Chromium TYPE_NORMAL browser to its own distinct
+  // WindowID (binding to saved windows first, creating new ones for extras,
+  // and creating ephemeral Incognito windows for OTR startup browsers).
+  std::vector<WindowID> unbound_windows;
+  for (const BrowserWindowState& window : model.windows()) {
+    if (window.style == WindowStyle::kStandard && !window.is_incognito) {
+      unbound_windows.push_back(window.id);
+    }
+  }
+  size_t next_unbound = 0;
   std::vector<std::pair<BrowserWindowInterface*, content::WebContents*>>
       startup_tabs;
   GlobalBrowserCollection::GetInstance()->ForEach(
@@ -279,15 +466,42 @@ void OpenTabBridge::AdoptStartupBrowsers() {
         }
         std::optional<ProfileID> profile =
             service_->OpenProfileIdFor(browser->GetProfile());
-        if (!profile || browser->GetProfile()->IsOffTheRecord()) {
+        if (!profile) {
           return true;
         }
-        WindowBrowsers& wb = windows_[main];
+        const bool is_otr = browser->GetProfile()->IsOffTheRecord();
+        WindowID assigned_window;
+        if (is_otr) {
+          base::AutoReset<bool> applying(&applying_, true);
+          assigned_window = model.CreateIncognitoWindow(*profile);
+        } else if (next_unbound < unbound_windows.size()) {
+          assigned_window = unbound_windows[next_unbound++];
+        } else {
+          SpaceID target_space;
+          for (const Space& space : model.spaces()) {
+            if (space.profile_id == *profile) {
+              target_space = space.id;
+              break;
+            }
+          }
+          if (target_space.empty() && !model.spaces().empty()) {
+            target_space = model.spaces().front().id;
+          }
+          if (!target_space.empty()) {
+            base::AutoReset<bool> applying(&applying_, true);
+            assigned_window = model.CreateWindow(
+                target_space, WindowStyle::kStandard, /*register_undo=*/false);
+          }
+        }
+        if (assigned_window.empty()) {
+          return true;
+        }
+        WindowBrowsers& wb = windows_[assigned_window];
         const bool primary = !wb.by_profile.contains(*profile);
         if (primary) {
           wb.by_profile[*profile] = browser;
         }
-        TrackBrowser(browser, main, *profile, primary);
+        TrackBrowser(browser, assigned_window, *profile, primary, is_otr);
         // Chromium's startup tabs (NTP, session restore, command-line URLs)
         // are not Open's; Open's model is the session.
         TabStripModel* strip = browser->GetTabStripModel();
@@ -297,20 +511,44 @@ void OpenTabBridge::AdoptStartupBrowsers() {
         return true;
       });
 
-  for (const BrowserWindowState& window : service_->model().windows()) {
-    ShowBrowserForSpace(window.id, window.focused_space_id);
-    ApplySelectionFromModel(window.id);
+  // Collect window IDs first because ShowBrowserForSpace / ApplySelection
+  // may inspect windows while running.
+  std::vector<WindowID> all_windows;
+  for (const BrowserWindowState& window : model.windows()) {
+    if (window.style == WindowStyle::kStandard) {
+      all_windows.push_back(window.id);
+    }
+  }
+  for (const BrowserWindowState& window : model.incognito_windows()) {
+    all_windows.push_back(window.id);
+  }
+  for (const WindowID& window_id : all_windows) {
+    if (const BrowserWindowState* window = model.FindWindow(window_id)) {
+      ShowBrowserForSpace(window->id, window->focused_space_id);
+      ApplySelectionFromModel(window->id);
+    }
   }
 
-  // Close the startup tabs only now, after Open's own tabs are in the
-  // strips, so no window closes for being empty.
+  // Close ALL Chromium startup tabs (including chrome://newtab when a Space
+  // has 0 tabs!) after guaranteeing an OpenEmptyStateMarker page keeps any
+  // empty window alive on Open's clean tinted empty Space canvas.
   base::AutoReset<bool> applying(&applying_, true);
   for (auto& [browser, contents] : startup_tabs) {
+    if (!browsers_.contains(browser)) {
+      continue;
+    }
     TabStripModel* strip = browser->GetTabStripModel();
-    EnsureNonEmpty(browser);
     const int index = strip->GetIndexOfWebContents(contents);
-    if (index != TabStripModel::kNoTab && strip->count() > 1) {
-      strip->CloseWebContentsAt(index, TabCloseTypes::CLOSE_NONE);
+    if (index == TabStripModel::kNoTab || IsEmptyState(contents) ||
+        TabIdForWebContents(contents).has_value()) {
+      continue;
+    }
+    if (strip->count() == 1) {
+      EnsureEmptyStatePresent(browser);
+    }
+    const int updated_index = strip->GetIndexOfWebContents(contents);
+    if (updated_index != TabStripModel::kNoTab && strip->count() > 1) {
+      strip->CloseWebContentsAt(updated_index, TabCloseTypes::CLOSE_NONE);
     }
   }
 }
@@ -327,6 +565,13 @@ BrowserWindowInterface* OpenTabBridge::EnsureBrowser(
     return nullptr;
   }
   const BrowserWindowState* window = service_->model().FindWindow(window_id);
+  const bool is_incognito = window && window->is_incognito;
+  if (is_incognito) {
+    profile = profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+    if (!profile) {
+      return nullptr;
+    }
+  }
   BrowserWindowCreateParams params(BrowserWindowInterface::TYPE_NORMAL,
                                    *profile, /*from_user_gesture=*/true);
   if (window) {
@@ -341,19 +586,54 @@ BrowserWindowInterface* OpenTabBridge::EnsureBrowser(
     return nullptr;
   }
   wb.by_profile[profile_id] = browser;
-  TrackBrowser(browser, window_id, profile_id, /*primary=*/true);
+  TrackBrowser(browser, window_id, profile_id, /*primary=*/true, is_incognito);
   return browser;
 }
 
 void OpenTabBridge::TrackBrowser(BrowserWindowInterface* browser,
                                  const WindowID& window_id,
                                  const ProfileID& profile_id,
-                                 bool primary) {
+                                 bool primary,
+                                 bool incognito) {
   ManagedBrowser& managed = browsers_[browser];
   managed.window = window_id;
   managed.profile = profile_id;
   managed.primary = managed.primary || primary;
+  managed.incognito = managed.incognito || incognito;
   AddObservedStrip(browser->GetTabStripModel());
+}
+
+void OpenTabBridge::ScrubNewTabPagesLater(BrowserWindowInterface* browser) {
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<OpenTabBridge> self,
+             base::WeakPtr<BrowserWindowInterface> browser) {
+            if (!self || !browser || !self->browsers_.contains(browser.get())) {
+              return;
+            }
+            TabStripModel* strip = browser->GetTabStripModel();
+            base::AutoReset<bool> applying(&self->applying_, true);
+            std::vector<content::WebContents*> ntps;
+            for (int i = 0; i < strip->count(); ++i) {
+              content::WebContents* wc = strip->GetWebContentsAt(i);
+              if (!IsEmptyState(wc) && !TabIdForWebContents(wc).has_value() &&
+                  (IsChromiumNewTabUrl(wc->GetVisibleURL()) ||
+                   IsChromiumNewTabUrl(wc->GetLastCommittedURL()))) {
+                ntps.push_back(wc);
+              }
+            }
+            for (content::WebContents* wc : ntps) {
+              if (strip->count() == 1) {
+                self->EnsureEmptyStatePresent(browser.get());
+              }
+              const int idx = strip->GetIndexOfWebContents(wc);
+              if (idx != TabStripModel::kNoTab && strip->count() > 1) {
+                strip->CloseWebContentsAt(idx, TabCloseTypes::CLOSE_NONE);
+              }
+            }
+          },
+          weak_factory_.GetWeakPtr(), browser->GetWeakPtr()));
 }
 
 void OpenTabBridge::ResyncBrowserLater(BrowserWindowInterface* browser) {
@@ -440,6 +720,10 @@ void OpenTabBridge::RunScheduledResync() {
   for (const BrowserWindowState& window : service_->model().windows()) {
     ApplySelectionFromModel(window.id);
   }
+  for (const BrowserWindowState& window :
+       service_->model().incognito_windows()) {
+    ApplySelectionFromModel(window.id);
+  }
 }
 
 void OpenTabBridge::ResyncAll() {
@@ -452,6 +736,27 @@ void OpenTabBridge::ResyncAll() {
       ResyncBrowser(browser);
     }
   }
+}
+
+std::vector<ItemID> OpenTabBridge::StripOrderFor(
+    BrowserWindowInterface* browser) const {
+  auto it = browsers_.find(browser);
+  if (it == browsers_.end()) {
+    return {};
+  }
+  if (it->second.incognito) {
+    std::vector<ItemID> order;
+    if (const BrowserWindowState* window =
+            service_->model().FindWindow(it->second.window)) {
+      if (const Space* space =
+              service_->model().FindSpace(window->focused_space_id)) {
+        AppendNodeTabIds(space->pinned, &order);
+        AppendNodeTabIds(space->today, &order);
+      }
+    }
+    return order;
+  }
+  return StripOrderFor(it->second.profile);
 }
 
 std::vector<ItemID> OpenTabBridge::StripOrderFor(
@@ -480,10 +785,9 @@ void OpenTabBridge::ResyncBrowser(BrowserWindowInterface* browser) {
     return;
   }
   const bool primary = managed->second.primary;
-  const ProfileID profile = managed->second.profile;
   base::AutoReset<bool> applying(&applying_, true);
   TabStripModel* strip = browser->GetTabStripModel();
-  const std::vector<ItemID> order = StripOrderFor(profile);
+  const std::vector<ItemID> order = StripOrderFor(browser);
   const std::set<ItemID> wanted(order.begin(), order.end());
 
   // 1. Close pages whose sidebar item is gone. The tab stays tracked until
@@ -537,13 +841,9 @@ void OpenTabBridge::ResyncBrowser(BrowserWindowInterface* browser) {
 
 int OpenTabBridge::TargetStripIndex(BrowserWindowInterface* browser,
                                     const ItemID& tab_id) const {
-  std::optional<ProfileID> profile = ProfileOfBrowser(browser);
-  if (!profile) {
-    return browser->GetTabStripModel()->count();
-  }
   const TabStripModel* strip = browser->GetTabStripModel();
   int index = 0;
-  for (const ItemID& id : StripOrderFor(*profile)) {
+  for (const ItemID& id : StripOrderFor(browser)) {
     if (id == tab_id) {
       break;
     }
@@ -561,9 +861,30 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
   if (!window) {
     return;
   }
+  const std::optional<ItemID> previous_active = ActiveTabIdForWindow(window_id);
   ShowBrowserForSpace(window_id, window->focused_space_id);
   auto selected = window->selected_node_by_space.find(window->focused_space_id);
   if (selected == window->selected_node_by_space.end()) {
+    // Empty Space state: ensure the window displays Open's clean tinted empty
+    // Space canvas (never chrome://newtab or a stale tab from another Space).
+    if (BrowserWindowInterface* browser = BrowserForWindow(window_id)) {
+      EnsureEmptyStatePresent(browser);
+      TabStripModel* strip = browser->GetTabStripModel();
+      for (int i = 0; i < strip->count(); ++i) {
+        if (IsEmptyState(strip->GetWebContentsAt(i))) {
+          if (strip->active_index() != i) {
+            base::AutoReset<bool> applying(&applying_, true);
+            strip->ActivateTabAt(i);
+          }
+          break;
+        }
+      }
+    }
+    if (previous_active) {
+      if (OpenSleepController* sleep = service_->sleep_controller()) {
+        sleep->OnTabHidden(*previous_active);
+      }
+    }
     return;
   }
   const SidebarNode* node = service_->model().FindNode(selected->second);
@@ -578,7 +899,7 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
     // Every pane of a Split View is live; the focused pane is the active
     // Chromium tab (keyboard focus, extensions' "active tab").
     for (const Tab& pane : split->panes) {
-      EnsureLoaded(pane.id);
+      EnsureLoaded(pane.id, window_id);
     }
     to_activate = split->focused_pane_id.value_or(
         split->panes.empty() ? ItemID() : split->panes.front().id);
@@ -588,7 +909,7 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
   if (to_activate.empty()) {
     return;
   }
-  content::WebContents* wc = EnsureLoaded(to_activate);
+  content::WebContents* wc = EnsureLoaded(to_activate, window_id);
   BrowserWindowInterface* browser = BrowserForTab(to_activate);
   if (!wc || !browser) {
     return;
@@ -599,9 +920,31 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
   if (index != TabStripModel::kNoTab && index != strip->active_index()) {
     strip->ActivateTabAt(index);
   }
+  if (previous_active && *previous_active != to_activate) {
+    if (OpenSleepController* sleep = service_->sleep_controller()) {
+      sleep->OnTabHidden(*previous_active);
+    }
+  }
   for (Observer& observer : observers_) {
     observer.OnTabActivated(to_activate);
   }
+}
+
+void OpenTabBridge::EnsureEmptyStatePresent(BrowserWindowInterface* browser) {
+  TabStripModel* strip = browser->GetTabStripModel();
+  for (int i = 0; i < strip->count(); ++i) {
+    if (IsEmptyState(strip->GetWebContentsAt(i))) {
+      return;
+    }
+  }
+  content::WebContents::CreateParams params(browser->GetProfile());
+  params.initially_hidden = true;
+  std::unique_ptr<content::WebContents> blank =
+      content::WebContents::Create(params);
+  OpenEmptyStateMarker::CreateForWebContents(blank.get());
+  base::AutoReset<bool> applying(&applying_, true);
+  strip->InsertWebContentsAt(strip->count(), std::move(blank),
+                             AddTabTypes::ADD_NONE);
 }
 
 void OpenTabBridge::EnsureNonEmpty(BrowserWindowInterface* browser) {
@@ -614,16 +957,7 @@ void OpenTabBridge::EnsureNonEmpty(BrowserWindowInterface* browser) {
   }
   // Insert a blank page that keeps the window alive if the last real page
   // goes away; OpenBrowserView paints the empty state over it.
-  if (strip->count() == 0 || TabIdForWebContents(strip->GetWebContentsAt(0))) {
-    content::WebContents::CreateParams params(browser->GetProfile());
-    params.initially_hidden = true;
-    std::unique_ptr<content::WebContents> blank =
-        content::WebContents::Create(params);
-    OpenEmptyStateMarker::CreateForWebContents(blank.get());
-    base::AutoReset<bool> applying(&applying_, true);
-    strip->InsertWebContentsAt(strip->count(), std::move(blank),
-                               AddTabTypes::ADD_NONE);
-  }
+  EnsureEmptyStatePresent(browser);
 }
 
 // --- Lazy creation -----------------------------------------------------------
@@ -681,7 +1015,46 @@ void OpenTabBridge::InsertIntoStrip(
   }
 }
 
+WindowID OpenTabBridge::ResolveTargetWindowForTab(
+    const ItemID& tab_id,
+    const WindowID& preferred) const {
+  const BrowserModel& model = service_->model();
+  if (model.IsIncognitoNode(tab_id)) {
+    std::optional<SpaceID> space = model_util::SpaceOfNode(model, tab_id);
+    if (space) {
+      for (const BrowserWindowState& w : model.incognito_windows()) {
+        if (w.focused_space_id == *space) {
+          return w.id;
+        }
+      }
+    }
+  }
+  if (!preferred.empty() && model.FindWindow(preferred) &&
+      !model.IsIncognitoWindow(preferred)) {
+    return preferred;
+  }
+  if (std::optional<SpaceID> space = model_util::SpaceOfNode(model, tab_id)) {
+    const WindowID focused = FocusedWindowId();
+    if (const BrowserWindowState* fw = model.FindWindow(focused);
+        fw && !fw->is_incognito && fw->focused_space_id == *space) {
+      return fw->id;
+    }
+    for (const BrowserWindowState& w : model.windows()) {
+      if (w.focused_space_id == *space) {
+        return w.id;
+      }
+    }
+  }
+  return FocusedWindowId();
+}
+
 content::WebContents* OpenTabBridge::EnsureLoaded(const ItemID& tab_id) {
+  return EnsureLoaded(tab_id, WindowID());
+}
+
+content::WebContents* OpenTabBridge::EnsureLoaded(
+    const ItemID& tab_id,
+    const WindowID& preferred_window_id) {
   if (auto it = contents_.find(tab_id); it != contents_.end()) {
     return it->second;
   }
@@ -691,8 +1064,9 @@ content::WebContents* OpenTabBridge::EnsureLoaded(const ItemID& tab_id) {
   if (!tab || !profile) {
     return nullptr;
   }
-  BrowserWindowInterface* browser =
-      EnsureBrowser(service_->MainWindowId(), *profile);
+  const WindowID target_window =
+      ResolveTargetWindowForTab(tab_id, preferred_window_id);
+  BrowserWindowInterface* browser = EnsureBrowser(target_window, *profile);
   if (!browser) {
     return nullptr;
   }
@@ -702,10 +1076,14 @@ content::WebContents* OpenTabBridge::EnsureLoaded(const ItemID& tab_id) {
   content::WebContents* raw = contents.get();
   InsertIntoStrip(browser, std::move(contents), tab_id, /*activate=*/false);
   // Restores the slept tab's OPNH history when the sleep store has one,
-  // else loads the tab's URL.
-  if (OpenSleepController* sleep = service_->sleep_controller()) {
-    sleep->RestoreOrLoad(tab_id, raw, url);
-  } else {
+  // else loads the tab's URL (never for Incognito).
+  if (!browser->GetProfile()->IsOffTheRecord()) {
+    if (OpenSleepController* sleep = service_->sleep_controller()) {
+      sleep->RestoreOrLoad(tab_id, raw, url);
+      return raw;
+    }
+  }
+  if (url.is_valid()) {
     raw->GetController().LoadURLWithParams(
         content::NavigationController::LoadURLParams(url));
   }
@@ -743,13 +1121,54 @@ void OpenTabBridge::UnloadTab(const ItemID& tab_id) {
 // --- Commands ----------------------------------------------------------------
 
 ItemID OpenTabBridge::OpenTab(const GURL& url, bool background) {
+  return OpenTab(url, background, FocusedWindowId());
+}
+
+ItemID OpenTabBridge::OpenTab(const GURL& url,
+                              bool background,
+                              const WindowID& window_id) {
   BrowserModel& model = service_->model();
-  const WindowID window_id = service_->MainWindowId();
-  const BrowserWindowState* window = model.FindWindow(window_id);
+  const WindowID target_window =
+      window_id.empty() ? FocusedWindowId() : window_id;
+  const BrowserWindowState* window = model.FindWindow(target_window);
   if (!window) {
     return ItemID();
   }
-  const SpaceID space_id = window->focused_space_id;
+  return OpenTabInSpace(url, window->focused_space_id, background,
+                        target_window);
+}
+
+ItemID OpenTabBridge::OpenTabInSpace(const GURL& url,
+                                     const SpaceID& space_id,
+                                     bool background,
+                                     const std::optional<WindowID>& window_id) {
+  BrowserModel& model = service_->model();
+  if (!model.FindSpace(space_id)) {
+    return ItemID();
+  }
+  WindowID target_window = window_id.value_or(WindowID());
+  if (target_window.empty()) {
+    if (model.IsIncognitoSpace(space_id)) {
+      for (const BrowserWindowState& w : model.incognito_windows()) {
+        if (w.focused_space_id == space_id) {
+          target_window = w.id;
+          break;
+        }
+      }
+    } else {
+      const WindowID focused = FocusedWindowId();
+      if (const BrowserWindowState* fw = model.FindWindow(focused);
+          fw && !fw->is_incognito) {
+        target_window = fw->id;
+      } else {
+        target_window = service_->MainWindowId();
+      }
+    }
+  }
+  const BrowserWindowState* window = model.FindWindow(target_window);
+  if (!window) {
+    return ItemID();
+  }
   ItemID id;
   {
     base::AutoReset<bool> applying(&applying_, true);
@@ -759,22 +1178,32 @@ ItemID OpenTabBridge::OpenTab(const GURL& url, bool background) {
       return id;
     }
     if (!background) {
-      model.SelectNode(window_id, space_id, id);
+      if (window->focused_space_id != space_id && !window->is_incognito) {
+        model.FocusSpace(target_window, space_id);
+      }
+      model.SelectNode(target_window, space_id, id);
     }
   }
   if (background) {
-    EnsureLoaded(id);
+    EnsureLoaded(id, target_window);
   } else {
-    ApplySelectionFromModel(window_id);
+    ApplySelectionFromModel(target_window);
   }
   return id;
 }
 
 bool OpenTabBridge::SelectNode(const ItemID& node_id) {
+  return SelectNode(node_id, FocusedWindowId());
+}
+
+bool OpenTabBridge::SelectNode(const ItemID& node_id,
+                               const WindowID& window_id) {
   BrowserModel& model = service_->model();
   std::optional<SpaceID> space = model_util::SpaceOfNode(model, node_id);
-  const WindowID window_id = service_->MainWindowId();
-  const BrowserWindowState* window = model.FindWindow(window_id);
+  const WindowID target_window =
+      window_id.empty() ? ResolveTargetWindowForTab(node_id, WindowID())
+                        : window_id;
+  const BrowserWindowState* window = model.FindWindow(target_window);
   if (!window || !model.FindNode(node_id)) {
     return false;
   }
@@ -783,25 +1212,40 @@ bool OpenTabBridge::SelectNode(const ItemID& node_id) {
   {
     base::AutoReset<bool> applying(&applying_, true);
     if (target_space != window->focused_space_id) {
-      model.FocusSpace(window_id, target_space);
+      model.FocusSpace(target_window, target_space);
     }
     // A split pane selects its Split (BrowserModel::SidebarSelectionId).
     const ItemID select = model.SidebarSelectionId(node_id).value_or(node_id);
-    model.SelectNode(window_id, target_space, select);
+    model.SelectNode(target_window, target_space, select);
   }
-  ApplySelectionFromModel(window_id);
+  ApplySelectionFromModel(target_window);
   return true;
 }
 
 bool OpenTabBridge::SelectIndex(size_t index) {
+  return SelectIndex(index, FocusedWindowId());
+}
+
+bool OpenTabBridge::SelectIndex(size_t index, const WindowID& window_id) {
+  const WindowID target_window =
+      window_id.empty() ? FocusedWindowId() : window_id;
   const BrowserWindowState* window =
-      service_->model().FindWindow(service_->MainWindowId());
+      service_->model().FindWindow(target_window);
   if (!window) {
     return false;
   }
-  const std::vector<ItemID> ids =
-      model_util::OrderedTabIds(service_->model(), window->focused_space_id);
-  return index < ids.size() && SelectNode(ids[index]);
+  std::vector<ItemID> ids;
+  if (window->is_incognito) {
+    if (const Space* space =
+            service_->model().FindSpace(window->focused_space_id)) {
+      AppendNodeTabIds(space->pinned, &ids);
+      AppendNodeTabIds(space->today, &ids);
+    }
+  } else {
+    ids = model_util::OrderedTabIds(service_->model(),
+                                    window->focused_space_id);
+  }
+  return index < ids.size() && SelectNode(ids[index], target_window);
 }
 
 bool OpenTabBridge::CloseNode(const ItemID& node_id) {
@@ -888,16 +1332,320 @@ bool OpenTabBridge::GoBack(const ItemID& tab_id) {
 }
 
 bool OpenTabBridge::FocusSpace(const SpaceID& space_id) {
+  return FocusSpace(space_id, FocusedWindowId());
+}
+
+bool OpenTabBridge::FocusSpace(const SpaceID& space_id,
+                               const WindowID& window_id) {
   if (!service_->model().FindSpace(space_id)) {
     return false;
   }
-  const WindowID window_id = service_->MainWindowId();
+  WindowID target_window = window_id.empty() ? FocusedWindowId() : window_id;
+  if (service_->model().IsIncognitoWindow(target_window) &&
+      !service_->model().IsIncognitoSpace(space_id)) {
+    target_window = service_->MainWindowId();
+  }
   {
     base::AutoReset<bool> applying(&applying_, true);
-    service_->model().FocusSpace(window_id, space_id);
+    if (!service_->model().FocusSpace(target_window, space_id)) {
+      return false;
+    }
   }
-  ApplySelectionFromModel(window_id);
+  ApplySelectionFromModel(target_window);
   return true;
+}
+
+WindowID OpenTabBridge::OpenNewWindow(const std::optional<SpaceID>& space_id) {
+  BrowserModel& model = service_->model();
+  SpaceID target_space = space_id.value_or(SpaceID());
+  if (target_space.empty() || !model.FindSpace(target_space) ||
+      model.IsIncognitoSpace(target_space)) {
+    const BrowserWindowState* focused = model.FindWindow(FocusedWindowId());
+    if (focused && !focused->is_incognito &&
+        model.FindSpace(focused->focused_space_id)) {
+      target_space = focused->focused_space_id;
+    } else if (!model.spaces().empty()) {
+      target_space = model.spaces().front().id;
+    }
+  }
+  if (target_space.empty()) {
+    return WindowID();
+  }
+  WindowID window_id;
+  {
+    base::AutoReset<bool> applying(&applying_, true);
+    window_id = model.CreateWindow(target_space, WindowStyle::kStandard,
+                                   /*register_undo=*/false);
+  }
+  if (window_id.empty()) {
+    return WindowID();
+  }
+  ShowBrowserForSpace(window_id, target_space);
+  ApplySelectionFromModel(window_id);
+  return window_id;
+}
+
+WindowID OpenTabBridge::OpenNewIncognitoWindow(
+    const std::optional<ProfileID>& parent_profile_id,
+    const std::optional<GURL>& initial_url) {
+  BrowserModel& model = service_->model();
+  ProfileID parent_id = parent_profile_id.value_or(ProfileID());
+  if (parent_id.empty() || !model.FindProfile(parent_id)) {
+    parent_id = service_->ActiveProfileId();
+  }
+  if (parent_id.empty() || !model.FindProfile(parent_id)) {
+    return WindowID();
+  }
+  WindowID window_id;
+  {
+    base::AutoReset<bool> applying(&applying_, true);
+    window_id = model.CreateIncognitoWindow(parent_id);
+  }
+  if (window_id.empty()) {
+    return WindowID();
+  }
+  const BrowserWindowState* window = model.FindWindow(window_id);
+  if (!window) {
+    return WindowID();
+  }
+  ShowBrowserForSpace(window_id, window->focused_space_id);
+  if (initial_url && initial_url->is_valid()) {
+    OpenTab(*initial_url, /*background=*/false, window_id);
+  } else {
+    ApplySelectionFromModel(window_id);
+  }
+  return window_id;
+}
+
+ItemID OpenTabBridge::AdoptLiveWebContentsAsTab(
+    std::unique_ptr<content::WebContents> contents,
+    const SpaceID& space_id,
+    bool background,
+    const std::optional<WindowID>& window_id,
+    std::optional<size_t> position) {
+  if (!contents) {
+    return ItemID();
+  }
+  BrowserModel& model = service_->model();
+  const Space* space = model.FindSpace(space_id);
+  if (!space) {
+    return ItemID();
+  }
+  WindowID target_window = window_id.value_or(WindowID());
+  if (target_window.empty()) {
+    if (model.IsIncognitoSpace(space_id)) {
+      for (const BrowserWindowState& w : model.incognito_windows()) {
+        if (w.focused_space_id == space_id) {
+          target_window = w.id;
+          break;
+        }
+      }
+    } else {
+      const WindowID focused = FocusedWindowId();
+      if (const BrowserWindowState* fw = model.FindWindow(focused);
+          fw && !fw->is_incognito) {
+        target_window = fw->id;
+      } else {
+        target_window = service_->MainWindowId();
+      }
+    }
+  }
+  BrowserWindowInterface* browser =
+      EnsureBrowser(target_window, space->profile_id);
+  if (!browser) {
+    return ItemID();
+  }
+
+  // Chromium requires a WebContents inserted into a TabStripModel to belong to
+  // the exact same BrowserContext (Profile + OTR status). If the live page
+  // came from a different Profile or OTR boundary, fall back to opening its
+  // URL cleanly in the target Space instead of crashing.
+  if (contents->GetBrowserContext() != browser->GetProfile()) {
+    const GURL fallback_url = contents->GetLastCommittedURL().is_valid()
+                                  ? contents->GetLastCommittedURL()
+                                  : contents->GetVisibleURL();
+    return fallback_url.is_valid()
+               ? OpenTabInSpace(fallback_url, space_id, background,
+                                target_window)
+               : ItemID();
+  }
+
+  const GURL url = contents->GetLastCommittedURL().is_valid()
+                       ? contents->GetLastCommittedURL()
+                       : contents->GetVisibleURL();
+  const std::string title = base::UTF16ToUTF8(contents->GetTitle());
+
+  ItemID id;
+  {
+    base::AutoReset<bool> applying(&applying_, true);
+    id = model.NewTab(space_id, url.is_valid() ? url.spec() : "about:blank",
+                      title, position.value_or(size_t{0}));
+    if (id.empty()) {
+      return ItemID();
+    }
+    if (!background) {
+      if (const BrowserWindowState* w = model.FindWindow(target_window);
+          w && w->focused_space_id != space_id && !w->is_incognito) {
+        model.FocusSpace(target_window, space_id);
+      }
+      model.SelectNode(target_window, space_id, id);
+    }
+  }
+
+  // Detach from any previous overlay/Little Open delegate so Browser adopts it.
+  contents->SetDelegate(nullptr);
+  content::WebContents* raw = contents.get();
+  AttachHandle(raw, id);
+  InsertIntoStrip(browser, std::move(contents), id, /*activate=*/!background);
+  if (!background) {
+    ShowBrowserForSpace(target_window, space_id);
+    ApplySelectionFromModel(target_window);
+  }
+  return id;
+}
+
+std::unique_ptr<content::WebContents> OpenTabBridge::DetachWebContentsForTransfer(
+    const ItemID& tab_id,
+    bool remove_from_model) {
+  auto it = contents_.find(tab_id);
+  if (it == contents_.end()) {
+    return nullptr;
+  }
+  content::WebContents* wc = it->second;
+  BrowserWindowInterface* browser = BrowserForTab(tab_id);
+  if (!browser) {
+    return nullptr;
+  }
+  std::unique_ptr<content::WebContents> detached;
+  {
+    base::AutoReset<bool> applying(&applying_, true);
+    TabStripModel* strip = browser->GetTabStripModel();
+    if (browsers_[browser].primary && strip->count() == 1) {
+      EnsureEmptyStatePresent(browser);
+    }
+    const int index = strip->GetIndexOfWebContents(wc);
+    if (index == TabStripModel::kNoTab) {
+      return nullptr;
+    }
+    detached = strip->DetachWebContentsAtForInsertion(
+        index, TabRemovedReason::kInsertedIntoOtherTabStrip);
+  }
+  ForgetContents(tab_id, wc);
+  if (detached) {
+    detached->RemoveUserData(OpenTabHandle::UserDataKey());
+  }
+  if (remove_from_model) {
+    base::AutoReset<bool> applying(&applying_, true);
+    service_->model().CloseTab(tab_id);
+  } else {
+    model_util::UpdateLive(service_->model(), tab_id, [](TabLiveState& live) {
+      live.has_web_content = false;
+      live.is_loading = false;
+      live.is_audible = false;
+    });
+  }
+  return detached;
+}
+
+void OpenTabBridge::CloseBrowsersForProfile(const ProfileID& profile_id) {
+  std::vector<BrowserWindowInterface*> targets;
+  for (const auto& [browser, managed] : browsers_) {
+    if (managed.profile == profile_id) {
+      targets.push_back(browser);
+    }
+  }
+  for (BrowserWindowInterface* browser : targets) {
+    if (browsers_.contains(browser) && browser->GetWindow()) {
+      browser->GetWindow()->Close();
+    }
+  }
+}
+
+void OpenTabBridge::UpdateTabProtectionState(const ItemID& tab_id,
+                                             content::WebContents* contents) {
+  if (!contents || !service_) {
+    return;
+  }
+  const bool capturing = IsWebContentsCapturingMedia(contents);
+  const bool devtools = IsDevToolsOpenForWebContents(contents);
+  const bool notifications = AreNotificationsAllowedForWebContents(contents);
+  const Tab* tab = service_->model().FindTab(tab_id);
+  if (tab && (tab->live_state.is_capturing_media != capturing ||
+              tab->live_state.devtools_open != devtools ||
+              tab->live_state.notifications_allowed != notifications)) {
+    model_util::UpdateLive(service_->model(), tab_id, [&](TabLiveState& live) {
+      live.is_capturing_media = capturing;
+      live.devtools_open = devtools;
+      live.notifications_allowed = notifications;
+    });
+  }
+  if (OpenSleepController* sleep = service_->sleep_controller()) {
+    sleep->OnTabUnloadHandlersChanged(
+        tab_id, contents->NeedToFireBeforeUnloadOrUnloadEvents());
+  }
+}
+
+void OpenTabBridge::RefreshProtectionStates() {
+  for (const auto& [tab_id, wc] : contents_) {
+    if (wc) {
+      UpdateTabProtectionState(tab_id, wc.get());
+    }
+  }
+}
+
+void OpenTabBridge::OnTabVisibilityChanged(const ItemID& tab_id,
+                                           content::WebContents* contents,
+                                           bool visible) {
+  if (!started_ || !service_) {
+    return;
+  }
+  UpdateTabProtectionState(tab_id, contents);
+  if (!visible) {
+    if (OpenSleepController* sleep = service_->sleep_controller()) {
+      sleep->OnTabHidden(tab_id);
+    }
+  }
+}
+
+void OpenTabBridge::OnTabFormInteraction(const ItemID& tab_id) {
+  if (!started_ || !service_) {
+    return;
+  }
+  const TimestampSec now = base::Time::Now().InSecondsFSinceUnixEpoch();
+  model_util::UpdateLive(service_->model(), tab_id, [now](TabLiveState& live) {
+    live.last_form_interaction_at = now;
+  });
+}
+
+void OpenTabBridge::OnMediaCaptureChanged(content::WebContents* web_contents) {
+  if (!started_ || !web_contents) {
+    return;
+  }
+  if (std::optional<ItemID> id = TabIdForWebContents(web_contents)) {
+    UpdateTabProtectionState(*id, web_contents);
+  }
+}
+
+void OpenTabBridge::DevToolsAgentHostAttached(
+    content::DevToolsAgentHost* agent_host) {
+  if (!started_ || !agent_host) {
+    return;
+  }
+  content::WebContents* wc = agent_host->GetWebContents();
+  if (std::optional<ItemID> id = TabIdForWebContents(wc)) {
+    UpdateTabProtectionState(*id, wc);
+  }
+}
+
+void OpenTabBridge::DevToolsAgentHostDetached(
+    content::DevToolsAgentHost* agent_host) {
+  if (!started_ || !agent_host) {
+    return;
+  }
+  content::WebContents* wc = agent_host->GetWebContents();
+  if (std::optional<ItemID> id = TabIdForWebContents(wc)) {
+    UpdateTabProtectionState(*id, wc);
+  }
 }
 
 // --- Chromium -> model -------------------------------------------------------
@@ -930,9 +1678,17 @@ void OpenTabBridge::OnTabStripModelChanged(
       }
       for (const auto& inserted : change.GetInsert()->contents) {
         content::WebContents* wc = inserted.contents;
-        if (!IsEmptyState(wc) && !TabIdForWebContents(wc)) {
-          AdoptChromiumTab(browser, wc, inserted.index);
+        if (IsEmptyState(wc) || TabIdForWebContents(wc)) {
+          continue;
         }
+        // Never adopt Chromium's raw chrome://newtab page into Open's sidebar;
+        // scrub it so empty Spaces render Open's tinted empty Space canvas.
+        if (IsChromiumNewTabUrl(wc->GetVisibleURL()) ||
+            IsChromiumNewTabUrl(wc->GetLastCommittedURL())) {
+          ScrubNewTabPagesLater(browser);
+          continue;
+        }
+        AdoptChromiumTab(browser, wc, inserted.index);
       }
       break;
     case TabStripModelChange::kRemoved:
@@ -979,18 +1735,28 @@ void OpenTabBridge::OnTabStripModelChanged(
   if (applying_) {
     return;
   }
+  if (selection.active_tab_changed()) {
+    std::optional<ItemID> old_id = TabIdForWebContents(selection.old_contents);
+    std::optional<ItemID> new_id = TabIdForWebContents(selection.new_contents);
+    if (old_id && old_id != new_id) {
+      if (OpenSleepController* sleep = service_->sleep_controller()) {
+        sleep->OnTabHidden(*old_id);
+      }
+    }
+  }
   if (selection.active_tab_changed() && selection.new_contents) {
     std::optional<ItemID> id = TabIdForWebContents(selection.new_contents);
     std::optional<WindowID> window_id = WindowOfBrowser(browser);
     if (id && window_id) {
       BrowserModel& model = service_->model();
+      model.TouchWindowFocus(*window_id);
       std::optional<SpaceID> space = model_util::SpaceOfNode(model, *id);
       const BrowserWindowState* window = model.FindWindow(*window_id);
       if (window) {
         const ItemID select = model.SidebarSelectionId(*id).value_or(*id);
         base::AutoReset<bool> applying(&applying_, true);
         const SpaceID target = space.value_or(window->focused_space_id);
-        if (target != window->focused_space_id) {
+        if (target != window->focused_space_id && !window->is_incognito) {
           model.FocusSpace(*window_id, target);
         }
         model.SelectNode(*window_id, target, select);
@@ -1075,35 +1841,104 @@ void OpenTabBridge::OnChromiumClosedTab(content::WebContents* contents) {
 void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
   if (applying_ || !started_ ||
       browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
-      browser->GetProfile()->IsOffTheRecord()) {
+      browsers_.contains(browser)) {
     return;
   }
-  // A normal window Open did not ask for (Ctrl+N from Chromium code paths,
-  // chrome.windows.create, a dragged-out page): its pages join the main
-  // window's sidebar; the window itself is kept for the extension that
-  // asked for it.
+  // Every TYPE_NORMAL Chromium Browser (including Off-The-Record / Incognito)
+  // gets its own distinct WindowID in BrowserModel.
   std::optional<ProfileID> profile =
       service_->OpenProfileIdFor(browser->GetProfile());
   if (!profile) {
     return;
   }
-  const WindowID main = service_->MainWindowId();
-  WindowBrowsers& wb = windows_[main];
-  const bool primary = !wb.by_profile.contains(*profile);
-  if (primary) {
-    wb.by_profile[*profile] = browser;
+  BrowserModel& model = service_->model();
+  const bool is_otr = browser->GetProfile()->IsOffTheRecord();
+  WindowID window_id;
+  {
+    base::AutoReset<bool> applying(&applying_, true);
+    if (is_otr) {
+      window_id = model.CreateIncognitoWindow(*profile);
+    } else {
+      SpaceID target_space;
+      if (const BrowserWindowState* focused =
+              model.FindWindow(FocusedWindowId());
+          focused && !focused->is_incognito) {
+        if (const Space* sp = model.FindSpace(focused->focused_space_id);
+            sp && sp->profile_id == *profile) {
+          target_space = sp->id;
+        }
+      }
+      if (target_space.empty()) {
+        for (const Space& space : model.spaces()) {
+          if (space.profile_id == *profile) {
+            target_space = space.id;
+            break;
+          }
+        }
+      }
+      if (target_space.empty() && !model.spaces().empty()) {
+        target_space = model.spaces().front().id;
+      }
+      if (!target_space.empty()) {
+        window_id = model.CreateWindow(target_space, WindowStyle::kStandard,
+                                       /*register_undo=*/false);
+      }
+    }
   }
-  TrackBrowser(browser, main, *profile, primary);
+  if (window_id.empty()) {
+    return;
+  }
+  WindowBrowsers& wb = windows_[window_id];
+  wb.by_profile[*profile] = browser;
+  TrackBrowser(browser, window_id, *profile, /*primary=*/true, is_otr);
+
+  // Adopt any real URL already in the strip; scrub raw chrome://newtab so a
+  // fresh OS window opens on Open's clean empty Space canvas.
+  TabStripModel* strip = browser->GetTabStripModel();
+  bool has_ntp = false;
+  for (int i = 0; i < strip->count(); ++i) {
+    content::WebContents* wc = strip->GetWebContentsAt(i);
+    if (IsEmptyState(wc) || TabIdForWebContents(wc)) {
+      continue;
+    }
+    if (IsChromiumNewTabUrl(wc->GetVisibleURL()) ||
+        IsChromiumNewTabUrl(wc->GetLastCommittedURL())) {
+      has_ntp = true;
+    } else {
+      AdoptChromiumTab(browser, wc, i);
+    }
+  }
+  if (has_ntp) {
+    ScrubNewTabPagesLater(browser);
+  }
 }
 
 void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
+  std::optional<ManagedBrowser> closed_info;
+  if (auto it = browsers_.find(browser); it != browsers_.end()) {
+    closed_info = it->second;
+    browsers_.erase(it);
+  }
   for (auto& [window_id, wb] : windows_) {
     std::erase_if(wb.by_profile, [browser](const auto& entry) {
       return entry.second == browser;
     });
   }
-  browsers_.erase(browser);
   RemoveObservedStrip(browser->GetTabStripModel());
+
+  if (closed_info) {
+    auto win_it = windows_.find(closed_info->window);
+    if (win_it != windows_.end() && win_it->second.by_profile.empty()) {
+      windows_.erase(win_it);
+      // When an OS window closes during normal operation (not shutdown), remove
+      // it from BrowserModel: Incognito windows vanish completely, and normal
+      // windows record last_closed_window_ for Dock reopen.
+      if (started_ && service_ && service_->started()) {
+        base::AutoReset<bool> applying(&applying_, true);
+        service_->model().CloseWindow(closed_info->window);
+      }
+    }
+  }
 }
 
 void OpenTabBridge::OnTabStripModelDestroyed(TabStripModel* tab_strip_model) {
@@ -1173,6 +2008,9 @@ void OpenTabBridge::OnTabDocumentAvailable(const ItemID& tab_id,
 
 void OpenTabBridge::PushLiveState(const ItemID& tab_id,
                                   content::WebContents* contents) {
+  const bool capturing = IsWebContentsCapturingMedia(contents);
+  const bool devtools = IsDevToolsOpenForWebContents(contents);
+  const bool notifications = AreNotificationsAllowedForWebContents(contents);
   model_util::UpdateLive(service_->model(), tab_id, [&](TabLiveState& live) {
     live.has_web_content = true;
     live.sleep_phase = SleepPhase::kLive;
@@ -1180,9 +2018,16 @@ void OpenTabBridge::PushLiveState(const ItemID& tab_id,
     live.progress = contents->GetLoadProgress();
     live.is_audible = contents->IsCurrentlyAudible();
     live.is_crashed = contents->IsCrashed();
+    live.is_capturing_media = capturing;
+    live.devtools_open = devtools;
+    live.notifications_allowed = notifications;
     live.can_go_back = contents->GetController().CanGoBack();
     live.can_go_forward = contents->GetController().CanGoForward();
   });
+  if (OpenSleepController* sleep = service_->sleep_controller()) {
+    sleep->OnTabUnloadHandlersChanged(
+        tab_id, contents->NeedToFireBeforeUnloadOrUnloadEvents());
+  }
 }
 
 // --- Lookups -----------------------------------------------------------------
@@ -1206,19 +2051,57 @@ std::optional<ItemID> OpenTabBridge::TabIdForWebContents(
   return handle->tab_id();
 }
 
-BrowserWindowInterface* OpenTabBridge::MainBrowser() const {
-  auto it = windows_.find(service_->MainWindowId());
+bool OpenTabBridge::IsIncognitoWindow(const WindowID& window_id) const {
+  if (service_->model().IsIncognitoWindow(window_id)) {
+    return true;
+  }
+  BrowserWindowInterface* browser = BrowserForWindow(window_id);
+  return browser && browser->GetProfile()->IsOffTheRecord();
+}
+
+WindowID OpenTabBridge::FocusedWindowId() const {
+  for (const auto& [browser, managed] : browsers_) {
+    if (browser->GetWindow() && browser->GetWindow()->IsActive()) {
+      return managed.window;
+    }
+  }
+  for (const auto& [browser, managed] : browsers_) {
+    if (browser->GetWindow() && browser->GetWindow()->IsVisible()) {
+      return managed.window;
+    }
+  }
+  return service_->MainWindowId();
+}
+
+BrowserWindowInterface* OpenTabBridge::BrowserForWindow(
+    const WindowID& window_id) const {
+  auto it = windows_.find(window_id);
   if (it == windows_.end()) {
     return nullptr;
   }
+  // Prefer the Browser matching the window's focused Space's Profile.
+  if (const BrowserWindowState* window =
+          service_->model().FindWindow(window_id)) {
+    if (const Space* space =
+            service_->model().FindSpace(window->focused_space_id)) {
+      if (auto pit = it->second.by_profile.find(space->profile_id);
+          pit != it->second.by_profile.end()) {
+        return pit->second;
+      }
+    }
+  }
   for (const auto& [profile_id, browser] : it->second.by_profile) {
-    if (browser->GetWindow()->IsVisible()) {
+    if (browser->GetWindow() && browser->GetWindow()->IsVisible()) {
       return browser;
     }
   }
   return it->second.by_profile.empty()
              ? nullptr
              : it->second.by_profile.begin()->second.get();
+}
+
+BrowserWindowInterface* OpenTabBridge::MainBrowser() const {
+  return BrowserForWindow(service_->MainWindowId());
 }
 
 BrowserWindowInterface* OpenTabBridge::BrowserForTab(
@@ -1236,14 +2119,24 @@ BrowserWindowInterface* OpenTabBridge::BrowserForTab(
   return nullptr;
 }
 
-content::WebContents* OpenTabBridge::ActiveWebContents() const {
-  BrowserWindowInterface* browser = MainBrowser();
+content::WebContents* OpenTabBridge::ActiveWebContentsForWindow(
+    const WindowID& window_id) const {
+  BrowserWindowInterface* browser = BrowserForWindow(window_id);
   if (!browser) {
     return nullptr;
   }
   content::WebContents* wc =
       browser->GetTabStripModel()->GetActiveWebContents();
   return IsEmptyState(wc) ? nullptr : wc;
+}
+
+std::optional<ItemID> OpenTabBridge::ActiveTabIdForWindow(
+    const WindowID& window_id) const {
+  return TabIdForWebContents(ActiveWebContentsForWindow(window_id));
+}
+
+content::WebContents* OpenTabBridge::ActiveWebContents() const {
+  return ActiveWebContentsForWindow(FocusedWindowId());
 }
 
 std::optional<ItemID> OpenTabBridge::ActiveTabId() const {

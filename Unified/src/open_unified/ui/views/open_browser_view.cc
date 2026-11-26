@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "cc/paint/paint_flags.h"
+#include "content/public/browser/web_contents.h"
 #include "open_unified/ui/design/open_metrics.h"
 #include "open_unified/ui/design/open_motion.h"
 #include "open_unified/ui/design/open_theme_shader.h"
@@ -52,6 +53,8 @@
 #include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
+#include "ui/views/window/frame_view.h"
+#include "ui/views/window/non_client_view.h"
 
 namespace open_unified {
 
@@ -182,9 +185,19 @@ class OpenThemeLayerView : public views::View {
   }
   void SetStyle(const theme::ThemeStyle& style) {
     if (painter_.SetStyle(style)) {
+      UpdateLayerOpacity();
       SchedulePaint();
     }
   }
+  // macOS translucent windows: a vibrant theme paints the window tint over
+  // the native material, so the layer must not claim to be opaque.
+  void SetTranslucentWindow(bool translucent) {
+    if (painter_.SetTranslucentWindow(translucent)) {
+      UpdateLayerOpacity();
+      SchedulePaint();
+    }
+  }
+  bool PaintsOpaque() const { return painter_.PaintsOpaque(); }
   void SetActive(bool active) {
     if (painter_.SetActive(active)) {
       SchedulePaint();
@@ -198,6 +211,10 @@ class OpenThemeLayerView : public views::View {
   }
 
  private:
+  void UpdateLayerOpacity() {
+    layer()->SetFillsBoundsOpaquely(painter_.PaintsOpaque());
+  }
+
   theme::ThemePainter painter_;
 };
 
@@ -233,6 +250,12 @@ class OpenBrowserView::ThemeBackgroundView : public views::View {
     incoming_->SetActive(active);
   }
 
+  void SetTranslucentWindow(bool translucent) {
+    translucent_ = translucent;
+    current_->SetTranslucentWindow(translucent);
+    incoming_->SetTranslucentWindow(translucent);
+  }
+
   // Animated switch. A second request for the running target continues it.
   void Crossfade(const theme::ThemeStyle& style) {
     if (target_ && *target_ == style && fading_) {
@@ -257,6 +280,7 @@ class OpenBrowserView::ThemeBackgroundView : public views::View {
     target_ = style;
     incoming_->SetStyle(style);
     incoming_->layer()->SetOpacity(0.0f);
+    current_->layer()->SetOpacity(1.0f);
     incoming_->SetVisible(true);
   }
 
@@ -265,8 +289,11 @@ class OpenBrowserView::ThemeBackgroundView : public views::View {
       return;
     }
     StopFade();
-    incoming_->layer()->SetOpacity(
-        static_cast<float>(std::clamp(progress, 0.0, 1.0)));
+    const float t = static_cast<float>(std::clamp(progress, 0.0, 1.0));
+    incoming_->layer()->SetOpacity(t);
+    if (CrossfadesBothLayers()) {
+      current_->layer()->SetOpacity(1.0f - t);
+    }
   }
 
   void EndTransition(bool commit) {
@@ -283,20 +310,32 @@ class OpenBrowserView::ThemeBackgroundView : public views::View {
   }
 
  private:
+  // Two translucent window tints composited source-over would raise the
+  // tint coverage mid-fade; fade the current one out as the incoming one
+  // fades in (ThemeBackgroundView uses plusL for the same reason).
+  bool CrossfadesBothLayers() const {
+    return translucent_ &&
+           (!current_->PaintsOpaque() || !incoming_->PaintsOpaque());
+  }
+
   void FinishFade(bool commit, double duration) {
     const float start = incoming_->layer()->GetTargetOpacity();
     const float end = commit ? 1.0f : 0.0f;
     const double remaining = std::abs(end - start) * duration;
     ++generation_;
     fading_ = true;
-    views::AnimationBuilder()
+    views::AnimationBuilder builder;
+    builder
         .SetPreemptionStrategy(ui::LayerAnimator::PreemptionStrategy::
                                    IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
         .OnEnded(base::BindOnce(&ThemeBackgroundView::OnFadeEnded,
-                                weak_factory_.GetWeakPtr(), generation_, commit))
-        .Once()
-        .SetDuration(motion::Seconds(remaining))
-        .SetOpacity(incoming_->layer(), end, gfx::Tween::LINEAR);
+                                weak_factory_.GetWeakPtr(), generation_, commit));
+    auto& block = builder.Once()
+                      .SetDuration(motion::Seconds(remaining))
+                      .SetOpacity(incoming_->layer(), end, gfx::Tween::LINEAR);
+    if (CrossfadesBothLayers()) {
+      block.SetOpacity(current_->layer(), 1.0f - end, gfx::Tween::LINEAR);
+    }
   }
 
   void OnFadeEnded(int generation, bool commit) {
@@ -319,12 +358,14 @@ class OpenBrowserView::ThemeBackgroundView : public views::View {
     ++generation_;
     fading_ = false;
     incoming_->layer()->GetAnimator()->StopAnimating();
+    current_->layer()->GetAnimator()->StopAnimating();
   }
 
   raw_ptr<OpenThemeLayerView> current_ = nullptr;
   raw_ptr<OpenThemeLayerView> incoming_ = nullptr;
   std::optional<theme::ThemeStyle> target_;
   bool fading_ = false;
+  bool translucent_ = false;
   int generation_ = 0;
   base::WeakPtrFactory<ThemeBackgroundView> weak_factory_{this};
 };
@@ -437,6 +478,13 @@ class OpenBrowserView::PanelHostView : public views::View {
     GetViewAccessibility().SetName(u"Web content");
   }
 
+  // Tab fullscreen: square corners, edge to edge.
+  void SetFullBleed(bool full_bleed) {
+    layer()->SetRoundedCornerRadius(
+        full_bleed ? gfx::RoundedCornersF()
+                   : gfx::RoundedCornersF(m::panel::kCornerRadius));
+  }
+
   // views::View:
   void Layout(PassKey) override {
     for (views::View* child : children()) {
@@ -445,6 +493,8 @@ class OpenBrowserView::PanelHostView : public views::View {
   }
 
   void OnPaint(gfx::Canvas* canvas) override {
+    // The panel draws no border stroke: only its 6 pt clip and the soft
+    // black 0.25 shadow (PanelShadowView) separate it from the theme.
     for (const views::View* child : children()) {
       if (child->GetVisible()) {
         return;
@@ -836,9 +886,12 @@ views::NativeViewHost* OpenBrowserView::ActiveWebHolder() const {
 
 void OpenBrowserView::ApplyWebCornerRadii() {
   // Native web content is not clipped by the panel layer: its clipping
-  // window gets the panel's 6 pt corners.
+  // window gets the panel's 6 pt corners (square in tab fullscreen).
   if (views::NativeViewHost* holder = ActiveWebHolder()) {
-    holder->SetNativeViewCornerRadii(gfx::RoundedCornersF(m::panel::kCornerRadius));
+    holder->SetNativeViewCornerRadii(
+        tab_fullscreen_applied_
+            ? gfx::RoundedCornersF()
+            : gfx::RoundedCornersF(m::panel::kCornerRadius));
   }
 }
 
@@ -942,6 +995,8 @@ views::View* OpenBrowserView::SetWebContentsHost(
     ApplyWebCornerRadii();
   }
   UpdatePanelChildren();
+  // A new child needs its bounds even when no visibility changed.
+  panel_host_->InvalidateLayout();
   return web_contents_host_;
 }
 
@@ -959,6 +1014,8 @@ views::View* OpenBrowserView::SetSplitContainer(
     split_slide_client_ = slide_client;
   }
   UpdatePanelChildren();
+  // A new child needs its bounds even when no visibility changed.
+  panel_host_->InvalidateLayout();
   return split_container_;
 }
 
@@ -971,19 +1028,29 @@ void OpenBrowserView::SetSplitViewActive(bool active) {
   sidebar_->OnSplitViewChanged(active);
 }
 
+bool OpenBrowserView::HasActiveTab() const {
+  return controller_->GetActiveTab(window_id_) != nullptr;
+}
+
 void OpenBrowserView::UpdatePanelChildren() {
   const bool split = split_view_active_ && split_container_;
-  if (split_container_) {
-    split_container_->SetVisible(split);
+  // An empty Space (no active tab) shows the empty-panel canvas: white 10 %
+  // over the theme (window-states.png), never Chromium's blank page or NTP.
+  const bool has_tab = HasActiveTab();
+  bool changed = false;
+  auto set_visible = [&changed](views::View* view, bool visible) {
+    if (view && view->GetVisible() != visible) {
+      view->SetVisible(visible);
+      changed = true;
+    }
+  };
+  set_visible(split_container_, split);
+  set_visible(web_contents_host_, !split && has_tab);
+  set_visible(browser_contents_container_, !split && has_tab);
+  if (changed) {
+    panel_host_->InvalidateLayout();
+    panel_host_->SchedulePaint();
   }
-  if (web_contents_host_) {
-    web_contents_host_->SetVisible(!split);
-  }
-  if (browser_contents_container_) {
-    browser_contents_container_->SetVisible(!split);
-  }
-  panel_host_->InvalidateLayout();
-  panel_host_->SchedulePaint();
 }
 
 views::View* OpenBrowserView::SetOverlay(OverlaySlot slot,
@@ -1283,7 +1350,8 @@ bool OpenBrowserView::PointInHoldZone(const gfx::Point& p) const {
 }
 
 void OpenBrowserView::OnRevealEvent(const ui::Event& event) {
-  if (!sidebar_hidden_ || sliding_ || !reveal_monitor_) {
+  if (!sidebar_hidden_ || sliding_ || !reveal_monitor_ ||
+      tab_fullscreen_applied_) {
     return;
   }
   if (event.type() == ui::EventType::kMouseExited) {
@@ -1331,10 +1399,16 @@ void OpenBrowserView::OnRevealEvent(const ui::Event& event) {
 }
 
 void OpenBrowserView::ShowRevealCard() {
-  if (!sidebar_hidden_ || card_state_ == CardState::kShown ||
-      card_state_ == CardState::kShowing) {
+  if (!sidebar_hidden_ || tab_fullscreen_applied_ ||
+      card_state_ == CardState::kShown || card_state_ == CardState::kShowing) {
     return;
   }
+  // Hit testing over the page: the card lives in the overlay host above
+  // BrowserView's contents container. On macOS, BridgedContentView's
+  // -hitTest: asks Views (NativeWidgetMacNSWindowHost::GetHitTestResult);
+  // only a NativeViewHost target sends the click to the WebContents NSView,
+  // so the card's views take every click over the page. A child widget is
+  // not needed (and would lose the card's page blur).
   ReparentSidebar(true);
   reveal_card_->SetStyle(FocusedThemeState().style);
   reveal_card_->SetWindowSize(size());
@@ -1384,21 +1458,38 @@ void OpenBrowserView::OnCardMotionSettled() {
 }
 
 void OpenBrowserView::NotifyTrafficLights() {
+  // Offset of the group from Arc's resting centers (x 20 / 43 / 66, y 24).
+  gfx::Vector2d offset;
+  bool visible = !sidebar_hidden_ || sliding_;
+  if (sidebar_->parent() == reveal_card_.get()) {
+    // The lights ride on the card, 5 pt further in: AX close [17, 21].
+    visible = card_state_ != CardState::kOff;
+    offset = gfx::Vector2d(
+        reveal_card_->x() + static_cast<int>(std::lround(card_motion_->value())),
+        reveal_card_->y());
+  } else {
+    offset = gfx::Vector2d(static_cast<int>(std::lround(sidebar_offset_)), 0);
+  }
+  // A fullscreen page hides them (native full screen is AppKit's).
+  if (tab_fullscreen_applied_) {
+    visible = false;
+  }
+#if BUILDFLAG(IS_MAC)
+  if (window_controls_ == WindowControls::kNativeMac && GetWidget()) {
+    if (OpenPlatform* platform = OpenPlatform::Get()) {
+      // Arc's DimmedWindowControls: grey at rest, lit under the pointer.
+      platform->PlaceWindowButtons(GetWidget(),
+                                   gfx::Point() + offset, visible,
+                                   /*dimmed=*/true);
+    }
+  }
+#endif
   if (!traffic_lights_callback_) {
     return;
   }
   const m::Frame close = m::chrome::kTrafficLightFrames[0];
   gfx::Point origin(static_cast<int>(close.x), static_cast<int>(close.y));
-  bool visible = !sidebar_hidden_ || sliding_;
-  if (sidebar_->parent() == reveal_card_.get()) {
-    // The lights ride on the card: AX close [17, 21].
-    visible = card_state_ != CardState::kOff;
-    origin.Offset(reveal_card_->x() +
-                      static_cast<int>(std::lround(card_motion_->value())),
-                  reveal_card_->y());
-  } else {
-    origin.Offset(static_cast<int>(std::lround(sidebar_offset_)), 0);
-  }
+  origin += offset;
   traffic_lights_callback_.Run(origin, visible);
 }
 
@@ -1448,6 +1539,7 @@ void OpenBrowserView::InvalidateThemeCache() {
   reveal_card_->SetStyle(focused.style);
   shown_theme_space_ = FocusedSpaceId();
   sidebar_->OnAppearanceChanged();
+  UpdateWindowMaterial();
 }
 
 SpaceID OpenBrowserView::FocusedSpaceId() const {
@@ -1479,6 +1571,7 @@ void OpenBrowserView::EndThemeTransition(bool commit) {
     reveal_card_->SetStyle(ThemeStateFor(*transition_space_).style);
   }
   transition_space_.reset();
+  UpdateWindowMaterial();
 }
 
 void OpenBrowserView::CrossfadeTheme(const SpaceID& to, bool animated) {
@@ -1490,6 +1583,7 @@ void OpenBrowserView::CrossfadeTheme(const SpaceID& to, bool animated) {
   }
   reveal_card_->SetStyle(style);
   shown_theme_space_ = to;
+  UpdateWindowMaterial();
 }
 
 ui::Compositor* OpenBrowserView::AnimationCompositor() {
@@ -1634,7 +1728,10 @@ void OpenBrowserView::SetClipsWindowCorners(bool clips) {
 
 // --- Layout -----------------------------------------------------------------------------
 
-void OpenBrowserView::LayoutPanel(const gfx::Rect& panel) {
+void OpenBrowserView::LayoutPanel(const gfx::Rect& requested) {
+  // A fullscreen page fills the window edge to edge.
+  const gfx::Rect panel =
+      tab_fullscreen_applied_ ? GetLocalBounds() : requested;
   panel_host_->SetBoundsRect(panel);
   panel_shadow_->SetContentBounds(panel);
   if (browser_contents_container_) {
@@ -1665,6 +1762,18 @@ void OpenBrowserView::Layout(PassKey) {
     }
   }
   theme_background_->SetBoundsRect(GetLocalBounds());
+  UpdatePanelChildren();
+  ApplyTabFullscreen(IsTabFullscreen());
+  if (tab_fullscreen_applied_) {
+    LayoutPanel(GetLocalBounds());
+    if (sidebar_->parent() == this) {
+      sidebar_->SetVisible(false);
+    }
+    resize_handle_->SetVisible(false);
+    LayoutOverlays();
+    NotifyTrafficLights();
+    return;
+  }
   const int w = static_cast<int>(std::lround(sidebar_width_));
   if (!sliding_) {
     LayoutPanel(PanelBoundsFor(sidebar_hidden_, sidebar_width_));
@@ -1695,7 +1804,12 @@ void OpenBrowserView::AddedToWidget() {
   widget_observation_.Reset();
   widget_observation_.Observe(widget);
   widget_visible_ = widget->IsVisible();
-  window_active_ = widget->IsActive();
+  // The active look follows ShouldPaintAsActive(): it stays active while a
+  // child overlay (Command Bar, Find bar, Peek) holds a paint-as-active lock.
+  window_active_ = widget->ShouldPaintAsActive();
+  paint_as_active_subscription_ =
+      widget->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+          &OpenBrowserView::OnPaintAsActiveChanged, base::Unretained(this)));
   theme_background_->SetActive(window_active_);
   reveal_card_->SetActive(window_active_);
   sidebar_slide_->SetCompositor(widget->GetCompositor());
@@ -1704,9 +1818,12 @@ void OpenBrowserView::AddedToWidget() {
   if (sidebar_hidden_) {
     StartRevealMonitor();
   }
+  UpdateWindowMaterial();
+  NotifyTrafficLights();
 }
 
 void OpenBrowserView::RemovedFromWidget() {
+  paint_as_active_subscription_ = {};
   StopRevealMonitor();
   sidebar_slide_->SetCompositor(nullptr);
   card_motion_->SetCompositor(nullptr);
@@ -1723,6 +1840,17 @@ void OpenBrowserView::OnThemeChanged() {
 
 void OpenBrowserView::OnWidgetActivationChanged(views::Widget* widget,
                                                 bool active) {
+  // Raw activation also flips when a child overlay takes key status; the
+  // paint-as-active state (which honors the overlay's lock) decides.
+  OnPaintAsActiveChanged();
+}
+
+void OpenBrowserView::OnPaintAsActiveChanged() {
+  const views::Widget* widget = GetWidget();
+  if (!widget) {
+    return;
+  }
+  const bool active = widget->ShouldPaintAsActive();
   if (window_active_ == active) {
     return;
   }
@@ -1730,6 +1858,127 @@ void OpenBrowserView::OnWidgetActivationChanged(views::Widget* widget,
   theme_background_->SetActive(active);
   reveal_card_->SetActive(active);
   sidebar_->OnWindowActivationChanged();
+  UpdateWindowMaterial();
+}
+
+// --- Tab fullscreen ------------------------------------------------------------
+
+void OpenBrowserView::SetTabFullscreen(bool fullscreen) {
+  if (tab_fullscreen_ == fullscreen) {
+    return;
+  }
+  tab_fullscreen_ = fullscreen;
+  InvalidateLayout();
+}
+
+bool OpenBrowserView::IsTabFullscreen() const {
+  if (tab_fullscreen_) {
+    return true;
+  }
+  // Browser fullscreen (Cmd+Ctrl+F) keeps Open's frame; only a page that
+  // asked for fullscreen goes full-bleed.
+  if (!browser_view_ || !browser_view_->IsFullscreen()) {
+    return false;
+  }
+  content::WebContents* contents = browser_view_->GetActiveWebContents();
+  return contents && contents->IsFullscreen();
+}
+
+void OpenBrowserView::ApplyTabFullscreen(bool fullscreen) {
+  if (tab_fullscreen_applied_ == fullscreen) {
+    return;
+  }
+  tab_fullscreen_applied_ = fullscreen;
+  panel_host_->SetFullBleed(fullscreen);
+  panel_shadow_->SetVisible(!fullscreen);
+  if (fullscreen) {
+    // No card and no reveal while the page is fullscreen.
+    reveal_dwell_timer_.Stop();
+    reveal_exit_timer_.Stop();
+    if (card_state_ != CardState::kOff) {
+      card_motion_->Stop();
+      card_state_ = CardState::kOff;
+      reveal_card_->SetVisible(false);
+      card_shadow_->SetVisible(false);
+      if (sidebar_->parent() == reveal_card_.get()) {
+        ReparentSidebar(false);
+      }
+    }
+    if (sliding_) {
+      sidebar_slide_->JumpTo(sidebar_hidden_ ? -sidebar_width_ : 0);
+      OnSidebarSlideSettled();
+    }
+    StopRevealMonitor();
+  } else if (sidebar_hidden_) {
+    StartRevealMonitor();
+  }
+  ApplyWebCornerRadii();
+  NotifyTrafficLights();
+}
+
+// --- macOS window material -------------------------------------------------
+
+void OpenBrowserView::EnableTranslucentChrome() {
+#if BUILDFLAG(IS_MAC)
+  if (translucent_chrome_enabled_ || !browser_view_) {
+    return;
+  }
+  views::Widget* widget = GetWidget();
+  views::NonClientView* non_client = widget ? widget->non_client_view() : nullptr;
+  views::FrameView* frame = non_client ? non_client->frame_view() : nullptr;
+  if (!frame) {
+    return;
+  }
+  translucent_chrome_enabled_ = true;
+  // BrowserFrameViewMac paints the opaque frame color under the whole
+  // window, and the ClientView (BrowserView) is its child. BrowserView gets
+  // its own transparent layer, so the browser's views still draw; the frame
+  // view's own layer is LAYER_NOT_DRAWN, which drops only its frame paint.
+  browser_view_->SetPaintToLayer();
+  browser_view_->layer()->SetFillsBoundsOpaquely(false);
+  frame->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
+#endif
+}
+
+void OpenBrowserView::UpdateWindowMaterial() {
+#if BUILDFLAG(IS_MAC)
+  views::Widget* widget = GetWidget();
+  OpenPlatform* platform = OpenPlatform::Get();
+  if (!widget || !platform || window_controls_ != WindowControls::kNativeMac) {
+    return;
+  }
+  const OpenSpaceThemeState& state = FocusedThemeState();
+  platform->SetWindowButtonsTone(
+      widget, state.roles.content == theme::ContentAppearance::kDark,
+      window_active_);
+  const theme::ThemeStyle& style = state.style;
+  WindowMaterialSpec spec;
+  spec.vibrant = style.is_vibrant;
+  spec.dark_translucency = style.translucency == theme::Translucency::kDark;
+  // Imported JSON keeps its stored translucency when the system appearance
+  // changes: the material follows it, the wash follows the window
+  // appearance. Editor themes carry their window scheme.
+  spec.dark_scheme = style.uses_legacy_intensity
+                         ? controller_->IsSystemDarkMode()
+                         : style.window_color_scheme ==
+                               theme::ContentAppearance::kDark;
+  spec.default_theme = style.fill_kind == theme::ThemeStyle::FillKind::kCorners;
+  spec.active = window_active_;
+  if (applied_material_ && *applied_material_ == spec) {
+    return;
+  }
+  applied_material_ = spec;
+  if (spec.vibrant) {
+    // Before the window turns non-opaque: no frame-color flash.
+    EnableTranslucentChrome();
+  }
+  const bool translucent = translucent_chrome_enabled_ &&
+                           platform->UpdateWindowEffects(widget, spec);
+  if (translucent != translucent_window_) {
+    translucent_window_ = translucent;
+    theme_background_->SetTranslucentWindow(translucent);
+  }
+#endif
 }
 
 void OpenBrowserView::OnWidgetVisibilityChanged(views::Widget* widget,
@@ -1738,6 +1987,7 @@ void OpenBrowserView::OnWidgetVisibilityChanged(views::Widget* widget,
 }
 
 void OpenBrowserView::OnWidgetDestroying(views::Widget* widget) {
+  paint_as_active_subscription_ = {};
   StopRevealMonitor();
   sidebar_slide_->SetCompositor(nullptr);
   card_motion_->SetCompositor(nullptr);
@@ -1767,6 +2017,7 @@ void OpenBrowserView::OnSpaceThemeChanged(const SpaceID& space_id) {
     const theme::ThemeStyle& style = ThemeStateFor(space_id).style;
     theme_background_->SetStyle(style);
     reveal_card_->SetStyle(style);
+    UpdateWindowMaterial();
   }
   sidebar_->OnSpaceThemeChanged(space_id);
 }
@@ -1783,6 +2034,7 @@ void OpenBrowserView::OnWindowStateChanged(const WindowID& window_id) {
   SyncFromWindowState(animate);
   // The pager slides the strip and drives the background cross-fade.
   sidebar_->OnWindowStateChanged(animate);
+  UpdatePanelChildren();
   if (IsRevealCardShown()) {
     reveal_card_->SetStyle(FocusedThemeState().style);
   }
@@ -1796,6 +2048,7 @@ void OpenBrowserView::OnActiveTabChanged(const WindowID& window_id) {
   if (window_id == window_id_) {
     // Each tab has its own web view: give the new one the panel corners.
     ApplyWebCornerRadii();
+    UpdatePanelChildren();
     sidebar_->OnActiveTabChanged();
   }
 }

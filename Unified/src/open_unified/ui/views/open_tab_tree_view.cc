@@ -22,6 +22,7 @@
 #include "open_unified/ui/design/open_theme_shader.h"
 #include "open_unified/ui/design/open_typography.h"
 #include "open_unified/ui/views/open_browser_view.h"
+#include "third_party/skia/include/core/SkPathBuilder.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
@@ -120,6 +121,48 @@ void DrawPlateShadow(gfx::Canvas* canvas,
   gfx::RectF shadow = rect;
   shadow.Offset(0, 0.5f);
   canvas->DrawRoundRect(shadow, radius, flags);
+}
+
+// Folder glyph tint. A theme with its own accent uses it; the default and
+// accent-less imported themes take the Space title ink instead of the
+// generic brand blue, so the folder matches the Space (no electric-blue
+// glyph on a dark or warm theme).
+SkColor FolderTint(const OpenSpaceThemeState& state) {
+  if (state.style.accent.has_value()) {
+    return Sk(state.accent);
+  }
+  return Sk(state.roles.space_title, 0.90f);
+}
+
+// Open's own Live Folder mark (a pull-request style glyph: two linked nodes
+// and a branch), drawn white inside the folder body. Size and placement are
+// a guess (FolderCellView: 0.78 of the body; capture pending).
+void DrawLiveFolderBadge(gfx::Canvas* canvas, const gfx::RectF& ink) {
+  const gfx::RectF body(ink.x(), ink.y() + ink.height() * 0.30f, ink.width(),
+                        ink.height() * 0.70f);
+  const float side = std::min(body.width(), body.height()) * 0.78f;
+  const float x0 = body.CenterPoint().x() - side / 2;
+  const float y0 = body.CenterPoint().y() - side / 2;
+  cc::PaintFlags pen;
+  pen.setAntiAlias(true);
+  pen.setStyle(cc::PaintFlags::kStroke_Style);
+  pen.setStrokeWidth(std::max(1.0f, side * 0.12f));
+  pen.setStrokeCap(cc::PaintFlags::kRound_Cap);
+  pen.setColor(SK_ColorWHITE);
+  const float r = side * 0.14f;
+  const gfx::PointF a(x0 + side * 0.25f, y0 + side * 0.18f);
+  const gfx::PointF b(x0 + side * 0.25f, y0 + side * 0.82f);
+  const gfx::PointF c(x0 + side * 0.75f, y0 + side * 0.82f);
+  canvas->DrawCircle(a, r, pen);
+  canvas->DrawCircle(b, r, pen);
+  canvas->DrawCircle(c, r, pen);
+  canvas->DrawLine(gfx::PointF(a.x(), a.y() + r), gfx::PointF(b.x(), b.y() - r),
+                   pen);
+  SkPathBuilder branch;
+  branch.moveTo(c.x(), c.y() - r);
+  branch.lineTo(c.x(), y0 + side * 0.40f);
+  branch.quadTo(c.x(), y0 + side * 0.18f, x0 + side * 0.50f, y0 + side * 0.18f);
+  canvas->DrawPath(branch.detach(), pen);
 }
 
 bool LeftPinnedUrl(const Tab& tab) {
@@ -341,19 +384,29 @@ class OpenTabTreeView::HeaderView : public views::View,
                                w - 2 * sl::kHeaderFillInsetX, sl::kHeaderHeight),
                     sl::kRowFillCornerRadius, Sk(state.roles.row_hover));
     }
+    // Incognito: the eyeglasses mark and "Private" (docs/incognito.md).
+    const bool incognito = IsIncognito();
     const std::u16string title =
-        base::UTF8ToUTF16(space->title.value_or(std::string()));
+        incognito ? std::u16string(u"Private")
+                  : base::UTF8ToUTF16(space->title.value_or(std::string()));
+    static const base::NoDestructor<SpaceIcon> kEyeglasses(
+        SpaceIconKind::kSymbol, "eyeglasses");
+    const SpaceIcon* icon = incognito ? kEyeglasses.get()
+                            : space->icon ? &*space->icon
+                                          : nullptr;
     glyphs::DrawSpaceIcon(
-        canvas, space->icon ? &*space->icon : nullptr, title,
-        ToRectF(sl::kHeaderIconFrame), typography::Get(OpenFont::kHeaderEmoji),
-        Sk(state.roles.space_title), 1.0f);
+        canvas, icon, title, ToRectF(sl::kHeaderIconFrame),
+        typography::Get(OpenFont::kHeaderEmoji), Sk(state.roles.space_title),
+        1.0f);
     if (rename_) {
       return;
     }
     const gfx::FontList& font = typography::Get(OpenFont::kSpaceTitle);
     // Hovered, the collapse chevron (22 pt plus its 2 pt gap) follows the
     // title and must stay clear of the "..." button: reserve its width.
-    const float right = hovered_ ? w - sl::kHeaderMoreTrailing -
+    // Incognito has no Pinned chevron and no "..." menu.
+    const bool controls = hovered_ && !incognito;
+    const float right = controls ? w - sl::kHeaderMoreTrailing -
                                        sl::kHeaderMoreSize - 2 - 24
                                  : w - 17;
     const int text_x = static_cast<int>(sl::kHeaderTitleX + sl::kHeaderTextInset);
@@ -362,7 +415,10 @@ class OpenTabTreeView::HeaderView : public views::View,
         font, sl::kHeaderTitleY + sl::kHeaderTitleBaselineOffset);
     const gfx::Rect text_rect(text_x, top, text_w, font.GetHeight());
     canvas->DrawStringRect(title, font, Sk(state.roles.space_title), text_rect);
-    if (hovered_) {
+    if (!controls) {
+      chevron_rect_ = gfx::RectF();
+      more_rect_ = gfx::RectF();
+    } else {
       // Pinned collapse chevron after the title (12 Bold), "..." at the end.
       const int title_w = std::min(
           text_w, gfx::Canvas::GetStringWidth(title, font));
@@ -402,7 +458,8 @@ class OpenTabTreeView::HeaderView : public views::View,
     if (!event.IsOnlyLeftMouseButton()) {
       return false;
     }
-    if (event.GetClickCount() == 2 && !more_rect_.Contains(gfx::PointF(event.location()))) {
+    if (event.GetClickCount() == 2 && !IsIncognito() &&
+        !more_rect_.Contains(gfx::PointF(event.location()))) {
       BeginRename();
       return true;
     }
@@ -435,6 +492,9 @@ class OpenTabTreeView::HeaderView : public views::View,
       views::View* source,
       const gfx::Point& point,
       ui::mojom::MenuSourceType source_type) override {
+    if (IsIncognito()) {
+      return;  // A private window has no Space edits.
+    }
     OpenMenuTarget target;
     target.kind = OpenMenuTarget::Kind::kSpace;
     target.space_id = tree_->space_id();
@@ -442,6 +502,11 @@ class OpenTabTreeView::HeaderView : public views::View,
   }
 
  private:
+  bool IsIncognito() const {
+    return tree_->context_->controller()->IsIncognitoWindow(
+        tree_->context_->window_id());
+  }
+
   void ShowMenu(gfx::Point local, ui::mojom::MenuSourceType source_type) {
     views::View::ConvertPointToScreen(this, &local);
     ShowContextMenuForViewImpl(this, local, source_type);
@@ -1094,7 +1159,15 @@ class OpenTabTreeView::RowView : public views::View,
     glyphs::Draw(canvas,
                  folder.is_expanded ? glyphs::Glyph::kFolderOpen
                                     : glyphs::Glyph::kFolderClosed,
-                 icon, Sk(state.accent));
+                 icon, FolderTint(state));
+    if (folder.live.has_value() &&
+        (folder.is_expanded || !folder.peeked_child_id.has_value())) {
+      const gfx::SizeF ink_size = glyphs::InkSize(glyphs::Glyph::kFolderClosed);
+      DrawLiveFolderBadge(
+          canvas, gfx::RectF(icon.CenterPoint().x() - ink_size.width() / 2,
+                             icon.CenterPoint().y() - ink_size.height() / 2,
+                             ink_size.width(), ink_size.height()));
+    }
     if (!folder.is_expanded && folder.peeked_child_id.has_value()) {
       cc::PaintFlags dot;
       dot.setAntiAlias(true);
@@ -1420,7 +1493,8 @@ class OpenTabTreeView::ListView : public views::View,
                           *target, dragged, url);
   }
 
-  // views::ContextMenuController (empty list area -> Space menu).
+  // views::ContextMenuController (empty list area -> Space menu; the
+  // controller builds the Incognito variant, "New Tab" only).
   void ShowContextMenuForViewImpl(
       views::View* source,
       const gfx::Point& point,
@@ -1535,21 +1609,39 @@ std::vector<OpenTabTreeView::RowDescriptor> OpenTabTreeView::BuildDescriptors()
     d.index = index;
     d.in_pinned = pinned;
     rows.push_back(d);
-    if (const Folder* f = node.as_folder(); f && f->is_expanded) {
-      const NodeParent child_parent{NodeParentKind::kFolder, f->id};
+    const Folder* f = node.as_folder();
+    if (!f) {
+      return;
+    }
+    const NodeParent child_parent{NodeParentKind::kFolder, f->id};
+    if (f->is_expanded) {
       for (size_t i = 0; i < f->children.size(); ++i) {
         self(self, f->children[i], depth + 1, child_parent, i, pinned);
+      }
+    } else if (f->peeked_child_id.has_value()) {
+      // A collapsed folder keeps its peeked child (the tab opened from it)
+      // as one row under it, so the active pill shows (SpacePageView
+      // .peeked). Nested folders are never peeked.
+      for (size_t i = 0; i < f->children.size(); ++i) {
+        const SidebarNode& child = f->children[i];
+        if (child.id() == *f->peeked_child_id && !child.as_folder()) {
+          self(self, child, depth + 1, child_parent, i, pinned);
+          break;
+        }
       }
     }
   };
 
-  if (!s->is_pinned_collapsed) {
+  // Incognito windows have no Pinned section (docs/incognito.md).
+  const bool incognito =
+      context_->controller()->IsIncognitoWindow(context_->window_id());
+  if (!incognito && !s->is_pinned_collapsed) {
     const NodeParent pinned{NodeParentKind::kSpacePinned, s->id};
     for (size_t i = 0; i < s->pinned.size(); ++i) {
       add(add, s->pinned[i], 0, pinned, i, true);
     }
   }
-  if (!s->today.empty()) {
+  if (!incognito && !s->today.empty()) {
     RowDescriptor divider;
     divider.kind = RowKind::kDivider;
     divider.key = kDividerKey;

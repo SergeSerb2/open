@@ -32,17 +32,20 @@ uint8_t ToByte(double v) {
       std::lround(std::min(1.0, std::max(0.0, v)) * 255.0));
 }
 
-sk_sp<SkImage> FieldImageFromPixels(const std::vector<float>& pixels, int n) {
-  const SkImageInfo dst_info =
-      SkImageInfo::Make(n, n, kRGBA_F16_SkColorType, kPremul_SkAlphaType,
-                        SkColorSpace::MakeSRGB());
+sk_sp<SkImage> FieldImageFromPixels(const std::vector<float>& pixels,
+                                    int n,
+                                    sk_sp<SkColorSpace> color_space = nullptr) {
+  if (!color_space) {
+    color_space = SkColorSpace::MakeSRGB();
+  }
+  const SkImageInfo dst_info = SkImageInfo::Make(
+      n, n, kRGBA_F16_SkColorType, kPremul_SkAlphaType, color_space);
   SkBitmap bitmap;
   if (!bitmap.tryAllocPixels(dst_info)) {
     return nullptr;
   }
-  const SkImageInfo src_info =
-      SkImageInfo::Make(n, n, kRGBA_F32_SkColorType, kPremul_SkAlphaType,
-                        SkColorSpace::MakeSRGB());
+  const SkImageInfo src_info = SkImageInfo::Make(
+      n, n, kRGBA_F32_SkColorType, kPremul_SkAlphaType, color_space);
   const SkPixmap src(src_info, pixels.data(),
                      static_cast<size_t>(n) * 4 * sizeof(float));
   // F16 is unclamped: extended (wide-gamut) components survive.
@@ -73,6 +76,57 @@ sk_sp<SkImage> TileImageFromAlpha(const texture::Tile& tile) {
   }
   bitmap.setImmutable();
   return SkImages::RasterFromBitmap(bitmap);
+}
+
+sk_sp<SkColorSpace> DisplayP3() {
+  return SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB,
+                               SkNamedGamut::kDisplayP3);
+}
+
+// ThemeField.makeWindowTint, pixel for pixel (premultiplied RGBA).
+std::vector<float> MakeWindowTintPixels(const ThemeStyle& style,
+                                        double width,
+                                        double height,
+                                        int n) {
+  const ThemeEvaluator e(style, width, height, /*is_active=*/true);
+  const bool corners = style.fill_kind == ThemeStyle::FillKind::kCorners;
+  double correction[3] = {0, 0, 0};
+  if (corners && style.translucency == Translucency::kDark) {
+    // Default corners store final fitted pixels, not a raw fill. Native
+    // material fit across the three C14-T wallpapers.
+    correction[0] = -0.12938;
+    correction[1] = -0.12318;
+    correction[2] = -0.12659;
+  }
+  const bool display_space = WindowTintUsesDisplayP3(style);
+  std::vector<float> pixels(static_cast<size_t>(n) * n * 4, 0.0f);
+  for (int y = 0; y < n; ++y) {
+    const double v = (y + 0.5) / n;
+    for (int x = 0; x < n; ++x) {
+      const double u = (x + 0.5) / n;
+      const size_t i = (static_cast<size_t>(y) * n + x) * 4;
+      if (display_space) {
+        // Keep the editor's display-space law: unmixing after conversion
+        // to sRGB would change its fitted colors.
+        const auto [c, a] = e.Fill(u, v);
+        pixels[i] = static_cast<float>(c.r * a);
+        pixels[i + 1] = static_cast<float>(c.g * a);
+        pixels[i + 2] = static_cast<float>(c.b * a);
+        pixels[i + 3] = static_cast<float>(a);
+        continue;
+      }
+      const auto rgb = e.Color(u, v);
+      const double a = corners ? e.alpha() : e.Fill(u, v).second;
+      // Unmix in the field's encoded space; extended channels keep colors
+      // outside sRGB until the window's color conversion.
+      const double gray = e.underlay() * (1 - a);
+      pixels[i] = static_cast<float>(rgb[0] - gray + correction[0] * a);
+      pixels[i + 1] = static_cast<float>(rgb[1] - gray + correction[1] * a);
+      pixels[i + 2] = static_cast<float>(rgb[2] - gray + correction[2] * a);
+      pixels[i + 3] = static_cast<float>(a);
+    }
+  }
+  return pixels;
 }
 
 // Small LRU of texture tiles. Key: texture, scale, and for legacy grain the
@@ -182,6 +236,25 @@ sk_sp<SkImage> MakeFieldImage(const ThemeStyle& style,
       n);
 }
 
+bool WindowTintUsesDisplayP3(const ThemeStyle& style) {
+  // Blended editor fills that do not mix in sRGB (ThemeEvaluator's
+  // mixes_in_srgb: light window scheme) keep the display-space law.
+  return style.fill_kind == ThemeStyle::FillKind::kBlended &&
+         !style.uses_legacy_intensity &&
+         style.window_color_scheme != ContentAppearance::kLight;
+}
+
+sk_sp<SkImage> MakeWindowTintImage(const ThemeStyle& style,
+                                   const gfx::SizeF& window_size,
+                                   int resolution) {
+  const int n = std::max(resolution, 2);
+  return FieldImageFromPixels(
+      MakeWindowTintPixels(style, window_size.width(), window_size.height(),
+                           n),
+      n,
+      WindowTintUsesDisplayP3(style) ? DisplayP3() : SkColorSpace::MakeSRGB());
+}
+
 sk_sp<SkShader> MakeFieldShader(const sk_sp<SkImage>& field,
                                 const gfx::RectF& window_rect) {
   if (!field) {
@@ -285,6 +358,11 @@ bool ThemePainter::SetActive(bool is_active) {
     return false;
   }
   is_active_ = is_active;
+  if (!PaintsOpaque()) {
+    // The window tint is built active: the native material owns the
+    // window's active look, so nothing repaints.
+    return false;
+  }
   field_size_.reset();
   return true;
 }
@@ -298,13 +376,30 @@ bool ThemePainter::SetCardTint(bool card_tint) {
   return true;
 }
 
+bool ThemePainter::SetTranslucentWindow(bool translucent) {
+  if (translucent == translucent_window_) {
+    return false;
+  }
+  translucent_window_ = translucent;
+  field_size_.reset();
+  return true;
+}
+
+bool ThemePainter::PaintsOpaque() const {
+  return !(translucent_window_ && style_.is_vibrant && !card_tint_);
+}
+
 void ThemePainter::Prepare(const gfx::SizeF& window_size, float device_scale) {
   if (!field_size_ || *field_size_ != window_size) {
     const int n = tuning::kFieldResolution;
-    sk_sp<SkImage> image = FieldImageFromPixels(
-        MakeFieldPixels(style_, window_size.width(), window_size.height(),
-                        is_active_, card_tint_, n),
-        n);
+    sk_sp<SkImage> image =
+        !PaintsOpaque()
+            ? MakeWindowTintImage(style_, window_size, n)
+            : FieldImageFromPixels(
+                  MakeFieldPixels(style_, window_size.width(),
+                                  window_size.height(), is_active_,
+                                  card_tint_, n),
+                  n);
     field_ = image ? cc::PaintImageBuilder::WithDefault()
                          .set_id(cc::PaintImage::GetNextId())
                          .set_image(std::move(image),

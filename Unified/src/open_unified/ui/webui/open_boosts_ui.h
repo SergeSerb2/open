@@ -14,7 +14,22 @@
 
 namespace open_unified::webui {
 
-// boosts.* methods of open://boosts (Boost editor and Zap).
+// RPC names this domain adds beyond open_ipc_contract.h (mirrors
+// Unified/webui/src/boosts/rpc.ts).
+//
+// boosts.editOnSite {id, profile_id?, zap?}: selects (or opens) a tab on the
+// Boost's site and asks that window for the floating Boost editor
+// ("edit-boost" command); with zap, also arms Zap on that page when it is
+// loaded. Reply {ok, tab_id, opened_new_tab, zap_armed, message}.
+namespace boosts_rpc {
+inline constexpr char kEditOnSite[] = "boosts.editOnSite";
+// Push event to OpenBrowserService observers and open:// pages:
+// {boost_id, profile_id, tab_id, window_id, zap}. OpenWindowController shows
+// OpenBoostEditorSession for that tab when it handles it.
+inline constexpr char kEventEditRequested[] = "open.boostEditRequested";
+}  // namespace boosts_rpc
+
+// boosts.* methods of open://boosts (Boost gallery, manager, Zap).
 class OpenBoostsUI : public OpenRpcDomain {
  public:
   explicit OpenBoostsUI(OpenWebUIMessageHandler* handler);
@@ -29,6 +44,11 @@ class OpenBoostsUI : public OpenRpcDomain {
   void Toggle(const base::DictValue& payload, Reply reply);
   void StartZap(const base::DictValue& payload, Reply reply);
   void RemoveZap(const base::DictValue& payload, Reply reply);
+  void EditOnSite(const base::DictValue& payload, Reply reply);
+  void OnEditBoostLoaded(ProfileID profile,
+                         bool zap,
+                         Reply reply,
+                         std::optional<Boost> boost);
 
   // Saves |boost| (store runner), refreshes the controller's cache and
   // replies {boost}.

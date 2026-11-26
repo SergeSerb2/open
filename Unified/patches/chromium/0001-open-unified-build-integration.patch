@@ -168,6 +168,70 @@ diff --git a/chrome/browser/ui/startup/BUILD.gn b/chrome/browser/ui/startup/BUIL
  }
  
  if (is_win) {
+diff --git a/chrome/browser/ui/cocoa/BUILD.gn b/chrome/browser/ui/cocoa/BUILD.gn
+--- a/chrome/browser/ui/cocoa/BUILD.gn
++++ b/chrome/browser/ui/cocoa/BUILD.gn
+@@ -217,6 +217,9 @@
+     # tab_group_menu_bridge.mm includes chrome/browser/ui/chrome_pages.h.
+     deps += [ "//chrome/browser/ui:chrome_pages" ]
+   }
++  # open_unified hook 0001-buildflags-cocoa begin
++  deps += [ "//open_unified:buildflags" ]
++  # open_unified hook 0001-buildflags-cocoa end
+ }
+ 
+ source_set("unit_tests") {
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn b/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
+--- a/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
++++ b/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
+@@ -52,5 +52,8 @@
+     if (is_chromeos) {
+       deps += [ "//chrome/browser/ui:settings_window_manager_chromeos" ]
+     }
++    # open_unified hook 0001-buildflags-wcd begin
++    deps += [ "//open_unified:buildflags" ]
++    # open_unified hook 0001-buildflags-wcd end
+   }
+ }
+diff --git a/chrome/browser/renderer_context_menu/BUILD.gn b/chrome/browser/renderer_context_menu/BUILD.gn
+--- a/chrome/browser/renderer_context_menu/BUILD.gn
++++ b/chrome/browser/renderer_context_menu/BUILD.gn
+@@ -249,6 +249,9 @@
+       "//extensions/common",
+     ]
+   }
++  # open_unified hook 0001-buildflags-ctxmenu begin
++  deps += [ "//open_unified:buildflags" ]
++  # open_unified hook 0001-buildflags-ctxmenu end
+ }
+ 
+ static_library("test_support") {
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -122,6 +122,9 @@
+     "//ui/base",
+     "//ui/views",
+   ]
++  # open_unified hook 0001-buildflags-bubble-anchor begin
++  deps += [ "//open_unified:buildflags" ]
++  # open_unified hook 0001-buildflags-bubble-anchor end
+ }
+ 
+ source_set("browser_commands_views") {
+diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -387,6 +387,9 @@
+     deps += [ "//chrome/browser/ui/ai_overlay_dialog" ]
+   }
+   deps += [ "//chrome/browser/ui/views/extensions:extensions_toolbar_desktop" ]
++  # open_unified hook 0001-buildflags-toolbar begin
++  deps += [ "//open_unified:buildflags" ]
++  # open_unified hook 0001-buildflags-toolbar end
+ }
+ 
+ if (!is_android) {
 diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn

@@ -3,6 +3,15 @@
 // and falls back to an interactive in-memory preview adapter when running outside Chromium.
 
 import { ADBLOCK_CATALOG, type AdBlockCatalogEntry, type AdBlockListCategory } from './catalog';
+import {
+  SETTINGS_RPC_METHODS,
+  type SettingsRpcRequestMap,
+  type SettingsRpcResponseMap,
+  type SettingsTheme,
+} from './settings-api';
+import { previewPreferences, previewSettingsRpc, previewTheme, setPreviewPreference } from './settings-preview';
+
+export * from './settings-api';
 
 export const OPEN_SCHEME = 'open' as const;
 
@@ -90,6 +99,9 @@ export const RPC_METHODS = {
   importProbeBrowsers: 'import.probeBrowsers',
   importRun: 'import.run',
   welcomeTriggerAction: 'welcome.triggerAction',
+
+  // Settings redesign (settings.<area>.<verb>, open_settings_ui.cc)
+  ...SETTINGS_RPC_METHODS,
 } as const;
 
 export type RpcMethod = (typeof RPC_METHODS)[keyof typeof RPC_METHODS];
@@ -168,6 +180,7 @@ export interface ProfileSummary {
     custom_search_engines: CustomSearchEngine[];
     sleep_mode: 'off' | 'conservative' | 'balanced' | 'aggressive';
     keep_alive_sites: string[];
+    default_document_app?: string;
   };
 }
 
@@ -207,6 +220,10 @@ export interface AdBlockListItem extends AdBlockCatalogEntry {
   enabled: boolean;
   rule_count?: number;
   last_updated_at?: number;
+  /** Receipt: "bundled" (shipped with Open) or "downloaded". */
+  source?: string;
+  bytes?: number;
+  error?: string;
 }
 
 export interface AdBlockState {
@@ -217,6 +234,13 @@ export interface AdBlockState {
   exclusions: string[];
   blocked_count_session: number;
   last_error?: string;
+  is_updating?: boolean;
+  engine_loaded?: boolean;
+  engine_list_count?: number;
+  active_rules?: number;
+  last_updated_at?: number;
+  custom_rules?: string;
+  update_ok?: boolean;
 }
 
 export interface ExtensionItem {
@@ -227,6 +251,8 @@ export interface ExtensionItem {
   enabled: boolean;
   pinned: boolean;
   permissions: string[];
+  has_options?: boolean;
+  is_adblocker?: boolean;
 }
 
 export interface SyncDevice {
@@ -422,11 +448,12 @@ export interface SettingsSnapshot {
   app_version: string;
   chromium_version: string;
   active_profile_id: string;
+  theme?: SettingsTheme;
 }
 
 // --- RPC Method Type Map ---
 
-export interface RpcRequestMap {
+export interface RpcRequestMap extends SettingsRpcRequestMap {
   'settings.getAll': { profile_id?: string };
   'settings.setPreference': { key: string; value: unknown; profile_id?: string; apply_all_profiles?: boolean };
   'settings.resetPreference': { key: string; profile_id?: string };
@@ -442,14 +469,14 @@ export interface RpcRequestMap {
   'settings.deleteRoutingRule': { id: string };
   'settings.testRoutingUrl': { url: string; source_app_id?: string; recent_space_id?: string };
   'settings.getAdBlockState': { profile_id?: string };
-  'settings.setAdBlockEnabled': { enabled: boolean };
+  'settings.setAdBlockEnabled': { enabled: boolean; profile_id?: string };
   'settings.toggleAdBlockList': { profile_id: string; list_id: string; enabled: boolean };
   'settings.addAdBlockExclusion': { profile_id: string; host: string };
   'settings.removeAdBlockExclusion': { profile_id: string; host: string };
   'settings.clearBrowsingData': { profile_id: string; range: 'hour' | 'day' | 'week' | 'month' | 'all'; kinds: string[] };
   'settings.setDefaultBrowser': Record<string, never>;
   'settings.getExtensions': { profile_id?: string };
-  'settings.toggleExtension': { id: string; enabled: boolean; pinned?: boolean };
+  'settings.toggleExtension': { id: string; enabled: boolean; pinned?: boolean; profile_id?: string };
 
   'sync.getStatus': Record<string, never>;
   'sync.configureServer': { server_url: string; categories?: Record<string, boolean> };
@@ -501,7 +528,7 @@ export interface RpcRequestMap {
   'welcome.triggerAction': { action: 'shortcuts' | 'help' | 'new_tab' | 'split' | 'replay_all' };
 }
 
-export interface RpcResponseMap {
+export interface RpcResponseMap extends SettingsRpcResponseMap {
   'settings.getAll': SettingsSnapshot;
   'settings.setPreference': { ok: boolean; preferences: Record<string, unknown> };
   'settings.resetPreference': { ok: boolean; preferences: Record<string, unknown> };
@@ -667,6 +694,10 @@ const ADBLOCK_STATE_METHODS: ReadonlySet<RpcMethod> = new Set<RpcMethod>([
   'settings.toggleAdBlockList',
   'settings.addAdBlockExclusion',
   'settings.removeAdBlockExclusion',
+  'settings.adblock.get',
+  'settings.adblock.updateNow',
+  'settings.adblock.resetLists',
+  'settings.adblock.setCustomRules',
 ]);
 
 function asString(value: unknown): string | undefined {
@@ -715,6 +746,12 @@ export function normalizeAdBlockState(raw: unknown): AdBlockState {
     if (ruleCount !== undefined) listItem.rule_count = ruleCount;
     const updatedAt = asNumber(it.last_updated_at);
     if (updatedAt !== undefined) listItem.last_updated_at = updatedAt;
+    const source = asString(it.source);
+    if (source) listItem.source = source;
+    const bytes = asNumber(it.bytes);
+    if (bytes !== undefined) listItem.bytes = bytes;
+    const listError = asString(it.error);
+    if (listError) listItem.error = listError;
     lists.push(listItem);
   }
   const state: AdBlockState = {
@@ -729,11 +766,25 @@ export function normalizeAdBlockState(raw: unknown): AdBlockState {
   };
   const lastError = asString(r.last_error);
   if (lastError) state.last_error = lastError;
+  if (typeof r.is_updating === 'boolean') state.is_updating = r.is_updating;
+  if (typeof r.engine_loaded === 'boolean') state.engine_loaded = r.engine_loaded;
+  if (typeof r.update_ok === 'boolean') state.update_ok = r.update_ok;
+  const engineLists = asNumber(r.engine_list_count);
+  if (engineLists !== undefined) state.engine_list_count = engineLists;
+  const activeRules = asNumber(r.active_rules);
+  if (activeRules !== undefined) state.active_rules = activeRules;
+  const stateUpdated = asNumber(r.last_updated_at);
+  if (stateUpdated !== undefined) state.last_updated_at = stateUpdated;
+  if (typeof r.custom_rules === 'string') state.custom_rules = r.custom_rules;
   return state;
 }
 
 function normalizeResponse<M extends RpcMethod>(method: M, value: unknown): RpcResponseMap[M] {
   if (ADBLOCK_STATE_METHODS.has(method)) return normalizeAdBlockState(value) as RpcResponseMap[M];
+  if (method === 'settings.profiles.switch' && value && typeof value === 'object') {
+    const v = value as Record<string, unknown>;
+    return { ...v, adblock: normalizeAdBlockState(v.adblock) } as RpcResponseMap[M];
+  }
   return value as RpcResponseMap[M];
 }
 
@@ -793,9 +844,28 @@ const DEFAULT_PREFERENCES: Record<string, unknown> = {
   'advanced.themeData': true,
   'advanced.enableBoosts': true,
   'advanced.translateOffer': true,
+  'general.offerTranslate': true,
+  'general.userName': '',
+  'appearance.sidebarPosition': 'left',
+  'appearance.sidebarAutoHide': false,
+  'appearance.translucency': true,
+  'appearance.increaseContrast': false,
+  'appearance.fontSize': 'medium',
+  'appearance.defaultZoom': 100,
+  'tabs.splitOrientation': 'horizontal',
+  'profiles.newDocuments': 'note',
+  'previews.recents': true,
+  'previews.calendar': true,
+  'previews.gmail': true,
+  'privacy.httpsOnly': false,
+  'privacy.doNotTrack': false,
+  'advanced.pipExcludedHosts': [],
+  'advanced.developerMode': false,
+  'advanced.hardwareAcceleration': true,
+  'advanced.widevine': false,
 };
 
-interface PreviewState {
+export interface PreviewState {
   preferences: Record<string, unknown>;
   isDefaultBrowser: boolean;
   profiles: ProfileSummary[];
@@ -1240,55 +1310,35 @@ async function previewRpc<M extends RpcMethod>(
   switch (method) {
     case 'settings.getAll': {
       const req = payload as RpcRequestMap['settings.getAll'];
+      const profileId = req.profile_id ?? defaultProfileId;
       return {
-        preferences: { ...st.preferences },
+        preferences: previewPreferences(st, DEFAULT_PREFERENCES, profileId),
         defaults: { ...DEFAULT_PREFERENCES },
         is_default_browser: st.isDefaultBrowser,
-        app_version: '1.0.0-unified',
+        app_version: '0.2.0',
         chromium_version: '156.0.8078.48',
-        active_profile_id: req.profile_id ?? defaultProfileId,
+        active_profile_id: profileId,
+        theme: previewTheme(st),
       } as RpcResponseMap[M];
     }
 
     case 'settings.setPreference': {
       const req = payload as RpcRequestMap['settings.setPreference'];
-      st.preferences[req.key] = req.value;
-      if (req.profile_id) {
-        const targets = req.apply_all_profiles
-          ? st.profiles
-          : st.profiles.filter((p) => p.id === req.profile_id);
-        for (const p of targets) {
-          if (req.key === 'tabs.archiveAfter' && typeof req.value === 'string') {
-            p.settings.auto_archive_after = req.value;
-          } else if (req.key === 'tabs.littleOpenArchiveAfter' && typeof req.value === 'string') {
-            p.settings.little_open_auto_archive_after = req.value;
-          } else if (req.key === 'search.engine' && typeof req.value === 'string') {
-            p.settings.search_engine_id = req.value;
-          } else if (req.key === 'search.suggestions' && typeof req.value === 'boolean') {
-            p.settings.search_suggest_enabled = req.value;
-          } else if (req.key === 'downloads.location' && typeof req.value === 'string') {
-            p.settings.download_directory = req.value;
-          } else if (req.key === 'downloads.askEachTime' && typeof req.value === 'boolean') {
-            p.settings.ask_where_to_save_each_file = req.value;
-          } else if (req.key === 'tabs.sleepMode' && typeof req.value === 'string') {
-            p.settings.sleep_mode = req.value as ProfileSummary['settings']['sleep_mode'];
-          }
-        }
-      }
-      if (req.key === 'shortcuts.priority' && (req.value === 'open' || req.value === 'website')) {
-        st.shortcutPriority = req.value;
-      }
+      const profileId = req.profile_id ?? defaultProfileId;
+      const error = setPreviewPreference(st, DEFAULT_PREFERENCES, req.key, req.value, profileId, req.apply_all_profiles === true);
+      if (error) throw new Error(error);
       emitEvent(RPC_EVENTS.stateChanged, { scope: 'preferences', key: req.key });
-      return { ok: true, preferences: { ...st.preferences } } as RpcResponseMap[M];
+      return { ok: true, preferences: previewPreferences(st, DEFAULT_PREFERENCES, profileId) } as RpcResponseMap[M];
     }
 
     case 'settings.resetPreference': {
       const req = payload as RpcRequestMap['settings.resetPreference'];
+      const profileId = req.profile_id ?? defaultProfileId;
       if (req.key in DEFAULT_PREFERENCES) {
-        st.preferences[req.key] = DEFAULT_PREFERENCES[req.key];
+        setPreviewPreference(st, DEFAULT_PREFERENCES, req.key, DEFAULT_PREFERENCES[req.key], profileId, false);
       }
       emitEvent(RPC_EVENTS.stateChanged, { scope: 'preferences', key: req.key });
-      return { ok: true, preferences: { ...st.preferences } } as RpcResponseMap[M];
+      return { ok: true, preferences: previewPreferences(st, DEFAULT_PREFERENCES, profileId) } as RpcResponseMap[M];
     }
 
     case 'settings.listProfiles':
@@ -1983,5 +2033,13 @@ async function previewRpc<M extends RpcMethod>(
       const req = payload as RpcRequestMap['welcome.triggerAction'];
       return { ok: true, message: `Triggered ${req.action}` } as RpcResponseMap[M];
     }
+
+    default:
+      // Settings redesign methods (settings.<area>.<verb>).
+      return previewSettingsRpc(
+        { st, defaults: DEFAULT_PREFERENCES, buildAdBlockState, matchHostPattern, emit: emitEvent },
+        method as Extract<M, keyof SettingsRpcRequestMap>,
+        payload as SettingsRpcRequestMap[Extract<M, keyof SettingsRpcRequestMap>],
+      ) as Promise<RpcResponseMap[M]>;
   }
 }

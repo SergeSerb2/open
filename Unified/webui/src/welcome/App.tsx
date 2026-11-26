@@ -1,443 +1,559 @@
-import type { JSX } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
-import { type ShortcutBinding, isNativeWebUI, rpc } from '../shared/bridge';
-import { Badge, Toast } from '../shared/components';
-import { OpenDoorwayMark } from '../shared/icons';
-import { currentPageRoute, replacePageRoute } from '../shared/route';
-import { isMacPlatform, shortcutKeycaps } from '../shared/shortcuts';
+// open://welcome — Open's settled Welcome tab, in Open's own identity: the
+// night room tinted by this Space, the doorway-and-sun, and "You're all set.
+// Here are the basics." Six try-it cards run the real commands
+// (welcome.triggerAction), a checklist remembers what was tried
+// (welcome.markStepDone), and the Essential Shortcuts sheet shows the live
+// CommandRegistry bindings (open://welcome#shortcuts, /shortcuts or /help).
 
-interface WelcomeStepDef {
-  index: number;
-  id: 'pin' | 'spaces' | 'split' | 'new-tab';
+import type { JSX } from 'preact';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { isNativeWebUI } from '../shared/bridge';
+import { rgbaToHex } from '../shared/components';
+import { currentPageRoute, replacePageRoute } from '../shared/route';
+import { type ShortcutPlatform, shortcutKeycaps } from '../shared/shortcuts';
+import { DoorwayArch, DoorwayEmblem, Room } from '../onboarding/art';
+import {
+  type EssentialShortcut,
+  type WelcomeState,
+  type WelcomeStep,
+  getWelcomeState,
+  markWelcomeStep,
+  triggerWelcomeAction,
+} from '../onboarding/rpc';
+import { type DemoId, FeatureDemo } from './demos';
+
+interface FeatureCard {
+  id: DemoId;
+  step: string;
   title: string;
   body: string;
-  icon: string;
+  /** CommandRegistry id whose binding is shown; or literal keys. */
+  shortcutId?: string;
+  literalKeys?: { mac: string; other: string };
+  action: string;
+  actionLabel: string;
+  secondary?: { action: string; label: string };
 }
 
-const STEPS: readonly WelcomeStepDef[] = [
+const CARDS: readonly FeatureCard[] = [
   {
-    index: 1,
-    id: 'pin',
-    title: 'Pin',
-    icon: '📌',
-    body: 'Keep important tabs above the divider. Pinned tabs stay organized and never auto-archive.',
+    id: 'command-bar',
+    step: 'command-bar',
+    title: 'Open anything',
+    body: 'Search, open a site, or jump to a tab you already have. It all starts in the Command Bar.',
+    shortcutId: 'new-tab',
+    action: 'open-command-bar',
+    actionLabel: 'Try it now',
   },
   {
-    index: 2,
+    id: 'sidebar',
+    step: 'sidebar',
+    title: 'Hide the sidebar',
+    body: 'Give a page the whole window. Press the same keys again and your tabs come back.',
+    shortcutId: 'toggle-sidebar',
+    action: 'toggle-sidebar',
+    actionLabel: 'Try it now',
+  },
+  {
     id: 'spaces',
-    title: 'Spaces',
-    icon: '🗂️',
-    body: 'Separate work, research, and personal projects into themed Spaces with distinct colors and Profiles.',
+    step: 'theme',
+    title: 'A Space for every part of life',
+    body: 'Spaces keep separate tabs for work, projects and home, each with its own color.',
+    shortcutId: 'next-space',
+    action: 'edit-theme',
+    actionLabel: 'Customize Space',
   },
   {
-    index: 3,
-    id: 'split',
-    title: 'Split',
-    icon: '◫',
-    body: 'Open up to four live web pages side by side in one Space tab to compare docs, code, and previews.',
+    id: 'peek-split',
+    step: 'peek',
+    title: 'Peek and Split View',
+    body: 'Shift-click a link to look at it without leaving the page. Put two pages side by side with Split View.',
+    literalKeys: { mac: 'Shift+Click', other: 'Shift+Click' },
+    shortcutId: 'add-split-view',
+    action: 'peek',
+    actionLabel: 'Try Peek',
+    secondary: { action: 'split-view', label: 'Try Split View' },
   },
   {
-    index: 4,
-    id: 'new-tab',
-    title: 'New tab',
-    icon: isMacPlatform() ? '⌘' : '⌨️',
-    body: 'Open the zero-latency Command Bar anytime to search, jump to tabs, run actions, or open URLs.',
+    id: 'boosts',
+    step: 'boosts',
+    title: 'Boosts and Zap',
+    body: 'Change how any site looks: its colors, its fonts, and the parts you would rather not see.',
+    action: 'new-boost',
+    actionLabel: 'Try Boosts',
+  },
+  {
+    id: 'library',
+    step: 'library',
+    title: 'Your Library',
+    body: 'Downloads, archived tabs, history, captures and Boosts, all in one place.',
+    shortcutId: 'view-library',
+    action: 'view-library',
+    actionLabel: 'Open Library',
   },
 ];
 
-const CLIP_DURATION_MS = 8500;
+const SHORTCUT_GROUPS = ['Navigation', 'Tabs', 'Spaces', 'Split & Peek', 'Boosts & Capture'] as const;
 
-// Help & Resources (open://welcome/help): the essential shortcuts with the
-// user's live bindings. Each row lists the command ids that may carry it
-// (C++ CommandRegistry ids first) and the default binding.
-interface HelpShortcutDef {
-  label: string;
-  ids: readonly string[];
-  fallback: string;
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 }
 
-const HELP_SHORTCUTS: readonly HelpShortcutDef[] = [
-  { label: 'New tab (Command Bar)', ids: ['new-tab'], fallback: 'Mod+T' },
-  { label: 'Edit the current URL', ids: ['open-command-bar'], fallback: 'Mod+L' },
-  { label: 'Show or hide the sidebar', ids: ['toggle-sidebar'], fallback: 'Mod+S' },
-  { label: 'Find on page', ids: ['find'], fallback: 'Mod+F' },
-  { label: 'Copy the current URL', ids: ['copy-url'], fallback: 'Mod+Shift+C' },
-  { label: 'Add Split View', ids: ['add-split-view'], fallback: 'Ctrl+Shift+=' },
-  { label: 'Switch to a recent tab', ids: ['tab-switcher-forward'], fallback: 'Ctrl+Tab' },
-  { label: 'New Little Open window', ids: ['new-little-open-window', 'new-little-open'], fallback: 'Mod+Alt+N' },
-  { label: 'Next Space', ids: ['next-space'], fallback: 'Mod+Alt+Right' },
-];
-
-function helpKeys(def: HelpShortcutDef, bindings: readonly ShortcutBinding[]): string {
-  for (const id of def.ids) {
-    const binding = bindings.find((b) => b.id === id);
-    if (binding) return binding.keys;
-  }
-  return def.fallback;
-}
-
-function Keycaps({ keys, label }: { keys: string; label: string }): JSX.Element {
+function Keycaps({ keys, platform, label }: { keys: string; platform: ShortcutPlatform; label?: string }): JSX.Element {
+  const caps =
+    keys === 'Shift+Click'
+      ? platform === 'mac'
+        ? ['⇧', 'Click']
+        : ['Shift', 'Click']
+      : shortcutKeycaps(keys, platform);
   return (
-    <span class="welcome-keycaps" aria-label={label}>
-      {shortcutKeycaps(keys).map((cap, i) => (
-        <span key={`${cap}-${i}`} class="welcome-keycap">
+    <span class="wel-keycaps" aria-label={label ?? caps.join(' ')}>
+      {caps.map((cap, i) => (
+        <kbd key={`${cap}-${i}`} class="wel-keycap">
           {cap}
-        </span>
+        </kbd>
       ))}
     </span>
   );
 }
 
-function HelpView({ onBack }: { onBack: () => void }): JSX.Element {
-  const [bindings, setBindings] = useState<ShortcutBinding[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    rpc('settings.getShortcuts', {})
-      .then((res) => {
-        if (active) setBindings(res.shortcuts);
-      })
-      .catch(() => {
-        // Defaults stay on screen.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
+function CheckBadge({ done }: { done: boolean }): JSX.Element {
   return (
-    <section class="welcome-help" aria-label="Help and resources">
-      <div class="welcome-help-header">
-        <OpenDoorwayMark size={36} />
-        <div>
-          <h1 class="welcome-heading">Help &amp; Resources</h1>
-          <p class="welcome-help-lede">The shortcuts that make Open fast, with your current bindings.</p>
-        </div>
-      </div>
-
-      <div class="welcome-help-card" role="list" aria-label="Essential shortcuts">
-        {HELP_SHORTCUTS.map((def) => {
-          const keys = helpKeys(def, bindings);
-          if (!keys) return null;
-          return (
-            <div key={def.label} class="welcome-help-row" role="listitem">
-              <span>{def.label}</span>
-              <Keycaps keys={keys} label={`${def.label} shortcut`} />
-            </div>
-          );
-        })}
-      </div>
-
-      <div class="welcome-help-actions">
-        <button
-          type="button"
-          class="open-btn open-btn-primary"
-          onClick={async () => {
-            try {
-              const res = await rpc('welcome.triggerAction', { action: 'shortcuts' });
-              if (res.message) setMessage(res.message);
-            } catch (err) {
-              setMessage(err instanceof Error ? err.message : 'Cannot open shortcut settings.');
-            }
-          }}
-        >
-          Customize Shortcuts
-        </button>
-        <button type="button" class="open-btn" onClick={onBack}>
-          Back to the Basics
-        </button>
-      </div>
-      {message && <p class="welcome-help-lede">{message}</p>}
-    </section>
+    <span class={`wel-check${done ? ' is-done' : ''}`} aria-hidden="true">
+      {done && (
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M2 5.2l2 2L8 3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      )}
+    </span>
   );
 }
 
-export function WelcomeApp(): JSX.Element {
-  const [view, setView] = useState<'basics' | 'help'>(() =>
-    currentPageRoute().segments[0] === 'help' ? 'help' : 'basics',
-  );
-  const [reduceMotion, setReduceMotion] = useState<boolean>(() =>
-    typeof window !== 'undefined' && window.matchMedia
-      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      : false,
-  );
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [playingPlaylist, setPlayingPlaylist] = useState<boolean>(() => !reduceMotion);
-  const [ended, setEnded] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [toast, setToast] = useState<string | null>(null);
+// --- Essential Shortcuts sheet -------------------------------------------------------
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast((c) => (c === msg ? null : c)), 2200);
-  };
+function ShortcutsSheet({
+  shortcuts,
+  platform,
+  onClose,
+  onAction,
+}: {
+  shortcuts: readonly EssentialShortcut[];
+  platform: ShortcutPlatform;
+  onClose: () => void;
+  onAction: (action: string) => void;
+}): JSX.Element {
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!mq) return;
-    const onChange = () => {
-      setReduceMotion(mq.matches);
-      if (mq.matches) {
-        setPlayingPlaylist(false);
-        setProgress(1);
+    inputRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
       }
     };
-    mq.addEventListener?.('change', onChange);
-    return () => mq.removeEventListener?.('change', onChange);
-  }, []);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
-  // Playlist timer (8.5s per step, pauses when tab hidden, disabled under Reduce Motion)
-  useEffect(() => {
-    if (reduceMotion || ended || !playingPlaylist) return;
-    let rafId = 0;
-    let start = performance.now();
-
-    const tick = (now: number) => {
-      if (document.hidden) {
-        start = now - progress * CLIP_DURATION_MS;
-        rafId = requestAnimationFrame(tick);
-        return;
-      }
-      const elapsed = now - start;
-      const pct = Math.min(1, elapsed / CLIP_DURATION_MS);
-      setProgress(pct);
-      if (pct >= 1) {
-        if (activeIndex < STEPS.length - 1) {
-          setActiveIndex((i) => i + 1);
-          setProgress(0);
-        } else {
-          setEnded(true);
-          setPlayingPlaylist(false);
-        }
-        return;
-      }
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [activeIndex, playingPlaylist, ended, reduceMotion]);
-
-  const selectStep = (idx: number) => {
-    setActiveIndex(idx);
-    setEnded(false);
-    setProgress(reduceMotion ? 1 : 0);
-    setPlayingPlaylist(!reduceMotion);
-  };
-
-  const handleReplayAll = async () => {
-    setActiveIndex(0);
-    setEnded(false);
-    setProgress(0);
-    setPlayingPlaylist(!reduceMotion);
-    await rpc('welcome.triggerAction', { action: 'replay_all' });
-  };
-
-  const activeStep = STEPS[activeIndex] ?? STEPS[0]!;
-
-  if (view === 'help') {
-    return (
-      <div class="welcome-shell">
-        <HelpView
-          onBack={() => {
-            replacePageRoute('');
-            setView('basics');
-          }}
-        />
-        <Toast message={toast} />
-      </div>
-    );
-  }
+  const q = query.trim().toLowerCase();
+  const visible = shortcuts.filter(
+    (s) => s.keys && (!q || s.title.toLowerCase().includes(q) || s.keys.toLowerCase().includes(q)),
+  );
 
   return (
-    <div class="welcome-shell">
-      <div class="welcome-top-links">
-        <button
-          type="button"
-          class="open-btn"
-          onClick={async () => {
-            await rpc('welcome.triggerAction', { action: 'shortcuts' });
-            showToast('Opened Essential Shortcuts.');
-          }}
-        >
-          Learn Essential Shortcuts
-        </button>
-        <button
-          type="button"
-          class="open-btn"
-          onClick={async () => {
-            await rpc('welcome.triggerAction', { action: 'help' });
-            // In Chromium the browser opens open://welcome/help in a new tab;
-            // the standalone preview shows the view in place.
-            if (!isNativeWebUI()) {
-              setView('help');
-              return;
-            }
-            showToast('Opened Help & Resources.');
-          }}
-        >
-          Help &amp; Resources
-        </button>
-      </div>
-
-      <div class="welcome-layout">
-        <section class="welcome-left" aria-label="Open basics guide">
-          <OpenDoorwayMark size={44} />
-          <h1 class="welcome-heading">
-            You’re all set.
-            <br />
-            Here are the basics.
-          </h1>
-
-          <div class="welcome-accordion" role="tablist" aria-label="Basics steps">
-            {STEPS.map((st, idx) => {
-              const isActive = idx === activeIndex;
-              return (
-                <button
-                  key={st.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  class={`welcome-step${isActive ? ' is-active' : ''}`}
-                  onClick={() => selectStep(idx)}
-                >
-                  <div class="welcome-step-header">
-                    <span class="welcome-step-num">{st.index}</span>
-                    <span class="welcome-step-title">
-                      {isActive ? `${st.icon} ` : ''}
-                      {st.title}
-                    </span>
+    <div class="wel-sheet-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div class="wel-sheet" role="dialog" aria-modal="true" aria-label="Essential Shortcuts" ref={dialogRef}>
+        <header class="wel-sheet-head">
+          <DoorwayEmblem size={28} />
+          <div class="wel-sheet-title">
+            <h2>Essential Shortcuts</h2>
+            <p>Your current keys. {platform === 'mac' ? '⌘ Command · ⌥ Option · ⌃ Control · ⇧ Shift' : 'Ctrl · Alt · Shift'}</p>
+          </div>
+          <button type="button" class="wel-icon-btn" aria-label="Close" onClick={onClose}>
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+          </button>
+        </header>
+        <input
+          ref={inputRef}
+          class="wel-search"
+          type="search"
+          placeholder="Search shortcuts"
+          aria-label="Search shortcuts"
+          value={query}
+          onInput={(e) => setQuery((e.currentTarget as HTMLInputElement).value)}
+        />
+        <div class="wel-sheet-groups">
+          {SHORTCUT_GROUPS.map((group) => {
+            const rows = visible.filter((s) => s.group === group);
+            if (!rows.length) return null;
+            return (
+              <section key={group} class="wel-sheet-group" aria-label={group}>
+                <h3>{group}</h3>
+                {rows.map((s) => (
+                  <div key={s.id} class="wel-sheet-row">
+                    <span>{s.title.replace(/…$/, '')}</span>
+                    <Keycaps keys={s.keys} platform={platform} label={`${s.title} shortcut`} />
                   </div>
-                  {isActive && (
-                    <>
-                      <p class="welcome-step-body">{st.body}</p>
-                      {st.id === 'new-tab' && <Keycaps keys="Mod+T" label="New tab shortcut" />}
-                      <div class="welcome-progress-track">
-                        <div
-                          class="welcome-progress-fill"
-                          style={{ transform: `scaleX(${reduceMotion ? 1 : progress})` }}
-                        />
-                      </div>
-                    </>
-                  )}
-                </button>
-              );
-            })}
+                ))}
+              </section>
+            );
+          })}
+          {visible.length === 0 && <p class="wel-sheet-empty">No shortcut matches “{query}”.</p>}
+        </div>
+        <footer class="wel-sheet-foot">
+          <button type="button" class="wel-btn wel-btn-quiet" onClick={() => onAction('customize-shortcuts')}>
+            Customize Shortcuts…
+          </button>
+          <button type="button" class="wel-btn wel-btn-primary" onClick={onClose}>
+            Done
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+// --- Page ----------------------------------------------------------------------------
+
+export function WelcomeApp(): JSX.Element {
+  const reduceMotion = useMemo(prefersReducedMotion, []);
+  const [state, setState] = useState<WelcomeState | null>(null);
+  const [steps, setSteps] = useState<WelcomeStep[]>([]);
+  const [sheetOpen, setSheetOpen] = useState(() => {
+    const route = currentPageRoute().segments[0];
+    return route === 'shortcuts' || route === 'help';
+  });
+  const [playing, setPlaying] = useState<Set<DemoId>>(new Set());
+  const [replayKey, setReplayKey] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const cardRefs = useRef<Map<DemoId, HTMLElement>>(new Map());
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast((current) => (current === message ? null : current)), 2600);
+  }, []);
+
+  useEffect(() => {
+    void getWelcomeState()
+      .then((st) => {
+        setState(st);
+        setSteps(st.steps);
+      })
+      .catch(() => undefined);
+    // Steps tried elsewhere (Command Bar, menus) show up on return.
+    const onVisible = () => {
+      setHidden(document.hidden);
+      if (!document.hidden) {
+        void getWelcomeState()
+          .then((st) => setSteps(st.steps))
+          .catch(() => undefined);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const onHash = () => {
+      if (currentPageRoute().segments[0] === 'shortcuts') setSheetOpen(true);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('hashchange', onHash);
+    };
+  }, []);
+
+  // "?" opens the sheet (outside text fields).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (e.key === '?' && tag !== 'INPUT' && tag !== 'TEXTAREA' && !sheetOpen) {
+        e.preventDefault();
+        setSheetOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sheetOpen]);
+
+  // Each demo plays once when its card scrolls into view.
+  useEffect(() => {
+    if (reduceMotion || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const id = (entry.target as HTMLElement).dataset.demo as DemoId | undefined;
+          if (!id) continue;
+          observer.unobserve(entry.target);
+          window.setTimeout(() => setPlaying((prev) => new Set(prev).add(id)), 700);
+        }
+      },
+      { threshold: 0.55 },
+    );
+    for (const el of cardRefs.current.values()) observer.observe(el);
+    return () => observer.disconnect();
+  }, [reduceMotion, replayKey]);
+
+  const replay = (id: DemoId) => {
+    setPlaying((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => setPlaying((prev) => new Set(prev).add(id))),
+    );
+  };
+
+  const replayAll = () => {
+    setPlaying(new Set());
+    setReplayKey((k) => k + 1);
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    // Replay All only restarts the demos; setup is never reopened.
+    void triggerWelcomeAction('replay_all').catch(() => undefined);
+  };
+
+  const runAction = async (action: string) => {
+    if (action === 'shortcuts') {
+      setSheetOpen(true);
+      return;
+    }
+    setBusy(action);
+    try {
+      const res = await triggerWelcomeAction(action);
+      if (res.steps) setSteps(res.steps);
+      if (!res.ok && res.message) showToast(res.message);
+      else if (!isNativeWebUI() && res.message) showToast(res.message);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'That did not work. Try again.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleStep = async (step: WelcomeStep) => {
+    const optimistic = steps.map((s) => (s.id === step.id ? { ...s, done: !s.done } : s));
+    setSteps(optimistic);
+    try {
+      setSteps(await markWelcomeStep(step.id, !step.done));
+    } catch {
+      setSteps(steps);
+    }
+  };
+
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
+    const route = currentPageRoute().segments[0];
+    if (route === 'shortcuts' || route === 'help') replacePageRoute('');
+  }, []);
+
+  const platform: ShortcutPlatform = state?.platform ?? 'mac';
+  const shortcuts = state?.shortcuts ?? [];
+  const keysFor = (id?: string): string => (id ? (shortcuts.find((s) => s.id === id)?.keys ?? '') : '');
+  const tint = state?.space.style ? rgbaToHex(state.space.style.key_color) : '#3139ff';
+  const doneCount = steps.filter((s) => s.done).length;
+  const total = steps.length || 7;
+  const name = state?.user_name.trim() ?? '';
+  const stepDone = (id: string) => steps.some((s) => s.id === id && s.done);
+
+  return (
+    <Room tint={tint} class={`wel${reduceMotion ? ' is-reduced' : ''}${hidden ? ' is-hidden' : ''}`}>
+      <div class="wel-scroll">
+        <header class="wel-top">
+          <button type="button" class="wel-btn wel-btn-glass" onClick={() => setSheetOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <rect x="1.5" y="3" width="11" height="8" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M4 6h1M6.5 6h1M9 6h1M4.5 8.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            </svg>
+            Essential Shortcuts
+          </button>
+          <button type="button" class="wel-btn wel-btn-glass" onClick={() => void runAction('settings')}>
+            Settings
+          </button>
+        </header>
+
+        <section class="wel-hero">
+          <div class="wel-hero-text">
+            <h1 class="wel-heading">
+              <span>You’re all set{name ? `, ${name}` : ''}.</span>
+              <span class="wel-heading-soft">Here are the basics.</span>
+            </h1>
+            <p class="wel-lede">Six things that make Open feel like yours. Try each one; this page keeps track.</p>
+            <div class="wel-progress" aria-label={`${doneCount} of ${total} tried`}>
+              <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+                <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="3" />
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="15"
+                  fill="none"
+                  stroke="#ffc982"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-dasharray={`${(doneCount / total) * 94.25} 94.25`}
+                  transform="rotate(-90 18 18)"
+                  class="wel-progress-arc"
+                />
+              </svg>
+              <span>
+                <strong>
+                  {doneCount} of {total}
+                </strong>{' '}
+                tried
+              </span>
+            </div>
+          </div>
+          <div class="wel-hero-door" aria-hidden="true">
+            <DoorwayArch height={150} />
           </div>
         </section>
 
-        <section class="welcome-stage-panel" aria-label={`Interactive preview for ${activeStep.title}`}>
-          <div class={`welcome-stage-canvas${ended ? ' is-ended' : ''}`}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderRight: '1px solid rgba(255,255,255,0.12)', paddingRight: '12px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, opacity: 0.75 }}>
-                {activeStep.id === 'spaces' ? '⚡ Engineering Space' : '☀️ Home Space'}
-              </div>
-              <div
-                style={{
-                  padding: '8px',
-                  borderRadius: '8px',
-                  background: activeStep.id === 'pin' ? 'rgba(85,97,255,0.45)' : 'rgba(255,255,255,0.08)',
-                  border: activeStep.id === 'pin' ? '1px solid #8c95ff' : '1px solid transparent',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                }}
-              >
-                📌 Pinned: Docs
-              </div>
-              <div style={{ padding: '7px 8px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', fontSize: '11px', opacity: 0.85 }}>
-                Today: Design Spec
-              </div>
-              <div style={{ marginTop: 'auto', display: 'flex', gap: '6px' }}>
-                <span style={{ padding: '3px 7px', borderRadius: '999px', fontSize: '10px', background: activeStep.id === 'spaces' ? 'rgba(255,255,255,0.12)' : '#3139FF' }}>
-                  Home
-                </span>
-                <span style={{ padding: '3px 7px', borderRadius: '999px', fontSize: '10px', background: activeStep.id === 'spaces' ? '#FF5C35' : 'rgba(255,255,255,0.12)' }}>
-                  Work
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Badge tone="accent">Step {activeStep.index} of 4 · {activeStep.title}</Badge>
-                {reduceMotion && <Badge>Reduce Motion</Badge>}
-              </div>
-
-              {activeStep.id === 'split' ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', flex: 1 }}>
-                  <div style={{ borderRadius: '10px', background: 'rgba(255,255,255,0.08)', padding: '14px' }}>
-                    <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '6px' }}>Pane 1 · Reference</div>
-                    <div style={{ fontSize: '11.5px', opacity: 0.78 }}>Read documentation side by side without switching windows.</div>
-                  </div>
-                  <div style={{ borderRadius: '10px', background: 'rgba(49,57,255,0.28)', border: '1px solid rgba(120,130,255,0.5)', padding: '14px' }}>
-                    <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '6px' }}>Pane 2 · Live App</div>
-                    <div style={{ fontSize: '11.5px', opacity: 0.85 }}>Drag any tab onto a pane to build 2–4 pane Split Views.</div>
-                  </div>
-                </div>
-              ) : activeStep.id === 'new-tab' ? (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div
-                    style={{
-                      width: '88%',
-                      borderRadius: '14px',
-                      background: '#1d1d27',
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      padding: '14px 16px',
-                      boxShadow: '0 24px 48px rgba(0,0,0,0.45)',
-                    }}
-                  >
-                    <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px' }}>
-                      ⌘T · Search or enter URL…
-                    </div>
-                    <div style={{ fontSize: '11.5px', opacity: 0.75 }}>
-                      Switch to tab · Open Settings · New Easel · Boost this site
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    flex: 1,
-                    borderRadius: '12px',
-                    background:
-                      activeStep.id === 'spaces'
-                        ? 'linear-gradient(135deg, rgba(255,92,53,0.42), rgba(49,57,255,0.42))'
-                        : 'linear-gradient(135deg, rgba(49,57,255,0.38), rgba(0,184,124,0.32))',
-                    padding: '20px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    gap: '8px',
+        <div class="wel-layout">
+          <section class="wel-cards" aria-label="The basics">
+            {CARDS.map((card, i) => {
+              const keys = keysFor(card.shortcutId);
+              const done = stepDone(card.step);
+              return (
+                <article
+                  key={`${card.id}-${replayKey}`}
+                  class={`wel-card${done ? ' is-done' : ''}`}
+                  style={{ '--i': i }}
+                  data-demo={card.id}
+                  ref={(el) => {
+                    if (el) cardRefs.current.set(card.id, el);
+                    else cardRefs.current.delete(card.id);
+                  }}
+                  onMouseEnter={() => {
+                    if (!reduceMotion && playing.has(card.id)) replay(card.id);
                   }}
                 >
-                  <div style={{ fontSize: '20px', fontWeight: 800 }}>
-                    {activeStep.icon} {activeStep.title}
+                  <div class="wel-card-demo">
+                    <FeatureDemo id={card.id} tint={tint} playing={reduceMotion || playing.has(card.id)} />
+                    <button
+                      type="button"
+                      class="wel-replay"
+                      aria-label={`Replay the ${card.title} demo`}
+                      onClick={() => replay(card.id)}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                        <path d="M2.2 6a3.8 3.8 0 106.7-2.4M9.2 1.6v2.3H6.9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
                   </div>
-                  <div style={{ fontSize: '13px', opacity: 0.9, maxWidth: '380px', lineHeight: 1.55 }}>
-                    {activeStep.body}
+                  <div class="wel-card-body">
+                    <div class="wel-card-title">
+                      <CheckBadge done={done} />
+                      <h2>{card.title}</h2>
+                    </div>
+                    <p>{card.body}</p>
+                    <div class="wel-card-keys">
+                      {card.literalKeys && (
+                        <Keycaps
+                          keys={platform === 'mac' ? card.literalKeys.mac : card.literalKeys.other}
+                          platform={platform}
+                        />
+                      )}
+                      {keys && <Keycaps keys={keys} platform={platform} label={`${card.title} shortcut`} />}
+                    </div>
+                    <div class="wel-card-actions">
+                      <button
+                        type="button"
+                        class="wel-btn wel-btn-primary"
+                        disabled={busy === card.action}
+                        onClick={() => void runAction(card.action)}
+                      >
+                        {card.actionLabel}
+                      </button>
+                      {card.secondary && (
+                        <button
+                          type="button"
+                          class="wel-btn wel-btn-glass"
+                          disabled={busy === card.secondary.action}
+                          onClick={() => void runAction(card.secondary!.action)}
+                        >
+                          {card.secondary.label}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
+                </article>
+              );
+            })}
+          </section>
 
-          {ended && (
-            <div class="welcome-replay-overlay">
-              <button
-                type="button"
-                class="open-btn open-btn-primary"
-                style={{ height: '38px', padding: '0 20px', fontSize: '13.5px' }}
-                onClick={() => void handleReplayAll()}
-              >
-                Replay All
-              </button>
-            </div>
-          )}
-        </section>
+          <aside class="wel-side">
+            <section class="wel-panel" aria-label="First steps">
+              <h2>First steps</h2>
+              <ul class="wel-steps">
+                {steps.map((step) => (
+                  <li key={step.id} class={step.done ? 'is-done' : ''}>
+                    <button
+                      type="button"
+                      class="wel-step-check"
+                      role="checkbox"
+                      aria-checked={step.done}
+                      aria-label={`${step.title}: ${step.done ? 'done' : 'not done'}`}
+                      onClick={() => void toggleStep(step)}
+                    >
+                      <CheckBadge done={step.done} />
+                    </button>
+                    <span class="wel-step-title">{step.title}</span>
+                    {!step.done && (
+                      <button
+                        type="button"
+                        class="wel-link"
+                        disabled={busy === step.action}
+                        onClick={() => void runAction(step.action)}
+                      >
+                        Try
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section class="wel-panel" aria-label="More">
+              <h2>More</h2>
+              <div class="wel-more">
+                <button type="button" class="wel-more-row" onClick={() => void runAction('import-from-browser')}>
+                  Import from another browser
+                </button>
+                <button type="button" class="wel-more-row" onClick={() => void runAction('customize-shortcuts')}>
+                  Customize shortcuts
+                </button>
+                <button type="button" class="wel-more-row" onClick={() => void runAction('boost-gallery')}>
+                  Boost gallery
+                </button>
+                <button type="button" class="wel-more-row" onClick={replayAll}>
+                  Replay all demos
+                </button>
+                <button type="button" class="wel-more-row" onClick={() => void runAction('replay-onboarding')}>
+                  See the welcome tour again
+                </button>
+              </div>
+            </section>
+          </aside>
+        </div>
       </div>
 
-      <Toast message={toast} />
-    </div>
+      {sheetOpen && (
+        <ShortcutsSheet
+          shortcuts={shortcuts}
+          platform={platform}
+          onClose={closeSheet}
+          onAction={(action) => void runAction(action)}
+        />
+      )}
+      {toast && (
+        <div class="wel-toast" role="status">
+          {toast}
+        </div>
+      )}
+    </Room>
   );
 }

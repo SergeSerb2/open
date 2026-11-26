@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -13,7 +14,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_flags.h"
 #include "content/public/browser/web_contents.h"
+#include "open_unified/ui/design/open_glyphs.h"
+#include "third_party/skia/include/core/SkPathBuilder.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/hit_test.h"
@@ -25,11 +29,12 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/background.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/native/native_view_host.h"
-#include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -47,8 +52,7 @@ namespace m = little_open_metrics;
 // Window resize border for the frameless window (guess; platform default).
 constexpr int kResizeBorder = 5;
 constexpr int kResizeCorner = 12;
-// Bar mode: the top strip above the embedded bar's input drags the window
-// (guess: no capture shows a bar-mode drag).
+// Bar mode: the top strip above the embedded bar's input drags the window.
 constexpr int kBarDragStrip = 10;
 
 // Emoji when the icon is one, else the first letter of `name`.
@@ -58,6 +62,29 @@ std::u16string GlyphTextFor(const std::optional<SpaceIcon>& icon,
     return base::UTF8ToUTF16(icon->value);
   }
   return name.empty() ? std::u16string(u"•") : name.substr(0, 1);
+}
+
+void DrawIconInBadge(gfx::Canvas* canvas,
+                     const std::optional<SpaceIcon>& icon,
+                     const std::u16string& fallback_name,
+                     const gfx::Rect& badge_rect,
+                     SkColor color,
+                     int font_size) {
+  if (icon && (icon->kind == SpaceIconKind::kSymbol ||
+               icon->kind == SpaceIconKind::kNamed)) {
+    const std::string_view symbol =
+        icon->kind == SpaceIconKind::kNamed
+            ? glyphs::NamedSpaceIconSymbol(icon->value)
+            : std::string_view(icon->value);
+    if (glyphs::DrawSystemSymbol(canvas, symbol, static_cast<float>(font_size),
+                                 glyphs::SymbolWeight::kMedium,
+                                 gfx::RectF(badge_rect), color)) {
+      return;
+    }
+  }
+  secondary::DrawText(canvas, GlyphTextFor(icon, fallback_name),
+                      secondary::FontOfSize(font_size), color, badge_rect,
+                      gfx::Canvas::TEXT_ALIGN_CENTER);
 }
 
 // --- Frameless frame: drag from the title bar, resize from the edges. ------
@@ -129,6 +156,9 @@ class LittleOpenWindowDelegate : public views::WidgetDelegate {
 
   // Notifies on the next task, so the owner may delete the window there.
   void OnWindowClosing() {
+    if (contents_) {
+      contents_->NotifyWindowClosing();
+    }
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&LittleOpenWindowDelegate::NotifyClosed,
                                   weak_factory_.GetWeakPtr()));
@@ -169,11 +199,14 @@ class SpacePickerView : public views::View {
   METADATA_HEADER(SpacePickerView, views::View)
 
  public:
-  using PickCallback = base::RepeatingCallback<void(const SpaceID&)>;
+  using PickCallback = base::RepeatingCallback<void(const SpaceID&, bool)>;
 
   SpacePickerView(std::vector<LittleOpenSpaceChoice> spaces,
+                  std::optional<SpaceID> target_space_id,
                   PickCallback on_pick)
-      : spaces_(std::move(spaces)), on_pick_(std::move(on_pick)) {
+      : spaces_(std::move(spaces)),
+        target_space_id_(std::move(target_space_id)),
+        on_pick_(std::move(on_pick)) {
     GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
     GetViewAccessibility().SetName(u"Open in Space");
     SetFocusBehavior(FocusBehavior::ALWAYS);
@@ -204,26 +237,45 @@ class SpacePickerView : public views::View {
       const gfx::Rect row = RowRect(i);
       if (hovered_ == scroll_ + i) {
         secondary::FillRoundRect(canvas, gfx::RectF(row), 8.f,
-                                 secondary::WithAlpha(SK_ColorWHITE, 0.07f));
+                                 secondary::WithAlpha(SK_ColorWHITE, 0.08f));
       }
       const gfx::Rect icon(row.x() + 6,
                            row.y() + (row.height() - m::kPickerIconSize) / 2,
                            m::kPickerIconSize, m::kPickerIconSize);
       secondary::FillRoundRect(canvas, gfx::RectF(icon), m::kPickerIconRadius,
                                space.color);
-      secondary::DrawText(canvas, GlyphTextFor(space.icon, space.title),
-                          secondary::FontOfSize(17), SK_ColorWHITE, icon,
-                          gfx::Canvas::TEXT_ALIGN_CENTER);
+      DrawIconInBadge(canvas, space.icon, space.title, icon, SK_ColorWHITE, 16);
+
+      const bool is_target =
+          space.is_target ||
+          (target_space_id_.has_value() && space.id == *target_space_id_);
+      const int text_right = row.right() - (is_target ? 30 : 12);
       secondary::DrawText(
-          canvas, space.title, secondary::FontOfSize(m::kFontSize), m::kText,
-          gfx::Rect(icon.right() + 10, row.y(), row.right() - icon.right() - 16,
+          canvas, space.title,
+          secondary::FontOfSize(m::kFontSize,
+                                is_target ? gfx::Font::Weight::SEMIBOLD
+                                          : gfx::Font::Weight::NORMAL),
+          is_target ? SK_ColorWHITE : m::kText,
+          gfx::Rect(icon.right() + 10, row.y(),
+                    std::max(0, text_right - (icon.right() + 10)),
                     row.height()));
+      if (is_target) {
+        const gfx::RectF check_box(row.right() - 24.f,
+                                   row.y() + (row.height() - 14.f) / 2.f, 14.f,
+                                   14.f);
+        secondary::PaintGlyph(canvas, Glyph::kCheck, check_box, SK_ColorWHITE,
+                              1.6f);
+      }
     }
   }
 
   bool OnMousePressed(const ui::MouseEvent& event) override {
     if (std::optional<size_t> index = RowAt(event.location())) {
-      Pick(*index);
+      // Right-click or Alt+click updates the pill target without moving yet;
+      // normal left-click opens in that Space immediately.
+      const bool target_only =
+          event.IsRightMouseButton() || event.IsAltDown();
+      Pick(*index, target_only);
       return true;
     }
     return false;
@@ -269,7 +321,7 @@ class SpacePickerView : public views::View {
         break;
       case ui::VKEY_RETURN:
         if (hovered_) {
-          Pick(*hovered_);
+          Pick(*hovered_, /*target_only=*/false);
         }
         return true;
       default:
@@ -303,7 +355,7 @@ class SpacePickerView : public views::View {
     return std::nullopt;
   }
 
-  void Pick(size_t index) {
+  void Pick(size_t index, bool target_only) {
     if (index >= spaces_.size()) {
       return;
     }
@@ -314,16 +366,148 @@ class SpacePickerView : public views::View {
     if (views::Widget* widget = GetWidget()) {
       widget->Close();
     }
-    on_pick.Run(id);
+    on_pick.Run(id, target_only);
   }
 
   std::vector<LittleOpenSpaceChoice> spaces_;
+  std::optional<SpaceID> target_space_id_;
   PickCallback on_pick_;
   std::optional<size_t> hovered_;
   size_t scroll_ = 0;
 };
 
 BEGIN_METADATA(SpacePickerView)
+END_METADATA
+
+// --- Profile picker ----------------------------------------------------------
+
+class ProfilePickerView : public views::View {
+  METADATA_HEADER(ProfilePickerView, views::View)
+
+ public:
+  using PickCallback = base::RepeatingCallback<void(const ProfileID&)>;
+
+  ProfilePickerView(std::vector<LittleOpenProfileChoice> profiles,
+                    PickCallback on_pick)
+      : profiles_(std::move(profiles)), on_pick_(std::move(on_pick)) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+    GetViewAccessibility().SetName(u"Switch Profile");
+    SetFocusBehavior(FocusBehavior::ALWAYS);
+  }
+
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
+    const int rows = static_cast<int>(
+        std::min<size_t>(profiles_.size(), m::kPickerVisibleRows));
+    return gfx::Size(
+        m::kPickerWidth,
+        m::kPickerHeader + rows * m::kPickerRowHeight + m::kPickerInset);
+  }
+
+  void OnPaint(gfx::Canvas* canvas) override {
+    canvas->DrawColor(m::kTitleBarFill);
+    secondary::DrawText(
+        canvas, u"Switch Profile",
+        secondary::FontOfSize(m::kFontSize, gfx::Font::Weight::SEMIBOLD),
+        secondary::WithAlpha(SK_ColorWHITE, 0.55f),
+        gfx::Rect(m::kPickerInset + 6, 0, width() - 2 * m::kPickerInset,
+                  m::kPickerHeader));
+    const size_t visible =
+        std::min<size_t>(profiles_.size() - scroll_, m::kPickerVisibleRows);
+    for (size_t i = 0; i < visible; ++i) {
+      const LittleOpenProfileChoice& profile = profiles_[scroll_ + i];
+      const gfx::Rect row = RowRect(i);
+      if (hovered_ == scroll_ + i) {
+        secondary::FillRoundRect(canvas, gfx::RectF(row), 8.f,
+                                 secondary::WithAlpha(SK_ColorWHITE, 0.08f));
+      }
+      const gfx::Rect icon(row.x() + 6,
+                           row.y() + (row.height() - m::kPickerIconSize) / 2,
+                           m::kPickerIconSize, m::kPickerIconSize);
+      secondary::FillRoundRect(canvas, gfx::RectF(icon), m::kPickerIconRadius,
+                               profile.color);
+      DrawIconInBadge(canvas, profile.icon, profile.name, icon, SK_ColorWHITE,
+                      15);
+
+      const int text_right = row.right() - (profile.active ? 30 : 12);
+      secondary::DrawText(
+          canvas, profile.name,
+          secondary::FontOfSize(m::kFontSize,
+                                profile.active ? gfx::Font::Weight::SEMIBOLD
+                                               : gfx::Font::Weight::NORMAL),
+          profile.active ? SK_ColorWHITE : m::kText,
+          gfx::Rect(icon.right() + 10, row.y(),
+                    std::max(0, text_right - (icon.right() + 10)),
+                    row.height()));
+      if (profile.active) {
+        const gfx::RectF check_box(row.right() - 24.f,
+                                   row.y() + (row.height() - 14.f) / 2.f, 14.f,
+                                   14.f);
+        secondary::PaintGlyph(canvas, Glyph::kCheck, check_box, SK_ColorWHITE,
+                              1.6f);
+      }
+    }
+  }
+
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    if (std::optional<size_t> index = RowAt(event.location())) {
+      Pick(*index);
+      return true;
+    }
+    return false;
+  }
+
+  void OnMouseMoved(const ui::MouseEvent& event) override {
+    const std::optional<size_t> index = RowAt(event.location());
+    if (index != hovered_) {
+      hovered_ = index;
+      SchedulePaint();
+    }
+  }
+
+  void OnMouseExited(const ui::MouseEvent& event) override {
+    hovered_.reset();
+    SchedulePaint();
+  }
+
+ private:
+  gfx::Rect RowRect(size_t visible_index) const {
+    return gfx::Rect(m::kPickerInset,
+                     m::kPickerHeader +
+                         static_cast<int>(visible_index) * m::kPickerRowHeight,
+                     width() - 2 * m::kPickerInset, m::kPickerRowHeight);
+  }
+
+  std::optional<size_t> RowAt(const gfx::Point& point) const {
+    const size_t visible =
+        std::min<size_t>(profiles_.size() - scroll_, m::kPickerVisibleRows);
+    for (size_t i = 0; i < visible; ++i) {
+      if (RowRect(i).Contains(point)) {
+        return scroll_ + i;
+      }
+    }
+    return std::nullopt;
+  }
+
+  void Pick(size_t index) {
+    if (index >= profiles_.size()) {
+      return;
+    }
+    const ProfileID id = profiles_[index].id;
+    PickCallback on_pick = on_pick_;
+    if (views::Widget* widget = GetWidget()) {
+      widget->Close();
+    }
+    on_pick.Run(id);
+  }
+
+  std::vector<LittleOpenProfileChoice> profiles_;
+  PickCallback on_pick_;
+  std::optional<size_t> hovered_;
+  size_t scroll_ = 0;
+};
+
+BEGIN_METADATA(ProfilePickerView)
 END_METADATA
 
 }  // namespace
@@ -348,7 +532,9 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
   profile_button_ = AddChildView(std::make_unique<PaintedButton>(
       base::BindRepeating(
           [](OpenLittleOpenView* self) {
-            if (self->delegate_) {
+            if (!self->state_.profiles.empty()) {
+              self->ShowProfilePicker();
+            } else if (self->delegate_) {
               self->delegate_->OnLittleOpenProfile(self->profile_button_);
             }
           },
@@ -368,6 +554,19 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
       base::BindRepeating(&OpenLittleOpenView::PaintHost,
                           base::Unretained(this)),
       u"Edit URL"));
+
+  downloads_button_ = AddChildView(std::make_unique<PaintedButton>(
+      base::BindRepeating(
+          [](OpenLittleOpenView* self) {
+            if (self->delegate_) {
+              self->delegate_->OnLittleOpenDownloads(self->downloads_button_);
+            }
+          },
+          base::Unretained(this)),
+      base::BindRepeating(&OpenLittleOpenView::PaintDownloads,
+                          base::Unretained(this)),
+      u"Downloads"));
+  downloads_button_->SetVisible(false);
 
   auto make_glyph = [this](Glyph glyph, const char16_t* name,
                            views::Button::PressedCallback callback) {
@@ -406,8 +605,8 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
   pill_button_ = AddChildView(std::make_unique<PaintedButton>(
       base::BindRepeating(
           [](OpenLittleOpenView* self) {
-            if (self->delegate_ && self->state_.space_title) {
-              self->delegate_->OnLittleOpenOpenInSpace(std::nullopt);
+            if (self->state_.space_title) {
+              self->TriggerOpenInSpace(self->state_.target_space_id);
             }
           },
           base::Unretained(this)),
@@ -424,6 +623,7 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
 
 OpenLittleOpenView::~OpenLittleOpenView() {
   web_view_->SetWebContents(nullptr);
+  owned_contents_.reset();
 }
 
 // static
@@ -436,8 +636,6 @@ gfx::Rect OpenLittleOpenView::DefaultBarBounds(const gfx::Rect& work_area) {
 // static
 gfx::Rect OpenLittleOpenView::PageBoundsFromBar(const gfx::Rect& bar_bounds,
                                                 const gfx::Rect& work_area) {
-  // std::clamp needs lo <= hi: a work area smaller than the minimum page
-  // size (or empty) caps the minimum instead.
   const int max_width = std::max(0, work_area.width());
   const int max_height = std::max(0, work_area.height());
   const int width = std::clamp(
@@ -464,6 +662,11 @@ void OpenLittleOpenView::SetMode(Mode mode) {
   }
   profile_button_->SetVisible(page && state_.show_profile);
   host_button_->SetVisible(page);
+  downloads_button_->SetVisible(page && (state_.show_downloads ||
+                                         state_.downloads_running));
+  for (auto& ext_btn : extension_action_buttons_) {
+    ext_btn->SetVisible(page);
+  }
   copy_button_->SetVisible(page);
   extensions_button_->SetVisible(page && state_.show_extensions);
   pill_button_->SetVisible(page);
@@ -478,6 +681,29 @@ void OpenLittleOpenView::SetMode(Mode mode) {
 
 void OpenLittleOpenView::SetState(const LittleOpenState& state) {
   state_ = state;
+  // Sync target_space_color / icon from matching choice if not explicitly set.
+  if (state_.target_space_id) {
+    for (const LittleOpenSpaceChoice& choice : state_.spaces) {
+      if (choice.id == *state_.target_space_id) {
+        state_.target_space_color = choice.color;
+        if (!state_.target_space_icon) {
+          state_.target_space_icon = choice.icon;
+        }
+        break;
+      }
+    }
+  } else if (state_.space_title) {
+    for (const LittleOpenSpaceChoice& choice : state_.spaces) {
+      if (choice.title == *state_.space_title) {
+        state_.target_space_color = choice.color;
+        if (!state_.target_space_icon) {
+          state_.target_space_icon = choice.icon;
+        }
+        break;
+      }
+    }
+  }
+
   pill_button_->SetEnabled(state_.space_title.has_value());
   pill_button_->GetViewAccessibility().SetName(
       u"Open in " + state_.space_title.value_or(u"Space") + u" " +
@@ -486,6 +712,7 @@ void OpenLittleOpenView::SetState(const LittleOpenState& state) {
   profile_button_->GetViewAccessibility().SetName(u"Profile: " +
                                                   state_.profile_name);
   chevron_button_->SetEnabled(!state_.spaces.empty());
+  RebuildExtensionActionButtons();
   SetMode(mode_);
 }
 
@@ -500,11 +727,116 @@ void OpenLittleOpenView::SetBarContents(std::unique_ptr<views::View> contents) {
 }
 
 void OpenLittleOpenView::SetWebContents(content::WebContents* contents) {
+  if (owned_contents_ && owned_contents_.get() != contents) {
+    web_view_->SetWebContents(nullptr);
+    owned_contents_.reset();
+  }
   if (web_view_->web_contents() != contents) {
     web_view_->SetWebContents(contents);
   }
+  promoted_to_main_ = false;
   web_view_->SetVisible(mode_ == Mode::kPage && contents);
   InvalidateLayout();
+}
+
+void OpenLittleOpenView::SetOwnedWebContents(
+    std::unique_ptr<content::WebContents> contents) {
+  web_view_->SetWebContents(nullptr);
+  owned_contents_ = std::move(contents);
+  promoted_to_main_ = false;
+  web_view_->SetWebContents(owned_contents_.get());
+  web_view_->SetVisible(mode_ == Mode::kPage && owned_contents_ != nullptr);
+  InvalidateLayout();
+}
+
+std::unique_ptr<content::WebContents>
+OpenLittleOpenView::ReleaseWebContents() {
+  promoted_to_main_ = true;
+  web_view_->SetWebContents(nullptr);
+  web_view_->SetVisible(false);
+  return std::move(owned_contents_);
+}
+
+content::WebContents* OpenLittleOpenView::DetachWebContents() {
+  promoted_to_main_ = true;
+  content::WebContents* contents = web_view_->web_contents();
+  web_view_->SetWebContents(nullptr);
+  web_view_->SetVisible(false);
+  return contents;
+}
+
+void OpenLittleOpenView::SetMoveToSpaceCallback(MoveToSpaceCallback callback) {
+  move_to_space_callback_ = std::move(callback);
+}
+
+void OpenLittleOpenView::SetArchiveOnCloseCallback(
+    ArchiveOnCloseCallback callback) {
+  archive_on_close_callback_ = std::move(callback);
+}
+
+void OpenLittleOpenView::NotifyWindowClosing() {
+  if (archive_notified_ || promoted_to_main_) {
+    return;
+  }
+  archive_notified_ = true;
+  content::WebContents* contents =
+      owned_contents_ ? owned_contents_.get() : web_view_->web_contents();
+  if (!contents) {
+    return;
+  }
+  const GURL& committed = contents->GetLastCommittedURL();
+  const GURL& url =
+      committed.is_valid() ? committed : contents->GetVisibleURL();
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
+    return;
+  }
+  const std::u16string title = contents->GetTitle();
+  if (archive_on_close_callback_) {
+    archive_on_close_callback_.Run(url, title, state_.active_profile_id);
+  }
+  if (delegate_) {
+    delegate_->OnLittleOpenArchiveOnClose(url, title, state_.active_profile_id);
+  }
+}
+
+void OpenLittleOpenView::TriggerOpenInSpace(std::optional<SpaceID> space_id) {
+  if (move_to_space_callback_ && owned_contents_) {
+    move_to_space_callback_.Run(ReleaseWebContents(), std::move(space_id));
+    return;
+  }
+  if (delegate_) {
+    delegate_->OnLittleOpenOpenInSpace(std::move(space_id));
+  }
+}
+
+void OpenLittleOpenView::RebuildExtensionActionButtons() {
+  for (auto& btn : extension_action_buttons_) {
+    RemoveChildViewT(btn.ExtractAsDangling());
+  }
+  extension_action_buttons_.clear();
+  const size_t count = std::min<size_t>(state_.extension_actions.size(),
+                                        m::kMaxExtensionStripButtons);
+  extension_action_buttons_.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    const LittleOpenExtensionAction& action = state_.extension_actions[i];
+    auto button = std::make_unique<PaintedButton>(
+        base::BindRepeating(
+            [](OpenLittleOpenView* self, size_t idx) {
+              if (self->delegate_ &&
+                  idx < self->state_.extension_actions.size() &&
+                  idx < self->extension_action_buttons_.size()) {
+                self->delegate_->OnLittleOpenExtensionAction(
+                    self->state_.extension_actions[idx].id,
+                    self->extension_action_buttons_[idx]);
+              }
+            },
+            base::Unretained(this), i),
+        base::BindRepeating(&OpenLittleOpenView::PaintExtensionAction,
+                            base::Unretained(this), i),
+        action.name.empty() ? u"Extension" : action.name);
+    button->SetEnabled(action.enabled);
+    extension_action_buttons_.push_back(AddChildView(std::move(button)));
+  }
 }
 
 int OpenLittleOpenView::NonClientHitTest(const gfx::Point& point) const {
@@ -536,6 +868,11 @@ std::optional<gfx::Rect> OpenLittleOpenView::GetElementBounds(
   }
   if (name == "host") {
     return host_button_->bounds();
+  }
+  if (name == "downloads") {
+    return downloads_button_->GetVisible()
+               ? std::optional<gfx::Rect>(downloads_button_->bounds())
+               : std::nullopt;
   }
   if (name == "copy") {
     return copy_button_->bounds();
@@ -570,8 +907,8 @@ gfx::Size OpenLittleOpenView::GetMinimumSize() const {
 bool OpenLittleOpenView::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_O && mode_ == Mode::kPage &&
-      state_.space_title && delegate_) {
-    delegate_->OnLittleOpenOpenInSpace(std::nullopt);
+      state_.space_title) {
+    TriggerOpenInSpace(state_.target_space_id);
     return true;
   }
   return false;
@@ -612,19 +949,39 @@ void OpenLittleOpenView::LayoutTitleBar() {
                   m::kWindowButtonSize));
   }
   copy_button_->SetBoundsRect(m::Copy(w));
-  extensions_button_->SetBoundsRect(m::Extensions(w));
   chevron_button_->SetBoundsRect(m::Chevron(w));
   // The pill's clickable part ends at the divider; the chevron is its own.
   const gfx::Rect pill = m::Pill(w);
   pill_button_->SetBoundsRect(gfx::Rect(
       pill.x(), pill.y(), m::Divider(w).x() - pill.x(), pill.height()));
 
+  // Lay out right-side accessories inside the capsule from right to left:
+  // Copy URL <- Extensions overflow <- Extension Action strip <- Downloads.
+  int next_x = m::Copy(w).x();
+  if (state_.show_extensions) {
+    next_x -= m::kAccessoryPitch;
+    extensions_button_->SetBoundsRect(gfx::Rect(next_x, 16, 16, 16));
+  } else {
+    extensions_button_->SetBoundsRect(m::Extensions(w));
+  }
+
+  for (size_t i = extension_action_buttons_.size(); i > 0; --i) {
+    next_x -= m::kAccessoryPitch;
+    extension_action_buttons_[i - 1]->SetBoundsRect(
+        gfx::Rect(next_x - 2, 14, 20, 20));
+  }
+
+  const bool show_downloads = state_.show_downloads || state_.downloads_running;
+  if (show_downloads) {
+    next_x -= m::kAccessoryPitch;
+    downloads_button_->SetBoundsRect(gfx::Rect(next_x, 16, 16, 16));
+  }
+  downloads_button_->SetVisible(mode_ == Mode::kPage && show_downloads);
+
   // Profile chip, then the host centered between chip and accessories. On a
-  // narrow page the chip hides before it can cover the host (guess, as in
-  // LittleOpenTitleBarView).
+  // narrow page the chip hides before it can cover the host.
   const gfx::Rect capsule = m::Capsule(w);
-  const int accessory_left =
-      state_.show_extensions ? m::Extensions(w).x() : m::Copy(w).x();
+  const int accessory_left = next_x;
   const int chip_x = m::kProfileIcon.x();
   const int available = std::max(0, accessory_left - m::kHostGap - chip_x);
   const int profile_width =
@@ -665,14 +1022,12 @@ void OpenLittleOpenView::OnPaint(gfx::Canvas* canvas) {
 void OpenLittleOpenView::PaintPill(gfx::Canvas* canvas,
                                    const gfx::Rect& bounds,
                                    bool hovered) {
-  // Coordinates: the button starts at the pill's x; the label box is
-  // [w - 191, 15, 148, 17] in window terms, i.e. x + 5, y + 7 here.
   const gfx::FontList regular = secondary::FontOfSize(m::kFontSize);
   const gfx::FontList bold =
       secondary::FontOfSize(m::kFontSize, gfx::Font::Weight::BOLD);
   if (hovered) {
     secondary::FillRoundRect(canvas, gfx::RectF(bounds), m::kPillRadius,
-                             secondary::WithAlpha(SK_ColorWHITE, 0.06f));
+                             secondary::WithAlpha(SK_ColorWHITE, 0.08f));
   }
   const std::u16string keycap = KeycapLabel();
   const int keycap_w =
@@ -685,24 +1040,37 @@ void OpenLittleOpenView::PaintPill(gfx::Canvas* canvas,
   secondary::DrawText(canvas, keycap, regular, m::kText, cap,
                       gfx::Canvas::TEXT_ALIGN_CENTER);
 
+  // Leading Space color dot inside the pill (matches Space target swatch).
+  int text_x = label.x();
+  if (state_.space_title) {
+    const gfx::RectF dot(label.x() + 2.f, label.y() + 4.5f, 8.f, 8.f);
+    secondary::FillRoundRect(canvas, dot, 4.f, state_.target_space_color);
+    text_x += 14;
+  }
+
   const SkColor ink = state_.space_title
                           ? m::kText
                           : secondary::WithAlpha(SK_ColorWHITE, 0.35f);
   const std::u16string prefix = u"Open in ";
   const int prefix_w = secondary::TextWidth(prefix, regular);
-  const int room = std::max(0, cap.x() - 4 - label.x());
+  const int room = std::max(0, cap.x() - 4 - text_x);
   secondary::DrawText(canvas, prefix, regular, ink,
-                      gfx::Rect(label.x(), label.y(), std::min(prefix_w, room),
+                      gfx::Rect(text_x, label.y(), std::min(prefix_w, room),
                                 label.height()));
   secondary::DrawText(canvas, state_.space_title.value_or(u"Space"), bold, ink,
-                      gfx::Rect(label.x() + prefix_w, label.y(),
+                      gfx::Rect(text_x + prefix_w, label.y(),
                                 std::max(0, room - prefix_w), label.height()));
 }
 
 void OpenLittleOpenView::PaintProfile(gfx::Canvas* canvas,
                                       const gfx::Rect& bounds,
                                       bool hovered) {
-  // Icon [97, 17, 14, 14] in window terms: x + 0, y + 2 here.
+  if (hovered) {
+    gfx::RectF plate(bounds);
+    plate.Inset(-2.f);
+    secondary::FillRoundRect(canvas, plate, 5.f,
+                             secondary::WithAlpha(SK_ColorWHITE, 0.08f));
+  }
   const gfx::Rect icon(bounds.x(), bounds.y() + 2, m::kProfileIcon.width(),
                        m::kProfileIcon.height());
   if (state_.profile_icon &&
@@ -712,7 +1080,6 @@ void OpenLittleOpenView::PaintProfile(gfx::Canvas* canvas,
                         secondary::FontOfSize(12), m::kText, icon,
                         gfx::Canvas::TEXT_ALIGN_CENTER);
   } else {
-    // Open's own profile mark: the initial in a ring (no SF Symbols here).
     secondary::StrokeRoundRect(canvas, gfx::RectF(icon), icon.width() / 2.f,
                                m::kText, 1.2f);
     secondary::DrawText(canvas, GlyphTextFor(std::nullopt, state_.profile_name),
@@ -740,13 +1107,83 @@ void OpenLittleOpenView::PaintHost(gfx::Canvas* canvas,
                                 bounds.y(), text, bounds.height()));
 }
 
+void OpenLittleOpenView::PaintDownloads(gfx::Canvas* canvas,
+                                        const gfx::Rect& bounds,
+                                        bool hovered) {
+  if (hovered) {
+    secondary::FillRoundRect(canvas, gfx::RectF(bounds), 4.f,
+                             secondary::WithAlpha(SK_ColorWHITE, 0.10f));
+  }
+  const SkColor ink = hovered ? SK_ColorWHITE : m::kText;
+  gfx::RectF glyph_box(bounds);
+  glyph_box.Inset(2.f);
+  secondary::PaintGlyph(canvas, Glyph::kDownload, glyph_box, ink, 1.3f);
+
+  if (!state_.downloads_running) {
+    return;
+  }
+  // Progress ring around the button (port of LittleOpenDownloadsButton.draw).
+  gfx::RectF ring(bounds);
+  ring.Inset(0.75f);
+  secondary::StrokeRoundRect(canvas, ring, ring.width() / 2.f,
+                             secondary::WithAlpha(SK_ColorWHITE, 0.25f), 1.5f);
+  if (state_.download_progress) {
+    const float sweep =
+        static_cast<float>(std::clamp(*state_.download_progress, 0.0, 1.0)) *
+        360.f;
+    if (sweep > 0.f) {
+      cc::PaintFlags flags;
+      flags.setAntiAlias(true);
+      flags.setStyle(cc::PaintFlags::kStroke_Style);
+      flags.setStrokeWidth(1.5f);
+      flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
+      flags.setColor(SK_ColorWHITE);
+      SkPathBuilder arc;
+      arc.addArc(gfx::RectFToSkRect(ring), -90.f, sweep);
+      canvas->DrawPath(arc.detach(), flags);
+    }
+  } else {
+    // Indeterminate active indicator dot at top-right.
+    secondary::FillRoundRect(
+        canvas, gfx::RectF(bounds.right() - 5.f, bounds.y(), 5.f, 5.f), 2.5f,
+        state_.target_space_color);
+  }
+}
+
+void OpenLittleOpenView::PaintExtensionAction(size_t index,
+                                              gfx::Canvas* canvas,
+                                              const gfx::Rect& bounds,
+                                              bool hovered) {
+  if (index >= state_.extension_actions.size()) {
+    return;
+  }
+  if (hovered) {
+    secondary::FillRoundRect(canvas, gfx::RectF(bounds), 4.f,
+                             secondary::WithAlpha(SK_ColorWHITE, 0.12f));
+  }
+  const LittleOpenExtensionAction& action = state_.extension_actions[index];
+  if (!action.icon.isNull()) {
+    gfx::Rect icon_rect = bounds;
+    icon_rect.Inset(2);
+    secondary::DrawImageInRect(canvas, action.icon, icon_rect);
+  } else {
+    gfx::RectF box(bounds);
+    box.Inset(3.f);
+    secondary::PaintGlyph(canvas, Glyph::kPuzzle, box,
+                          hovered ? SK_ColorWHITE : m::kText, 1.3f);
+  }
+  if (!action.badge_text.empty()) {
+    const gfx::RectF badge(bounds.right() - 7.f, bounds.bottom() - 7.f, 6.f,
+                           6.f);
+    secondary::FillRoundRect(canvas, badge, 3.f, state_.target_space_color);
+  }
+}
+
 void OpenLittleOpenView::PaintWindowButton(int index,
                                            gfx::Canvas* canvas,
                                            const gfx::Rect& bounds,
                                            bool hovered) {
 #if BUILDFLAG(IS_MAC)
-  // 12 pt circles centered in the 16 pt frames (ChromeMetrics traffic
-  // lights); system close / minimize / zoom colors; glyphs on hover.
   static constexpr std::array<SkColor, 3> kColors = {
       SkColorSetRGB(0xFF, 0x5F, 0x57), SkColorSetRGB(0xFE, 0xBC, 0x2E),
       SkColorSetRGB(0x28, 0xC8, 0x40)};
@@ -762,7 +1199,6 @@ void OpenLittleOpenView::PaintWindowButton(int index,
                           secondary::WithAlpha(SK_ColorBLACK, 0.55f), 1.2f);
   }
 #else
-  // Open's monochrome caption glyphs on Windows and Linux.
   static constexpr std::array<Glyph, 3> kGlyphs = {Glyph::kClose, Glyph::kMinus,
                                                    Glyph::kSquare};
   if (hovered) {
@@ -801,7 +1237,7 @@ void OpenLittleOpenView::PressWindowButton(int index) {
 }
 
 void OpenLittleOpenView::ShowSpacePicker() {
-  if (state_.spaces.empty() || !delegate_ || picker_widget_) {
+  if (state_.spaces.empty() || picker_widget_) {
     return;
   }
   picker_delegate_ = std::make_unique<views::BubbleDialogDelegate>(
@@ -816,12 +1252,30 @@ void OpenLittleOpenView::ShowSpacePicker() {
   picker_delegate_->SetShowTitle(false);
   picker_delegate_->SetBackgroundColor(m::kTitleBarFill);
   picker_delegate_->SetContentsView(std::make_unique<SpacePickerView>(
-      state_.spaces,
+      state_.spaces, state_.target_space_id,
       base::BindRepeating(
-          [](base::WeakPtr<OpenLittleOpenView> self, const SpaceID& id) {
-            if (self && self->delegate_) {
-              self->delegate_->OnLittleOpenOpenInSpace(id);
+          [](base::WeakPtr<OpenLittleOpenView> self, const SpaceID& id,
+             bool target_only) {
+            if (!self) {
+              return;
             }
+            if (target_only) {
+              self->state_.target_space_id = id;
+              for (const LittleOpenSpaceChoice& choice : self->state_.spaces) {
+                if (choice.id == id) {
+                  self->state_.space_title = choice.title;
+                  self->state_.target_space_color = choice.color;
+                  self->state_.target_space_icon = choice.icon;
+                  break;
+                }
+              }
+              self->SchedulePaint();
+              if (self->delegate_) {
+                self->delegate_->OnLittleOpenTargetSpaceChanged(id);
+              }
+              return;
+            }
+            self->TriggerOpenInSpace(id);
           },
           weak_factory_.GetWeakPtr())));
   picker_widget_ = views::BubbleDialogDelegate::CreateBubble(
@@ -837,8 +1291,6 @@ void OpenLittleOpenView::ShowSpacePicker() {
 }
 
 void OpenLittleOpenView::OnSpacePickerClosed() {
-  // The close can start inside the bubble's own activation handling: hide
-  // now, delete on the next task (widget before its delegate).
   if (picker_widget_) {
     picker_widget_->Hide();
     base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
@@ -847,6 +1299,58 @@ void OpenLittleOpenView::OnSpacePickerClosed() {
   if (picker_delegate_) {
     base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
         FROM_HERE, std::move(picker_delegate_));
+  }
+}
+
+void OpenLittleOpenView::ShowProfilePicker() {
+  if (state_.profiles.empty() || profile_picker_widget_) {
+    return;
+  }
+  profile_picker_delegate_ = std::make_unique<views::BubbleDialogDelegate>(
+      profile_button_.get(), views::BubbleBorder::TOP_LEFT,
+      views::BubbleBorder::DIALOG_SHADOW, /*autosize=*/true);
+  profile_picker_delegate_->set_margins(gfx::Insets());
+  profile_picker_delegate_->set_fixed_width(m::kPickerWidth);
+  profile_picker_delegate_->set_corner_radius(m::kWindowCornerRadius);
+  profile_picker_delegate_->SetButtons(
+      static_cast<int>(ui::mojom::DialogButton::kNone));
+  profile_picker_delegate_->SetShowCloseButton(false);
+  profile_picker_delegate_->SetShowTitle(false);
+  profile_picker_delegate_->SetBackgroundColor(m::kTitleBarFill);
+  profile_picker_delegate_->SetContentsView(std::make_unique<ProfilePickerView>(
+      state_.profiles,
+      base::BindRepeating(
+          [](base::WeakPtr<OpenLittleOpenView> self, const ProfileID& id) {
+            if (!self) {
+              return;
+            }
+            if (self->delegate_) {
+              self->delegate_->OnLittleOpenProfileSelected(id);
+            }
+          },
+          weak_factory_.GetWeakPtr())));
+  profile_picker_widget_ = views::BubbleDialogDelegate::CreateBubble(
+      profile_picker_delegate_.get(),
+      base::BindOnce(
+          [](base::WeakPtr<OpenLittleOpenView> self,
+             views::Widget::ClosedReason reason) {
+            if (self) {
+              self->OnProfilePickerClosed();
+            }
+          },
+          weak_factory_.GetWeakPtr()));
+  profile_picker_widget_->Show();
+}
+
+void OpenLittleOpenView::OnProfilePickerClosed() {
+  if (profile_picker_widget_) {
+    profile_picker_widget_->Hide();
+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(profile_picker_widget_));
+  }
+  if (profile_picker_delegate_) {
+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(profile_picker_delegate_));
   }
 }
 

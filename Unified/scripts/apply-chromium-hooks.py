@@ -24,7 +24,7 @@ Usage:
   apply-chromium-hooks.py --pristine-root DIR --export-patches OUT    # no git
 
 --export-patches writes one clean unified diff per logical patch
-(0001-...patch .. 0012-...patch) computed in memory from the pristine files
+(0001-...patch .. 0015-...patch) computed in memory from the pristine files
 (`git show HEAD:<path>` in --src, or --pristine-root), plus `series`. The
 series applies in order with `git apply` on an unmodified checkout.
 
@@ -549,6 +549,28 @@ def build_patches() -> List[Patch]:
                            '0001-buildflags', 'impl', kind='source_set'),
       op_gn_buildflags_dep('chrome/browser/ui/startup/BUILD.gn',
                            '0001-buildflags', 'impl', kind='source_set'),
+      # //chrome/browser/ui/cocoa: main_menu_builder.mm (0013).
+      op_gn_buildflags_dep('chrome/browser/ui/cocoa/BUILD.gn',
+                           '0001-buildflags-cocoa', 'cocoa',
+                           kind='source_set'),
+      # //chrome/browser/ui/browser_web_contents_delegate: link interception
+      # and hover target URL (0014).
+      op_gn_buildflags_dep(
+          'chrome/browser/ui/browser_web_contents_delegate/BUILD.gn',
+          '0001-buildflags-wcd', 'browser_web_contents_delegate',
+          kind='source_set'),
+      # //chrome/browser/renderer_context_menu: Open web context menu (0015).
+      op_gn_buildflags_dep('chrome/browser/renderer_context_menu/BUILD.gn',
+                           '0001-buildflags-ctxmenu', 'impl',
+                           kind='source_set'),
+      # //chrome/browser/ui/views & toolbar: Open bubble anchors (0015).
+      op_gn_buildflags_dep('chrome/browser/ui/views/BUILD.gn',
+                           '0001-buildflags-bubble-anchor',
+                           'bubble_anchor_util_views_impl',
+                           kind='source_set'),
+      op_gn_buildflags_dep('chrome/browser/ui/views/toolbar/BUILD.gn',
+                           '0001-buildflags-toolbar', 'impl',
+                           kind='source_set'),
       op_gn_buildflags_dep('chrome/common/BUILD.gn', '0001-buildflags',
                            'common_lib', kind='static_library'),
       # //chrome/renderer: the ad-block renderer agent (0003) and its mojom
@@ -815,6 +837,50 @@ def build_patches() -> List[Patch]:
                  'inline constexpr wchar_t kProductPathName[] = L"Chromium";',
                  'inline constexpr wchar_t kProductPathName[] = '
                  f'L"{OPEN_PRODUCT_WIN}";'),
+      op_replace(
+          'chrome/app/chromium_strings.grd',
+          '0008-grd-product-name',
+          '        <else>\n'
+          '          <message name="IDS_PRODUCT_NAME" desc="The Chrome application name" translateable="false">\n'
+          '            Chromium\n'
+          '          </message>\n'
+          '          <message name="IDS_SHORT_PRODUCT_NAME" desc="The Chrome application short name." translateable="false">\n'
+          '            Chromium\n'
+          '          </message>\n'
+          '        </else>',
+          '        <else>\n'
+          '          <message name="IDS_PRODUCT_NAME" desc="The Chrome application name" translateable="false">\n'
+          '            Open\n'
+          '          </message>\n'
+          '          <message name="IDS_SHORT_PRODUCT_NAME" desc="The Chrome application short name." translateable="false">\n'
+          '            Open\n'
+          '          </message>\n'
+          '        </else>'),
+      op_replace(
+          'chrome/app/chromium_strings.grd',
+          '0008-grd-mac-app-menu',
+          '      <if expr="is_macosx">\n'
+          '        <message name="IDS_APP_MENU_PRODUCT_NAME" desc="The application\'s short name, used for the Mac\'s application menu, activity monitor, etc. This should be less than 16 characters. Example: Chrome, not Google Chrome." translateable="false">\n'
+          '          Chromium\n'
+          '        </message>\n'
+          '        <message name="IDS_HELPER_NAME" desc="The helper application\'s name.  Should contain the Chrome application name (IDS_PRODUCT_NAME). Example: Google Chrome Helper.">\n'
+          '          Chromium Helper\n'
+          '        </message>\n'
+          '        <message name="IDS_SHORT_HELPER_NAME" desc="The helper application\'s short name, used for the Mac\'s application menu, activity monitor, etc. Example: Chrome Helper, not Google Chrome Helper.">\n'
+          '          Chromium Helper\n'
+          '        </message>\n'
+          '      </if>',
+          '      <if expr="is_macosx">\n'
+          '        <message name="IDS_APP_MENU_PRODUCT_NAME" desc="The application\'s short name, used for the Mac\'s application menu, activity monitor, etc. This should be less than 16 characters. Example: Chrome, not Google Chrome." translateable="false">\n'
+          '          Open\n'
+          '        </message>\n'
+          '        <message name="IDS_HELPER_NAME" desc="The helper application\'s name.  Should contain the Chrome application name (IDS_PRODUCT_NAME). Example: Google Chrome Helper.">\n'
+          '          Open Helper\n'
+          '        </message>\n'
+          '        <message name="IDS_SHORT_HELPER_NAME" desc="The helper application\'s short name, used for the Mac\'s application menu, activity monitor, etc. Example: Chrome Helper, not Google Chrome Helper.">\n'
+          '          Open Helper\n'
+          '        </message>\n'
+          '      </if>'),
   ]))
 
   # 0009 ------------------------------------------------------------------
@@ -862,8 +928,8 @@ def build_patches() -> List[Patch]:
   appc = 'chrome/browser/app_controller_mac.mm'
   p.append(Patch('0011', 'open-external-urls',
                  'URLs the OS hands over (command line, second launch, macOS '
-                 'application:openURLs:) go through Open\'s Air Traffic '
-                 'Control instead of Chromium tabs', [
+                 'application:openURLs: with sender bundle id), quit guard, '
+                 'and macOS Dock reopen', [
       op_include(sbci, '0011-include', HOOKS_HEADER, guard=True),
       op_after_line(
           sbci, '0011-route-urls',
@@ -891,20 +957,59 @@ def build_patches() -> List[Patch]:
               '    }\n'
               '  }'), indent='  '),
       op_include(appc, '0011-include', HOOKS_HEADER, guard=True),
+      op_after_line(
+          appc, '0011-should-terminate',
+          r'^- \(void\)tryToTerminateApplication \{\n',
+          code=guarded(
+              '  // Open Unified: Warn Before Quitting + active Downloads guard.\n'
+              '  if (!open_unified::hooks::ShouldTerminateApp()) {\n'
+              '    return;\n'
+              '  }'), indent='  '),
+      op_after_line(
+          appc, '0011-reopen',
+          r'^    return NO;\n',
+          within=r'^- \(BOOL\)applicationShouldHandleReopen:',
+          code=guarded(
+              '  // Open Unified: focus existing window or restore saved state.\n'
+              '  if (open_unified::hooks::HandleAppReopen(hasVisibleWindows)) {\n'
+              '    return NO;\n'
+              '  }'), indent='  '),
       op_before_line(
           appc, '0011-open-urls', r'^  if \(!startupTabs\.empty\(\)\) \{',
           within=r'openURLs:\(NSArray<NSURL\*>\*\)urls \{',
           code=guarded(
               '  // Open Unified: Air Traffic Control places the URLs (queued\n'
-              '  // until Open starts when this runs during launch).\n'
+              '  // until Open starts when this runs during launch), passing\n'
+              '  // the sender application bundle ID when available.\n'
               '  {\n'
+              '    std::optional<std::string> source_app_id;\n'
+              '    if (NSAppleEventDescriptor* current_event =\n'
+              '            NSAppleEventManager.sharedAppleEventManager\n'
+              '                .currentAppleEvent) {\n'
+              '      if (NSAppleEventDescriptor* pid_desc =\n'
+              '              [current_event attributeDescriptorForKeyword:\n'
+              '                                 static_cast<AEKeyword>(\'spid\')]) {\n'
+              '        pid_t sender_pid = [pid_desc int32Value];\n'
+              '        if (sender_pid > 0) {\n'
+              '          if (NSRunningApplication* sender_app =\n'
+              '                  [NSRunningApplication\n'
+              '                      runningApplicationWithProcessIdentifier:\n'
+              '                          sender_pid]) {\n'
+              '            if (NSString* bundle_id = sender_app.bundleIdentifier;\n'
+              '                bundle_id.length > 0) {\n'
+              '              source_app_id = base::SysNSStringToUTF8(bundle_id);\n'
+              '            }\n'
+              '          }\n'
+              '        }\n'
+              '      }\n'
+              '    }\n'
               '    std::vector<GURL> open_urls;\n'
               '    for (const StartupTab& tab : startupTabs) {\n'
               '      open_urls.push_back(tab.url);\n'
               '    }\n'
               '    if (!open_urls.empty() &&\n'
-              '        open_unified::hooks::RouteExternalUrls(nullptr, '
-              'open_urls)) {\n'
+              '        open_unified::hooks::RouteExternalUrls(\n'
+              '            nullptr, open_urls, std::move(source_app_id))) {\n'
               '      return;\n'
               '    }\n'
               '  }'), indent='  '),
@@ -912,11 +1017,38 @@ def build_patches() -> List[Patch]:
 
   # 0012 ------------------------------------------------------------------
   bcc = 'chrome/browser/ui/browser_command_controller.cc'
+  gks = 'chrome/browser/global_keyboard_shortcuts_mac.mm'
   p.append(Patch('0012', 'open-find-commands',
-                 'IDC_FIND, IDC_FIND_NEXT and IDC_FIND_PREVIOUS open Open\'s '
-                 'find bar from every path (views accelerators, macOS menu '
-                 'key equivalents, chrome::ExecuteCommand)', [
+                 'Route shadowed Chromium IDC_* commands, Open custom menu '
+                 'commands, and macOS reserved shortcuts through Open', [
       op_include(bcc, '0012-include', HOOKS_HEADER, guard=True),
+      op_function_start(
+          bcc, '0012-supports-command',
+          r'^bool BrowserCommandController::SupportsCommand\(',
+          guarded('  if (open_unified::hooks::IsOpenMenuCommand(${id})) {\n'
+                  '    return true;\n'
+                  '  }'),
+          params={'id': r'int\s+(\w+)'}, indent='  '),
+      op_function_start(
+          bcc, '0012-is-enabled',
+          r'^bool BrowserCommandController::IsCommandEnabled\(',
+          guarded('  if (open_unified::hooks::IsOpenMenuCommand(${id})) {\n'
+                  '    return open_unified::hooks::IsOpenMenuCommandEnabled(\n'
+                  '        browser_.get(), ${id});\n'
+                  '  }'),
+          params={'id': r'int\s+(\w+)'}, indent='  '),
+      op_after_block(
+          bcc, '0012-execute-empty-window',
+          r'^  if \(!SupportsCommand\(id\) \|\| !IsCommandEnabled\(id\)\) \{',
+          within=r'^bool BrowserCommandController::'
+          r'ExecuteCommandWithDispositionAndContext\(',
+          code=guarded(
+              '  // Route Open commands even when the Chromium tab strip has no\n'
+              '  // active tab yet (empty window state).\n'
+              '  if (open_unified::hooks::HandleBrowserCommand(browser_.get(), '
+              'id)) {\n'
+              '    return true;\n'
+              '  }'), indent='  '),
       # HandleCommandWithDisposition() is the CommandUpdaterDelegate that
       # every ExecuteCommand*() path reaches once the command is enabled.
       op_function_start(
@@ -927,6 +1059,370 @@ def build_patches() -> List[Patch]:
                   '    return;\n'
                   '  }'),
           params={'id': r'int\s+(\w+)'}, indent='  '),
+      op_function_start(
+          bcc, '0012-reserved-command',
+          r'^bool BrowserCommandController::IsReservedCommandOrKey\(',
+          guarded('  if (open_unified::hooks::IsReservedBrowserCommand(${id})) {\n'
+                  '    return true;\n'
+                  '  }'),
+          params={'id': r'int\s+(\w+)'}, indent='  '),
+      op_include(gks, '0012-gks-include', HOOKS_HEADER, guard=True),
+      op_function_start(
+          gks, '0012-gks-mac-shortcuts',
+          r'^const std::vector<KeyboardShortcutData>& '
+          r'GetShortcutsNotPresentInMainMenu\(\)',
+          guarded(
+              '  // Open Unified: route non-menu macOS shortcuts through Open\'s\n'
+              '  // command tags instead of Chrome\'s tab strip / Downloads / '
+              'Save Page.\n'
+              '  if (open_unified::hooks::UseOpenMacMenusAndShortcuts()) {\n'
+              '    static const base::NoDestructor<std::vector<KeyboardShortcutData>>\n'
+              '        open_keys([]() {\n'
+              '          using open_unified::hooks::OpenCommandIdForMenuTag;\n'
+              '          std::vector<KeyboardShortcutData> keys;\n'
+              '          auto add = [&](bool cmd, bool shift, bool ctrl, bool opt,\n'
+              '                         int vkey, const char* id) {\n'
+              '            if (int tag = OpenCommandIdForMenuTag(id); tag != 0) {\n'
+              '              keys.push_back({cmd, shift, ctrl, opt, vkey, tag});\n'
+              '            }\n'
+              '          };\n'
+              '          // Cmd+1..9 -> Go to Tab 1..9\n'
+              '          const int kDigitKeys[9] = {\n'
+              '              kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4,\n'
+              '              kVK_ANSI_5, kVK_ANSI_6, kVK_ANSI_7, kVK_ANSI_8,\n'
+              '              kVK_ANSI_9};\n'
+              '          const int kKeypadKeys[9] = {\n'
+              '              kVK_ANSI_Keypad1, kVK_ANSI_Keypad2, kVK_ANSI_Keypad3,\n'
+              '              kVK_ANSI_Keypad4, kVK_ANSI_Keypad5, kVK_ANSI_Keypad6,\n'
+              '              kVK_ANSI_Keypad7, kVK_ANSI_Keypad8, kVK_ANSI_Keypad9};\n'
+              '          const char* kTabCmds[9] = {\n'
+              '              "go-to-tab-1", "go-to-tab-2", "go-to-tab-3",\n'
+              '              "go-to-tab-4", "go-to-tab-5", "go-to-tab-6",\n'
+              '              "go-to-tab-7", "go-to-tab-8", "go-to-tab-9"};\n'
+              '          const char* kSpaceCmds[9] = {\n'
+              '              "go-to-space-1", "go-to-space-2", "go-to-space-3",\n'
+              '              "go-to-space-4", "go-to-space-5", "go-to-space-6",\n'
+              '              "go-to-space-7", "go-to-space-8", "go-to-space-9"};\n'
+              '          for (int i = 0; i < 9; ++i) {\n'
+              '            add(true, false, false, false, kDigitKeys[i], kTabCmds[i]);\n'
+              '            add(true, false, false, false, kKeypadKeys[i], kTabCmds[i]);\n'
+              '            add(false, false, true, false, kDigitKeys[i], kSpaceCmds[i]);\n'
+              '            add(false, false, true, false, kKeypadKeys[i], kSpaceCmds[i]);\n'
+              '          }\n'
+              '          // Space / Tab / Switcher / Split navigation\n'
+              '          add(true, false, false, true, kVK_RightArrow, "next-space");\n'
+              '          add(true, false, false, true, kVK_LeftArrow, "previous-space");\n'
+              '          add(true, false, false, true, kVK_DownArrow, "next-tab");\n'
+              '          add(true, false, false, true, kVK_UpArrow, "previous-tab");\n'
+              '          add(false, false, true, false, kVK_Tab, "tab-switcher-forward");\n'
+              '          add(false, true, true, false, kVK_Tab, "tab-switcher-backward");\n'
+              '          add(true, false, true, false, kVK_RightArrow, "cycle-tab-forward");\n'
+              '          add(true, false, true, false, kVK_LeftArrow, "cycle-tab-backward");\n'
+              '          add(false, false, true, false, kVK_Space, "reveal-current-tab");\n'
+              '          add(false, true, true, false, kVK_ANSI_1, "focus-split-pane-1");\n'
+              '          add(false, true, true, false, kVK_ANSI_2, "focus-split-pane-2");\n'
+              '          add(false, true, true, false, kVK_ANSI_3, "focus-split-pane-3");\n'
+              '          add(false, true, true, false, kVK_ANSI_4, "focus-split-pane-4");\n'
+              '          add(false, true, true, false, kVK_ANSI_RightBracket, "next-split-pane");\n'
+              '          add(false, true, true, false, kVK_ANSI_LeftBracket, "previous-split-pane");\n'
+              '          return keys;\n'
+              '        }());\n'
+              '    return *open_keys;\n'
+              '  }'), indent='  '),
+  ]))
+
+  # 0013 ------------------------------------------------------------------
+  mmb = 'chrome/browser/ui/cocoa/main_menu_builder.mm'
+  p.append(Patch('0013', 'open-macos-main-menu',
+                 'Build Open\'s macOS main menu bar (Open, File, Edit, View, '
+                 'Spaces, Tabs, Archive, Extensions, Window, Help) from '
+                 'CommandRegistry and guard Chrome-only menu bridges', [
+      op_include(mmb, '0013-include', HOOKS_HEADER, guard=True),
+      op_function_start(
+          mmb, '0013-build-main-menu',
+          r'^NSMenu\* BuildMainMenu\(',
+          guarded(
+              '  if (!${is_pwa}) {\n'
+              '    AcceleratorsCocoa::CreateForPWA(false);\n'
+              '    auto build_item = [](auto&& self, NSApplication* app,\n'
+              '                         id<NSApplicationDelegate> delegate,\n'
+              '                         const open_unified::hooks::OpenMenuItemSpec& spec)\n'
+              '        -> NSMenuItem* {\n'
+              '      using Kind = open_unified::hooks::OpenMenuItemSpec::Kind;\n'
+              '      if (spec.kind == Kind::kSeparator) {\n'
+              '        return [NSMenuItem separatorItem];\n'
+              '      }\n'
+              '      NSString* title =\n'
+              '          [NSString stringWithUTF8String:spec.title.c_str()] ?: @"";\n'
+              '      if (spec.kind == Kind::kSectionHeader) {\n'
+              '        if (@available(macOS 14, *)) {\n'
+              '          return [NSMenuItem sectionHeaderWithTitle:title];\n'
+              '        }\n'
+              '        NSMenuItem* hdr = [[NSMenuItem alloc] initWithTitle:title\n'
+              '                                                     action:nil\n'
+              '                                              keyEquivalent:@""];\n'
+              '        hdr.enabled = NO;\n'
+              '        return hdr;\n'
+              '      }\n'
+              '      if (spec.kind == Kind::kServicesSubmenu) {\n'
+              '        NSMenuItem* svc = [[NSMenuItem alloc] initWithTitle:title\n'
+              '                                                     action:nil\n'
+              '                                              keyEquivalent:@""];\n'
+              '        NSMenu* svc_menu = [[NSMenu alloc] initWithTitle:title];\n'
+              '        svc.submenu = svc_menu;\n'
+              '        app.servicesMenu = svc_menu;\n'
+              '        return svc;\n'
+              '      }\n'
+              '      if (spec.kind == Kind::kSubmenu) {\n'
+              '        NSMenuItem* sub = [[NSMenuItem alloc] initWithTitle:title\n'
+              '                                                     action:nil\n'
+              '                                              keyEquivalent:@""];\n'
+              '        sub.tag = spec.command_tag;\n'
+              '        NSMenu* menu = [[NSMenu alloc] initWithTitle:title];\n'
+              '        for (const auto& child : spec.submenu) {\n'
+              '          NSMenuItem* ns_child = self(self, app, delegate, child);\n'
+              '          if (ns_child) {\n'
+              '            [menu addItem:ns_child];\n'
+              '          }\n'
+              '        }\n'
+              '        sub.submenu = menu;\n'
+              '        if (spec.is_windows_menu) {\n'
+              '          app.windowsMenu = menu;\n'
+              '        }\n'
+              '        if (spec.is_help_menu) {\n'
+              '          app.helpMenu = menu;\n'
+              '        }\n'
+              '        return sub;\n'
+              '      }\n'
+              '      NSString* key_equiv =\n'
+              '          spec.key_equivalent.empty()\n'
+              '              ? @""\n'
+              '              : ([NSString stringWithUTF8String:\n'
+              '                               spec.key_equivalent.c_str()] ?: @"");\n'
+              '      SEL action = spec.native_selector.empty()\n'
+              '                       ? @selector(commandDispatch:)\n'
+              '                       : NSSelectorFromString(\n'
+              '                             [NSString stringWithUTF8String:\n'
+              '                                           spec.native_selector.c_str()]);\n'
+              '      NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:title\n'
+              '                                                    action:action\n'
+              '                                             keyEquivalent:key_equiv];\n'
+              '      NSEventModifierFlags flags = 0;\n'
+              '      if (spec.modifier_mask & open_unified::hooks::kOpenMenuModCommand)\n'
+              '        flags |= NSEventModifierFlagCommand;\n'
+              '      if (spec.modifier_mask & open_unified::hooks::kOpenMenuModControl)\n'
+              '        flags |= NSEventModifierFlagControl;\n'
+              '      if (spec.modifier_mask & open_unified::hooks::kOpenMenuModOption)\n'
+              '        flags |= NSEventModifierFlagOption;\n'
+              '      if (spec.modifier_mask & open_unified::hooks::kOpenMenuModShift)\n'
+              '        flags |= NSEventModifierFlagShift;\n'
+              '      item.keyEquivalentModifierMask = flags;\n'
+              '      item.tag = spec.native_selector.empty() ? spec.command_tag\n'
+              '                                              : spec.native_tag;\n'
+              '      if (spec.target_app_delegate) {\n'
+              '        item.target = delegate;\n'
+              '      } else if (spec.target_nsapp) {\n'
+              '        item.target = app;\n'
+              '      }\n'
+              '      item.alternate = spec.alternate;\n'
+              '      item.hidden = spec.hidden;\n'
+              '      if (spec.hidden) {\n'
+              '        item.allowsKeyEquivalentWhenHidden = YES;\n'
+              '      }\n'
+              '      return item;\n'
+              '    };\n'
+              '    NSMenu* main_menu = [[NSMenu alloc] initWithTitle:@""];\n'
+              '    for (const auto& top :\n'
+              '         open_unified::hooks::BuildOpenMainMenuSpec(${product})) {\n'
+              '      NSMenuItem* ns_top = build_item(build_item, ${nsapp},\n'
+              '                                      ${delegate}, top);\n'
+              '      if (ns_top) {\n'
+              '        [main_menu addItem:ns_top];\n'
+              '      }\n'
+              '    }\n'
+              '    ${nsapp}.mainMenu = main_menu;\n'
+              '    return main_menu;\n'
+              '  }'),
+          params={
+              'nsapp': r'NSApplication\*\s+(\w+)',
+              'delegate': r'id<NSApplicationDelegate>\s+(\w+)',
+              'product': r'const std::u16string&\s+(\w+)',
+              'is_pwa': r'bool\s+(\w+),\s*\n?\s*bool\s+\w+',
+          }, indent='  '),
+      # Guard Chrome-only macOS menu bridges in AppController that expect
+      # Chrome's Profile/Bookmarks/History/Tab menu tags, and route Open custom
+      # menu commands when no browser window is focused.
+      op_after_line(
+          appc, '0013-skip-profile-menu',
+          r'^- \(void\)initProfileMenu \{\n',
+          code=guarded(
+              '  if (open_unified::hooks::UseOpenMacMenusAndShortcuts()) {\n'
+              '    return;\n'
+              '  }'), indent='  '),
+      op_before_line(
+          appc, '0013-skip-tab-menu-bridge',
+          r'^  if \(browser->GetType\(\) == BrowserWindowInterface::Type::TYPE_NORMAL\) \{',
+          within=r'^- \(void\)windowDidBecomeMain:',
+          code=guarded(
+              '  if (open_unified::hooks::UseOpenMacMenusAndShortcuts()) {\n'
+              '    _lastActiveBrowser = browser->GetWeakPtr();\n'
+              '    [self setLastProfile:browser->GetProfile()];\n'
+              '    return;\n'
+              '  }'), indent='  '),
+      op_before_line(
+          appc, '0013-skip-bookmark-history-bridges',
+          r'^  NSMenuItem\* bookmarkItem = \[NSApp\.mainMenu itemWithTag:IDC_BOOKMARKS_MENU\];',
+          code=guarded(
+              '  if (open_unified::hooks::UseOpenMacMenusAndShortcuts()) {\n'
+              '    _lastProfile = profile;\n'
+              '    if (_lastProfile == nullptr) {\n'
+              '      return;\n'
+              '    }\n'
+              '    chrome::BrowserCommandController::\n'
+              '        UpdateSharedCommandsForIncognitoAvailability(\n'
+              '            _menuState.get(), _lastProfile);\n'
+              '    return;\n'
+              '  }'), indent='  '),
+      op_after_line(
+          appc, '0013-validate-open-command',
+          r'^    NSInteger tag = \[item tag\];\n',
+          within=r'^- \(BOOL\)validateUserInterfaceItem:',
+          code=guarded(
+              '    if (open_unified::hooks::IsOpenMenuCommand(tag)) {\n'
+              '      return open_unified::hooks::IsOpenMenuCommandEnabled(\n'
+              '                 nullptr, tag) &&\n'
+              '             ![self keyWindowIsModal];\n'
+              '    }'), indent='    '),
+      op_after_line(
+          appc, '0013-dispatch-open-command',
+          r'^  NSInteger tag = \[sender tag\];\n',
+          within=r'^- \(void\)commandDispatch:',
+          code=guarded(
+              '  if (open_unified::hooks::HandleBrowserCommand(nullptr, tag)) {\n'
+              '    return;\n'
+              '  }'), indent='  '),
+  ]))
+
+  # 0014 ------------------------------------------------------------------
+  wcd = 'chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc'
+  p.append(Patch('0014', 'open-link-interception-and-target-url',
+                 'Intercept link opens and new contents for Peek/Little Open, '
+                 'forward hover target URL to Open\'s URL pill, and notify '
+                 'Open on BrowserView fullscreen transitions', [
+      op_include(wcd, '0014-include', HOOKS_HEADER, guard=True),
+      op_function_start(
+          wcd, '0014-open-url-from-tab',
+          r'^content::WebContents\* BrowserWebContentsDelegate::OpenURLFromTab\(',
+          guarded(
+              '  if (open_unified::hooks::MaybeInterceptLinkOpen(\n'
+              '          &*browser_, ${source}, ${params})) {\n'
+              '    return nullptr;\n'
+              '  }'),
+          params={
+              'source': r'content::WebContents\*\s+(\w+)',
+              'params': r'const content::OpenURLParams&\s+(\w+)',
+          }, indent='  '),
+      op_function_start(
+          wcd, '0014-add-new-contents',
+          r'^content::WebContents\* BrowserWebContentsDelegate::AddNewContents\(',
+          guarded(
+              '  if (open_unified::hooks::MaybeInterceptAddNewContents(\n'
+              '          &*browser_, ${source}, ${new_contents}, ${target_url},\n'
+              '          ${disposition}, ${user_gesture})) {\n'
+              '    return nullptr;\n'
+              '  }'),
+          params={
+              'source': r'content::WebContents\*\s+(\w+)',
+              'new_contents': r'std::unique_ptr<content::WebContents>\s+(\w+)',
+              'target_url': r'const GURL&\s+(\w+)',
+              'disposition': r'WindowOpenDisposition\s+(\w+)',
+              'user_gesture': r'bool\s+(\w+),',
+          }, indent='  '),
+      op_function_start(
+          wcd, '0014-update-target-url',
+          r'^void BrowserWebContentsDelegate::UpdateTargetURL\(',
+          guarded(
+              '  open_unified::hooks::OnUpdateTargetURL(&*browser_, ${source}, '
+              '${url});'),
+          params={
+              'source': r'content::WebContents\*\s+(\w+)',
+              'url': r'const GURL&\s+(\w+)',
+          }, indent='  '),
+      op_function_end(
+          bv, '0014-fullscreen-state',
+          r'^void BrowserView::FullscreenStateChanged\(\) \{',
+          guarded('  open_unified::hooks::OnFullscreenStateChanged(this);'),
+          indent='  '),
+  ]))
+
+  # 0015 ------------------------------------------------------------------
+  rvcm = 'chrome/browser/renderer_context_menu/render_view_context_menu.cc'
+  bav = 'chrome/browser/ui/views/bubble_anchor_util_views.cc'
+  tv = 'chrome/browser/ui/views/toolbar/toolbar_view.cc'
+  p.append(Patch('0015', 'open-page-context-menu-and-anchors',
+                 'Add Open link/selection/page items to Chromium\'s web '
+                 'context menu and anchor Chromium permission/password/'
+                 'extension bubbles cleanly inside OpenBrowserView', [
+      op_include(rvcm, '0015-include', HOOKS_HEADER, guard=True),
+      op_before_line(
+          rvcm, '0015-context-menu-init',
+          r'^  AppendReadWriteCardItems\(\);\n',
+          within=r'^void RenderViewContextMenu::InitMenu\(\) \{',
+          code=guarded(
+              '  open_unified::hooks::AppendWebContextMenuItems(\n'
+              '      GetBrowser(), source_web_contents_, params_, '
+              '&menu_model_);'), indent='  '),
+      op_function_start(
+          rvcm, '0015-context-menu-enabled',
+          r'^bool RenderViewContextMenu::IsCommandIdEnabled\(',
+          guarded(
+              '  if (std::optional<bool> open_enabled =\n'
+              '          open_unified::hooks::IsWebContextMenuCommandEnabled(\n'
+              '              GetBrowser(), source_web_contents_, params_, '
+              '${id})) {\n'
+              '    return *open_enabled;\n'
+              '  }'),
+          params={'id': r'int\s+(\w+)'}, indent='  '),
+      op_after_line(
+          rvcm, '0015-context-menu-exec',
+          r'^  command_executed_ = true;\n',
+          within=r'^void RenderViewContextMenu::ExecuteCommand\(',
+          code=guarded(
+              '  if (open_unified::hooks::ExecuteWebContextMenuCommand(\n'
+              '          GetBrowser(), source_web_contents_, params_, id, '
+              'event_flags)) {\n'
+              '    return;\n'
+              '  }'), indent='  '),
+      op_include(bav, '0015-bav-include', HOOKS_HEADER, guard=True),
+      op_function_start(
+          bav, '0015-bav-config',
+          r'^AnchorConfiguration GetPageInfoAnchorConfiguration\(',
+          guarded(
+              '  if (views::View* open_anchor =\n'
+              '          open_unified::hooks::GetBubbleAnchorView(${browser})) {\n'
+              '    return {views::BubbleAnchor(open_anchor),\n'
+              '            ui::ElementIdentifier(),\n'
+              '            views::BubbleBorder::TOP_LEFT};\n'
+              '  }'),
+          params={'browser': r'BrowserWindowInterface\*\s+(\w+)'}, indent='  '),
+      op_function_start(
+          bav, '0015-bav-rect',
+          r'^gfx::Rect GetPageInfoAnchorRect\(',
+          guarded(
+              '  if (std::optional<gfx::Rect> open_rect =\n'
+              '          open_unified::hooks::GetBubbleAnchorRect(${browser})) {\n'
+              '    return *open_rect;\n'
+              '  }'),
+          params={'browser': r'BrowserWindowInterface\*\s+(\w+)'}, indent='  '),
+      op_include(tv, '0015-tv-include', HOOKS_HEADER, guard=True),
+      op_function_start(
+          tv, '0015-tv-bubble-anchor',
+          r'^views::BubbleAnchor ToolbarView::GetBubbleAnchor\(',
+          guarded(
+              '  if (views::View* open_anchor =\n'
+              '          open_unified::hooks::GetBubbleAnchorView(browser_)) {\n'
+              '    return views::BubbleAnchor(open_anchor);\n'
+              '  }'), indent='  '),
   ]))
   return p
 

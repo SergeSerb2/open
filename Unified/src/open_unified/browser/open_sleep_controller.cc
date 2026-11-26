@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "chrome/browser/devtools/devtools_window.h"  // nogncheck
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-shared.h"
@@ -25,6 +26,7 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -101,12 +103,38 @@ OpenSleepController::~OpenSleepController() {
   Shutdown();
 }
 
+// Separate helper to avoid inheriting from base::CheckedObserver twice
+// alongside OpenTabBridge::Observer.
+class OpenSleepController::MemoryPressureBridge final
+    : public base::MemoryPressureListener {
+ public:
+  explicit MemoryPressureBridge(OpenSleepController* owner)
+      : owner_(owner),
+        registration_(
+            FROM_HERE,
+            base::MemoryPressureListenerTag::kMemoryPressureListenerPolicy,
+            this) {}
+  ~MemoryPressureBridge() override = default;
+
+ protected:
+  void OnMemoryPressure(base::MemoryPressureLevel level) override {
+    if (level == base::MEMORY_PRESSURE_LEVEL_CRITICAL && owner_) {
+      owner_->HandleCriticalMemoryPressure();
+    }
+  }
+
+ private:
+  raw_ptr<OpenSleepController> owner_;
+  base::MemoryPressureListenerRegistration registration_;
+};
+
 void OpenSleepController::Start() {
   if (started_) {
     return;
   }
   started_ = true;
   service_->tab_bridge()->AddObserver(this);
+  memory_pressure_bridge_ = std::make_unique<MemoryPressureBridge>(this);
   UpdateTimer();
 }
 
@@ -115,6 +143,7 @@ void OpenSleepController::Shutdown() {
     return;
   }
   started_ = false;
+  memory_pressure_bridge_.reset();
   tick_timer_.Stop();
   // Keep back/forward and scroll state of every loaded page for the next
   // launch (the store runner is BLOCK_SHUTDOWN).
@@ -337,12 +366,43 @@ bool OpenSleepController::MayChromeDiscard(
   if (!tab_id) {
     return true;
   }
-  if (ModeForTab(*tab_id) == SleepMode::kOff ||
-      IsKeepAlive(*tab_id, contents) || contents->IsCurrentlyAudible()) {
+  if (contents->GetBrowserContext()->IsOffTheRecord()) {
     return false;
   }
+  if (ModeForTab(*tab_id) == SleepMode::kOff ||
+      IsKeepAlive(*tab_id, contents) || contents->IsCurrentlyAudible() ||
+      contents->IsBeingCaptured() ||
+      contents->NeedToFireBeforeUnloadOrUnloadEvents()) {
+    return false;
+  }
+  if (DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr ||
+      content::DevToolsAgentHost::IsDebuggerAttached(contents)) {
+    return false;
+  }
+  if (const Tab* tab = service_->model().FindTab(*tab_id)) {
+    const TimestampSec now = NowSec();
+    if (tab->live_state.is_capturing_media || tab->live_state.devtools_open ||
+        tab->live_state.notifications_allowed || tab->live_state.is_loading) {
+      return false;
+    }
+    if (tab->live_state.last_form_interaction_at.has_value() &&
+        (now - *tab->live_state.last_form_interaction_at) <
+            SleepScheduler::kFormProtectionSec) {
+      return false;
+    }
+  }
   MediaStreamCaptureIndicator* indicator = CaptureIndicator();
-  return !(indicator && indicator->IsCapturingUserMedia(contents));
+  if (indicator &&
+      (indicator->IsCapturingUserMedia(contents) ||
+       indicator->IsCapturingVideo(contents) ||
+       indicator->IsCapturingAudio(contents) ||
+       indicator->IsBeingMirrored(contents) ||
+       indicator->IsCapturingTab(contents) ||
+       indicator->IsCapturingWindow(contents) ||
+       indicator->IsCapturingDisplay(contents))) {
+    return false;
+  }
+  return true;
 }
 
 void OpenSleepController::Tick() {
@@ -350,9 +410,13 @@ void OpenSleepController::Tick() {
   if (!started_ || !bridge) {
     return;
   }
+  bridge->RefreshProtectionStates();
   const TimestampSec now = NowSec();
   std::set<ItemID> visible;
   for (const auto& [tab_id, contents] : bridge->LoadedTabs()) {
+    if (contents->GetBrowserContext()->IsOffTheRecord()) {
+      continue;
+    }
     if (contents->GetVisibility() == content::Visibility::VISIBLE) {
       visible.insert(tab_id);
     }
@@ -365,6 +429,55 @@ void OpenSleepController::Tick() {
     }
   }
   scheduler_.Tick(service_->model(), visible, now);
+}
+
+size_t OpenSleepController::HandleCriticalMemoryPressure() {
+  OpenTabBridge* bridge = service_->tab_bridge();
+  if (!started_ || !bridge) {
+    return 0;
+  }
+  bridge->RefreshProtectionStates();
+  const TimestampSec now = NowSec();
+  std::set<ItemID> visible;
+  for (const auto& [tab_id, contents] : bridge->LoadedTabs()) {
+    if (contents->GetBrowserContext()->IsOffTheRecord()) {
+      continue;
+    }
+    if (contents->GetVisibility() == content::Visibility::VISIBLE) {
+      visible.insert(tab_id);
+    }
+    const bool audible = contents->IsCurrentlyAudible();
+    auto [it, inserted] = audible_.try_emplace(tab_id, audible);
+    if (inserted || it->second != audible) {
+      it->second = audible;
+      scheduler_.OnTabAudioChanged(tab_id, audible, now);
+    }
+  }
+  return scheduler_.HandleCriticalMemoryPressure(service_->model(), visible,
+                                                 now);
+}
+
+void OpenSleepController::OnTabHidden(const ItemID& tab_id) {
+  if (!started_) {
+    return;
+  }
+  scheduler_.OnTabHidden(tab_id, NowSec());
+}
+
+void OpenSleepController::OnTabUnloadHandlersChanged(const ItemID& tab_id,
+                                                     bool has_handlers) {
+  if (!started_) {
+    return;
+  }
+  scheduler_.OnTabUnloadHandlersChanged(tab_id, has_handlers);
+}
+
+void OpenSleepController::OnTabDownloadStateChanged(const ItemID& tab_id,
+                                                    bool is_downloading) {
+  if (!started_) {
+    return;
+  }
+  scheduler_.OnTabDownloadStateChanged(tab_id, is_downloading);
 }
 
 void OpenSleepController::UpdateTimer() {

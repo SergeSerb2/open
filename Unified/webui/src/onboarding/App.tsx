@@ -1,60 +1,136 @@
+// open://onboarding — Open's first run, in Open's own identity: the night
+// room, the doorway-and-sun, a warm synthesized score. Intro → Import (only
+// when another browser is found) → Favorites → Make it yours → Ready.
+//
+// Nothing is written until Ready: the import choice, Favorites, theme and
+// toggles stay in this page and go to onboarding.complete once. The browser
+// then turns this tab into open://welcome (or selects an existing Welcome
+// tab), so the page never stays on Ready.
+
 import type { JSX } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
-import { type BrowserImportSource, type SpaceStyle, rpc } from '../shared/bridge';
-import { ONBOARDING_FAVORITES } from '../shared/catalog';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { type SpaceStyle, isNativeWebUI, subscribeEvent } from '../shared/bridge';
+import { computeSpaceGradientCss, hexToRgba, isLightSpaceStyle, rgbaToHex } from '../shared/components';
+import { DoorwayArch, DoorwayEmblem, Landscape, MiniBrowser, type MiniFavorite, Room, SiteIcon } from './art';
 import {
-  Badge,
-  SpaceThemeEditor,
-  Toast,
-  Toggle,
-  computeSpaceGradientCss,
-  hexToRgba,
-  isLightSpaceStyle,
-} from '../shared/components';
-import { CheckIcon, OpenDoorwayMark } from '../shared/icons';
+  DEFAULT_IMPORT_KINDS,
+  FAVORITE_SITES,
+  type FavoriteSite,
+  IMPORT_KIND_LABELS,
+  MAX_FAVORITES,
+  THEME_SWATCHES,
+  favoriteKey,
+  normalizeTypedUrl,
+  siteNameFromUrl,
+} from './catalog';
+import {
+  type FaviconResult,
+  type ImportKind,
+  type ImportSource,
+  type OnboardingState,
+  completeOnboarding,
+  getOnboardingState,
+  prefetchFavicons,
+  probeImportSources,
+} from './rpc';
+import { isMuted, playHandoff, playIntroScore, playTick, setMuted } from './sound';
 
-type OnboardingStep = 'intro' | 'name' | 'import' | 'favorites' | 'theme' | 'blocker' | 'default' | 'ready';
+type Step = 'intro' | 'import' | 'favorites' | 'theme' | 'ready';
 
-const SETUP_STEPS: readonly OnboardingStep[] = [
-  'name',
-  'import',
-  'favorites',
-  'theme',
-  'blocker',
-  'default',
-  'ready',
-];
+// Intro beats (seconds), after docs/onboarding.md's IntroTimeline, with the
+// button brought forward to the end of the identity line.
+const BEAT = {
+  line: 4.3,
+  value1: 5.6,
+  value2: 6.8,
+  value3: 8.0,
+  settle: 9.2,
+  button: 5.0,
+} as const;
 
+const IDENTITY_LINE = 'A browser that’s yours, and only yours.';
 const VALUE_LINES = [
-  'A calm, fast browser built around Spaces and Tabs.',
-  'Built-in ad blocking, Boosts, Split View, and zero-knowledge Sync.',
-  'Local-first. No account required. Ready in under a minute.',
+  'Spaces keep work, home and everything else apart.',
+  'Ad blocking, Boosts and Split View are built in.',
+  'Private by default. Sync is yours to turn on.',
 ];
-
-const SHUFFLE_COLORS = ['#3139FF', '#0D9488', '#D97706', '#DB2777', '#7C3AED', '#2563EB'];
 
 const READY_PATTERNS = [
-  'radial-gradient(circle at 80% 20%, rgba(255,255,255,0.28), transparent 45%)',
-  'repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0 12px, transparent 12px 24px)',
-  'radial-gradient(circle at 20% 80%, rgba(255,230,150,0.28), transparent 50%)',
-  'linear-gradient(120deg, rgba(255,255,255,0.16), transparent 60%)',
-  'radial-gradient(circle at 50% 0%, rgba(255,255,255,0.24), transparent 55%)',
-  'conic-gradient(from 45deg at 80% 80%, rgba(255,255,255,0.16), transparent 40%)',
+  'radial-gradient(circle at 82% 18%, rgba(255,255,255,0.32), transparent 46%)',
+  'radial-gradient(circle at 18% 86%, rgba(255,236,170,0.34), transparent 52%)',
+  'repeating-linear-gradient(135deg, rgba(255,255,255,0.07) 0 12px, transparent 12px 26px)',
+  'radial-gradient(circle at 50% -10%, rgba(255,255,255,0.3), transparent 58%)',
+  'conic-gradient(from 210deg at 78% 78%, rgba(255,255,255,0.18), transparent 38%)',
+  'linear-gradient(115deg, rgba(255,255,255,0.2), transparent 55%)',
 ];
 
-export function OnboardingApp(): JSX.Element {
-  const [step, setStep] = useState<OnboardingStep>('intro');
-  const [valueIdx, setValueIdx] = useState(0);
-  const [userName, setUserName] = useState('');
-  const [importSources, setImportSources] = useState<BrowserImportSource[]>([]);
-  const [selectedImportId, setSelectedImportId] = useState<string>('');
-  const [importResult, setImportResult] = useState<string | null>(null);
-  const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(
-    () => new Set(ONBOARDING_FAVORITES.filter((f) => f.defaultSelected).map((f) => f.id)),
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+}
+
+function sourceTitle(source: ImportSource): string {
+  if (source.family === 'open-legacy') return 'Import from Open (Legacy)';
+  return `Import from ${source.browser_name}`;
+}
+
+function sourceSubtitle(source: ImportSource): string {
+  const parts: string[] = [];
+  if (source.profile_name && source.profile_name !== source.browser_name && source.family !== 'open-legacy') {
+    parts.push(source.profile_name);
+  }
+  if (source.access_denied) return parts.join(' · ');
+  const items = source.family === 'arc' || source.family === 'open-legacy' ? 'tabs' : 'bookmarks';
+  if (source.bookmarks_count) parts.push(`${source.bookmarks_count.toLocaleString()} ${items}`);
+  if (source.history_count) parts.push(`${source.history_count.toLocaleString()} history`);
+  return parts.join(' · ');
+}
+
+const FAMILY_TINT: Record<ImportSource['family'], string> = {
+  'open-legacy': 'linear-gradient(160deg, #FFD08A, #F08A4B)',
+  arc: 'linear-gradient(160deg, #6b5cff, #d35b8f)',
+  safari: 'linear-gradient(160deg, #4aa8ff, #2a6fdb)',
+  chromium: 'linear-gradient(160deg, #6aa5ff, #3f6fe0)',
+  firefox: 'linear-gradient(160deg, #ffb040, #e0505d)',
+  html: 'linear-gradient(160deg, #8f96a8, #5b6478)',
+};
+
+function SourceBadge({ source }: { source: ImportSource }): JSX.Element {
+  if (source.family === 'open-legacy') {
+    return (
+      <span class="onb-source-badge is-open" aria-hidden="true">
+        <DoorwayEmblem size={22} />
+      </span>
+    );
+  }
+  return (
+    <span class="onb-source-badge" style={{ background: FAMILY_TINT[source.family] }} aria-hidden="true">
+      {source.browser_name.charAt(0).toUpperCase()}
+    </span>
   );
-  const [spaceStyle, setSpaceStyle] = useState<SpaceStyle>({
+}
+
+interface FavoriteTile extends FavoriteSite {
+  custom?: boolean;
+}
+
+export function OnboardingApp(): JSX.Element {
+  const reduceMotion = useMemo(prefersReducedMotion, []);
+  const [step, setStep] = useState<Step>('intro');
+  const [state, setState] = useState<OnboardingState | null>(null);
+  const [sources, setSources] = useState<ImportSource[] | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [sourceId, setSourceId] = useState<string>('');
+  const [kinds, setKinds] = useState<Set<ImportKind>>(() => new Set(DEFAULT_IMPORT_KINDS));
+  const [tiles, setTiles] = useState<FavoriteTile[]>(() => [...FAVORITE_SITES]);
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(FAVORITE_SITES.filter((f) => f.selected).map((f) => f.url)),
+  );
+  const [icons, setIcons] = useState<Record<string, FaviconResult>>({});
+  const [customUrl, setCustomUrl] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [style, setStyle] = useState<SpaceStyle>({
     math_version: 1,
-    key_color: { r: 0.19, g: 0.22, b: 1.0, a: 1 },
+    key_color: { r: 0.19, g: 0.22, b: 1, a: 1 },
     color_count: 2,
     wheel: 'analogous',
     appearance: 'automatic',
@@ -62,472 +138,881 @@ export function OnboardingApp(): JSX.Element {
     texture: 'grain',
     intensity_factor: 0.65,
   });
-  const [adBlockEnabled, setAdBlockEnabled] = useState(true);
-  const [wantDefaultBrowser, setWantDefaultBrowser] = useState(true);
-  const [isDefaultBrowser, setIsDefaultBrowser] = useState(false);
-  const [readyPatternIdx, setReadyPatternIdx] = useState(0);
-  const [completing, setCompleting] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [adblock, setAdblock] = useState(true);
+  const [makeDefault, setMakeDefault] = useState(true);
+  const [userName, setUserName] = useState('');
+  const [applyAgain, setApplyAgain] = useState(false);
+  const [pattern, setPattern] = useState(0);
+  const [finishing, setFinishing] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; importFailed: boolean } | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const [muted, setMutedState] = useState(isMuted);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast((c) => (c === msg ? null : c)), 2500);
-  };
+  // Intro timeline.
+  const introStart = useRef(performance.now());
+  const [introSkipped, setIntroSkipped] = useState(reduceMotion);
+  const [lineIndex, setLineIndex] = useState(-1); // -1 hidden, 0 identity, 1..3 values
+  const [buttonReady, setButtonReady] = useState(false);
 
-  useEffect(() => {
-    void rpc('onboarding.getState', {}).then((st) => {
-      setSpaceStyle(st.default_space_style);
-      setAdBlockEnabled(st.adblock_enabled);
-      setIsDefaultBrowser(st.is_default_browser);
-    });
-    void rpc('import.probeBrowsers', {}).then((res) => {
-      setImportSources(res.sources);
-      if (res.sources[0]) setSelectedImportId(res.sources[0].id);
-    });
+  const replay = state?.completed === true;
+
+  // --- Load ---------------------------------------------------------------------
+
+  const probe = useCallback(async () => {
+    setProbing(true);
+    try {
+      const list = await probeImportSources();
+      setSources(list);
+      setSourceId((current) => {
+        if (current && list.some((s) => s.id === current && !s.access_denied)) return current;
+        const first = list.find((s) => s.recommended && !s.access_denied);
+        return first ? first.id : '';
+      });
+    } catch {
+      setSources([]);
+    } finally {
+      setProbing(false);
+    }
   }, []);
 
   useEffect(() => {
+    void getOnboardingState()
+      .then((st) => {
+        setState(st);
+        setStyle(st.default_space_style);
+        setAdblock(st.adblock_enabled);
+        setMakeDefault(!st.is_default_browser);
+        if (st.user_name) setUserName(st.user_name);
+      })
+      .catch(() => undefined);
+    void probe();
+    const off = subscribeEvent('open.importProgress', (payload) => {
+      const p = (payload ?? {}) as { phase?: string; progress?: number };
+      if (p.phase === 'reading') setProgress('Reading your data…');
+      else if (p.phase === 'applying') setProgress('Adding it to Open…');
+      else if (p.phase === 'done') setProgress('Imported.');
+    });
+    return off;
+  }, [probe]);
+
+  // Favicons: fetched after the intro starts (sellIntro + syncLead).
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void prefetchFavicons(FAVORITE_SITES.map((f) => f.url)).then((results) => {
+        setIcons((prev) => {
+          const next = { ...prev };
+          for (const r of results) next[r.page_url] = r;
+          return next;
+        });
+      });
+    }, 3380);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // --- Intro schedule ---------------------------------------------------------------
+
+  useEffect(() => {
     if (step !== 'intro') return;
-    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduced) return;
-    const timer = window.setInterval(() => {
-      setValueIdx((i) => (i + 1) % VALUE_LINES.length);
-    }, 2400);
-    return () => window.clearInterval(timer);
-  }, [step]);
+    if (introSkipped) {
+      setLineIndex(0);
+      setButtonReady(true);
+      return;
+    }
+    const elapsed = (performance.now() - introStart.current) / 1000;
+    const at = (beat: number, fn: () => void) => window.setTimeout(fn, Math.max(0, (beat - elapsed) * 1000));
+    const timers = [
+      at(BEAT.line, () => setLineIndex(0)),
+      at(BEAT.button, () => setButtonReady(true)),
+      at(BEAT.value1, () => setLineIndex(1)),
+      at(BEAT.value2, () => setLineIndex(2)),
+      at(BEAT.value3, () => setLineIndex(3)),
+      at(BEAT.settle, () => setLineIndex(0)),
+    ];
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [step, introSkipped]);
 
-  const stepIdx = SETUP_STEPS.indexOf(step);
-  const goBack = () => {
-    if (stepIdx <= 0) setStep('intro');
-    else setStep(SETUP_STEPS[stepIdx - 1]!);
-  };
+  // The score starts with the first gesture (browsers block earlier audio).
+  useEffect(() => {
+    const start = () => {
+      playIntroScore((performance.now() - introStart.current) / 1000);
+      window.removeEventListener('pointerdown', start, true);
+      window.removeEventListener('keydown', start, true);
+    };
+    window.addEventListener('pointerdown', start, true);
+    window.addEventListener('keydown', start, true);
+    return () => {
+      window.removeEventListener('pointerdown', start, true);
+      window.removeEventListener('keydown', start, true);
+    };
+  }, []);
+
+  // --- Steps ------------------------------------------------------------------------
+
+  const steps = useMemo<Step[]>(() => {
+    const list: Step[] = ['intro'];
+    // Import only when another browser has data (or while still looking).
+    if (sources === null || sources.length > 0) list.push('import');
+    list.push('favorites', 'theme', 'ready');
+    return list;
+  }, [sources]);
+
+  useEffect(() => {
+    if (!steps.includes(step)) setStep('favorites');
+  }, [steps, step]);
+
+  const setupSteps = steps.filter((s) => s !== 'intro');
+  const stepIndex = steps.indexOf(step);
+
   const goNext = () => {
-    if (step === 'intro') setStep('name');
-    else if (stepIdx >= 0 && stepIdx < SETUP_STEPS.length - 1) setStep(SETUP_STEPS[stepIdx + 1]!);
+    const next = steps[stepIndex + 1];
+    if (next) setStep(next);
+  };
+  const goBack = () => {
+    const prev = steps[stepIndex - 1];
+    if (prev) setStep(prev);
   };
 
-  const toggleFav = (id: string) => {
-    setSelectedFavIds((prev) => {
+  const selectedSource = sources?.find((s) => s.id === sourceId && !s.access_denied) ?? null;
+  // Sidebar kinds stay idempotent; offer them again even after a run.
+  const importKindsForRun = selectedSource
+    ? selectedSource.supported_kinds.filter((k) => kinds.has(k))
+    : [];
+
+  const existingKeys = useMemo(
+    () => new Set((state?.existing_favorite_urls ?? []).map(favoriteKey)),
+    [state],
+  );
+
+  const selectedTiles = tiles.filter((t) => selected.has(t.url) && !existingKeys.has(favoriteKey(t.url)));
+  const miniFavorites: MiniFavorite[] = [
+    ...(state?.existing_favorite_urls ?? []).map((url) => ({
+      id: `existing-${url}`,
+      name: siteNameFromUrl(url),
+      monogram: siteNameFromUrl(url).slice(0, 2),
+      icon: icons[url]?.icon,
+    })),
+    ...selectedTiles.map((t) => ({
+      id: t.id,
+      name: t.name,
+      monogram: t.monogram,
+      icon: icons[t.url]?.icon,
+      color: icons[t.url]?.fallback_color ?? t.color,
+    })),
+  ];
+
+  const toggleFavorite = (tile: FavoriteTile) => {
+    if (existingKeys.has(favoriteKey(tile.url))) return;
+    setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(tile.url)) next.delete(tile.url);
+      else if (selectedTiles.length < MAX_FAVORITES) next.add(tile.url);
       return next;
     });
+    playTick();
   };
 
-  const selectedFavs = ONBOARDING_FAVORITES.filter((f) => selectedFavIds.has(f.id));
-  const spaceTitle = userName.trim() ? `${userName.trim()}'s Space` : 'Personal';
-  const artGradient = computeSpaceGradientCss(spaceStyle);
-  const artLightText = !isLightSpaceStyle(spaceStyle);
+  const addCustom = () => {
+    const url = normalizeTypedUrl(customUrl);
+    if (!url) {
+      setCustomError('Type a site address, like example.com.');
+      return;
+    }
+    const key = favoriteKey(url);
+    const existing = tiles.find((t) => favoriteKey(t.url) === key);
+    if (existing) {
+      setSelected((prev) => new Set(prev).add(existing.url));
+    } else {
+      const name = siteNameFromUrl(url);
+      const tile: FavoriteTile = {
+        id: `custom-${key}`,
+        name,
+        url,
+        monogram: name.slice(0, 2),
+        custom: true,
+      };
+      setTiles((prev) => [...prev, tile]);
+      setSelected((prev) => new Set(prev).add(url));
+      // Local icon only (custom sites never go to a favicon server).
+      void prefetchFavicons([url]).then((results) =>
+        setIcons((prev) => {
+          const next = { ...prev };
+          for (const r of results) next[r.page_url] = r;
+          return next;
+        }),
+      );
+    }
+    setCustomUrl('');
+    setCustomError(null);
+  };
 
-  const handleFinish = async () => {
-    setCompleting(true);
+  const spaceTitle = state?.space_title || (userName.trim() ? `${userName.trim()}’s Space` : 'Your Space');
+  const gradient = computeSpaceGradientCss(style);
+  const lightArt = isLightSpaceStyle(style);
+  const roomTint = rgbaToHex(style.key_color);
+
+  // --- Finish -----------------------------------------------------------------------
+
+  const finish = async (skipImport = false) => {
+    if (finishing) return;
+    setFinishing(true);
+    setError(null);
+    const runImport = !skipImport && !replay && selectedSource && importKindsForRun.length > 0;
+    setProgress(runImport ? 'Importing…' : null);
     try {
-      const res = await rpc('onboarding.complete', {
+      const result = await completeOnboarding({
         user_name: userName.trim().slice(0, 40),
-        imported_source_id: importResult ? selectedImportId : undefined,
-        favorite_urls: selectedFavs.map((f) => f.url),
-        space_style: spaceStyle,
-        adblock_enabled: adBlockEnabled,
-        make_default_browser: wantDefaultBrowser,
+        favorite_urls: selectedTiles.map((t) => t.url),
+        space_style: style,
+        adblock_enabled: adblock,
+        make_default_browser: makeDefault && !state?.is_default_browser,
+        replay: replay && !applyAgain,
+        ...(runImport && selectedSource ? { import: { source_id: selectedSource.id, kinds: importKindsForRun } } : {}),
       });
-      showToast(`Setup complete! Opening ${res.welcome_url}`);
-      if (window.location.protocol !== 'open:') {
-        window.location.href = '/welcome.html';
-      }
+      playHandoff();
+      setLeaving(true);
+      const target = isNativeWebUI()
+        ? result.welcome_url
+        : `/welcome.html${window.location.search}`;
+      // The browser turns this tab into Welcome (navigated) or closes it
+      // (selected_existing). If that does not happen, go there ourselves.
+      const wait =
+        isNativeWebUI() && (result.handoff === 'navigated' || result.handoff === 'selected_existing') ? 1600 : 650;
+      window.setTimeout(() => window.location.replace(target), wait);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Unable to save setup.');
-    } finally {
-      setCompleting(false);
+      const message = err instanceof Error ? err.message : 'Setup could not be saved.';
+      setError({ message, importFailed: /^Import failed/i.test(message) });
+      setFinishing(false);
+      setProgress(null);
     }
   };
 
-  return (
-    <div class="onb-room">
-      <div class="onb-grain" />
+  // --- Keyboard ---------------------------------------------------------------------
 
-      {step === 'intro' ? (
-        <section class="onb-intro" aria-label="Welcome to Open">
-          <div class="onb-doorway-halo">
-            <OpenDoorwayMark size={84} />
+  const primary = (): void => {
+    if (step === 'intro') {
+      if (buttonReady) goNext();
+      return;
+    }
+    if (step === 'ready') void finish();
+    else goNext();
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+      if (e.key === 'Escape') {
+        if (step === 'intro') setIntroSkipped(true);
+        else if (!finishing) goBack();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter' && !typing && target?.tagName !== 'BUTTON' && target?.tagName !== 'LABEL') {
+        e.preventDefault();
+        primary();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  // --- Render: intro ------------------------------------------------------------------
+
+  const muteButton = (
+    <button
+      type="button"
+      class="onb-mute"
+      aria-pressed={muted}
+      aria-label={muted ? 'Turn sound on' : 'Turn sound off'}
+      title={muted ? 'Sound off' : 'Sound on'}
+      onClick={(e) => {
+        e.stopPropagation();
+        setMuted(!muted);
+        setMutedState(!muted);
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M2.5 6h2.2L8 3.2v9.6L4.7 10H2.5z" fill="currentColor" />
+        {muted ? (
+          <path d="M10.5 6l3 4M13.5 6l-3 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+        ) : (
+          <path
+            d="M10.4 5.6a3.4 3.4 0 010 4.8M12.2 3.9a5.8 5.8 0 010 8.2"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.3"
+            stroke-linecap="round"
+          />
+        )}
+      </svg>
+    </button>
+  );
+
+  if (step === 'intro') {
+    const line = lineIndex <= 0 ? IDENTITY_LINE : (VALUE_LINES[lineIndex - 1] ?? IDENTITY_LINE);
+    return (
+      <Room tint={roomTint} class={`onb-intro${introSkipped ? ' is-skipped' : ''}${reduceMotion ? ' is-reduced' : ''}`}>
+        <div class="onb-titlebar" />
+        {muteButton}
+        <div
+          class="onb-intro-stage"
+          onClick={() => setIntroSkipped(true)}
+          role="presentation"
+        >
+          <div class="onb-intro-spill" aria-hidden="true" />
+          <div class="onb-intro-door">
+            <DoorwayArch height={196} />
           </div>
           <h1 class="onb-wordmark">Open</h1>
-          <p class="onb-value-line">{VALUE_LINES[valueIdx]}</p>
+          <p class="onb-intro-line" aria-live="polite">
+            <span key={lineIndex} class={lineIndex >= 0 ? 'is-shown' : ''}>
+              {line}
+            </span>
+          </p>
+        </div>
+        <div class="onb-intro-cta">
           <button
             type="button"
-            class="open-btn open-btn-primary"
-            style={{ height: '40px', padding: '0 26px', fontSize: '14px', borderRadius: '11px' }}
+            class={`onb-continue${buttonReady ? ' is-ready' : ''}`}
+            disabled={!buttonReady}
             onClick={goNext}
           >
-            Continue
+            {replay ? 'Look around' : 'Get Started'}
           </button>
-        </section>
-      ) : (
-        <div class="onb-window">
-          <section class="onb-form-pane">
-            <div>
-              {step === 'name' && (
-                <>
-                  <h1 class="onb-step-heading">What should we call you?</h1>
-                  <p class="onb-step-desc">
-                    Optional. Used only on your device to personalize your Space and welcome card.
-                  </p>
-                  <div class="onb-controls">
-                    <input
-                      class="open-input"
-                      style={{ height: '38px', fontSize: '14px' }}
-                      maxLength={40}
-                      placeholder="Your first name"
-                      aria-label="Your name"
-                      value={userName}
-                      onInput={(e) => setUserName((e.currentTarget as HTMLInputElement).value.slice(0, 40))}
-                    />
-                  </div>
-                </>
-              )}
+          {replay && buttonReady && (
+            <p class="onb-replay-note">You’ve set up Open before. Nothing changes unless you choose to.</p>
+          )}
+        </div>
+      </Room>
+    );
+  }
 
-              {step === 'import' && (
-                <>
-                  <h1 class="onb-step-heading">Import your browser data</h1>
-                  <p class="onb-step-desc">
-                    Bring bookmarks, Favorites, history, and extensions from another browser on this machine.
-                  </p>
-                  <div class="onb-controls">
-                    {importSources.map((src) => (
-                      <label
-                        key={src.id}
-                        class={`onb-radio-card${selectedImportId === src.id ? ' is-selected' : ''}`}
-                        style={{ height: 'auto', padding: '12px 14px', justifyContent: 'space-between' }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <input
-                            type="radio"
-                            name="onb-import"
-                            checked={selectedImportId === src.id}
-                            onChange={() => setSelectedImportId(src.id)}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 600 }}>
-                              {src.browser_name} · {src.profile_name}
-                            </div>
-                            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
-                              {src.bookmarks_count} bookmarks · {src.history_count} history · {src.favorites_count} Favorites
-                            </div>
-                          </div>
-                        </div>
-                      </label>
-                    ))}
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        class="open-btn open-btn-primary"
-                        disabled={!selectedImportId}
-                        onClick={async () => {
-                          const res = await rpc('import.run', {
-                            source_id: selectedImportId,
-                            kinds: ['bookmarks', 'history', 'favorites'],
-                          });
-                          setImportResult(
-                            `Imported ${res.imported_bookmarks} bookmarks & ${res.imported_favorites} Favorites.`,
-                          );
-                        }}
-                      >
-                        Import Now
-                      </button>
-                      {importResult && <Badge tone="success">{importResult}</Badge>}
-                    </div>
-                  </div>
-                </>
-              )}
+  // --- Render: setup steps --------------------------------------------------------------
 
-              {step === 'favorites' && (
-                <>
-                  <h1 class="onb-step-heading">Pin your everyday Favorites</h1>
-                  <p class="onb-step-desc">
-                    Favorites stay anchored at the top of your sidebar across every Space in this Profile.
-                  </p>
-                  <div class="onb-controls">
-                    <div class="onb-favorites-grid">
-                      {ONBOARDING_FAVORITES.map((fav) => {
-                        const selected = selectedFavIds.has(fav.id);
+  const todayRows: { title: string; active?: boolean; highlight?: boolean }[] = [
+    { title: 'Welcome to Open', active: true },
+  ];
+  if (step === 'import' && selectedSource) {
+    todayRows.push({ title: `Imported from ${selectedSource.family === 'open-legacy' ? 'Open' : selectedSource.browser_name}`, highlight: true });
+  } else {
+    todayRows.push({ title: 'Morning reading' }, { title: 'Trip planning' });
+  }
+
+  const formByStep: Record<Exclude<Step, 'intro'>, JSX.Element> = {
+    import: (
+      <>
+        <h1 class="onb-heading">Bring your browser with you.</h1>
+        <p class="onb-desc">
+          Choose where to start from. Open makes a copy and never changes the original. It imports when you
+          finish setup.
+        </p>
+        <div class="onb-controls onb-sources" role="radiogroup" aria-label="Import source">
+          {sources === null && <div class="onb-source-skeleton">Looking for other browsers…</div>}
+          {sources?.map((source) => {
+            const isSelected = source.id === sourceId;
+            return (
+              <div
+                key={source.id}
+                class={`onb-source${isSelected ? ' is-selected' : ''}${source.access_denied ? ' is-blocked' : ''}${
+                  source.recommended ? ' is-recommended' : ''
+                }`}
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  class="onb-source-head"
+                  onClick={() => setSourceId(source.id)}
+                >
+                  <SourceBadge source={source} />
+                  <span class="onb-source-text">
+                    <span class="onb-source-title">{sourceTitle(source)}</span>
+                    <span class="onb-source-sub">
+                      {source.access_denied
+                        ? 'Needs Full Disk Access'
+                        : sourceSubtitle(source) || 'Ready to import'}
+                    </span>
+                    {(source.recommended || source.imported_kinds.length > 0) && (
+                      <span class="onb-source-tags">
+                        {source.recommended && <span class="onb-tag is-warm">Recommended · Safe read-only copy</span>}
+                        {source.imported_kinds.length > 0 && <span class="onb-tag">Imported before</span>}
+                      </span>
+                    )}
+                  </span>
+                  <span class="onb-radio" aria-hidden="true" />
+                </button>
+                {isSelected && source.access_denied && (
+                  <div class="onb-source-body">
+                    <p class="onb-source-help">
+                      Open needs Full Disk Access to read {source.browser_name}. Open System Settings › Privacy &amp;
+                      Security › Full Disk Access, turn on Open, then check again.
+                    </p>
+                    <button type="button" class="onb-btn onb-btn-secondary" disabled={probing} onClick={() => void probe()}>
+                      {probing ? 'Checking…' : 'Check Again'}
+                    </button>
+                  </div>
+                )}
+                {isSelected && !source.access_denied && (
+                  <div class="onb-source-body">
+                    <div class="onb-kinds">
+                      {source.supported_kinds.map((kind) => {
+                        const done = source.imported_kinds.includes(kind);
+                        const on = kinds.has(kind) && !done;
                         return (
-                          <button
-                            key={fav.id}
-                            type="button"
-                            class={`onb-fav-tile${selected ? ' is-selected' : ''}`}
-                            aria-pressed={selected}
-                            onClick={() => toggleFav(fav.id)}
-                          >
-                            {selected && (
-                              <span class="onb-fav-check" aria-hidden="true">
-                                <CheckIcon size={10} />
-                              </span>
-                            )}
-                            <span class="onb-fav-icon" style={{ background: fav.hueColor }}>
-                              {fav.monogram}
+                          <label key={kind} class={`onb-kind${on ? ' is-on' : ''}${done ? ' is-done' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={on || done}
+                              disabled={done}
+                              onChange={() =>
+                                setKinds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(kind)) next.delete(kind);
+                                  else next.add(kind);
+                                  return next;
+                                })
+                              }
+                            />
+                            <span class="onb-kind-label">{IMPORT_KIND_LABELS[kind].label}</span>
+                            <span class="onb-kind-hint">
+                              {done ? 'Already imported' : IMPORT_KIND_LABELS[kind].hint}
                             </span>
-                            <span class="onb-fav-label">{fav.title}</span>
-                          </button>
+                          </label>
                         );
                       })}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      {selectedFavIds.size} Favorite{selectedFavIds.size === 1 ? '' : 's'} selected
-                    </div>
                   </div>
-                </>
-              )}
-
-              {step === 'theme' && (
-                <>
-                  <h1 class="onb-step-heading">Pick a look for your Space</h1>
-                  <p class="onb-step-desc">
-                    Every Space can have its own multi-color OKLab gradient, grain texture, and light/dark appearance.
-                  </p>
-                  <div class="onb-controls">
-                    <SpaceThemeEditor style={spaceStyle} title={spaceTitle} onChange={setSpaceStyle} />
-                    <div>
-                      <button
-                        type="button"
-                        class="open-btn"
-                        onClick={() => {
-                          const nextHex = SHUFFLE_COLORS[Math.floor(Math.random() * SHUFFLE_COLORS.length)]!;
-                          setSpaceStyle((prev) => ({
-                            ...prev,
-                            key_color: hexToRgba(nextHex),
-                            wheel: prev.wheel === 'analogous' ? 'complementary' : 'analogous',
-                          }));
-                        }}
-                      >
-                        Shuffle Theme
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {step === 'blocker' && (
-                <>
-                  <h1 class="onb-step-heading">Block ads and trackers by default</h1>
-                  <p class="onb-step-desc">
-                    Open ships with a fast Rust ad-blocker using EasyList and EasyPrivacy. Cookie-banner lists stay off by default, and you can allow any site anytime.
-                  </p>
-                  <div class="onb-controls">
-                    <div
-                      class="open-card"
-                      style={{
-                        padding: '16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '14px',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 600 }}>Built-in Ad & Tracker Blocker</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>
-                          EasyList + EasyPrivacy · Per-site exceptions in Site Control
-                        </div>
-                      </div>
-                      <Toggle
-                        label="Enable built-in ad blocker"
-                        checked={adBlockEnabled}
-                        onChange={setAdBlockEnabled}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {step === 'default' && (
-                <>
-                  <h1 class="onb-step-heading">Make Open your default browser?</h1>
-                  <p class="onb-step-desc">
-                    Links from mail, chat, and terminals will open smoothly in Little Open or your Air Traffic Control Space.
-                  </p>
-                  <div class="onb-controls">
-                    <label class={`onb-radio-card${wantDefaultBrowser ? ' is-selected' : ''}`}>
-                      <input
-                        type="radio"
-                        name="default-browser"
-                        checked={wantDefaultBrowser}
-                        onChange={() => setWantDefaultBrowser(true)}
-                      />
-                      <span>Yes, make Open my default browser</span>
-                    </label>
-                    <label class={`onb-radio-card${!wantDefaultBrowser ? ' is-selected' : ''}`}>
-                      <input
-                        type="radio"
-                        name="default-browser"
-                        checked={!wantDefaultBrowser}
-                        onChange={() => setWantDefaultBrowser(false)}
-                      />
-                      <span>Not right now</span>
-                    </label>
-                  </div>
-                </>
-              )}
-
-              {step === 'ready' && (
-                <>
-                  <h1 class="onb-step-heading">You’re ready for Open</h1>
-                  <p class="onb-step-desc">
-                    Your Space theme, Favorites, and privacy defaults are ready to apply.
-                  </p>
-                  <div class="onb-controls">
-                    <div
-                      class="onb-ready-card"
-                      style={{
-                        background: `${READY_PATTERNS[readyPatternIdx]}, ${artGradient}`,
-                        color: artLightText ? '#ffffff' : '#14151f',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <OpenDoorwayMark size={34} />
-                        <span style={{ fontSize: '11.5px', opacity: 0.78 }}>
-                          {new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
-                        </span>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '22px', fontWeight: 700 }}>{userName.trim() || 'Open Explorer'}</div>
-                        <div style={{ fontSize: '12px', opacity: 0.8 }}>
-                          {selectedFavs.length} Favorites · Ad Blocker {adBlockEnabled ? 'On' : 'Off'}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        type="button"
-                        class="open-btn"
-                        onClick={() => setReadyPatternIdx((i) => (i + 1) % READY_PATTERNS.length)}
-                      >
-                        Shuffle Card Pattern
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <footer class="onb-footer">
-              <button type="button" class="open-btn open-btn-ghost" onClick={goBack}>
-                Back
-              </button>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {step === 'import' && (
-                  <button type="button" class="open-btn open-btn-ghost" onClick={goNext}>
-                    Skip
-                  </button>
-                )}
-                {step === 'ready' ? (
-                  <button
-                    type="button"
-                    class="open-btn open-btn-primary"
-                    disabled={completing}
-                    onClick={() => void handleFinish()}
-                  >
-                    {completing ? 'Starting…' : 'Get Started'}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    class="open-btn open-btn-primary"
-                    onClick={async () => {
-                      if (step === 'default' && wantDefaultBrowser && !isDefaultBrowser) {
-                        const res = await rpc('settings.setDefaultBrowser', {});
-                        setIsDefaultBrowser(res.is_default);
-                      }
-                      goNext();
-                    }}
-                  >
-                    {step === 'default' && wantDefaultBrowser && !isDefaultBrowser ? 'Make Default' : 'Next'}
-                  </button>
                 )}
               </div>
-            </footer>
-          </section>
-
-          <aside
-            class="onb-art-pane"
-            style={{
-              background: artGradient,
-              color: artLightText ? '#ffffff' : '#14151f',
+            );
+          })}
+          <div class={`onb-source is-fresh${sourceId === '' ? ' is-selected' : ''}`}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={sourceId === ''}
+              class="onb-source-head"
+              onClick={() => setSourceId('')}
+            >
+              <span class="onb-source-badge is-fresh" aria-hidden="true">
+                +
+              </span>
+              <span class="onb-source-text">
+                <span class="onb-source-title">Start fresh</span>
+                <span class="onb-source-sub">An empty Space, ready for anything</span>
+              </span>
+              <span class="onb-radio" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </>
+    ),
+    favorites: (
+      <>
+        <h1 class="onb-heading">Choose the sites you use most.</h1>
+        <p class="onb-desc">They become Favorites at the top of your sidebar, one click away.</p>
+        <div class="onb-controls">
+          <div class="onb-fav-grid" role="group" aria-label="Suggested Favorites">
+            {tiles.map((tile, i) => {
+              const already = existingKeys.has(favoriteKey(tile.url));
+              const isOn = already || selected.has(tile.url);
+              const icon = icons[tile.url];
+              return (
+                <button
+                  key={tile.id}
+                  type="button"
+                  class={`onb-fav${isOn ? ' is-selected' : ''}${already ? ' is-existing' : ''}`}
+                  aria-pressed={isOn}
+                  aria-label={already ? `${tile.name}, already a Favorite` : tile.name}
+                  style={{ '--i': i }}
+                  onClick={() => toggleFavorite(tile)}
+                >
+                  {isOn && (
+                    <span class="onb-fav-check" aria-hidden="true">
+                      <svg width="10" height="10" viewBox="0 0 10 10">
+                        <path d="M2 5.2l2 2L8 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </span>
+                  )}
+                  <SiteIcon
+                    class="onb-fav-icon"
+                    name={tile.name}
+                    monogram={tile.monogram}
+                    icon={icon?.icon}
+                    color={icon?.fallback_color ?? tile.color}
+                    size={32}
+                  />
+                  <span class="onb-fav-label">{tile.name}</span>
+                </button>
+              );
+            })}
+          </div>
+          <form
+            class="onb-add-site"
+            onSubmit={(e) => {
+              e.preventDefault();
+              addCustom();
             }}
           >
-            <div class="onb-mini-browser">
-              <div class="onb-mini-sidebar">
-                <div style={{ fontSize: '11.5px', fontWeight: 700, padding: '2px 4px', opacity: 0.92 }}>
-                  {spaceTitle}
-                </div>
-                <div class="onb-mini-favs">
-                  {selectedFavs.slice(0, 8).map((f) => (
-                    <div key={f.id} class="onb-mini-fav-cell" style={{ background: f.hueColor }} title={f.title}>
-                      {f.monogram}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '10.5px' }}>
-                  <div style={{ padding: '4px 6px', borderRadius: '6px', background: 'rgba(255,255,255,0.18)', fontWeight: 600 }}>
-                    Welcome to Open
-                  </div>
-                  <div style={{ padding: '4px 6px', opacity: 0.8 }}>Today · Reading List</div>
-                  {step === 'default' && wantDefaultBrowser && (
-                    <div style={{ padding: '4px 6px', borderRadius: '6px', background: 'rgba(255,255,255,0.22)' }}>
-                      Mail link → Little Open
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div class="onb-mini-page">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <strong style={{ fontSize: '12px' }}>Editorial Preview</strong>
-                  {adBlockEnabled && <Badge tone="success">Ad Blocked</Badge>}
-                </div>
-                <div
-                  style={{
-                    height: '92px',
-                    borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #3139FF 0%, #FF9B54 100%)',
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                    padding: '8px',
-                    color: '#ffffff',
-                    fontSize: '11px',
-                    fontWeight: 600,
+            <input
+              class="onb-input"
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              spellcheck={false}
+              placeholder="Add a site, like example.com"
+              aria-label="Add a site"
+              value={customUrl}
+              onInput={(e) => {
+                setCustomUrl((e.currentTarget as HTMLInputElement).value);
+                setCustomError(null);
+              }}
+            />
+            <button type="submit" class="onb-btn onb-btn-secondary" disabled={!customUrl.trim()}>
+              Add
+            </button>
+          </form>
+          <div class="onb-counter" aria-live="polite">
+            {customError ??
+              (selectedTiles.length >= MAX_FAVORITES
+                ? `${MAX_FAVORITES} selected (the most for now)`
+                : `${selectedTiles.length} selected`)}
+          </div>
+        </div>
+      </>
+    ),
+    theme: (
+      <>
+        <h1 class="onb-heading">Make it yours.</h1>
+        <p class="onb-desc">Pick a color for your Space. You can change it any time with Edit Theme.</p>
+        <div class="onb-controls">
+          <div class="onb-swatches" role="radiogroup" aria-label="Space color">
+            {THEME_SWATCHES.map((swatch) => {
+              const on = rgbaToHex(style.key_color).toLowerCase() === swatch.hex.toLowerCase();
+              return (
+                <button
+                  key={swatch.hex}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  aria-label={swatch.name}
+                  title={swatch.name}
+                  class={`onb-swatch${on ? ' is-selected' : ''}`}
+                  style={{ '--swatch': swatch.hex }}
+                  onClick={() => {
+                    setStyle((prev) => ({ ...prev, key_color: hexToRgba(swatch.hex) }));
+                    playTick();
                   }}
+                />
+              );
+            })}
+            <button
+              type="button"
+              class="onb-btn onb-btn-secondary onb-shuffle"
+              onClick={() => {
+                const pick = THEME_SWATCHES[Math.floor(Math.random() * THEME_SWATCHES.length)]!;
+                setStyle((prev) => ({
+                  ...prev,
+                  key_color: hexToRgba(pick.hex),
+                  wheel: prev.wheel === 'analogous' ? 'complementary' : 'analogous',
+                  color_count: (((prev.color_count % 3) + 1) as 1 | 2 | 3),
+                }));
+              }}
+            >
+              Shuffle
+            </button>
+          </div>
+          <div class="onb-field">
+            <span class="onb-field-label">Colors</span>
+            <div class="onb-segmented" role="radiogroup" aria-label="Number of colors">
+              {([1, 2, 3] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  role="radio"
+                  aria-checked={style.color_count === n}
+                  class={style.color_count === n ? 'is-on' : ''}
+                  onClick={() => setStyle((prev) => ({ ...prev, color_count: n }))}
                 >
-                  Open Unified · Calm Browsing
-                </div>
-                <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  Spaces keep your projects organized while Favorites stay one click away.
-                </p>
-                {!adBlockEnabled && (
-                  <div
-                    style={{
-                      padding: '8px',
-                      borderRadius: '6px',
-                      border: '1px dashed var(--open-sun)',
-                      fontSize: '10.5px',
-                      color: 'var(--open-sun)',
-                    }}
-                  >
-                    Sponsored banner placeholder (blocked when Ad Blocker is on)
-                  </div>
+                  {n === 1 ? 'One' : n === 2 ? 'Two' : 'Three'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div class="onb-field">
+            <span class="onb-field-label">Appearance</span>
+            <div class="onb-segmented" role="radiogroup" aria-label="Appearance">
+              {(
+                [
+                  ['automatic', 'Auto'],
+                  ['light', 'Light'],
+                  ['dark', 'Dark'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={style.appearance === value}
+                  class={style.appearance === value ? 'is-on' : ''}
+                  onClick={() => setStyle((prev) => ({ ...prev, appearance: value }))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div class="onb-switch-card">
+            <label class="onb-switch-row">
+              <span>
+                <span class="onb-switch-title">Block ads and trackers</span>
+                <span class="onb-switch-hint">EasyList and EasyPrivacy. Allow any site from Site Controls.</span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                class="onb-switch"
+                checked={adblock}
+                onChange={(e) => setAdblock((e.currentTarget as HTMLInputElement).checked)}
+              />
+            </label>
+            <label class="onb-switch-row">
+              <span>
+                <span class="onb-switch-title">Make Open your default browser</span>
+                <span class="onb-switch-hint">
+                  {state?.is_default_browser
+                    ? 'Open is already your default browser.'
+                    : 'Links from mail and chat open in Open. Your system asks to confirm.'}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                class="onb-switch"
+                checked={makeDefault || state?.is_default_browser === true}
+                disabled={state?.is_default_browser === true}
+                onChange={(e) => setMakeDefault((e.currentTarget as HTMLInputElement).checked)}
+              />
+            </label>
+          </div>
+        </div>
+      </>
+    ),
+    ready: (
+      <>
+        <h1 class="onb-heading">
+          Welcome to Open{userName.trim() ? `, ${userName.trim()}` : ''}.
+        </h1>
+        <p class="onb-desc">Here’s your Open card, made from your color and the day you started.</p>
+        <div class="onb-controls">
+          <input
+            class="onb-input"
+            type="text"
+            maxLength={40}
+            placeholder="Your name (optional)"
+            aria-label="Your name"
+            value={userName}
+            onInput={(e) => setUserName((e.currentTarget as HTMLInputElement).value.slice(0, 40))}
+          />
+          <ul class="onb-summary">
+            <li>
+              <span>Import</span>
+              <strong>
+                {replay && !applyAgain
+                  ? 'Nothing new'
+                  : selectedSource && importKindsForRun.length
+                    ? `${sourceTitle(selectedSource).replace('Import from ', '')} · ${importKindsForRun
+                        .map((k) => IMPORT_KIND_LABELS[k].label)
+                        .join(', ')}`
+                    : 'Starting fresh'}
+              </strong>
+            </li>
+            <li>
+              <span>Favorites</span>
+              <strong>{selectedTiles.length ? `${selectedTiles.length} new` : 'None for now'}</strong>
+            </li>
+            <li>
+              <span>Space color</span>
+              <strong class="onb-summary-swatch">
+                <i style={{ background: gradient }} />
+                {THEME_SWATCHES.find((s) => s.hex.toLowerCase() === rgbaToHex(style.key_color).toLowerCase())?.name ??
+                  'Custom'}
+              </strong>
+            </li>
+            <li>
+              <span>Ad blocking</span>
+              <strong>{adblock ? 'On' : 'Off'}</strong>
+            </li>
+            <li>
+              <span>Default browser</span>
+              <strong>{state?.is_default_browser ? 'Already Open' : makeDefault ? 'Ask when I finish' : 'Not now'}</strong>
+            </li>
+          </ul>
+          {replay && (
+            <label class="onb-switch-row onb-replay-row">
+              <span>
+                <span class="onb-switch-title">Apply these choices again</span>
+                <span class="onb-switch-hint">Off: just go back to Open. Existing Favorites are never added twice.</span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                class="onb-switch"
+                checked={applyAgain}
+                onChange={(e) => setApplyAgain((e.currentTarget as HTMLInputElement).checked)}
+              />
+            </label>
+          )}
+          {error && (
+            <div class="onb-error" role="alert">
+              <span>{error.message}</span>
+              <div class="onb-error-actions">
+                <button type="button" class="onb-btn onb-btn-secondary" onClick={() => void finish()}>
+                  Try Again
+                </button>
+                {error.importFailed && (
+                  <button type="button" class="onb-btn onb-btn-ghost" onClick={() => void finish(true)}>
+                    Finish Without Importing
+                  </button>
                 )}
               </div>
             </div>
-
-            <div class="onb-step-dots" aria-label="Setup progress">
-              {SETUP_STEPS.map((s) => (
-                <span key={s} class={`onb-step-dot${step === s ? ' is-active' : ''}`} />
-              ))}
-            </div>
-          </aside>
+          )}
+          {progress && !error && <div class="onb-progress">{progress}</div>}
         </div>
-      )}
+      </>
+    ),
+  };
 
-      <Toast message={toast} />
-    </div>
+  const formStep = step as Exclude<Step, 'intro'>;
+  const nextLabel =
+    step === 'ready'
+      ? finishing
+        ? 'Opening…'
+        : replay && !applyAgain
+          ? 'Back to Open'
+          : 'Open the Door'
+      : 'Next';
+
+  return (
+    <Room tint={roomTint} class={`onb-setup${leaving ? ' is-leaving' : ''}${reduceMotion ? ' is-reduced' : ''}`}>
+      <div class="onb-titlebar" />
+      {muteButton}
+      <div class="onb-window" role="dialog" aria-label="Set up Open">
+        <section class="onb-form">
+          <div class="onb-form-top">
+            <span class="onb-stepcount">
+              Step {setupSteps.indexOf(formStep) + 1} of {setupSteps.length}
+            </span>
+          </div>
+          <div class="onb-form-body" key={step}>
+            {formByStep[formStep]}
+          </div>
+          <footer class="onb-footer">
+            <button type="button" class="onb-back" aria-label="Back" onClick={goBack} disabled={finishing}>
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                <path d="M8.5 3L4.5 7l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            {step === 'favorites' && (
+              <button
+                type="button"
+                class="onb-skip"
+                onClick={() => {
+                  setSelected(new Set());
+                  goNext();
+                }}
+              >
+                Skip for now
+              </button>
+            )}
+            <span class="onb-footer-spacer" />
+            <button
+              type="button"
+              class="onb-btn onb-btn-primary"
+              disabled={finishing}
+              onClick={() => (step === 'ready' ? void finish() : goNext())}
+            >
+              {nextLabel}
+            </button>
+          </footer>
+        </section>
+
+        <aside class={`onb-art${step === 'ready' ? ' is-ready' : ''}`} aria-label="Preview">
+          <div class="onb-art-door" aria-hidden="true">
+            <DoorwayArch height={118} />
+          </div>
+          {step === 'ready' ? (
+            <div class="onb-ready-stage">
+              <div
+                class="onb-ready-card"
+                aria-hidden="true"
+                style={{
+                  background: `${READY_PATTERNS[pattern] ?? READY_PATTERNS[0]}, ${gradient}`,
+                  color: lightArt ? 'rgba(0,0,0,0.82)' : '#ffffff',
+                }}
+              >
+                {!reduceMotion && (
+                  <div class="onb-confetti">
+                    {Array.from({ length: 14 }, (_, i) => (
+                      <i key={i} style={{ '--k': i }} />
+                    ))}
+                  </div>
+                )}
+                <DoorwayEmblem size={40} />
+                <div class="onb-ready-name">
+                  <strong>{userName.trim() || 'Explorer'}</strong>
+                  <span>
+                    Since{' '}
+                    {new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="onb-circle"
+                aria-label="Shuffle card pattern"
+                onClick={() => setPattern((p) => (p + 1) % READY_PATTERNS.length)}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    d="M1.5 4h2.2c1.3 0 2.1.6 2.8 1.6l1.4 2.1c.7 1 1.5 1.6 2.8 1.6h1.8M1.5 10h2.2c.9 0 1.5-.3 2-.8M9.6 4.8c.4-.5 1-.8 1.8-.8h1.6M11.4 2.4L13 4l-1.6 1.6M11.4 8.4L13 10l-1.6 1.6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <MiniBrowser
+              class="onb-mini"
+              aria-hidden
+              style={style}
+              spaceTitle={spaceTitle}
+              favorites={miniFavorites}
+              todayRows={todayRows}
+            >
+              <div class="onb-mini-article">
+                <strong>Welcome to Open</strong>
+                <Landscape class="onb-mini-landscape" />
+                <b>Make yourself at home.</b>
+                <p>Keep your everyday places close. Leave room for something new.</p>
+                {step === 'theme' && !adblock && <div class="onb-mini-ad">Sponsored</div>}
+              </div>
+            </MiniBrowser>
+          )}
+          <div class="onb-dots" aria-hidden="true">
+            {setupSteps.map((s) => (
+              <span key={s} class={s === step ? 'is-active' : ''} />
+            ))}
+          </div>
+        </aside>
+      </div>
+    </Room>
   );
 }

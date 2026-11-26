@@ -6,9 +6,11 @@
 #define OPEN_UNIFIED_CORE_ROUTING_ROUTING_EVALUATOR_H_
 
 #include <cstddef>
+#include <deque>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "open_unified/core/model/browser_model.h"
@@ -21,7 +23,85 @@ namespace open_unified {
 std::string CanonicalHostName(std::string_view raw);
 std::optional<std::string> CanonicalHostFromUrl(std::string_view url);
 std::string CanonicalPathFromUrl(std::string_view url);
+std::string CanonicalUrlString(std::string_view url);
 std::optional<std::string> DecodePunycodeLabel(std::string_view payload);
+
+// PeekPolicy (matching Packages/OpenKit/Sources/OpenFeatures/PeekPolicy.swift):
+// decides whether an in-page link click opens in the Peek overlay or navigates
+// normally, including the OAuth/SSO authentication-flow exemption.
+struct PeekClickContext {
+  PeekClickContext();
+  PeekClickContext(const PeekClickContext&);
+  PeekClickContext(PeekClickContext&&) noexcept;
+  PeekClickContext& operator=(const PeekClickContext&);
+  PeekClickContext& operator=(PeekClickContext&&) noexcept;
+  ~PeekClickContext();
+
+  bool source_is_pinned_or_favorite = false;
+  std::optional<std::string> source_url;
+  std::string target_url;
+  bool shift_held = false;
+  bool peek_other_sites_enabled = true;
+  bool peek_shift_enabled = true;
+  // Explicit override; IsAuthenticationFlow(target_url) is also checked.
+  bool is_authentication_flow = false;
+};
+
+enum class PeekDecision {
+  kNavigate,
+  kPeek,
+};
+
+class PeekPolicy {
+ public:
+  // True for OAuth / OIDC / SAML / SSO / sign-in authentication URLs that must
+  // navigate normally instead of opening inside a Peek overlay.
+  static bool IsAuthenticationFlow(std::string_view url);
+
+  // Extracts the registrable domain (eTLD+1) for cross-site comparison.
+  static std::optional<std::string> RegistrableDomain(std::string_view url);
+
+  static PeekDecision Evaluate(const PeekClickContext& click);
+
+  static bool ShouldOpenInPeek(std::string_view target_url,
+                               const Tab* source_tab,
+                               bool source_is_pinned_or_favorite,
+                               bool shift_click,
+                               bool peek_other_sites_enabled,
+                               bool peek_shift_enabled);
+};
+
+// Deep links: open:// and open-browser:// routes
+// (quit, restart, space/<name|index>, welcome, little-open, WebUI pages).
+enum class DeepLinkKind {
+  kNone,
+  kQuit,
+  kRestart,
+  kSpace,
+  kWelcome,
+  kLittleOpen,
+  kWebUI,
+  kUnknown,
+};
+
+struct DeepLinkAction {
+  DeepLinkAction();
+  DeepLinkAction(const DeepLinkAction&);
+  DeepLinkAction(DeepLinkAction&&) noexcept;
+  DeepLinkAction& operator=(const DeepLinkAction&);
+  DeepLinkAction& operator=(DeepLinkAction&&) noexcept;
+  ~DeepLinkAction();
+
+  DeepLinkKind kind = DeepLinkKind::kNone;
+  std::string route;
+  std::string argument;
+  std::string raw_url;
+};
+
+DeepLinkAction ParseDeepLink(std::string_view url);
+bool IsMailtoUrl(std::string_view url);
+bool IsGoogleMeetUrl(std::string_view url);
+bool HasGoogleMeetRule(const BrowserModel& model);
 
 struct RoutingRequest {
   std::string url;
@@ -71,6 +151,47 @@ struct RoutingDecision {
   RoutingVia via = RoutingVia::kDefaultDestination;
   std::optional<RuleID> matched_rule_id;
   std::optional<ResolvedRoutingTarget> resolved;
+};
+
+// 2-second duplicate external URL suppressor (matching ExternalLinkIntake.swift).
+class ExternalLinkDeduper {
+ public:
+  static constexpr double kWindowSeconds = 2.0;
+
+  ExternalLinkDeduper();
+  ~ExternalLinkDeduper();
+
+  // Returns true if |(url, source_app_id)| was already seen within the last
+  // kWindowSeconds; otherwise records it and returns false.
+  bool IsDuplicateAndRecord(std::string_view url,
+                            const std::optional<std::string>& source_app_id,
+                            TimestampSec now);
+
+  size_t duplicates_dropped() const { return duplicates_dropped_; }
+  void Clear();
+
+ private:
+  std::unordered_map<std::string, TimestampSec> recent_;
+  size_t duplicates_dropped_ = 0;
+};
+
+// Bounded, memory-only log of recent Air Traffic Control routing decisions
+// (URLs stay in memory only and are never written to system logs or disk).
+class RoutingDecisionLog {
+ public:
+  static constexpr size_t kMaxEntries = 200;
+
+  RoutingDecisionLog();
+  ~RoutingDecisionLog();
+
+  void Record(RoutingDecision decision);
+  const std::deque<RoutingDecision>& entries() const { return entries_; }
+  std::optional<RoutingDecision> latest() const;
+  size_t size() const { return entries_.size(); }
+  void Clear() { entries_.clear(); }
+
+ private:
+  std::deque<RoutingDecision> entries_;
 };
 
 class RoutingEvaluator {

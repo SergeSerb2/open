@@ -30,6 +30,9 @@
 
 namespace network {
 class SharedURLLoaderFactory;
+namespace mojom {
+class NetworkContext;
+}  // namespace mojom
 }  // namespace network
 
 namespace open_unified {
@@ -114,6 +117,8 @@ enum class FirstSyncStrategy {
   kMergeLocalAndCloud,
   kReplaceCloudWithLocal,
 };
+
+using InitialSyncStrategy = FirstSyncStrategy;
 
 enum class SyncApplyMode {
   kReplaceLocal,
@@ -240,7 +245,32 @@ struct SyncAccountSnapshot {
   std::vector<std::string> warnings;
   bool uses_file_credential_store = false;
   bool is_busy = false;
+  bool websocket_connected = false;
+  size_t pending_push_count = 0;
   std::optional<SyncCloudSummary> pending_initial_choice;
+};
+
+struct SyncDetailedStatus {
+  bool signed_in = false;
+  std::string state = "signedOut";
+  std::string status_message;
+  std::string email;
+  std::string display_name;
+  std::string server_url = kSyncDefaultServerUrl;
+  std::string device_id;
+  std::string device_name;
+  std::optional<int64_t> last_sync_at_ms;
+  int last_pulled_revision = 0;
+  size_t pending_push_count = 0;
+  bool websocket_connected = false;
+  bool initial_sync_required = false;
+  std::optional<SyncCloudSummary> pending_initial_choice;
+  std::vector<SyncDeviceInfo> devices;
+  std::map<std::string, bool> categories;
+  std::vector<SyncPendingExtension> pending_extension_installs;
+  std::vector<std::string> warnings;
+  bool is_busy = false;
+  std::optional<std::string> error_message;
 };
 
 struct SyncResult {
@@ -280,6 +310,7 @@ struct SyncedWindowLayoutPayload {
 struct SyncedAdBlockProfilePayload {
   std::vector<std::string> enabled_list_ids;
   std::vector<std::string> excluded_domains;
+  std::string custom_rules;
 };
 
 struct SyncedAdBlockConfigPayload {
@@ -540,6 +571,8 @@ class SyncDataAdapter {
   virtual bool PrepareLocalBackup(const base::FilePath& backup_dir) = 0;
 };
 
+using SyncStorageAdapter = SyncDataAdapter;
+
 // --- HTTP Transport Interface (SimpleURLLoader-compatible) ---
 
 struct SyncHttpRequest {
@@ -593,6 +626,7 @@ class SyncWebSocketClient {
                        Delegate* delegate) = 0;
   virtual void SendText(const std::string& text) = 0;
   virtual void Disconnect() = 0;
+  virtual bool IsConnected() const { return false; }
 };
 
 // --- Main SyncEngine ---
@@ -622,6 +656,9 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
   SyncEngine& operator=(const SyncEngine&) = delete;
 
   void SetDataAdapter(SyncDataAdapter* adapter) { data_adapter_ = adapter; }
+  void SetWebSocketClient(std::unique_ptr<SyncWebSocketClient> ws_client);
+  void SetNetworkContextProvider(
+      base::RepeatingCallback<network::mojom::NetworkContext*()> provider);
   void SetCredentialAccountKey(std::string account_key);
   void SetOnSnapshotChanged(SnapshotCallback cb) {
     on_snapshot_changed_ = std::move(cb);
@@ -631,6 +668,9 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
   }
 
   SyncStatusInfo Status() const;
+  SyncDetailedStatus GetDetailedStatus() const;
+  bool is_websocket_connected() const { return ws_connected_; }
+  size_t pending_push_count() const { return pending_push_count_; }
   void ConfigureServer(std::string url,
                        std::map<std::string, bool> categories,
                        StatusCallback done);
@@ -695,6 +735,9 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
                       const std::string& new_password,
                       bool revoke_other_sessions,
                       ResultCallback callback);
+  void ChangePassword(const std::string& current_password,
+                      const std::string& new_password,
+                      ResultCallback callback);
 
   void UpdateDisplayName(const std::string& display_name,
                          ResultCallback callback);
@@ -706,7 +749,10 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
 
   // Sync control (§4.4).
   void SyncNow(ResultCallback callback = {});
+  void PullNow(ResultCallback callback = {});
   void SchedulePush(std::string_view reason);
+  void ScheduleCollectionPush(std::string_view collection,
+                              std::string_view item_id = {});
   void SetCategoryEnabled(SyncCategory category, bool enabled);
   void ResolvePendingExtensionInstalls(
       const std::vector<std::string>& extension_ids);
@@ -946,11 +992,13 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
 
   base::OneShotTimer push_debounce_timer_;
   int64_t push_burst_started_ms_ = 0;
+  size_t pending_push_count_ = 0;
 
   base::OneShotTimer ws_reconnect_timer_;
   base::RepeatingTimer ws_ping_timer_;
   double ws_backoff_seconds_ = 1.0;
   bool ws_force_refresh_next_ = false;
+  bool ws_connected_ = false;
 
   base::WeakPtrFactory<SyncEngine> weak_factory_{this};
 };

@@ -8,9 +8,13 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
@@ -20,6 +24,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/webui_config_map.h"
 #include "content/public/common/url_constants.h"
+#include "open_unified/core/documents/document_store.h"
 #include "open_unified/grit/open_webui_resources.h"
 #include "open_unified/grit/open_webui_resources_map.h"
 #include "open_unified/ui/webui/open_boosts_ui.h"
@@ -85,10 +90,133 @@ std::optional<int> PageResourceId(std::string_view host) {
   return std::nullopt;
 }
 
+// --- Binary assets ------------------------------------------------------------
+
+constexpr char kDocumentAssetPrefix[] = "asset/";
+// DocumentStore's own caps (Easel images 50 MiB, Note assets 20 MiB).
+constexpr size_t kMaxDocumentAssetBytes = kEaselMaxImageBytes;
+
+// "asset/<doc>/<asset>?v=1#x" -> {"<doc>", "<asset>"}; nullopt on any other
+// shape. Both parts must pass DocumentStore's id/filename validation, which
+// rejects separators, "..", and unknown extensions.
+std::optional<std::pair<std::string, std::string>> ParseDocumentAssetPath(
+    std::string_view path) {
+  path = path.substr(0, path.find_first_of("?#"));
+  if (!base::StartsWith(path, kDocumentAssetPrefix)) {
+    return std::nullopt;
+  }
+  path.remove_prefix(sizeof(kDocumentAssetPrefix) - 1);
+  const std::vector<std::string_view> parts = base::SplitStringPiece(
+      path, "/", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  if (parts.size() != 2 || !DocumentStore::IsValidDocumentId(parts[0]) ||
+      !DocumentStore::IsValidAssetFilename(parts[1]) ||
+      DocumentAssetMimeType(parts[1]).empty()) {
+    return std::nullopt;
+  }
+  return std::make_pair(std::string(parts[0]), std::string(parts[1]));
+}
+
+// Reads |path| when it resolves (symlinks included) to a regular file inside
+// |root|; null otherwise. Blocking.
+scoped_refptr<base::RefCountedMemory> ReadContainedFile(
+    const base::FilePath& root,
+    const base::FilePath& path,
+    size_t max_bytes) {
+  if (root.empty() || path.empty()) {
+    return nullptr;
+  }
+  const base::FilePath real_root = base::MakeAbsoluteFilePath(root);
+  const base::FilePath real_path = base::MakeAbsoluteFilePath(path);
+  if (real_root.empty() || real_path.empty() ||
+      !real_root.IsParent(real_path) || base::DirectoryExists(real_path)) {
+    return nullptr;
+  }
+  std::string contents;
+  if (!base::ReadFileToStringWithMaxSize(real_path, &contents, max_bytes)) {
+    return nullptr;
+  }
+  return base::MakeRefCounted<base::RefCountedString>(std::move(contents));
+}
+
+void HandleDocumentAsset(content::BrowserContext* context,
+                         bool easel,
+                         const std::string& path,
+                         content::WebUIDataSource::GotDataCallback callback) {
+  std::optional<std::pair<std::string, std::string>> ids =
+      ParseDocumentAssetPath(path);
+  OpenBrowserService* service = OpenBrowserService::Get();
+  ProfileServices* ps =
+      ids && service ? service->ProfileServicesForBrowserContext(context)
+                     : nullptr;
+  if (!ps) {
+    std::move(callback).Run(nullptr);  // 404 (net::ERR_FILE_NOT_FOUND).
+    return;
+  }
+  // <profile_dir>/documents/assets/<doc>/<asset> (profile_dir is the parent
+  // of the Profile's State directory).
+  const base::FilePath legacy_root = ps->state_dir.DirName()
+                                         .AppendASCII("documents")
+                                         .AppendASCII("assets");
+  RunOnStore(
+      ps->documents,
+      base::BindOnce(
+          [](bool easel, std::string doc_id, std::string asset_id,
+             base::FilePath legacy_root, DocumentStore* store)
+              -> scoped_refptr<base::RefCountedMemory> {
+            const std::optional<base::FilePath> resolved =
+                easel ? store->ResolveEaselImagePath(doc_id, asset_id)
+                      : store->ResolveNoteAssetPath(doc_id, asset_id);
+            if (resolved) {
+              const base::FilePath root =
+                  easel ? store->EaselImagesDir(doc_id)
+                        : store->NoteAssetsDir(doc_id);
+              if (auto data = ReadContainedFile(root, *resolved,
+                                                kMaxDocumentAssetBytes)) {
+                return data;
+              }
+            }
+            return ReadContainedFile(
+                legacy_root,
+                legacy_root.AppendASCII(doc_id).AppendASCII(asset_id),
+                kMaxDocumentAssetBytes);
+          },
+          easel, ids->first, ids->second, legacy_root),
+      base::BindOnce(
+          [](content::WebUIDataSource::GotDataCallback callback,
+             scoped_refptr<base::RefCountedMemory> data) {
+            std::move(callback).Run(std::move(data));
+          },
+          std::move(callback)));
+}
+
+// Binary routes of a host: Library thumbnails, media files and favicons
+// (OpenLibraryUI) and Easel/Note document assets.
+void InstallRequestFilter(content::WebUIDataSource* source,
+                          content::BrowserContext* context,
+                          std::string_view host) {
+  if (host == kHostLibrary) {
+    source->SetRequestFilter(
+        base::BindRepeating(&OpenLibraryUI::ShouldHandleResource),
+        base::BindRepeating(&OpenLibraryUI::HandleResource,
+                            base::Unretained(context)));
+  } else if (host == kHostEasel || host == kHostNote) {
+    source->SetRequestFilter(
+        base::BindRepeating([](const std::string& path) {
+          return IsDocumentAssetPath(path);
+        }),
+        base::BindRepeating(&HandleDocumentAsset, base::Unretained(context),
+                            host == kHostEasel));
+  }
+}
+
 void CreateDataSource(content::WebUI* web_ui, std::string_view host) {
-  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
-      web_ui->GetWebContents()->GetBrowserContext(), InternalHost(host));
+  content::BrowserContext* context =
+      web_ui->GetWebContents()->GetBrowserContext();
+  content::WebUIDataSource* source =
+      content::WebUIDataSource::CreateAndAdd(context, InternalHost(host));
   source->AddResourcePaths(kOpenWebuiResources);
+  // Before the page fallback: filtered paths never reach the resource map.
+  InstallRequestFilter(source, context, host);
   // Client-side routes (open://settings/extensions) fall back to the page.
   if (std::optional<int> page = PageResourceId(host)) {
     source->AddResourcePath("", *page);
@@ -127,6 +255,24 @@ void CreateDataSource(content::WebUI* web_ui, std::string_view host) {
 }  // namespace
 
 // --- URLs -------------------------------------------------------------------
+
+bool IsDocumentAssetPath(std::string_view path) {
+  return ParseDocumentAssetPath(path).has_value();
+}
+
+std::string_view DocumentAssetMimeType(std::string_view filename) {
+  const size_t dot = filename.rfind('.');
+  if (dot == std::string_view::npos) {
+    return {};
+  }
+  const std::string ext = base::ToLowerASCII(filename.substr(dot + 1));
+  if (ext == "png") return "image/png";
+  if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
+  if (ext == "webp") return "image/webp";
+  if (ext == "gif") return "image/gif";
+  if (ext == "svg") return "image/svg+xml";
+  return {};
+}
 
 std::string OpenWebUIURL(std::string_view host, std::string_view path) {
   return base::StrCat({kOpenScheme, url::kStandardSchemeSeparator, host, "/",
@@ -191,10 +337,33 @@ ProfileID OpenRpcDomain::profile_id() const {
 ProfileID OpenRpcDomain::ProfileFromPayload(
     const base::DictValue& payload) const {
   const std::string* id = payload.FindString("profile_id");
-  if (id && service() && service()->model().FindProfile(*id)) {
+  if (id && *id != kAllProfilesId && service() &&
+      service()->model().FindProfile(*id)) {
     return *id;
   }
   return profile_id();
+}
+
+bool OpenRpcDomain::WantsAllProfiles(const base::DictValue& payload) const {
+  const std::string* id = payload.FindString("profile_id");
+  return id && *id == kAllProfilesId;
+}
+
+std::vector<ProfileID> OpenRpcDomain::ProfilesFromPayload(
+    const base::DictValue& payload) const {
+  std::vector<ProfileID> ids;
+  if (WantsAllProfiles(payload) && service()) {
+    for (const Profile& profile : service()->model().profiles()) {
+      ids.push_back(profile.id);
+    }
+  }
+  if (ids.empty()) {
+    const ProfileID single = ProfileFromPayload(payload);
+    if (!single.empty()) {
+      ids.push_back(single);
+    }
+  }
+  return ids;
 }
 
 content::WebUI* OpenRpcDomain::web_ui() const {

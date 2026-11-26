@@ -10,5 +10,8 @@
 0008-open-widevine-branding.patch  # Widevine only with --open-enable-widevine; Open product names and user-data directories
 0009-open-browser-service-startup.patch  # OpenBrowserMainExtraParts: OpenBrowserService (state, windows, sleep) and OpenAutomationServer start with the browser
 0010-open-tab-helpers.patch  # open_unified::hooks::AttachTabHelpers() may adopt Peek and Little Open pages with the full tab helper set
-0011-open-external-urls.patch  # URLs the OS hands over (command line, second launch, macOS application:openURLs:) go through Open's Air Traffic Control instead of Chromium tabs
-0012-open-find-commands.patch  # IDC_FIND, IDC_FIND_NEXT and IDC_FIND_PREVIOUS open Open's find bar from every path (views accelerators, macOS menu key equivalents, chrome::ExecuteCommand)
+0011-open-external-urls.patch  # URLs the OS hands over (command line, second launch, macOS application:openURLs: with sender bundle id), quit guard, and macOS Dock reopen
+0012-open-find-commands.patch  # Route shadowed Chromium IDC_* commands, Open custom menu commands, and macOS reserved shortcuts through Open
+0013-open-macos-main-menu.patch  # Build Open's macOS main menu bar (Open, File, Edit, View, Spaces, Tabs, Archive, Extensions, Window, Help) from CommandRegistry and guard Chrome-only menu bridges
+0014-open-link-interception-and-target-url.patch  # Intercept link opens and new contents for Peek/Little Open, forward hover target URL to Open's URL pill, and notify Open on BrowserView fullscreen transitions
+0015-open-page-context-menu-and-anchors.patch  # Add Open link/selection/page items to Chromium's web context menu and anchor Chromium permission/password/extension bubbles cleanly inside OpenBrowserView

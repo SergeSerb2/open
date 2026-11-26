@@ -477,11 +477,47 @@ class OpenPlatformWin final : public OpenPlatform {
 
   std::string GetSyncPlatformName() override { return "windows"; }
 
+  // Windows' closest match to macOS "Increase contrast": a High Contrast
+  // (Contrast themes) scheme is on.
+  bool IsIncreaseContrastEnabled() override {
+    HIGHCONTRASTW hc{};
+    hc.cbSize = sizeof(hc);
+    return SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+           (hc.dwFlags & HCF_HIGHCONTRASTON);
+  }
+
  private:
   WinHotkeyDispatcher hotkeys_;
 };
 
 }  // namespace
+
+// --- OpenPlatform defaults (Windows and Linux have no native window
+// material, no movable window buttons, and no per-app URL source). ---------
+
+bool OpenPlatform::UpdateWindowEffects(views::Widget*,
+                                       const WindowMaterialSpec&) {
+  return false;
+}
+
+void OpenPlatform::PlaceWindowButtons(views::Widget*,
+                                      const gfx::Point&,
+                                      bool,
+                                      bool) {}
+
+void OpenPlatform::SetWindowButtonsTone(views::Widget*, bool, bool) {}
+
+bool OpenPlatform::IsIncreaseContrastEnabled() {
+  return false;
+}
+
+bool OpenPlatform::SetAppIcon(const std::string&) {
+  return false;
+}
+
+std::string OpenPlatform::ResolveExternalUrlSourceApp() {
+  return std::string();
+}
 
 // static
 OpenPlatform* OpenPlatform::Get() {
