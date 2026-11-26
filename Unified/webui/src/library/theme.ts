@@ -32,10 +32,12 @@ export function parseTheme(raw: unknown): Partial<SpaceThemeVars> {
 export function themeFromQuery(search: string = window.location.search): Partial<SpaceThemeVars> {
   const params = new URLSearchParams(search);
   const raw: Record<string, string> = {};
-  for (const key of ['bg', 'fg', 'accent', 'surface', 'mode']) {
+  for (const key of ['bg', 'fg', 'accent', 'surface']) {
     const v = params.get(key);
     if (v) raw[key] = v;
   }
+  const mode = params.get('theme_mode') ?? params.get('mode');
+  if (mode) raw.mode = mode;
   return parseTheme(raw);
 }
 

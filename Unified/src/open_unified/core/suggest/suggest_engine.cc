@@ -465,6 +465,15 @@ class CalcParser {
   }
 
  private:
+  static constexpr int kMaxDepth = 64;
+
+  struct ScopedDepth {
+    explicit ScopedDepth(int& depth) : depth_(depth) { ++depth_; }
+    ~ScopedDepth() { --depth_; }
+    bool ok() const { return depth_ <= kMaxDepth; }
+    int& depth_;
+  };
+
   void SkipWs() {
     while (pos_ < s_.size() &&
            std::isspace(static_cast<unsigned char>(s_[pos_]))) {
@@ -536,6 +545,10 @@ class CalcParser {
     }
     SkipWs();
     if (pos_ < s_.size() && s_[pos_] == '^') {
+      ScopedDepth guard(depth_);
+      if (!guard.ok()) {
+        return std::nullopt;
+      }
       ++pos_;
       saw_operator_ = true;
       auto exp = ParsePower();
@@ -550,6 +563,10 @@ class CalcParser {
   std::optional<double> ParseUnary() {
     SkipWs();
     if (pos_ < s_.size() && (s_[pos_] == '+' || s_[pos_] == '-')) {
+      ScopedDepth guard(depth_);
+      if (!guard.ok()) {
+        return std::nullopt;
+      }
       char op = s_[pos_++];
       auto val = ParseUnary();
       if (!val.has_value()) {
@@ -566,6 +583,10 @@ class CalcParser {
       return std::nullopt;
     }
     if (s_[pos_] == '(') {
+      ScopedDepth guard(depth_);
+      if (!guard.ok()) {
+        return std::nullopt;
+      }
       ++pos_;
       auto val = ParseExpr();
       SkipWs();
@@ -602,6 +623,7 @@ class CalcParser {
 
   std::string_view s_;
   size_t pos_ = 0;
+  int depth_ = 0;
   bool saw_operator_ = false;
 };
 

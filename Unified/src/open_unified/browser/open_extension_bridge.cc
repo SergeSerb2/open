@@ -417,6 +417,8 @@ class OpenExtensionBridge::ActionEntry
     if (model_) {
       model_->UnregisterCommand();
     }
+    delegate_ = nullptr;
+    model_.reset();
   }
 
   ExtensionActionViewModel* model() { return model_.get(); }
@@ -435,8 +437,8 @@ class OpenExtensionBridge::ActionEntry
   const std::string extension_id_;
   scoped_refptr<const extensions::Extension> extension_;
   extensions::ExtensionActionIconFactory icon_factory_;
-  raw_ptr<ActionDelegate> delegate_ = nullptr;
   std::unique_ptr<ExtensionActionViewModel> model_;
+  raw_ptr<ActionDelegate> delegate_ = nullptr;
   base::CallbackListSubscription icon_subscription_;
 };
 
@@ -475,9 +477,11 @@ class OpenExtensionBridge::PickerView : public views::View,
   }
 
   void Reload() {
-    RemoveAllChildViews();
     rows_.clear();
     pins_.clear();
+    manage_ = nullptr;
+    add_ = nullptr;
+    RemoveAllChildViews();
     actions_ = bridge_->GetAllToolbarActions(window_, /*include_unpinned=*/true);
     for (size_t i = 0; i < actions_.size(); ++i) {
       auto row = std::make_unique<secondary::PaintedButton>(
@@ -1207,6 +1211,7 @@ void OpenExtensionBridge::ExecuteAction(
   state->pending_done = std::move(done);
   ActionDelegate* delegate = entry->delegate();
   delegate->reset_popup_requested();
+  views::Widget* const widget = state->widget;
   base::WeakPtr<OpenExtensionBridge> self = weak_factory_.GetWeakPtr();
   // Grants activeTab like a real click, runs chrome.action.onClicked when
   // there is no popup, and calls ActionDelegate::TriggerPopup when there is
@@ -1216,7 +1221,7 @@ void OpenExtensionBridge::ExecuteAction(
   if (!self) {
     return;
   }
-  if (WindowState* still = FindWindow(state->widget);
+  if (WindowState* still = FindWindow(widget);
       still && still->pending_done) {
     // No popup: the click itself was the action (or it could not run).
     const bool ran = still->entries.contains(extension_id) &&

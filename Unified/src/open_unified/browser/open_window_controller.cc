@@ -518,11 +518,9 @@ std::string AppendSpaceThemeQuery(std::string base_url,
             {key, "=", base::EscapeQueryParamValue(*val, /*use_plus=*/false)}));
       }
     }
-    if (extra_query.find("mode=") == std::string::npos) {
-      if (const std::string* mode = palette.FindString("mode");
-          mode && !mode->empty()) {
-        params.push_back(base::StrCat({"mode=", *mode}));
-      }
+    if (const std::string* mode = palette.FindString("mode");
+        mode && !mode->empty()) {
+      params.push_back(base::StrCat({"theme_mode=", *mode}));
     }
   }
   if (params.empty()) {
@@ -770,12 +768,13 @@ views::View* FindDescendantByScreenRect(views::View* root,
   return nullptr;
 }
 
-// Container view with explicit minimum size for standalone WebUI windows.
+// Container view with explicit default and minimum size for standalone WebUI windows.
 class MinSizeWebContainer : public views::View {
  public:
-  MinSizeWebContainer(gfx::Size min_size,
+  MinSizeWebContainer(gfx::Size default_size,
+                      gfx::Size min_size,
                       std::unique_ptr<views::WebView> web_view)
-      : min_size_(min_size) {
+      : default_size_(default_size), min_size_(min_size) {
     SetLayoutManager(std::make_unique<views::FillLayout>());
     web_view_ = AddChildView(std::move(web_view));
   }
@@ -783,29 +782,47 @@ class MinSizeWebContainer : public views::View {
 
   views::WebView* web_view() const { return web_view_; }
 
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& /*available_size*/) const override {
+    return default_size_;
+  }
+
   gfx::Size GetMinimumSize() const override { return min_size_; }
 
  private:
+  gfx::Size default_size_;
   gfx::Size min_size_;
   raw_ptr<views::WebView> web_view_ = nullptr;
 };
 
 // WebView for the in-window Library Drawer that preserves views::WebView's own
 // WebContentsDelegate wiring while forwarding unhandled keys (such as Esc) to
-// the browser window's FocusManager.
+// the browser window's FocusManager or closing the drawer.
 class LibraryDrawerWebView : public views::WebView {
  public:
   LibraryDrawerWebView(content::BrowserContext* browser_context,
-                       views::FocusManager* browser_focus_manager)
+                       views::FocusManager* browser_focus_manager,
+                       base::RepeatingClosure on_escape)
       : views::WebView(browser_context),
-        browser_focus_manager_(browser_focus_manager) {}
+        browser_focus_manager_(browser_focus_manager),
+        on_escape_(std::move(on_escape)) {}
   ~LibraryDrawerWebView() override = default;
 
-  void ClearBrowserFocusManager() { browser_focus_manager_ = nullptr; }
+  void ClearBrowserFocusManager() {
+    browser_focus_manager_ = nullptr;
+    on_escape_.Reset();
+  }
 
   bool HandleKeyboardEvent(
       content::WebContents* source,
       const input::NativeWebKeyboardEvent& event) override {
+    if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown &&
+        event.windows_key_code == ui::VKEY_ESCAPE &&
+        (event.GetModifiers() & blink::WebInputEvent::kKeyModifiers) == 0 &&
+        on_escape_) {
+      on_escape_.Run();
+      return true;
+    }
     if (browser_focus_manager_ &&
         unhandled_keyboard_event_handler_.HandleKeyboardEvent(
             event, browser_focus_manager_)) {
@@ -816,6 +833,7 @@ class LibraryDrawerWebView : public views::WebView {
 
  private:
   raw_ptr<views::FocusManager> browser_focus_manager_ = nullptr;
+  base::RepeatingClosure on_escape_;
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 };
 
@@ -849,8 +867,8 @@ class OpenWindowController::StandaloneWebWindow {
         &StandaloneWebWindow::OnWindowClosing, weak_factory_.GetWeakPtr()));
 
     auto web_view = std::make_unique<views::WebView>(browser_context);
-    auto container =
-        std::make_unique<MinSizeWebContainer>(min_size, std::move(web_view));
+    auto container = std::make_unique<MinSizeWebContainer>(
+        default_size, min_size, std::move(web_view));
     web_view_ = container->web_view();
     delegate_->SetContentsView(std::move(container));
     delegate_->SetInitiallyFocusedView(web_view_);
@@ -866,12 +884,13 @@ class OpenWindowController::StandaloneWebWindow {
     const int y =
         work_area.y() +
         std::max(0, (work_area.height() - default_size.height()) / 2);
+    initial_bounds_ = gfx::Rect(x, y, default_size.width(), default_size.height());
 
     views::Widget::InitParams params(
         views::Widget::InitParams::CLIENT_OWNS_WIDGET,
         views::Widget::InitParams::TYPE_WINDOW);
     params.delegate = delegate_.get();
-    params.bounds = gfx::Rect(x, y, default_size.width(), default_size.height());
+    params.bounds = initial_bounds_;
     params.name = std::move(name);
     if (frameless) {
       params.remove_standard_frame = true;
@@ -881,6 +900,7 @@ class OpenWindowController::StandaloneWebWindow {
 
     widget_ = std::make_unique<views::Widget>();
     widget_->Init(std::move(params));
+    widget_->SetBounds(initial_bounds_);
     web_view_->LoadInitialURL(url);
   }
 
@@ -904,7 +924,14 @@ class OpenWindowController::StandaloneWebWindow {
     if (widget_->IsMinimized()) {
       widget_->Restore();
     }
+    if (!shown_once_ && !initial_bounds_.IsEmpty()) {
+      widget_->SetBounds(initial_bounds_);
+    }
     widget_->Show();
+    if (!shown_once_ && !initial_bounds_.IsEmpty()) {
+      shown_once_ = true;
+      widget_->SetBounds(initial_bounds_);
+    }
     widget_->Activate();
     if (web_view_) {
       web_view_->RequestFocus();
@@ -947,6 +974,8 @@ class OpenWindowController::StandaloneWebWindow {
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<views::WebView> web_view_ = nullptr;
   base::OnceClosure on_closed_;
+  gfx::Rect initial_bounds_;
+  bool shown_once_ = false;
   bool closing_ = false;
   base::WeakPtrFactory<StandaloneWebWindow> weak_factory_{this};
 };
@@ -3761,7 +3790,9 @@ void OpenWindowUi::EnsureLibraryDrawer() {
     return;
   }
   auto web_view = std::make_unique<LibraryDrawerWebView>(
-      browser_view_->browser()->GetProfile(), browser_view_->GetFocusManager());
+      browser_view_->browser()->GetProfile(), browser_view_->GetFocusManager(),
+      base::BindRepeating(&OpenWindowUi::HideLibraryDrawer,
+                          weak_factory_.GetWeakPtr()));
   auto container = std::make_unique<MinSizeWebContainer>(
       gfx::Size(320, 400), std::move(web_view));
   library_web_view_ = container->web_view();
@@ -4322,6 +4353,9 @@ void OpenWindowUi::ToggleDownloadsPopover(views::View* anchor) {
     return;
   }
   OpenDownloadBridge* downloads = service()->download_bridge();
+  if (downloads) {
+    downloads->SyncLiveDownloadsFromManagers();
+  }
   std::vector<RecentDownloadEntry> entries =
       downloads ? downloads->GetRecentDownloads(
                       service()->ActiveProfileId(),
@@ -5565,8 +5599,16 @@ void OpenWindowUi::OnPeekExpandToTab() {
     modal->SetDelegate(nullptr);
   }
   wc->SetDelegate(nullptr);
-  const std::optional<SpaceID> focused =
-      model_util::FocusedSpace(service()->model(), window_id_);
+  const BrowserModel& model = service()->model();
+  std::optional<SpaceID> focused = model_util::FocusedSpace(model, window_id_);
+  if (!focused) {
+    if (const WindowID main_id = service()->MainWindowId(); !main_id.empty()) {
+      focused = model_util::FocusedSpace(model, main_id);
+    }
+  }
+  if (!focused && !model.spaces().empty()) {
+    focused = model.spaces().front().id;
+  }
   if (focused && service()->tab_bridge()) {
     service()->tab_bridge()->AdoptLiveWebContentsAsTab(
         std::move(wc), *focused, /*background=*/false, window_id_);
@@ -5597,8 +5639,16 @@ void OpenWindowUi::OnPeekOpenInSplit() {
     modal->SetDelegate(nullptr);
   }
   wc->SetDelegate(nullptr);
-  const std::optional<SpaceID> focused =
-      model_util::FocusedSpace(service()->model(), window_id_);
+  const BrowserModel& model = service()->model();
+  std::optional<SpaceID> focused = model_util::FocusedSpace(model, window_id_);
+  if (!focused) {
+    if (const WindowID main_id = service()->MainWindowId(); !main_id.empty()) {
+      focused = model_util::FocusedSpace(model, main_id);
+    }
+  }
+  if (!focused && !model.spaces().empty()) {
+    focused = model.spaces().front().id;
+  }
   if (focused && service()->tab_bridge()) {
     const ItemID adopted = service()->tab_bridge()->AdoptLiveWebContentsAsTab(
         std::move(wc), *focused, /*background=*/true, window_id_);
@@ -5631,8 +5681,16 @@ void OpenWindowUi::OnPeekOpenInFavorite() {
     modal->SetDelegate(nullptr);
   }
   wc->SetDelegate(nullptr);
-  const std::optional<SpaceID> focused =
-      model_util::FocusedSpace(service()->model(), window_id_);
+  const BrowserModel& model = service()->model();
+  std::optional<SpaceID> focused = model_util::FocusedSpace(model, window_id_);
+  if (!focused) {
+    if (const WindowID main_id = service()->MainWindowId(); !main_id.empty()) {
+      focused = model_util::FocusedSpace(model, main_id);
+    }
+  }
+  if (!focused && !model.spaces().empty()) {
+    focused = model.spaces().front().id;
+  }
   if (focused && service()->tab_bridge()) {
     const ItemID adopted = service()->tab_bridge()->AdoptLiveWebContentsAsTab(
         std::move(wc), *focused, /*background=*/false, window_id_);
@@ -6882,9 +6940,11 @@ void OpenWindowUi::SetEscapeRegistered(bool registered) {
 }
 
 void OpenWindowUi::UpdateEscapeRegistration() {
+  // Library drawer is excluded so Escape reaches the Library WebUI first for
+  // layered menus/dialogs/search (the page calls library.close or falls
+  // through to LibraryDrawerWebView::HandleKeyboardEvent).
   SetEscapeRegistered(command_bar_shown() || peek_shown() ||
-                      library_drawer_shown() || boost_editor_shown() ||
-                      find_bar_shown());
+                      boost_editor_shown() || find_bar_shown());
 }
 
 bool OpenWindowUi::RunShortcut(CommandId command) {
@@ -7070,7 +7130,7 @@ base::DictValue OpenWindowUi::FindBarState() const {
   state.Set("shown", find_bar_shown());
   if (find_bar_) {
     state.Set("query", base::UTF16ToUTF8(find_bar_->query()));
-    state.Set("matches", find_bar_->total());
+    state.Set("matches", find_bar_->has_result() ? find_bar_->total() : -1);
     state.Set("active", find_bar_->active_ordinal());
   }
   if (find_host_ && find_host_->widget()) {
@@ -7568,6 +7628,9 @@ void OpenLittleOpenController::OnLittleOpenDownloads(views::View* anchor) {
     return;
   }
   OpenDownloadBridge* downloads = service()->download_bridge();
+  if (downloads) {
+    downloads->SyncLiveDownloadsFromManagers();
+  }
   std::vector<RecentDownloadEntry> entries =
       downloads
           ? downloads->GetRecentDownloads(profile_id_,

@@ -110,7 +110,9 @@ class OpenMediaBridge::TabSessionObserver
         tab_id_(std::move(tab_id)) {
     state_.tab_id = tab_id_;
     SyncFromWebContents();
-    BindMediaSession();
+    // Silent tabs must not eagerly instantiate a MediaSession: only attach
+    // to one that already exists, and bind lazily later.
+    BindMediaSession(/*create_if_needed=*/false);
   }
 
   TabSessionObserver(const TabSessionObserver&) = delete;
@@ -125,12 +127,16 @@ class OpenMediaBridge::TabSessionObserver
     return wc ? content::MediaSession::GetIfExists(wc) : nullptr;
   }
 
-  void BindMediaSession() {
+  // Binds to the tab's MediaSession. Without |create_if_needed| this only
+  // attaches to an already-existing session (never instantiates one).
+  void BindMediaSession(bool create_if_needed) {
     content::WebContents* wc = web_contents();
     if (!wc || observer_receiver_.is_bound()) {
       return;
     }
-    content::MediaSession* session = content::MediaSession::Get(wc);
+    content::MediaSession* session =
+        create_if_needed ? content::MediaSession::Get(wc)
+                         : content::MediaSession::GetIfExists(wc);
     if (!session) {
       return;
     }
@@ -164,7 +170,15 @@ class OpenMediaBridge::TabSessionObserver
     if (audible) {
       state_.dismissed = false;
     }
-    BindMediaSession();
+    // An audible tab is genuinely playing media: create the session if
+    // needed. Otherwise only bind to one that already exists.
+    BindMediaSession(/*create_if_needed=*/audible);
+    bridge_->OnTabStateUpdated(tab_id_);
+  }
+
+  void DidUpdateAudioMutingState(bool muted) override {
+    state_.is_muted = muted;
+    BindMediaSession(/*create_if_needed=*/false);
     bridge_->OnTabStateUpdated(tab_id_);
   }
 

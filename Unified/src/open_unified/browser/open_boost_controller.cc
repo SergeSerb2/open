@@ -294,16 +294,19 @@ constexpr char kZapPickerTemplate[] = R"JS(
     pill.style.top = Math.max(4, top) + 'px';
   }
   function hover(e) {
+    if (!e.isTrusted) return;
     const el = e.target;
     target = zappable(el) ? el : null;
     place();
   }
   function swallow(e) {
+    if (!e.isTrusted) return;
     if (e.button !== undefined && e.button !== 0) return;
     e.preventDefault();
     e.stopImmediatePropagation();
   }
   function commit(e) {
+    if (!e.isTrusted) return;
     if (e.button !== 0 || e.isPrimary === false) return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -322,6 +325,7 @@ constexpr char kZapPickerTemplate[] = R"JS(
     place();
   }
   function onKey(e) {
+    if (!e.isTrusted) return;
     if (e.key !== 'Escape') return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -980,7 +984,9 @@ bool OpenBoostController::StartZap(const std::string& boost_id,
   std::optional<ItemID> tab_id =
       bridge ? bridge->ActiveTabId() : std::nullopt;
   if (!tab_id) {
-    *message = "Open a page to zap elements on it.";
+    if (message) {
+      *message = "Open a page to zap elements on it.";
+    }
     return false;
   }
   return StartZapForTab(*tab_id, boost_id, message);

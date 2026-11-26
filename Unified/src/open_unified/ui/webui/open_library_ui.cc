@@ -56,6 +56,10 @@
 #include <windows.h>
 
 #include <shellapi.h>
+
+// winuser.h defines FindWindow -> FindWindowW, colliding with
+// BrowserModel::FindWindow.
+#undef FindWindow
 #endif
 
 namespace open_unified::webui {
@@ -464,6 +468,20 @@ std::string UrlSuffix(std::string_view ext) {
   return ext.empty() ? std::string() : base::StrCat({".", ext});
 }
 
+bool IsSafeMediaUrlSuffix(std::string_view suffix, bool allow_video) {
+  if (suffix.size() < 2 || suffix.front() != '.' ||
+      suffix.find('.', 1) != std::string_view::npos) {
+    return false;
+  }
+  const std::string lower = base::ToLowerASCII(suffix);
+  if (lower == ".js" || lower == ".mjs" || lower == ".html" ||
+      lower == ".htm" || lower == ".svg" || lower == ".xhtml") {
+    return false;
+  }
+  const std::string_view ext = suffix.substr(1);
+  return IsImageExtension(ext) || (allow_video && IsVideoExtension(ext));
+}
+
 // A media id: base64url("<kind>\x1f<profile>\x1f<a>\x1f<b>").
 //   capture:  a = "app" | "profile" (Captures root), b = file name
 //   download: a = download id
@@ -481,8 +499,14 @@ std::string EncodeMediaToken(const MediaToken& token) {
 }
 
 std::optional<MediaToken> DecodeMediaToken(std::string_view encoded) {
-  // Drop the cosmetic extension ("<id>.png").
-  encoded = encoded.substr(0, encoded.find('.'));
+  const size_t dot = encoded.find('.');
+  if (dot != std::string_view::npos) {
+    const std::string_view suffix = encoded.substr(dot);
+    if (!IsSafeMediaUrlSuffix(suffix, /*allow_video=*/true)) {
+      return std::nullopt;
+    }
+    encoded = encoded.substr(0, dot);
+  }
   std::optional<std::string> raw = UnB64(encoded);
   if (!raw) {
     return std::nullopt;
@@ -562,11 +586,26 @@ bool IsSafeFileName(std::string_view name) {
          name.find('\0') == std::string_view::npos;
 }
 
-// |path| resolved (symlinks too) to a regular file inside |root|.
+base::FilePath CanonicalizePath(const base::FilePath& path) {
+  if (path.empty()) {
+    return base::FilePath();
+  }
+#if BUILDFLAG(IS_WIN)
+  base::FilePath normalized;
+  if (!base::NormalizeFilePath(path, &normalized)) {
+    return base::FilePath();
+  }
+  return normalized;
+#else
+  return base::MakeAbsoluteFilePath(path);
+#endif
+}
+
+// |path| resolved (symlinks and junctions too) to a regular file inside |root|.
 std::optional<base::FilePath> ContainedFile(const base::FilePath& root,
                                             const base::FilePath& path) {
-  const base::FilePath real_root = base::MakeAbsoluteFilePath(root);
-  const base::FilePath real_path = base::MakeAbsoluteFilePath(path);
+  const base::FilePath real_root = CanonicalizePath(root);
+  const base::FilePath real_path = CanonicalizePath(path);
   if (real_root.empty() || real_path.empty() ||
       !real_root.IsParent(real_path) || base::DirectoryExists(real_path)) {
     return std::nullopt;
@@ -727,10 +766,11 @@ std::optional<base::FilePath> ResolveMedia(const MediaToken& token,
     }
     const base::FilePath path =
         root.Append(base::FilePath::FromUTF8Unsafe(token.b));
-    if (!allowed(path)) {
+    std::optional<base::FilePath> resolved = ContainedFile(root, path);
+    if (!resolved || !allowed(*resolved)) {
       return std::nullopt;
     }
-    return ContainedFile(root, path);
+    return resolved;
   }
   // download: only the completed record's own target file.
   for (const DownloadRecord& record : store->List()) {
@@ -738,8 +778,7 @@ std::optional<base::FilePath> ResolveMedia(const MediaToken& token,
       continue;
     }
     const base::FilePath path =
-        base::MakeAbsoluteFilePath(
-            base::FilePath::FromUTF8Unsafe(record.target_path));
+        CanonicalizePath(base::FilePath::FromUTF8Unsafe(record.target_path));
     if (path.empty() || !allowed(path) || base::DirectoryExists(path)) {
       return std::nullopt;
     }
@@ -937,6 +976,10 @@ void CollectDownloads(std::vector<ProfileID> profiles,
   if (!bridge) {
     CollectDownloadsFromStores(std::move(profiles), limit, std::move(done));
     return;
+  }
+  for (const ProfileID& profile : profiles) {
+    // Ensure each requested Profile's services and DownloadManager binding exist.
+    ServicesFor(profile);
   }
   auto barrier = base::BarrierCallback<DownloadEntries>(
       profiles.size(),
@@ -1267,9 +1310,12 @@ void OpenLibraryUI::HandleResource(
         path.substr(8), "/", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
     std::optional<std::string> url;
     ProfileServices* ps = nullptr;
-    if (parts.size() == 2) {
-      url = UnB64(parts[1].substr(0, parts[1].find('.')));
-      ps = ServicesFor(std::string(parts[0]));
+    if (parts.size() == 2 && base::EndsWith(parts[1], ".png")) {
+      const std::string_view stem = parts[1].substr(0, parts[1].size() - 4);
+      if (!stem.empty() && stem.find('.') == std::string_view::npos) {
+        url = UnB64(stem);
+        ps = ServicesFor(std::string(parts[0]));
+      }
     }
     if (!url || !ps || !GURL(*url).is_valid()) {
       std::move(callback).Run(nullptr);
@@ -1299,6 +1345,17 @@ void OpenLibraryUI::HandleResource(
 
   const bool thumb = base::StartsWith(path, "thumb/");
   path.remove_prefix(thumb ? 6 : 11);  // "thumb/" or "media-file/".
+  const size_t dot = path.find('.');
+  if (dot == std::string_view::npos ||
+      path.find_first_of("/\\") != std::string_view::npos) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+  const std::string requested_suffix(path.substr(dot));
+  if (!IsSafeMediaUrlSuffix(requested_suffix, /*allow_video=*/!thumb)) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
   std::optional<MediaToken> token = DecodeMediaToken(path);
   ProfileServices* ps = token ? ServicesFor(token->profile) : nullptr;
   if (!ps) {
@@ -1308,15 +1365,18 @@ void OpenLibraryUI::HandleResource(
   RunOnStore(ps->downloads,
              base::BindOnce(
                  [](MediaToken token, MediaRoots roots, bool thumb,
-                    DownloadHistoryStore* store)
+                    std::string requested_suffix, DownloadHistoryStore* store)
                      -> scoped_refptr<base::RefCountedMemory> {
                    std::optional<base::FilePath> file = ResolveMedia(
                        token, roots, store, /*allow_video=*/!thumb);
-                   return file ? ReadCapped(*file, thumb ? kMaxThumbBytes
-                                                         : kMaxMediaFileBytes)
-                               : nullptr;
+                   if (!file ||
+                       UrlSuffix(LowerExtension(*file)) != requested_suffix) {
+                     return nullptr;
+                   }
+                   return ReadCapped(*file, thumb ? kMaxThumbBytes
+                                                  : kMaxMediaFileBytes);
                  },
-                 *token, RootsFor(*ps), thumb),
+                 *token, RootsFor(*ps), thumb, requested_suffix),
              std::move(callback));
 }
 
@@ -2134,10 +2194,10 @@ void OpenLibraryUI::AddMediaFolder(const base::DictValue& payload,
              DownloadHistoryStore*) -> std::string {
             base::FilePath home;
             base::PathService::Get(base::DIR_HOME, &home);
-            const base::FilePath real = base::MakeAbsoluteFilePath(folder);
-            const base::FilePath real_home = base::MakeAbsoluteFilePath(home);
+            const base::FilePath real = CanonicalizePath(folder);
+            const base::FilePath real_home = CanonicalizePath(home);
             const base::FilePath real_data =
-                base::MakeAbsoluteFilePath(roots.user_data_dir);
+                CanonicalizePath(roots.user_data_dir);
             if (real.empty() || !base::DirectoryExists(real)) {
               return "that folder does not exist";
             }

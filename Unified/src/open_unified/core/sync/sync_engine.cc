@@ -22,6 +22,7 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "net/base/url_util.h"
 #include "net/http/http_request_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -29,6 +30,7 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace open_unified {
 
@@ -589,13 +591,31 @@ std::optional<SyncedAssetRef> DecodeAssetRef(const base::DictValue* d) {
   return ref;
 }
 
+// Credentials, bearer tokens and refresh tokens must never travel in
+// cleartext: require HTTPS (or WSS) unless the server is on loopback.
+bool IsSecureOrLoopbackSyncUrl(const GURL& url) {
+  if (!url.is_valid() || url.host().empty()) return false;
+  if (url.SchemeIs(url::kHttpsScheme) || url.SchemeIs(url::kWssScheme)) {
+    return true;
+  }
+  if (url.SchemeIs(url::kHttpScheme) || url.SchemeIs(url::kWsScheme)) {
+    return net::IsLocalhost(url);
+  }
+  return false;
+}
+
+// Returns an empty string when |base_url| is not https:// (or loopback http://).
 std::string MakeWsUrlFromHttp(const std::string& base_url) {
+  GURL parsed(base_url);
+  if (!IsSecureOrLoopbackSyncUrl(parsed)) return std::string();
   std::string ws = base_url;
   if (base::StartsWith(ws, "https://", base::CompareCase::INSENSITIVE_ASCII)) {
     ws.replace(0, 8, "wss://");
   } else if (base::StartsWith(ws, "http://",
                               base::CompareCase::INSENSITIVE_ASCII)) {
     ws.replace(0, 7, "ws://");
+  } else {
+    return std::string();
   }
   return ws + "/v1/sync/ws";
 }
@@ -2366,7 +2386,8 @@ std::optional<std::string> SyncEngine::ValidateServerUrl(std::string_view raw) {
   GURL parsed(trimmed);
   if (!parsed.is_valid() || !parsed.SchemeIsHTTPOrHTTPS() ||
       parsed.host().empty() || parsed.has_query() || parsed.has_ref() ||
-      parsed.has_username() || parsed.has_password()) {
+      parsed.has_username() || parsed.has_password() ||
+      !IsSecureOrLoopbackSyncUrl(parsed)) {
     return std::nullopt;
   }
   std::string normalized = parsed.spec();
@@ -2782,6 +2803,14 @@ void SyncEngine::SendRaw(
   if (!http_transport_) {
     SyncHttpResponse resp;
     resp.error_message = "No HTTP transport configured.";
+    std::move(callback).Run(std::move(resp));
+    return;
+  }
+  // Single choke point (sign-in, refresh, sync): never send passwords or
+  // bearer/refresh tokens over cleartext HTTP to a non-loopback host.
+  if (!IsSecureOrLoopbackSyncUrl(GURL(full_url))) {
+    SyncHttpResponse resp;
+    resp.error_message = "Sync server must use HTTPS.";
     std::move(callback).Run(std::move(resp));
     return;
   }
@@ -5790,6 +5819,9 @@ void SyncEngine::StartWebSocket() {
   }
   ws_reconnect_timer_.Stop();
   std::string ws_url = MakeWsUrlFromHttp(state_->server_url);
+  if (ws_url.empty()) {
+    return;
+  }
   ws_client_->Connect(ws_url, credentials_->tokens.access_token,
                       state_->device_id, this);
   ws_ping_timer_.Start(FROM_HERE, base::Seconds(kWsPingIntervalSec), this,

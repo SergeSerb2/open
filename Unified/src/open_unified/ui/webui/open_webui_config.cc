@@ -16,6 +16,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_url_handler.h"
@@ -116,8 +117,23 @@ std::optional<std::pair<std::string, std::string>> ParseDocumentAssetPath(
   return std::make_pair(std::string(parts[0]), std::string(parts[1]));
 }
 
-// Reads |path| when it resolves (symlinks included) to a regular file inside
-// |root|; null otherwise. Blocking.
+base::FilePath CanonicalizePath(const base::FilePath& path) {
+  if (path.empty()) {
+    return base::FilePath();
+  }
+#if BUILDFLAG(IS_WIN)
+  base::FilePath normalized;
+  if (!base::NormalizeFilePath(path, &normalized)) {
+    return base::FilePath();
+  }
+  return normalized;
+#else
+  return base::MakeAbsoluteFilePath(path);
+#endif
+}
+
+// Reads |path| when it resolves (symlinks and junctions included) to a regular
+// raster-image file inside |root|; null otherwise. Blocking.
 scoped_refptr<base::RefCountedMemory> ReadContainedFile(
     const base::FilePath& root,
     const base::FilePath& path,
@@ -125,10 +141,17 @@ scoped_refptr<base::RefCountedMemory> ReadContainedFile(
   if (root.empty() || path.empty()) {
     return nullptr;
   }
-  const base::FilePath real_root = base::MakeAbsoluteFilePath(root);
-  const base::FilePath real_path = base::MakeAbsoluteFilePath(path);
+  const base::FilePath real_root = CanonicalizePath(root);
+  const base::FilePath real_path = CanonicalizePath(path);
   if (real_root.empty() || real_path.empty() ||
       !real_root.IsParent(real_path) || base::DirectoryExists(real_path)) {
+    return nullptr;
+  }
+  const std::string_view real_mime =
+      DocumentAssetMimeType(real_path.BaseName().AsUTF8Unsafe());
+  const std::string_view requested_mime =
+      DocumentAssetMimeType(path.BaseName().AsUTF8Unsafe());
+  if (real_mime.empty() || real_mime != requested_mime) {
     return nullptr;
   }
   std::string contents;
@@ -270,7 +293,6 @@ std::string_view DocumentAssetMimeType(std::string_view filename) {
   if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
   if (ext == "webp") return "image/webp";
   if (ext == "gif") return "image/gif";
-  if (ext == "svg") return "image/svg+xml";
   return {};
 }
 

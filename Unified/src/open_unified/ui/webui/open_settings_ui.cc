@@ -14,6 +14,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
@@ -1065,8 +1066,12 @@ void OpenPreferences::WhenLoaded(base::OnceClosure done) {
               return;
             }
             if (stored) {
-              // Keep only known keys with the default's type.
+              // Keep only known keys with the default's type, preserving any
+              // keys written via Set()/Reset() before the disk load completed.
               for (auto [key, value] : *stored) {
+                if (self->dirty_keys_.contains(key)) {
+                  continue;
+                }
                 const base::Value* def = Defaults().Find(key);
                 if (def && def->type() == value.type() &&
                     !FindProfileKey(key)) {
@@ -1074,8 +1079,13 @@ void OpenPreferences::WhenLoaded(base::OnceClosure done) {
                 }
               }
             }
+            const bool had_dirty = !self->dirty_keys_.empty();
+            self->dirty_keys_.clear();
             self->loaded_ = true;
             self->loading_ = false;
+            if (had_dirty) {
+              self->Save();
+            }
             // Changed preferences take effect from the first launch on.
             ApplyAllEffects();
             auto waiters = std::move(self->waiters_);
@@ -1176,7 +1186,12 @@ bool OpenPreferences::Set(const std::string& key,
     return true;
   }
   stored_.Set(key, value.Clone());
-  Save();
+  if (!loaded_) {
+    dirty_keys_.insert(key);
+    WhenLoaded(base::DoNothing());
+  } else {
+    Save();
+  }
   ApplyEffects(key, {});
   return true;
 }
@@ -1193,7 +1208,12 @@ void OpenPreferences::Reset(const std::string& key,
     return;
   }
   stored_.Remove(key);
-  Save();
+  if (!loaded_) {
+    dirty_keys_.insert(key);
+    WhenLoaded(base::DoNothing());
+  } else {
+    Save();
+  }
   ApplyEffects(key, {});
 }
 
@@ -1781,6 +1801,16 @@ std::string TodayStamp() {
 }
 
 }  // namespace
+
+// static
+std::string OpenPreferences::TranslateLegacyKey(std::string_view key) {
+  for (const auto& [legacy_key, mapped_key] : kLegacyPreferenceKeys) {
+    if (key == legacy_key) {
+      return mapped_key;
+    }
+  }
+  return std::string(key);
+}
 
 // --- Preferences -------------------------------------------------------------
 
@@ -3688,6 +3718,28 @@ void OpenSettingsUI::ClearBrowsingData(const base::DictValue& payload,
 
 void OpenSettingsUI::SetDefaultBrowser(const base::DictValue& payload,
                                        Reply reply) {
+#if BUILDFLAG(IS_MAC)
+  // AppKit's NSWorkspace must run on the main/UI thread, and macOS prompts
+  // asynchronously for default-browser confirmation.
+  OpenPlatform* platform = OpenPlatform::Get();
+  if (!platform) {
+    ReplyOk(std::move(reply),
+            base::DictValue().Set("status", "failed").Set("is_default", false));
+    return;
+  }
+  if (platform->IsDefaultBrowser()) {
+    ReplyOk(std::move(reply),
+            base::DictValue().Set("status", "already").Set("is_default", true));
+    return;
+  }
+  const bool requested = platform->SetDefaultBrowser();
+  const bool is_default = platform->IsDefaultBrowser();
+  const char* status =
+      is_default ? "success" : (requested ? "prompted" : "failed");
+  ReplyOk(std::move(reply), base::DictValue()
+                                .Set("status", status)
+                                .Set("is_default", is_default));
+#else
   // Shell integration may spawn processes (xdg-settings) or show OS UI.
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
@@ -3701,8 +3753,15 @@ void OpenSettingsUI::SetDefaultBrowser(const base::DictValue& payload,
         }
         const bool requested = platform->SetDefaultBrowser();
         const bool is_default = platform->IsDefaultBrowser();
-        return {is_default ? "success" : (requested ? "declined" : "failed"),
-                is_default};
+#if BUILDFLAG(IS_WIN)
+        // Windows launches ms-settings:defaultapps asynchronously.
+        const char* status =
+            is_default ? "success" : (requested ? "prompted" : "failed");
+#else
+        const char* status =
+            is_default ? "success" : (requested ? "declined" : "failed");
+#endif
+        return {status, is_default};
       }),
       base::BindOnce(
           [](Reply reply, std::pair<std::string, bool> result) {
@@ -3712,6 +3771,7 @@ void OpenSettingsUI::SetDefaultBrowser(const base::DictValue& payload,
                         .Set("is_default", result.second));
           },
           std::move(reply)));
+#endif
 }
 
 // --- Extensions --------------------------------------------------------------

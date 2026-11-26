@@ -314,9 +314,13 @@ export interface AboutInfo {
 }
 
 export interface UpdateCheckResult {
-  status: 'unavailable' | 'up_to_date' | 'available';
+  status: 'unavailable' | 'up_to_date' | 'update_available' | 'checking' | 'error';
   current_version: string;
   message: string;
+  latest_version?: string;
+  release_url?: string;
+  download_url?: string;
+  release_notes?: string;
 }
 
 export interface FilePickResult {

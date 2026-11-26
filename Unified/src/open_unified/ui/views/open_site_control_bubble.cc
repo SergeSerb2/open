@@ -1109,6 +1109,7 @@ content::WebContents* OpenSiteControlView::web_contents() const {
 
 void OpenSiteControlView::SetCallbacks(const SiteControlCallbacks& callbacks) {
   callbacks_ = callbacks;
+  Rebuild();
 }
 
 void OpenSiteControlView::SetWebContents(content::WebContents* tab) {
@@ -1313,12 +1314,12 @@ void OpenSiteControlView::Rebuild() {
 }
 
 void OpenSiteControlView::BuildBody() {
-  body_->RemoveAllChildViews();
   extension_tiles_.clear();
   boost_rows_.clear();
   boost_circles_.clear();
   tile_rows_.clear();
   tile_row_indices_.clear();
+  body_->RemoveAllChildViews();
   if (showing_certificate_) {
     BuildCertificatePage();
     return;
@@ -1674,6 +1675,7 @@ bool OpenSiteControlView::OnMouseWheel(const ui::MouseWheelEvent& event) {
 // --- Actions -------------------------------------------------------------------
 
 void OpenSiteControlView::OnActionPressed(int index) {
+  base::WeakPtr<OpenSiteControlView> self = weak_factory_.GetWeakPtr();
   const gfx::Rect anchor =
       action_tiles_[static_cast<size_t>(index)]->GetBoundsInScreen();
   bool handled = false;
@@ -1720,8 +1722,8 @@ void OpenSiteControlView::OnActionPressed(int index) {
       break;
     }
   }
-  if (handled && GetWidget()) {
-    GetWidget()->Close();  // SiteControlDismissReason.action
+  if (handled && self && self->GetWidget()) {
+    self->GetWidget()->Close();  // SiteControlDismissReason.action
   }
 }
 
@@ -1885,10 +1887,11 @@ void OpenSiteControlView::OnBoostPressed(size_t index) {
   if (index >= state_.boosts.size()) {
     return;
   }
+  base::WeakPtr<OpenSiteControlView> self = weak_factory_.GetWeakPtr();
   if (callbacks_.on_open_boost_editor) {
     callbacks_.on_open_boost_editor.Run(state_.boosts[index].id);
-    if (GetWidget()) {
-      GetWidget()->Close();
+    if (self && self->GetWidget()) {
+      self->GetWidget()->Close();
     }
   } else if (delegate_) {
     delegate_->OnSiteControlAction(SiteControlAction::kNewBoost);
@@ -1923,6 +1926,7 @@ void OpenSiteControlView::OnSecurityPressed() {
 }
 
 void OpenSiteControlView::ClearSiteData(SiteDataKind kind) {
+  base::WeakPtr<OpenSiteControlView> self = weak_factory_.GetWeakPtr();
   const base::RepeatingClosure& callback =
       kind == SiteDataKind::kCache ? callbacks_.on_clear_cache_and_reload
                                    : callbacks_.on_clear_cookies_and_reload;
@@ -1934,8 +1938,8 @@ void OpenSiteControlView::ClearSiteData(SiteDataKind kind) {
     delegate_->OnSiteControlAction(SiteControlAction::kClearSiteData);
     return;
   }
-  if (GetWidget()) {
-    GetWidget()->Close();
+  if (self && self->GetWidget()) {
+    self->GetWidget()->Close();
   }
 }
 
@@ -2166,9 +2170,12 @@ bool OpenSiteControlView::IsCommandIdChecked(int command_id) const {
 bool OpenSiteControlView::IsCommandIdEnabled(int command_id) const {
   switch (command_id) {
     case kCmdClearCache:
-    case kCmdClearCookies:
       return state_.is_website &&
              (tab_ || !callbacks_.on_clear_cache_and_reload.is_null() ||
+              delegate_);
+    case kCmdClearCookies:
+      return state_.is_website &&
+             (tab_ || !callbacks_.on_clear_cookies_and_reload.is_null() ||
               delegate_);
     case kCmdManageBoosts:
       return !state_.incognito && !callbacks_.on_manage_boosts.is_null();

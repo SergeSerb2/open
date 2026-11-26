@@ -1327,7 +1327,8 @@ void OpenOnboardingUI::ApplyImport(ProfileID profile,
       OpenPreferences* prefs = OpenPreferences::Get();
       for (const auto& [key, value] : data.legacy->preferences) {
         std::string error;
-        prefs->Set(key, value, profile, false, &error);
+        prefs->Set(OpenPreferences::TranslateLegacyKey(key), value, profile,
+                   false, &error);
       }
     }
   }
@@ -1493,6 +1494,12 @@ void OpenOnboardingUI::FinishComplete(base::DictValue payload,
     }
 
     if (json::GetBool(payload, "make_default_browser", false)) {
+#if BUILDFLAG(IS_MAC)
+      if (OpenPlatform* platform = OpenPlatform::Get();
+          platform && !platform->IsDefaultBrowser()) {
+        platform->SetDefaultBrowser();
+      }
+#else
       base::ThreadPool::PostTask(
           FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
           base::BindOnce([] {
@@ -1501,6 +1508,7 @@ void OpenOnboardingUI::FinishComplete(base::DictValue payload,
               platform->SetDefaultBrowser();
             }
           }));
+#endif
     }
     s->ScheduleSave();
   }
@@ -1934,11 +1942,23 @@ void OpenOnboardingUI::TriggerWelcomeAction(const base::DictValue& payload,
   } else if (action == "boost-gallery") {
     open_page(kHostBoosts, "");
   } else if (action == "settings") {
-    open_page(kHostSettings, "");
+    if (windows) {
+      windows->OpenSettingsWindow("");
+    } else {
+      open_page(kHostSettings, "");
+    }
   } else if (action == "customize-shortcuts") {
-    open_page(kHostSettings, "shortcuts");
+    if (windows) {
+      windows->OpenSettingsWindow("shortcuts");
+    } else {
+      open_page(kHostSettings, "shortcuts");
+    }
   } else if (action == "import-from-browser") {
-    open_page(kHostSettings, "general/import");
+    if (windows) {
+      windows->OpenSettingsWindow("import");
+    } else {
+      open_page(kHostSettings, "import");
+    }
   } else if (action == "shortcuts" || action == "keyboard-shortcuts-edu") {
     open_page(kHostWelcome, "shortcuts");
   } else if (action == "help") {

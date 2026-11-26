@@ -149,6 +149,9 @@ class OpenDownloadBridge : public content::DownloadManager::Observer,
   // and notifies observers when availability changes.
   void RefreshFileAvailability();
 
+  // Scans all bound Chromium DownloadManagers to ensure live items are tracked.
+  void SyncLiveDownloadsFromManagers();
+
   // Syncs Open's ProfileSettings download location & prompt toggle directly
   // into Chromium's DownloadPrefs (prefs::kDownloadDefaultDirectory and
   // prefs::kPromptForDownload).

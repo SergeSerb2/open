@@ -267,6 +267,13 @@ void OpenDownloadBridge::AttachProfileInternal(
     DetachProfile(chrome_profile);
   }
 
+  if (PrefService* prefs = chrome_profile->GetPrefs()) {
+    // Open renders its own Downloads popover, sidebar ring, and Library drawer.
+    // Disable Chromium's automatic partial download bubble so it never pops
+    // over Open's sidebar or traffic lights.
+    prefs->SetBoolean(prefs::kDownloadBubblePartialViewEnabled, false);
+  }
+
   content::DownloadManager* manager = chrome_profile->GetDownloadManager();
   if (!manager) {
     return;
@@ -880,11 +887,58 @@ std::vector<RecentDownloadEntry> OpenDownloadBridge::GetRecentDownloads(
   return entries;
 }
 
+void OpenDownloadBridge::SyncLiveDownloadsFromManagers() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (auto& [_, binding] : bindings_) {
+    if (!binding || !binding->chrome_profile) {
+      continue;
+    }
+    content::DownloadManager* manager =
+        binding->chrome_profile->GetDownloadManager();
+    if (!manager) {
+      continue;
+    }
+    if (binding->manager != manager) {
+      if (binding->manager) {
+        binding->manager->RemoveObserver(this);
+      }
+      binding->manager = manager;
+      manager->AddObserver(this);
+    }
+    download::SimpleDownloadManager::DownloadVector items;
+    manager->GetAllDownloads(&items);
+    manager->GetUninitializedActiveDownloadsIfAny(&items);
+    for (download::DownloadItem* item : items) {
+      if (!item || item->IsTransient()) {
+        continue;
+      }
+      if (!item_to_id_.contains(item)) {
+        ObserveItem(binding.get(), item);
+        SyncItem(binding.get(), item, /*force_persist=*/true);
+      } else {
+        auto id_it = item_to_id_.find(item);
+        if (id_it != item_to_id_.end()) {
+          auto d_it = downloads_.find(id_it->second);
+          if (d_it != downloads_.end() && !d_it->second->removed) {
+            const DownloadRecord latest = RecordFromItem(item);
+            if (latest.state != d_it->second->record.state ||
+                latest.received_bytes != d_it->second->record.received_bytes ||
+                latest.target_path != d_it->second->record.target_path) {
+              SyncItem(binding.get(), item, /*force_persist=*/false);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 void OpenDownloadBridge::GetRecentDownloadsAsync(
     const ProfileID& profile_id,
     int limit,
     base::OnceCallback<void(std::vector<RecentDownloadEntry>)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  SyncLiveDownloadsFromManagers();
   std::vector<RecentDownloadEntry> snapshot =
       GetRecentDownloads(profile_id, limit);
   io_task_runner_->PostTaskAndReplyWithResult(
@@ -913,6 +967,7 @@ void OpenDownloadBridge::GetRecentDownloadsAsync(
 
 void OpenDownloadBridge::RefreshFileAvailability() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  SyncLiveDownloadsFromManagers();
   std::vector<std::pair<std::string, base::FilePath>> checks;
   for (const auto& [id, tracked] : downloads_) {
     if (!tracked->removed && tracked->record.state == "completed" &&
@@ -996,6 +1051,7 @@ void OpenDownloadBridge::ApplyDownloadPreferences(
                                 : download_dir;
   prefs->SetFilePath(prefs::kDownloadDefaultDirectory, resolved);
   prefs->SetBoolean(prefs::kPromptForDownload, ask_each_time);
+  prefs->SetBoolean(prefs::kDownloadBubblePartialViewEnabled, false);
   if (DownloadPrefs* download_prefs =
           DownloadPrefs::FromBrowserContext(chrome_profile)) {
     download_prefs->SetDownloadPath(resolved);
@@ -1027,19 +1083,7 @@ void OpenDownloadBridge::OnDownloadCreated(content::DownloadManager* manager,
 
 void OpenDownloadBridge::OnManagerInitialized() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto& [_, binding] : bindings_) {
-    if (!binding->manager || !binding->manager->IsManagerInitialized()) {
-      continue;
-    }
-    download::SimpleDownloadManager::DownloadVector items;
-    binding->manager->GetAllDownloads(&items);
-    for (download::DownloadItem* item : items) {
-      if (item && !item->IsTransient() && !item_to_id_.contains(item)) {
-        ObserveItem(binding.get(), item);
-        SyncItem(binding.get(), item, /*force_persist=*/false);
-      }
-    }
-  }
+  SyncLiveDownloadsFromManagers();
 }
 
 void OpenDownloadBridge::ManagerGoingDown(content::DownloadManager* manager) {

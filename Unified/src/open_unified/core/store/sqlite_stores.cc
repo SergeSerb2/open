@@ -130,7 +130,8 @@ std::vector<uint8_t> ReadBlobColumn(sql::Statement& stmt, int col) {
 
 HistoryStore::HistoryStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("History")) {}
+      db_(sql::DatabaseOptions().set_exclusive_locking(false),
+          sql::Database::Tag("History")) {}
 
 HistoryStore::~HistoryStore() {
   Close();
@@ -577,7 +578,8 @@ int64_t HistoryStore::UrlCount() {
 
 ArchiveStore::ArchiveStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("TabStateStorage")) {}
+      db_(sql::DatabaseOptions().set_exclusive_locking(false),
+          sql::Database::Tag("TabStateStorage")) {}
 
 ArchiveStore::~ArchiveStore() {
   Close();
@@ -877,7 +879,8 @@ int64_t ArchiveStore::Count() {
 
 SleepStore::SleepStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("TabStateStorage")) {}
+      db_(sql::DatabaseOptions().set_exclusive_locking(false),
+          sql::Database::Tag("TabStateStorage")) {}
 
 SleepStore::~SleepStore() {
   Close();
@@ -1070,7 +1073,8 @@ bool SleepStore::SetMeta(const std::string& key, const std::string& value) {
 
 DownloadHistoryStore::DownloadHistoryStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("DownloadRecord")) {}
+      db_(sql::DatabaseOptions().set_exclusive_locking(false),
+          sql::Database::Tag("DownloadRecord")) {}
 
 DownloadHistoryStore::~DownloadHistoryStore() {
   Close();
@@ -1229,7 +1233,8 @@ bool DownloadHistoryStore::Clear(std::optional<TimestampSec> since,
 
 FaviconStore::FaviconStore(base::FilePath db_path)
     : db_path_(std::move(db_path)),
-      db_(sql::DatabaseOptions{}, sql::Database::Tag("Thumbnail")) {}
+      db_(sql::DatabaseOptions().set_exclusive_locking(false),
+          sql::Database::Tag("Thumbnail")) {}
 
 FaviconStore::~FaviconStore() {
   Close();

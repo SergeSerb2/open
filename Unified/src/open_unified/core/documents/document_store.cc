@@ -189,11 +189,17 @@ std::optional<NoteDocument> DecodeNoteDict(const base::DictValue& d) {
 
 }  // namespace
 
-DocumentStore::DocumentStore(base::FilePath data_root)
-    : data_root_(std::move(data_root)) {}
+DocumentStore::DocumentStore(base::FilePath data_root, bool read_only)
+    : data_root_(std::move(data_root)), read_only_(read_only) {}
 
-DocumentStore::DocumentStore(std::filesystem::path data_root)
-    : data_root_(base::FilePath::FromUTF8Unsafe(data_root.string())) {}
+DocumentStore::DocumentStore(std::filesystem::path data_root, bool read_only)
+    : read_only_(read_only) {
+  // std::filesystem::path::string() is in the native encoding on Windows
+  // (not UTF-8); u8string() is always UTF-8.
+  const auto utf8 = data_root.u8string();
+  data_root_ = base::FilePath::FromUTF8Unsafe(std::string_view(
+      reinterpret_cast<const char*>(utf8.data()), utf8.size()));
+}
 
 DocumentStore::~DocumentStore() = default;
 
@@ -204,7 +210,7 @@ EaselDocument DocumentStore::CreateEasel() const {
   double now = base::Time::Now().InSecondsFSinceUnixEpoch();
   doc.created_at = now;
   doc.modified_at = now;
-  SaveEasel(doc);
+  if (!read_only_) SaveEasel(doc);
   return doc;
 }
 
@@ -231,7 +237,7 @@ NoteDocument DocumentStore::CreateNote() const {
   double now = base::Time::Now().InSecondsFSinceUnixEpoch();
   doc.created_at = now;
   doc.modified_at = now;
-  SaveNote(doc);
+  if (!read_only_) SaveNote(doc);
   return doc;
 }
 
@@ -284,28 +290,36 @@ std::optional<EaselDocument> DocumentStore::LoadEasel(
 
   std::string raw;
   if (!base::ReadFileToStringWithMaxSize(path, &raw, kEaselMaxDocumentBytes)) {
-    // Move refused oversized/unreadable file aside so fresh edits never lose it.
-    std::string refused_name =
-        "document.refused-" +
-        base::NumberToString(base::Time::Now().InMillisecondsSinceUnixEpoch() / 1000) +
-        ".json";
-    base::Move(path, path.DirName().AppendASCII(refused_name));
+    // Move refused oversized/unreadable file aside so fresh edits never lose
+    // it. Read-only stores (legacy import) never touch the disk.
+    if (!read_only_) {
+      std::string refused_name =
+          "document.refused-" +
+          base::NumberToString(
+              base::Time::Now().InMillisecondsSinceUnixEpoch() / 1000) +
+          ".json";
+      base::Move(path, path.DirName().AppendASCII(refused_name));
+    }
     return std::nullopt;
   }
   auto dict = base::JSONReader::ReadDict(raw, base::JSON_PARSE_RFC);
   auto doc = dict ? DecodeEaselDict(*dict) : std::nullopt;
   if (!doc || doc->id != base::ToLowerASCII(easel_id)) {
-    std::string refused_name =
-        "document.refused-" +
-        base::NumberToString(base::Time::Now().InMillisecondsSinceUnixEpoch() / 1000) +
-        ".json";
-    base::Move(path, path.DirName().AppendASCII(refused_name));
+    if (!read_only_) {
+      std::string refused_name =
+          "document.refused-" +
+          base::NumberToString(
+              base::Time::Now().InMillisecondsSinceUnixEpoch() / 1000) +
+          ".json";
+      base::Move(path, path.DirName().AppendASCII(refused_name));
+    }
     return std::nullopt;
   }
   return doc;
 }
 
 bool DocumentStore::SaveEasel(const EaselDocument& doc) const {
+  if (read_only_) return false;
   if (!IsValidDocumentId(doc.id)) return false;
   std::string json;
   if (!base::JSONWriter::Write(EncodeEaselDict(doc), &json)) return false;
@@ -351,6 +365,7 @@ std::vector<EaselIndexEntry> DocumentStore::ListEasels() const {
 }
 
 bool DocumentStore::DeleteEasel(std::string_view easel_id) const {
+  if (read_only_) return false;
   if (!IsValidDocumentId(easel_id)) return false;
   base::FilePath dir = EaselDir(easel_id);
   if (!base::PathExists(dir)) return true;
@@ -361,6 +376,7 @@ std::optional<std::string> DocumentStore::SaveEaselImage(
     std::string_view easel_id,
     const std::vector<uint8_t>& image_bytes,
     std::string_view extension) const {
+  if (read_only_) return std::nullopt;
   if (!IsValidDocumentId(easel_id) || image_bytes.empty() ||
       image_bytes.size() > kEaselMaxImageBytes) {
     return std::nullopt;
@@ -535,6 +551,7 @@ std::optional<NoteDocument> DocumentStore::LoadNote(
 }
 
 bool DocumentStore::SaveNote(const NoteDocument& doc) const {
+  if (read_only_) return false;
   if (!IsValidDocumentId(doc.id)) return false;
   // Preflight text byte length before serializing to avoid excessive allocations.
   if (doc.text.size() > kNoteMaxDocumentBytes) return false;
@@ -577,6 +594,7 @@ std::vector<NoteIndexEntry> DocumentStore::ListNotes() const {
 }
 
 bool DocumentStore::DeleteNote(std::string_view note_id) const {
+  if (read_only_) return false;
   if (!IsValidDocumentId(note_id)) return false;
   bool ok = true;
   base::FilePath path = NotePath(note_id);
@@ -594,6 +612,7 @@ std::optional<std::string> DocumentStore::SaveNoteAsset(
     std::string_view note_id,
     const std::vector<uint8_t>& asset_bytes,
     std::string_view extension) const {
+  if (read_only_) return std::nullopt;
   if (!IsValidDocumentId(note_id) || asset_bytes.empty() ||
       asset_bytes.size() > kNoteMaxAssetBytes) {
     return std::nullopt;

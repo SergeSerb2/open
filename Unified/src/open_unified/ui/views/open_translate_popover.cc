@@ -400,7 +400,8 @@ void OpenTranslatePopoverView::PopulateLanguageListsIfEmpty() {
 }
 
 void OpenTranslatePopoverView::Rebuild() {
-  RemoveAllChildViews();
+  // Clear every child raw_ptr BEFORE the children are destroyed so none
+  // dangles while RemoveAllChildViews() runs.
   title_label_ = nullptr;
   error_label_ = nullptr;
   source_combobox_ = nullptr;
@@ -413,6 +414,7 @@ void OpenTranslatePopoverView::Rebuild() {
   primary_button_ = nullptr;
   secondary_button_ = nullptr;
   options_button_ = nullptr;
+  RemoveAllChildViews();
 
   const std::u16string source_name =
       TranslateLanguageDisplayName(state_.source_lang);

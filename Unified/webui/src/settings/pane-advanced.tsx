@@ -1,6 +1,6 @@
 import type { JSX } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { type AboutInfo, rpc } from '../shared/bridge';
+import { type AboutInfo, type UpdateCheckResult, rpc } from '../shared/bridge';
 import { OpenDoorwayMark } from '../shared/icons';
 import { CloseIcon, CopyIcon, FolderIcon } from '../shared/icons';
 import { useSettings } from './context';
@@ -122,10 +122,12 @@ export function AdvancedPane(): JSX.Element {
 export function AboutPane(): JSX.Element {
   const ctx = useSettings();
   const about = useAbout();
-  const [update, setUpdate] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [busy, setBusy] = useState(false);
   const version = about?.app_version ?? ctx.snapshot?.app_version ?? '';
   const engine = about?.chromium_version ?? ctx.snapshot?.chromium_version ?? '';
+  const updateUrl = update?.status === 'update_available' ? update.download_url || update.release_url : undefined;
+  const safeUpdateUrl = updateUrl && /^https?:\/\//i.test(updateUrl) ? updateUrl : undefined;
 
   return (
     <div class="st-pane">
@@ -142,7 +144,20 @@ export function AboutPane(): JSX.Element {
         )}
       </div>
 
-      {update && <Banner tone="info">{update}</Banner>}
+      {update && (
+        <Banner
+          tone={update.status === 'error' ? 'danger' : 'info'}
+          action={
+            safeUpdateUrl ? (
+              <Btn kind="primary" small onClick={() => void ctx.run(() => rpc('library.openUrl', { url: safeUpdateUrl, new_tab: true }))}>
+                {update.download_url ? 'Download Update' : 'View Release'}
+              </Btn>
+            ) : undefined
+          }
+        >
+          {update.message}
+        </Banner>
+      )}
 
       <Group>
         <Row id="about/updates" label="Updates" help={`Open ${version}`}>
@@ -152,7 +167,7 @@ export function AboutPane(): JSX.Element {
               setBusy(true);
               const res = await ctx.run(() => rpc('settings.about.checkForUpdates', {}));
               setBusy(false);
-              if (res) setUpdate(res.message);
+              if (res) setUpdate(res);
             }}
           >
             Check for Updates

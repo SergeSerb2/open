@@ -166,12 +166,11 @@ void OpenSpacePagerView::SetSpaces(const std::vector<SpaceID>& space_ids) {
       ++it;
     }
   }
-  if (IndexOf(shown_space_id_) < 0) {
-    shown_space_id_ =
-        space_ids_.empty() ? SpaceID() : context_->FocusedSpaceId();
-    if (IndexOf(shown_space_id_) < 0 && !space_ids_.empty()) {
-      shown_space_id_ = space_ids_.front();
-    }
+  const SpaceID focused = context_->FocusedSpaceId();
+  if (!focused.empty() && IndexOf(focused) >= 0) {
+    shown_space_id_ = focused;
+  } else if (IndexOf(shown_space_id_) < 0) {
+    shown_space_id_ = space_ids_.empty() ? SpaceID() : space_ids_.front();
   }
   if (!slide_->is_animating() && !swipe_) {
     const int index = std::max(0, IndexOf(shown_space_id_));
@@ -179,6 +178,12 @@ void OpenSpacePagerView::SetSpaces(const std::vector<SpaceID>& space_ids) {
   }
   if (!shown_space_id_.empty()) {
     GetPage(shown_space_id_);
+    if (!slide_->is_animating() && !swipe_) {
+      const int index = IndexOf(shown_space_id_);
+      if (index >= 0) {
+        SetPagesVisibleInRange(index, index);
+      }
+    }
   }
   InvalidateLayout();
 }

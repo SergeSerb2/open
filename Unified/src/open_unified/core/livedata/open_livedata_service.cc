@@ -24,6 +24,7 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace open_unified {
 
@@ -1101,7 +1102,10 @@ bool OpenLiveDataService::RefreshLiveFolder(const ItemID& folder_id,
                                "application/vnd.github+json");
     request->headers.SetHeader(net::HttpRequestHeaders::kUserAgent,
                                "OpenBrowser/1.0");
-    if (!github_bearer_token_.empty()) {
+    // Never send the GitHub token to anything but the GitHub API over HTTPS
+    // (a Live Folder query may be an arbitrary user-supplied URL).
+    if (!github_bearer_token_.empty() && fetch_url.SchemeIs(url::kHttpsScheme) &&
+        fetch_url.host() == "api.github.com") {
       request->headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
                                  "Bearer " + github_bearer_token_);
     }

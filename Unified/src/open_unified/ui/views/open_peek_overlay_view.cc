@@ -7,8 +7,10 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
@@ -421,8 +423,13 @@ bool OpenPeekOverlayView::PopStack(PeekDismissReason reason) {
   if (popped.wc_delegate) {
     popped.wc_delegate->Detach();
   }
-  // Destroy popped owned_contents cleanly after detaching from WebView.
-  popped.owned_contents.reset();
+  // The WebContents may be closing us from inside its own CloseContents()
+  // call stack, so destroy it asynchronously after detaching from the
+  // WebView and clearing its delegate.
+  if (popped.owned_contents) {
+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(popped.owned_contents));
+  }
 
   if (!stack_.empty()) {
     ShowTopEntry();
@@ -921,7 +928,13 @@ void OpenPeekOverlayView::OnEntryClosed(content::WebContents* contents) {
         if (stack_[i].wc_delegate) {
           stack_[i].wc_delegate->Detach();
         }
+        std::unique_ptr<content::WebContents> closed =
+            std::move(stack_[i].owned_contents);
         stack_.erase(stack_.begin() + static_cast<ptrdiff_t>(i));
+        if (closed) {
+          base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+              FROM_HERE, std::move(closed));
+        }
         SyncNavButtons();
         if (delegate_) {
           delegate_->OnPeekStackChanged(stack_.size());

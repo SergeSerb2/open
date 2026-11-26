@@ -18,6 +18,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/bind_post_task.h"
@@ -131,15 +132,17 @@ DiskSaveOutcome SaveCaptureFileOnIo(base::FilePath data_dir,
   base::ListValue rows;
   if (base::PathExists(index_path)) {
     std::string existing;
-    if (base::ReadFileToStringWithMaxSize(index_path, &existing,
-                                          kMaxCapturesIndexBytes)) {
-      if (auto parsed =
-              base::JSONReader::ReadList(existing, base::JSON_PARSE_RFC)) {
-        rows = std::move(*parsed);
-      } else {
-        // Never overwrite a damaged index.
-        return outcome;
-      }
+    if (!base::ReadFileToStringWithMaxSize(index_path, &existing,
+                                           kMaxCapturesIndexBytes)) {
+      // Oversized or unreadable index: never replace it with a one-row file.
+      return outcome;
+    }
+    if (auto parsed =
+            base::JSONReader::ReadList(existing, base::JSON_PARSE_RFC)) {
+      rows = std::move(*parsed);
+    } else {
+      // Never overwrite a damaged index.
+      return outcome;
     }
   }
 
@@ -155,7 +158,9 @@ DiskSaveOutcome SaveCaptureFileOnIo(base::FilePath data_dir,
                                        ? parsed_url.scheme()
                                        : parsed_url.host())
                                 : std::string());
-    entry.Set("title", title.substr(0, 4096));
+    std::string truncated_title;
+    base::TruncateUTF8ToByteSize(title, 4096, &truncated_title);
+    entry.Set("title", std::move(truncated_title));
     if (!source_url.empty()) {
       entry.Set("sourceURL", source_url);
     }

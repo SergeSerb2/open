@@ -141,6 +141,7 @@ class OpenFindBarView : public views::View,
   void StopFinding();
   int active_ordinal() const { return active_ordinal_; }
   int total() const { return total_; }
+  bool has_result() const { return result_type_ != ResultType::kEmpty; }
 
   // find_in_page::FindResultObserver:
   void OnFindResultAvailable(content::WebContents* web_contents) override;

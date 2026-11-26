@@ -41,8 +41,13 @@ struct NoteIndexEntry {
 // Notes (<root>/Notes/<uuid>.json + <uuid>.assets/<sha256>.<ext>).
 class DocumentStore {
  public:
-  explicit DocumentStore(base::FilePath data_root);
-  explicit DocumentStore(std::filesystem::path data_root);
+  // When |read_only| is true the store NEVER writes, moves, or deletes
+  // anything on disk: malformed or oversized documents are simply skipped and
+  // every mutating call (Create/Save/Delete) fails. Used for importing the
+  // legacy Open data directory, which must stay untouched.
+  explicit DocumentStore(base::FilePath data_root, bool read_only = false);
+  explicit DocumentStore(std::filesystem::path data_root,
+                         bool read_only = false);
   ~DocumentStore();
 
   DocumentStore(const DocumentStore&) = delete;
@@ -105,6 +110,7 @@ class DocumentStore {
 
  private:
   base::FilePath data_root_;
+  bool read_only_ = false;
 };
 
 }  // namespace open_unified

@@ -829,14 +829,21 @@ class OpenPlatformMac final : public OpenPlatform {
         return false;
       }
       if (@available(macOS 12.0, *)) {
-        [[NSWorkspace sharedWorkspace]
-            setDefaultApplicationAtURL:app_url
-                     toOpenURLsWithScheme:@"http"
-                        completionHandler:^(NSError*) {}];
-        [[NSWorkspace sharedWorkspace]
-            setDefaultApplicationAtURL:app_url
-                     toOpenURLsWithScheme:@"https"
-                        completionHandler:^(NSError*) {}];
+        void (^apply)(void) = ^{
+          [[NSWorkspace sharedWorkspace]
+              setDefaultApplicationAtURL:app_url
+                    toOpenURLsWithScheme:@"http"
+                       completionHandler:^(NSError*) {}];
+          [[NSWorkspace sharedWorkspace]
+              setDefaultApplicationAtURL:app_url
+                    toOpenURLsWithScheme:@"https"
+                       completionHandler:^(NSError*) {}];
+        };
+        if ([NSThread isMainThread]) {
+          apply();
+        } else {
+          dispatch_async(dispatch_get_main_queue(), apply);
+        }
         return true;
       }
       return false;

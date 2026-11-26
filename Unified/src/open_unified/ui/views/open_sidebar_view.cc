@@ -492,15 +492,21 @@ class OpenSidebarView::UrlPillView : public views::View,
     OpenSidebarContext* ctx = sidebar_->context_;
     const auto actions =
         ctx->controller()->GetPinnedToolbarActions(ctx->window_id());
+    std::vector<ToolbarButton*> old_extensions;
+    old_extensions.reserve(extensions_.size());
     for (ToolbarButton* b : extensions_) {
-      RemoveChildViewT(b);
+      old_extensions.push_back(b);
     }
     extensions_.clear();
+    for (ToolbarButton* b : old_extensions) {
+      RemoveChildViewT(b);
+    }
     for (const OpenToolbarActionInfo& action : actions) {
+      const size_t index = extensions_.size();
       auto button = std::make_unique<ToolbarButton>(
           ctx,
           base::BindRepeating(&UrlPillView::OnExtensionPressed,
-                              base::Unretained(this), action.id),
+                              base::Unretained(this), action.id, index),
           glyphs::Glyph::kPuzzle, action.tooltip,
           ToolbarButton::Role::kAccessory);
       if (!action.icon.isNull()) {
@@ -670,13 +676,13 @@ class OpenSidebarView::UrlPillView : public views::View,
     intent.anchor_in_screen = site_->GetBoundsInScreen();
     sidebar_->context_->Send(intent);
   }
-  void OnExtensionPressed(const std::string& id) {
+  void OnExtensionPressed(const std::string& id, size_t index) {
     OpenIntent intent = OpenIntent::Of(OpenIntentKind::kRunToolbarAction);
     intent.text = id;
-    for (ToolbarButton* b : extensions_) {
-      if (b->GetVisible() && b->IsMouseHovered()) {
-        intent.anchor_in_screen = b->GetBoundsInScreen();
-      }
+    if (index < extensions_.size()) {
+      intent.anchor_in_screen = extensions_[index]->GetBoundsInScreen();
+    } else {
+      intent.anchor_in_screen = GetBoundsInScreen();
     }
     sidebar_->context_->Send(intent);
   }
@@ -1349,6 +1355,9 @@ class OpenSidebarView::SwitcherStripView : public views::View,
     OpenSidebarContext* ctx = sidebar_->context_;
     const OpenSpaceThemeState& focused = ctx->ThemeStateFor(ctx->FocusedSpaceId());
     const float w = width();
+    if (w <= 0.0f) {
+      return;
+    }
     const float content = ContentWidth();
     const bool fits = content <= w;
     const float x0 = fits ? (w - content) / 2 - 1 : -1 - scroll_x_;
@@ -1387,14 +1396,15 @@ class OpenSidebarView::SwitcherStripView : public views::View,
           Sk(current ? focused.roles.title : focused.roles.bottom_glyph),
           current ? 1.0f : m::bottom_bar::kInactiveIconOpacity, !current);
     }
-    if (fade_left || fade_right) {
-      const float fade = m::bottom_bar::kSwitcherFadeWidth;
+    if ((fade_left || fade_right) && w > 0.0f) {
+      const float fade = std::min(m::bottom_bar::kSwitcherFadeWidth, w * 0.5f);
+      const float stop = fade / w;
       const SkPoint points[4] = {SkPoint::Make(0, 0), SkPoint::Make(fade, 0),
                                  SkPoint::Make(w - fade, 0), SkPoint::Make(w, 0)};
       const SkColor4f colors[4] = {
           fade_left ? SkColors::kTransparent : SkColors::kBlack, SkColors::kBlack,
           SkColors::kBlack, fade_right ? SkColors::kTransparent : SkColors::kBlack};
-      const SkScalar pos[4] = {0, fade / w, 1 - fade / w, 1};
+      const SkScalar pos[4] = {0, stop, 1.0f - stop, 1.0f};
       cc::PaintFlags mask;
       mask.setShader(cc::PaintShader::MakeLinearGradient(points, colors, pos, 4,
                                                          SkTileMode::kClamp));

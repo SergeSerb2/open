@@ -876,7 +876,7 @@ CommandRegistry::CommandRegistry() {
 
   // --- Code-only commands (44) ---
   add(CommandId::kImportArcNotes, "import-arc-notes",
-      "Import Arc Notes Export…", {}, {}, CommandScope::kWindow, false,
+      "Import Notes from Arc…", {}, {}, CommandScope::kWindow, false,
       "always", {"Import Notes", "Arc Notes", "Restore Notes"});
   add(CommandId::kChangeSpaceIcon, "change-space-icon", "Change Space Icon…",
       {}, {}, CommandScope::kWindow, false, "always",

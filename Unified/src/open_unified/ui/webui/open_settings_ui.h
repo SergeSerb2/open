@@ -8,7 +8,9 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -45,6 +47,9 @@ class OpenPreferences {
   // Merged values for |profile_id| (defaults < file < Profile settings).
   base::DictValue Values(const ProfileID& profile_id) const;
   static const base::DictValue& Defaults();
+  // Translates a legacy Swift Open preference key ("open.*") to its
+  // open://settings key, or returns |key| unchanged.
+  static std::string TranslateLegacyKey(std::string_view key);
   // Validates |key| and the type of |value| against the defaults.
   bool Set(const std::string& key,
            const base::Value& value,
@@ -73,6 +78,7 @@ class OpenPreferences {
   bool loading_ = false;
   bool loaded_ = false;
   base::DictValue stored_;
+  std::set<std::string> dirty_keys_;
   std::vector<base::OnceClosure> waiters_;
   base::WeakPtrFactory<OpenPreferences> weak_factory_{this};
 };

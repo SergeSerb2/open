@@ -17,6 +17,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "net/base/isolation_info.h"
+#include "net/base/url_util.h"
 #include "net/storage_access_api/status.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/originating_process_id.h"
@@ -130,7 +131,12 @@ void ChromiumSyncWebSocketClient::StartHandshake() {
   const uint64_t gen = connection_generation_;
 
   GURL url(ws_url_);
-  if (!url.is_valid() || !(url.SchemeIs("ws") || url.SchemeIs("wss"))) {
+  // wss:// is required; plain ws:// is allowed only for loopback servers so
+  // the bearer token never travels in cleartext.
+  const bool secure_or_loopback =
+      url.is_valid() &&
+      (url.SchemeIs("wss") || (url.SchemeIs("ws") && net::IsLocalhost(url)));
+  if (!secure_or_loopback) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(
@@ -283,7 +289,8 @@ void ChromiumSyncWebSocketClient::OnConnectionEstablished(
   writable_ = std::move(writable);
   connected_ = true;
   closing_ = false;
-  backoff_seconds_ = kMinBackoffSeconds;
+  // Backoff is reset only after the server's "connected" frame (see
+  // HandleServerMessage), not on a bare TCP/WebSocket handshake.
 
   readable_watcher_ = std::make_unique<mojo::SimpleWatcher>(
       FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL,
@@ -449,6 +456,7 @@ void ChromiumSyncWebSocketClient::HandleCompletedTextMessage(
     return;
   }
   if (*type == "connected") {
+    backoff_seconds_ = kMinBackoffSeconds;
     delegate_->OnWsConnected(dict->FindInt("serverRevision").value_or(0),
                              dict->FindInt("resetRevision").value_or(0));
   } else if (*type == "sync_available") {

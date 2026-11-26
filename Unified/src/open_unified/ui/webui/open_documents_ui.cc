@@ -27,6 +27,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/uuid.h"
@@ -1608,7 +1609,10 @@ void OpenDocumentsUI::CaptureUrl(const base::DictValue& payload, Reply reply) {
                   [](base::WeakPtr<OpenDocumentsUI> self, std::string doc_id,
                      std::string url_spec, std::string tab_title, Reply reply,
                      const content::CopyFromSurfaceResult& result) {
-                    if (!self) return;
+                    if (!self) {
+                      ReplyError(std::move(reply), "documents UI closed");
+                      return;
+                    }
                     std::vector<uint8_t> png;
                     if (result.has_value() && !result->bitmap.drawsNothing()) {
                       if (auto encoded = gfx::PNGCodec::FastEncodeBGRASkBitmap(
@@ -1616,10 +1620,13 @@ void OpenDocumentsUI::CaptureUrl(const base::DictValue& payload, Reply reply) {
                         png = std::move(*encoded);
                       }
                     }
+                    // Hoisted: argument evaluation order is unspecified, so
+                    // png.empty() must not be read next to std::move(png).
+                    const bool has_png = !png.empty();
                     self->FinishCaptureSession(
                         /*capture_id=*/0, doc_id, url_spec, tab_title,
                         std::move(png),
-                        png.empty() ? "metadata_only" : "tab_snapshot",
+                        has_png ? "tab_snapshot" : "metadata_only",
                         std::move(reply));
                   },
                   weak_factory_.GetWeakPtr(), doc_id, url.spec(),
@@ -1645,7 +1652,10 @@ void OpenDocumentsUI::CaptureUrl(const base::DictValue& payload, Reply reply) {
              std::string doc_id, std::string url_spec, Reply reply,
              std::string title, std::vector<uint8_t> png_bytes,
              std::string source) {
-            if (!self) return;
+            if (!self) {
+              ReplyError(std::move(reply), "documents UI closed");
+              return;
+            }
             self->FinishCaptureSession(capture_id, doc_id, url_spec, title,
                                        std::move(png_bytes), source,
                                        std::move(reply));
@@ -1663,7 +1673,15 @@ void OpenDocumentsUI::FinishCaptureSession(uint64_t capture_id,
                                            const std::string& source,
                                            Reply reply) {
   if (capture_id != 0) {
-    active_captures_.erase(capture_id);
+    // This runs inside the session's own done_ callback; destroy the session
+    // asynchronously instead of from within its own call stack.
+    auto it = active_captures_.find(capture_id);
+    if (it != active_captures_.end()) {
+      std::unique_ptr<UrlCaptureSession> finished = std::move(it->second);
+      active_captures_.erase(it);
+      base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+          FROM_HERE, std::move(finished));
+    }
   }
   const double refreshed_at = NowSec();
   std::string display_title =
@@ -1897,6 +1915,13 @@ void OpenDocumentsUI::ExportImage(const base::DictValue& payload, Reply reply) {
                           base::Base64DecodePolicy::kForgiving) ||
       decoded.empty() || decoded.size() > kMaxUploadBytes) {
     ReplyError(std::move(reply), "invalid base64 PNG data");
+    return;
+  }
+  // Only real PNGs may be written with a .png extension.
+  static constexpr std::string_view kPngMagic("\x89PNG\r\n\x1a\n", 8);
+  if (decoded.size() < kPngMagic.size() ||
+      std::string_view(decoded).substr(0, kPngMagic.size()) != kPngMagic) {
+    ReplyError(std::move(reply), "data is not a PNG image");
     return;
   }
   const std::string title = json::GetString(payload, "title", "Easel");

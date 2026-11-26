@@ -780,14 +780,9 @@ bool RouteExternalUrls(::Profile* profile,
   if (profile && (profile->IsOffTheRecord() || profile->IsGuestSession())) {
     return false;
   }
-  if (source_app_id.has_value() && service->started() &&
-      service->window_controller()) {
-    for (const GURL& url : urls) {
-      service->window_controller()->RouteExternalUrl(url, source_app_id);
-    }
-    return true;
-  }
-  service->RouteExternalUrls(urls);
+  // Always go through OpenBrowserService so open:// deep links, mailto: and
+  // the pre-start queue are handled even when a source app id is present.
+  service->RouteExternalUrls(urls, std::move(source_app_id));
   return true;
 }
 

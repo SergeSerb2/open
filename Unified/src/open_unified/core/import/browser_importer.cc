@@ -4099,7 +4099,7 @@ OpenLegacyImportResult BrowserImporter::ImportOpenLegacyDirectory(
     std::set<std::string> seen_easels;
     std::set<std::string> seen_notes;
     auto scan_docs_root = [&](const base::FilePath& root_dir) {
-      DocumentStore ds(root_dir);
+      DocumentStore ds(root_dir, /*read_only=*/true);
       for (const EaselIndexEntry& entry : ds.ListEasels()) {
         if (!seen_easels.insert(entry.id).second) continue;
         if (auto doc = ds.LoadEasel(entry.id)) {

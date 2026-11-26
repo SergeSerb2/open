@@ -444,9 +444,7 @@ void OpenFindBarView::ContentsChanged(views::Textfield* sender,
   if (field_->HasCompositionText()) {
     return;
   }
-  if (new_contents.empty()) {
-    ClearResult();
-  }
+  ClearResult();
   if (target_) {
     FindInTarget(/*forward=*/true);
     return;
