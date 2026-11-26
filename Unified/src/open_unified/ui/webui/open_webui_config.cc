@@ -336,14 +336,20 @@ OpenWebUIController::OpenWebUIController(content::WebUI* web_ui,
   OpenWebUIMessageHandler* raw = handler.get();
   if (host == kHostSettings) {
     raw->AddDomain(std::make_unique<OpenSettingsUI>(raw));
+    raw->AddDomain(std::make_unique<OpenLibraryUI>(raw));
+    raw->AddDomain(std::make_unique<OpenOnboardingUI>(raw));
   } else if (host == kHostLibrary) {
     raw->AddDomain(std::make_unique<OpenLibraryUI>(raw));
+    raw->AddDomain(std::make_unique<OpenSettingsUI>(raw));
+    raw->AddDomain(std::make_unique<OpenBoostsUI>(raw));
   } else if (host == kHostBoosts) {
     raw->AddDomain(std::make_unique<OpenBoostsUI>(raw));
+    raw->AddDomain(std::make_unique<OpenSettingsUI>(raw));
   } else if (host == kHostEasel || host == kHostNote) {
     raw->AddDomain(std::make_unique<OpenDocumentsUI>(raw));
   } else if (host == kHostOnboarding || host == kHostWelcome) {
     raw->AddDomain(std::make_unique<OpenOnboardingUI>(raw));
+    raw->AddDomain(std::make_unique<OpenSettingsUI>(raw));
   }
   web_ui->AddMessageHandler(std::move(handler));
 }
