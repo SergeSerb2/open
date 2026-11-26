@@ -1164,17 +1164,19 @@ EOF
 
   if gh release view "${TAG}" --repo "${PUBLISH_REPO}" >/dev/null 2>&1; then
     # Safety check: never overwrite or mutate a non-prerelease or Latest release!
-    release_meta="$(gh release view "${TAG}" --repo "${PUBLISH_REPO}" --json isPrerelease,isLatest)"
-    python3 - "${TAG}" "${PUBLISH_REPO}" "${release_meta}" <<'PY'
+    release_meta="$(gh release view "${TAG}" --repo "${PUBLISH_REPO}" --json isPrerelease)"
+    latest_tag="$(gh release view --repo "${PUBLISH_REPO}" --json tagName --jq '.tagName' 2>/dev/null || true)"
+    python3 - "${TAG}" "${PUBLISH_REPO}" "${release_meta}" "${latest_tag}" <<'PY'
 import json
 import sys
 
-tag, repo, raw = sys.argv[1:4]
+tag, repo, raw, latest_tag = sys.argv[1:5]
 meta = json.loads(raw)
-if meta.get("isLatest") or not meta.get("isPrerelease"):
+is_latest = bool(latest_tag) and latest_tag == tag
+if is_latest or not meta.get("isPrerelease"):
     raise SystemExit(
         f"refusing to modify existing release '{tag}' in {repo}: "
-        f"isPrerelease={meta.get('isPrerelease')}, isLatest={meta.get('isLatest')} "
+        f"isPrerelease={meta.get('isPrerelease')}, isLatest={is_latest} "
         "(only pre-releases may be updated by package-mac-dmg.sh)"
     )
 PY
