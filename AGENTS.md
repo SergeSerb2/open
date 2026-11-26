@@ -38,7 +38,7 @@ Installed Arc: 1.172.2 (build 90755) at `/Applications/Arc.app`. The unmodified 
 
 ## Working process
 
-- Before you open a PR, run [docs/review-checklist.md](docs/review-checklist.md) on your change and put the result table in the PR body. A PR gets at most two review rounds; after that, the lead handles small leftovers.
+- Before you open a PR, run [docs/review-checklist.md](docs/review-checklist.md) on your change and put the result table in the PR body. A PR gets at most two independent (lead or agent) review rounds; after that, the lead handles small leftovers. Separately, the automatic Claude Haiku review ([claude-pr-review](https://github.com/SergeSerb2/claude-pr-review)) reviews each PR on open and on up to two later pushes, and sets the advisory `claude-review` status. Wait for that status on the final head, fix real findings in one push per round, and reply with a reason to findings you dismiss. Codex review no longer runs.
 - The engine agent owns the Chromium tree at `~/Developer/open-engine/chromium_git`. Only it edits, patches, or builds that tree. Other agents may work on engine PR branches for Swift, e2e, and docs changes that do not need a tree build.
 - Report a PR ready as soon as it is green. The lead merges green PRs at once, bottom-up for stacked PRs, with merge commits.
 
