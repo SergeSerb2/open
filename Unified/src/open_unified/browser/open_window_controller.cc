@@ -3794,7 +3794,7 @@ void OpenWindowUi::EnsureLibraryDrawer() {
       base::BindRepeating(&OpenWindowUi::HideLibraryDrawer,
                           weak_factory_.GetWeakPtr()));
   auto container = std::make_unique<MinSizeWebContainer>(
-      gfx::Size(320, 400), std::move(web_view));
+      gfx::Size(529, 600), gfx::Size(320, 400), std::move(web_view));
   library_web_view_ = container->web_view();
   library_host_ = std::make_unique<secondary::OverlayWidgetHost>(
       widget(), std::move(container), "OpenLibraryDrawer",
