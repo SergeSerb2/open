@@ -2,7 +2,7 @@
 
 Reviewers use this list. Implementers run it on their own change **before** they open the PR, and put the result in the PR body as a table: item, PASS or N/A, and the evidence (a command, a log line, or a file:line). The items come from real defects that reviews found in Open PRs (round 2 and round 3 findings, 2026-10-25 and 2026-10-26).
 
-A PR gets at most two review rounds. After round 2, the lead fixes or verifies any small leftover finding, or files it in `docs/followups.md`. A third round happens only for a new crash, data-loss, or security finding.
+A PR gets at most two independent review rounds (the automatic Claude review, up to three rounds with the `claude-review` status, is separate and advisory). After round 2, the lead fixes or verifies any small leftover finding, or files it in `docs/followups.md`. A third round happens only for a new crash, data-loss, or security finding.
 
 ## 1. Input and memory limits
 
