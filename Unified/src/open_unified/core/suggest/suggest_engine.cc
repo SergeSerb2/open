@@ -17,6 +17,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
+#include "base/memory/stack_allocated.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -468,9 +469,14 @@ class CalcParser {
   static constexpr int kMaxDepth = 64;
 
   struct ScopedDepth {
+    STACK_ALLOCATED();
+
+   public:
     explicit ScopedDepth(int& depth) : depth_(depth) { ++depth_; }
     ~ScopedDepth() { --depth_; }
     bool ok() const { return depth_ <= kMaxDepth; }
+
+   private:
     int& depth_;
   };
 
