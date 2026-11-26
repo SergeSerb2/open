@@ -254,6 +254,11 @@ void OpenDownloadBridge::AttachProfile(
   AttachProfileInternal(chrome_profile, profile_id, nullptr, history_store);
 }
 
+bool OpenDownloadBridge::HasProfile(::Profile* chrome_profile) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return chrome_profile && bindings_.contains(chrome_profile);
+}
+
 void OpenDownloadBridge::AttachProfileInternal(
     ::Profile* chrome_profile,
     const ProfileID& profile_id,

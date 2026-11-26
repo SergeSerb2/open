@@ -107,6 +107,7 @@ class OpenDownloadBridge : public content::DownloadManager::Observer,
   void AttachProfile(::Profile* chrome_profile,
                      const ProfileID& profile_id,
                      base::SequenceBound<DownloadHistoryStore>* history_store);
+  bool HasProfile(::Profile* chrome_profile) const;
   void DetachProfile(::Profile* chrome_profile);
   void DetachAll();
 

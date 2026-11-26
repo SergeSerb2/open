@@ -590,7 +590,9 @@ class OpenWindowUi : public CommandBarDelegate,
   void PopulatePeekSpaceChoices();
   content::WebContents* FindTargetContents() const;
   find_in_page::FindTabHelper* FindHelper() const;
-  void SetEscapeRegistered(bool registered);
+  enum class EscapePriority { kNone, kNormal, kHigh };
+
+  void SetEscapePriority(EscapePriority priority);
   // Esc is a window accelerator only while an Open overlay shows.
   void UpdateEscapeRegistration();
   bool RunShortcut(CommandId command);
@@ -651,7 +653,7 @@ class OpenWindowUi : public CommandBarDelegate,
   // Find bar.
   std::unique_ptr<secondary::OverlayWidgetHost> find_host_;
   raw_ptr<OpenFindBarView> find_bar_ = nullptr;
-  bool escape_registered_ = false;
+  EscapePriority escape_priority_ = EscapePriority::kNone;
 
   // Toasts.
   std::unique_ptr<secondary::OverlayWidgetHost> toast_host_;

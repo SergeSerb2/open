@@ -1288,11 +1288,15 @@ void OpenWindowController::OnOnboardingCompleted() {
       if (focused) {
         if (const Space* space = model.FindSpace(*focused)) {
           for (const SidebarNode& node : space->today) {
-            if (const Tab* tab = node.as_tab();
-                tab && GURL(tab->url).host() == webui::kHostWelcome) {
-              bridge->SelectNode(tab->id);
-              found_welcome = true;
-              break;
+            if (const Tab* tab = node.as_tab()) {
+              const GURL tab_url(tab->url);
+              const std::string_view host = tab_url.host();
+              if (host == webui::kHostWelcome ||
+                  host == webui::InternalHost(webui::kHostWelcome)) {
+                bridge->SelectNode(tab->id);
+                found_welcome = true;
+                break;
+              }
             }
           }
         }
@@ -2729,6 +2733,8 @@ void OpenWindowController::OnTreeChanged(const TreeChange& change) {
         for (OpenViewObserver& observer : view_observers_) {
           observer.OnTabLiveStateChanged(change.node_id);
         }
+      } else {
+        NotifyWindowStateChanged();
       }
       if (change.parent.kind == NodeParentKind::kFavorites) {
         for (OpenViewObserver& observer : view_observers_) {
@@ -3453,7 +3459,7 @@ OpenWindowUi::~OpenWindowUi() {
   if (views::FocusManager* focus_manager = browser_view_->GetFocusManager()) {
     focus_manager->UnregisterAccelerators(this);
   }
-  escape_registered_ = false;
+  escape_priority_ = EscapePriority::kNone;
   switcher_monitor_.reset();
   widget_observation_.Reset();
   panel_observation_.Reset();
@@ -6688,6 +6694,7 @@ void OpenWindowUi::OnModelChanged() {
   const bool switched = last_focused_space_.has_value() && focused.has_value();
   last_focused_space_ = focused;
   UpdateThemeForLiveSurfaces();
+  UpdatePanel();
   if (!switched) {
     return;
   }
@@ -6902,7 +6909,7 @@ void OpenWindowUi::RegisterAccelerators() {
   }
   focus_manager->UnregisterAccelerators(this);
   accelerator_commands_.clear();
-  escape_registered_ = false;
+  escape_priority_ = EscapePriority::kNone;
   const CommandRegistry& commands = service()->commands();
   for (const CommandDefinition* def : commands.WindowAcceleratorCommands()) {
     if (!def || def->is_reserved) {
@@ -6924,27 +6931,37 @@ void OpenWindowUi::RegisterAccelerators() {
   UpdateEscapeRegistration();
 }
 
-void OpenWindowUi::SetEscapeRegistered(bool registered) {
+void OpenWindowUi::SetEscapePriority(EscapePriority priority) {
   views::FocusManager* focus_manager = browser_view_->GetFocusManager();
-  if (!focus_manager || registered == escape_registered_) {
+  if (!focus_manager || priority == escape_priority_) {
     return;
   }
   const ui::Accelerator escape(ui::VKEY_ESCAPE, ui::EF_NONE);
-  if (registered) {
-    focus_manager->RegisterAccelerator(
-        escape, ui::AcceleratorManager::kHighPriority, this);
-  } else {
+  if (escape_priority_ != EscapePriority::kNone) {
     focus_manager->UnregisterAccelerator(escape, this);
   }
-  escape_registered_ = registered;
+  if (priority == EscapePriority::kHigh) {
+    focus_manager->RegisterAccelerator(
+        escape, ui::AcceleratorManager::kHighPriority, this);
+  } else if (priority == EscapePriority::kNormal) {
+    focus_manager->RegisterAccelerator(
+        escape, ui::AcceleratorManager::kNormalPriority, this);
+  }
+  escape_priority_ = priority;
 }
 
 void OpenWindowUi::UpdateEscapeRegistration() {
-  // Library drawer is excluded so Escape reaches the Library WebUI first for
-  // layered menus/dialogs/search (the page calls library.close or falls
-  // through to LibraryDrawerWebView::HandleKeyboardEvent).
-  SetEscapeRegistered(command_bar_shown() || peek_shown() ||
-                      boost_editor_shown() || find_bar_shown());
+  if (command_bar_shown() || peek_shown() || boost_editor_shown() ||
+      find_bar_shown()) {
+    SetEscapePriority(EscapePriority::kHigh);
+  } else if (library_drawer_shown()) {
+    // Normal priority lets the Library WebUI consume Escape first for layered
+    // menus/dialogs/search, while unhandled Escape or Escape sent to the main
+    // window dismisses the drawer cleanly.
+    SetEscapePriority(EscapePriority::kNormal);
+  } else {
+    SetEscapePriority(EscapePriority::kNone);
+  }
 }
 
 bool OpenWindowUi::RunShortcut(CommandId command) {
@@ -6991,7 +7008,8 @@ bool OpenWindowUi::HandleFindCommand(CommandId command) {
 
 bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_ESCAPE &&
-      accelerator.modifiers() == ui::EF_NONE && escape_registered_) {
+      accelerator.modifiers() == ui::EF_NONE &&
+      escape_priority_ != EscapePriority::kNone) {
     if (command_bar_shown()) {
       if (command_bar_->HasCompositionText()) {
         return false;

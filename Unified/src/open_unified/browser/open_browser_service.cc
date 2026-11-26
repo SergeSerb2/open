@@ -872,7 +872,27 @@ void OpenBrowserService::Shutdown() {
 
 void OpenBrowserService::StartProfiles() {
   for (const Profile& profile : model_->profiles()) {
-    ProfileServicesFor(profile.id);
+    ProfileServices* s = ProfileServicesFor(profile.id);
+    if (!s || !s->chrome_profile) {
+      continue;
+    }
+    // A startup window (hook 0002 between PreBrowserStart and PostBrowserStart)
+    // may have materialized ProfileServices before Start() constructed
+    // download_bridge_ and adblock_observer_. Ensure every Profile is attached
+    // and observed now.
+    if (download_bridge_ && !download_bridge_->HasProfile(s->chrome_profile)) {
+      download_bridge_->AttachProfile(s->chrome_profile, profile.id,
+                                      &s->downloads);
+      OpenDownloadBridge::ApplyDownloadPreferences(
+          s->chrome_profile, profile.settings.download_directory,
+          profile.settings.ask_where_to_save_each_file);
+    }
+    if (adblock_observer_) {
+      if (OpenAdBlockProfileService* adblock = s->adblock()) {
+        adblock->SetProfileId(profile.id);
+        adblock_observer_->Observe(adblock);
+      }
+    }
   }
 }
 

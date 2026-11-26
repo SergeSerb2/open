@@ -27,8 +27,8 @@
       <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_E2YWSCWR_JS" file="assets/onboarding-e2ywScWr.js" resource_path="assets/onboarding-e2ywScWr.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_X_HQHUR_CSS" file="assets/onboarding-x--Hqhur.css" resource_path="assets/onboarding-x--Hqhur.css" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_RPC_CGKJRBCC_CSS" file="assets/rpc-CGkjRBCC.css" resource_path="assets/rpc-CGkjRBCC.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_CJ63QW6L_JS" file="assets/settings-CJ63qw6L.js" resource_path="assets/settings-CJ63qw6L.js" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_DM50BLXS_CSS" file="assets/settings-DM50bLXs.css" resource_path="assets/settings-DM50bLXs.css" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_DZGSRCDU_CSS" file="assets/settings-DZGsrcdU.css" resource_path="assets/settings-DZGsrcdU.css" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_PAWDWUP3_JS" file="assets/settings-PawdWUP3.js" resource_path="assets/settings-PawdWUP3.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_WELCOME_BGIJSW_N_CSS" file="assets/welcome-BGijsw_n.css" resource_path="assets/welcome-BGijsw_n.css" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_WELCOME_BJKEDR0H_JS" file="assets/welcome-BJKedR0h.js" resource_path="assets/welcome-BJKedR0h.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_BOOSTS_HTML" file="boosts.html" resource_path="boosts.html" use_base_dir="true" type="BINDATA" />
