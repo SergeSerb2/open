@@ -746,7 +746,7 @@ std::optional<DetectedMeetingLink> OpenLiveDataService::ClassifyMeetingUrl(
     return std::nullopt;
   }
   const std::string host = base::ToLowerASCII(url.host());
-  const std::string path = url.path();
+  const std::string path(url.path());
   const std::vector<std::string> parts = base::SplitString(
       path, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 

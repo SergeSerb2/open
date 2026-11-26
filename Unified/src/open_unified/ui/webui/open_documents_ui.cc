@@ -31,6 +31,7 @@
 #include "base/timer/timer.h"
 #include "base/uuid.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -1665,7 +1666,8 @@ void OpenDocumentsUI::FinishCaptureSession(uint64_t capture_id,
     active_captures_.erase(capture_id);
   }
   const double refreshed_at = NowSec();
-  std::string display_title = title.empty() ? GURL(url).host() : title;
+  std::string display_title =
+      title.empty() ? std::string(GURL(url).host()) : title;
 
   if (png_bytes.empty()) {
     ReplyOk(std::move(reply),

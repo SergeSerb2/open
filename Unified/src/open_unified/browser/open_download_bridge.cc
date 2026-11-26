@@ -632,7 +632,7 @@ bool OpenDownloadBridge::RevealInFolder(const std::string& id) {
   }
   TrackedDownload* tracked = it->second.get();
   if (tracked->item && tracked->item->CanShowInFolder()) {
-    tracked->item->ShowDownloadInFolder();
+    tracked->item->ShowDownloadInShell();
     return true;
   }
   if (tracked->record.target_path.empty() || !tracked->chrome_profile) {

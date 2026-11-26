@@ -299,7 +299,7 @@ PageTranslateState OpenTranslateController::GetPageTranslateState(
   }
 
   const GURL url = web_contents->GetLastCommittedURL();
-  state.host = NormalizeHost(url.host());
+  state.host = NormalizeHost(std::string(url.host()));
   const bool off_the_record =
       web_contents->GetBrowserContext() &&
       web_contents->GetBrowserContext()->IsOffTheRecord();

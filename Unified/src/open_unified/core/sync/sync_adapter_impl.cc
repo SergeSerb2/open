@@ -15,6 +15,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/string_view_util.h"
@@ -96,7 +97,7 @@ bool WriteAssetAtomicIfChanged(const base::FilePath& path,
 // caps, global ID uniqueness, and preserving live TabLiveState + active URLs
 // of tabs that already hold live WebContents.
 struct WorkspaceNodeMerger {
-  const BrowserModel* model = nullptr;
+  raw_ptr<const BrowserModel> model = nullptr;
   std::set<ItemID> used_ids;
   size_t built_count = 0;
 

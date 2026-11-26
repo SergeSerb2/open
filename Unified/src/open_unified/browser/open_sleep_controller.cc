@@ -83,26 +83,6 @@ MediaStreamCaptureIndicator* CaptureIndicator() {
 
 }  // namespace
 
-OpenSleepController::OpenSleepController(OpenBrowserService* service)
-    : service_(service) {
-  // scheduler_ is a member: its callbacks never outlive this controller
-  // (and WeakPtr cannot bind methods that return a value).
-  SleepCallbacks callbacks;
-  callbacks.on_freeze = base::BindRepeating(&OpenSleepController::DoFreeze,
-                                            base::Unretained(this));
-  callbacks.on_discard = base::BindRepeating(&OpenSleepController::DoDiscard,
-                                             base::Unretained(this));
-  callbacks.on_destroy = base::BindRepeating(&OpenSleepController::DoDestroy,
-                                             base::Unretained(this));
-  callbacks.on_restore = base::BindRepeating(&OpenSleepController::DoRestore,
-                                             base::Unretained(this));
-  scheduler_.SetCallbacks(std::move(callbacks));
-}
-
-OpenSleepController::~OpenSleepController() {
-  Shutdown();
-}
-
 // Separate helper to avoid inheriting from base::CheckedObserver twice
 // alongside OpenTabBridge::Observer.
 class OpenSleepController::MemoryPressureBridge final
@@ -127,6 +107,26 @@ class OpenSleepController::MemoryPressureBridge final
   raw_ptr<OpenSleepController> owner_;
   base::MemoryPressureListenerRegistration registration_;
 };
+
+OpenSleepController::OpenSleepController(OpenBrowserService* service)
+    : service_(service) {
+  // scheduler_ is a member: its callbacks never outlive this controller
+  // (and WeakPtr cannot bind methods that return a value).
+  SleepCallbacks callbacks;
+  callbacks.on_freeze = base::BindRepeating(&OpenSleepController::DoFreeze,
+                                            base::Unretained(this));
+  callbacks.on_discard = base::BindRepeating(&OpenSleepController::DoDiscard,
+                                             base::Unretained(this));
+  callbacks.on_destroy = base::BindRepeating(&OpenSleepController::DoDestroy,
+                                             base::Unretained(this));
+  callbacks.on_restore = base::BindRepeating(&OpenSleepController::DoRestore,
+                                             base::Unretained(this));
+  scheduler_.SetCallbacks(std::move(callbacks));
+}
+
+OpenSleepController::~OpenSleepController() {
+  Shutdown();
+}
 
 void OpenSleepController::Start() {
   if (started_) {

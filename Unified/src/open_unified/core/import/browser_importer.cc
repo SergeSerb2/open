@@ -27,6 +27,8 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_span.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/string_view_util.h"
@@ -205,7 +207,8 @@ void AppendUtf8CodePoint(uint32_t cp, std::string* out) {
 // or mutated.
 class SafeSqliteTempCopy {
  public:
-  SafeSqliteTempCopy() = default;
+  SafeSqliteTempCopy()
+      : db_(sql::DatabaseOptions{}, sql::Database::Tag("History")) {}
   ~SafeSqliteTempCopy() = default;
 
   bool Open(const base::FilePath& source_db, bool run_quick_check = true) {
@@ -261,8 +264,7 @@ class SafeSqliteTempCopy {
 
  private:
   base::ScopedTempDir temp_dir_;
-  sql::Database db_{sql::DatabaseOptions{},
-                    sql::Database::Tag("BrowserImporter")};
+  sql::Database db_;
 };
 
 int CountJsonStringKeyValue(std::string_view text,
@@ -639,7 +641,7 @@ class BinaryPlistParser {
     if (bytes_.size() < 40 || bytes_.size() > kMaxPlistBytes) {
       return std::nullopt;
     }
-    if (base::as_string_view(bytes_.first(8)) != "bplist00") {
+    if (base::as_string_view(bytes_.first<8>()) != "bplist00") {
       return std::nullopt;
     }
 
@@ -717,7 +719,7 @@ class BinaryPlistParser {
       return std::nullopt;
     }
     struct Guard {
-      std::set<uint64_t>* set;
+      raw_ptr<std::set<uint64_t>> set;
       uint64_t idx;
       ~Guard() { set->erase(idx); }
     } guard{&visiting_, obj_idx};
@@ -872,7 +874,7 @@ class BinaryPlistParser {
     }
   }
 
-  base::span<const uint8_t> bytes_;
+  base::raw_span<const uint8_t> bytes_;
   uint8_t offset_int_size_ = 0;
   uint8_t object_ref_size_ = 0;
   uint64_t num_objects_ = 0;
@@ -1056,7 +1058,7 @@ class XmlPlistParser {
 // ============================================================================
 
 struct ByteCursor {
-  base::span<const uint8_t> data;
+  base::raw_span<const uint8_t> data;
   size_t offset = 0;
 
   explicit ByteCursor(base::span<const uint8_t> bytes) : data(bytes) {}
@@ -1279,7 +1281,7 @@ template <typename Visitor>
 bool VisitLevelDbBlockEntries(const std::vector<uint8_t>& block,
                               Visitor&& visit) {
   if (block.size() < 4) return false;
-  ByteCursor trailer(base::span<const uint8_t>(block).last(4));
+  ByteCursor trailer(base::span<const uint8_t>(block).last<4>());
   uint64_t restarts = 0;
   if (!trailer.ReadFixedLE(4, &restarts) || restarts == 0 ||
       restarts > (block.size() - 4) / 4) {
@@ -1319,7 +1321,7 @@ template <typename Visitor>
 bool VisitLevelDbTable(const std::vector<uint8_t>& bytes, Visitor&& visit) {
   if (bytes.size() < 48) return false;
   const auto all = base::span<const uint8_t>(bytes);
-  ByteCursor footer(all.last(48));
+  ByteCursor footer(all.last<48>());
   uint64_t dummy = 0;
   size_t index_offset = 0;
   size_t index_size = 0;
@@ -1342,7 +1344,7 @@ bool VisitLevelDbTable(const std::vector<uint8_t>& bytes, Visitor&& visit) {
     }
     auto block_slice = all.subspan(off, sz);
     uint8_t kind = all[off + sz];
-    ByteCursor cc(all.subspan(off + sz + 1, 4));
+    ByteCursor cc(all.subspan(off + sz + 1, size_t{4}));
     uint64_t checksum = 0;
     if (!cc.ReadFixedLE(4, &checksum)) return false;
     uint32_t raw_crc = Crc32c(block_slice, 0, false, kind, true);
@@ -1507,7 +1509,7 @@ bool ReadLevelDbDirectoryCopy(
             [&](const std::vector<uint8_t>& k,
                 const std::vector<uint8_t>& v) -> bool {
               if (k.size() < 8) return false;
-              ByteCursor tc(base::span<const uint8_t>(k).last(8));
+              ByteCursor tc(base::span<const uint8_t>(k).last<8>());
               uint64_t seq = 0;
               if (!tc.ReadFixedLE(8, &seq)) return false;
               uint64_t kind = seq & 0xFFu;

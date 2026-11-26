@@ -39,6 +39,7 @@
 #include "components/find_in_page/find_types.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/context_menu_params.h"
@@ -3642,7 +3643,7 @@ ExtensionHostWindow OpenWindowUi::MakeExtensionHostWindow() const {
   host.browser = browser_view_ ? browser_view_->browser() : nullptr;
   host.widget = widget();
   host.active_contents = base::BindRepeating(
-      [](base::WeakPtr<OpenWindowUi> self) -> content::WebContents* {
+      [](base::WeakPtr<const OpenWindowUi> self) -> content::WebContents* {
         return self ? self->ActiveWebContents() : nullptr;
       },
       weak_factory_.GetWeakPtr());
@@ -7159,7 +7160,8 @@ ExtensionHostWindow OpenLittleOpenController::MakeExtensionHostWindow() const {
   }
   host.widget = window_ ? window_->widget() : nullptr;
   host.active_contents = base::BindRepeating(
-      [](base::WeakPtr<OpenLittleOpenController> self) -> content::WebContents* {
+      [](base::WeakPtr<const OpenLittleOpenController> self)
+          -> content::WebContents* {
         return self ? self->contents_.get() : nullptr;
       },
       weak_factory_.GetWeakPtr());

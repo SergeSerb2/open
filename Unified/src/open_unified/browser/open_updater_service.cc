@@ -44,7 +44,7 @@ constexpr net::NetworkTrafficAnnotationTag kUpdaterTrafficAnnotation =
             "No user data or cookies. Sends only an Open-Unified/<version> "
             "User-Agent header."
           destination: OTHER
-          destination_other: "GitHub Releases API (api.github.com)"
+          destination_other: "GitHub Releases API at api.github.com"
           internal {
             contacts {
               email: "engineering@openbrowser.dev"

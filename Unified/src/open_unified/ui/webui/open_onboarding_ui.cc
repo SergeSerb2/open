@@ -966,23 +966,24 @@ void OpenOnboardingUI::ProbeBrowsers(const base::DictValue& payload,
                 }
                 const bool legacy =
                     browser.family == BrowserFamily::kOpenLegacy;
-                base::DictValue source;
-                source.Set("id", id)
-                    .Set("browser_id", browser.id)
-                    .Set("browser_name", browser.name)
-                    .Set("profile_name", profile.name)
-                    .Set("family", FamilyName(browser.family))
-                    .Set("is_default", profile.is_default)
-                    .Set("recommended", legacy)
-                    .Set("read_only", true)
-                    .Set("access_denied", profile.access_denied)
-                    .Set("bookmarks_count", profile.bookmark_count)
-                    .Set("history_count", profile.history_count)
-                    .Set("extensions_count", 0)
-                    .Set("passwords_count", 0)
-                    .Set("favorites_count", 0)
-                    .Set("supported_kinds", std::move(kinds))
-                    .Set("imported_kinds", std::move(done));
+                base::DictValue source =
+                    base::DictValue()
+                        .Set("id", id)
+                        .Set("browser_id", browser.id)
+                        .Set("browser_name", browser.name)
+                        .Set("profile_name", profile.name)
+                        .Set("family", FamilyName(browser.family))
+                        .Set("is_default", profile.is_default)
+                        .Set("recommended", legacy)
+                        .Set("read_only", true)
+                        .Set("access_denied", profile.access_denied)
+                        .Set("bookmarks_count", profile.bookmark_count)
+                        .Set("history_count", profile.history_count)
+                        .Set("extensions_count", 0)
+                        .Set("passwords_count", 0)
+                        .Set("favorites_count", 0)
+                        .Set("supported_kinds", std::move(kinds))
+                        .Set("imported_kinds", std::move(done));
                 if (!profile.access_error.empty()) {
                   source.Set("access_error", profile.access_error);
                 }
