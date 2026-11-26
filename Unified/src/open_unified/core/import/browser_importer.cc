@@ -4397,15 +4397,17 @@ ImportReceipt BrowserImporter::ApplyArcImportToModel(
   }
 
   // Map Arc's "Default" profile to the model's existing Default profile when present.
+  // Store the ID by value because CreateProfile() may reallocate model->profiles_.
   std::map<ProfileID, ProfileID> profile_map;
-  const Profile* existing_default = model->DefaultProfile();
+  const ProfileID existing_default_id =
+      model->DefaultProfile() ? model->DefaultProfile()->id : ProfileID();
 
   for (const Profile& arc_prof : arc_result.profiles) {
     if (base::EqualsCaseInsensitiveASCII(arc_prof.data_directory_name,
                                          "default") &&
-        existing_default) {
-      profile_map[arc_prof.id] = existing_default->id;
-      Profile* target = model->FindProfile(existing_default->id);
+        !existing_default_id.empty()) {
+      profile_map[arc_prof.id] = existing_default_id;
+      Profile* target = model->FindProfile(existing_default_id);
       if (target) {
         for (const Tab& fav : arc_prof.favorites) {
           if (!model->HasNode(fav.id)) {
@@ -4429,6 +4431,9 @@ ImportReceipt BrowserImporter::ApplyArcImportToModel(
       if (Profile* created = model->FindProfile(tmp_id)) {
         std::string safe_dir = created->data_directory_name;
         *created = arc_prof;
+        if (created->id.empty()) {
+          created->id = tmp_id;
+        }
         created->data_directory_name = safe_dir;
         profile_map[arc_prof.id] = created->id;
         receipt.created_profile_ids.push_back(created->id);
@@ -4438,7 +4443,10 @@ ImportReceipt BrowserImporter::ApplyArcImportToModel(
   }
 
   ProfileID fallback_pid =
-      existing_default ? existing_default->id : model->profiles().front().id;
+      !existing_default_id.empty()
+          ? existing_default_id
+          : (model->profiles().empty() ? ProfileID()
+                                       : model->profiles().front().id);
 
   // Insert Arc Spaces with nested folders, splits, pinned, and today tabs.
   for (const Space& arc_space : arc_result.spaces) {
@@ -4572,13 +4580,14 @@ ImportReceipt BrowserImporter::ApplyOpenLegacyImportToModel(
   }
 
   std::map<ProfileID, ProfileID> profile_map;
-  const Profile* existing_default = model->DefaultProfile();
+  const ProfileID existing_default_id =
+      model->DefaultProfile() ? model->DefaultProfile()->id : ProfileID();
 
   for (const Profile& lp : legacy_result.profiles) {
     if (base::EqualsCaseInsensitiveASCII(lp.data_directory_name, "default") &&
-        existing_default) {
-      profile_map[lp.id] = existing_default->id;
-      if (Profile* target = model->FindProfile(existing_default->id)) {
+        !existing_default_id.empty()) {
+      profile_map[lp.id] = existing_default_id;
+      if (Profile* target = model->FindProfile(existing_default_id)) {
         for (const Tab& fav : lp.favorites) {
           if (!model->HasNode(fav.id)) {
             target->favorites.push_back(fav);
@@ -4600,6 +4609,9 @@ ImportReceipt BrowserImporter::ApplyOpenLegacyImportToModel(
       if (Profile* created = model->FindProfile(tmp_id)) {
         std::string safe_dir = created->data_directory_name;
         *created = lp;
+        if (created->id.empty()) {
+          created->id = tmp_id;
+        }
         created->data_directory_name = safe_dir;
         profile_map[lp.id] = created->id;
         receipt.created_profile_ids.push_back(created->id);
@@ -4609,7 +4621,10 @@ ImportReceipt BrowserImporter::ApplyOpenLegacyImportToModel(
   }
 
   ProfileID fallback_pid =
-      existing_default ? existing_default->id : model->profiles().front().id;
+      !existing_default_id.empty()
+          ? existing_default_id
+          : (model->profiles().empty() ? ProfileID()
+                                       : model->profiles().front().id);
 
   for (const Space& ls : legacy_result.spaces) {
     ProfileID target_pid = profile_map.contains(ls.profile_id)

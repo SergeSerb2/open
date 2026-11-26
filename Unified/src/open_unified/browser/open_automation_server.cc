@@ -681,7 +681,10 @@ class LoadWaiter {
     content::WebContents* contents =
         service ? service->tab_bridge()->WebContentsForTab(tab_id_) : nullptr;
     if (contents && !contents->IsLoading() &&
-        !contents->GetLastCommittedURL().is_empty()) {
+        !contents->GetController().NeedsReload() &&
+        !contents->GetLastCommittedURL().is_empty() &&
+        contents->GetPrimaryMainFrame() &&
+        contents->GetPrimaryMainFrame()->IsRenderFrameLive()) {
       Finish(base::Value(PageState(contents).Set("tab", tab_id_)));
       return;
     }
@@ -2133,7 +2136,16 @@ void OpenAutomationServer::RegisterCommands() {
           // Automation builds only: OpenAdBlockProfileService writes the
           // generation files synchronously.
           base::ScopedAllowBlockingForTesting allow_blocking;
-          adblock->SetEnabledListIds(ids);
+          bool has_catalog_id = false;
+          for (const std::string& id : ids) {
+            if (OpenAdBlockProfileService::FindCatalogList(id) != nullptr) {
+              has_catalog_id = true;
+              break;
+            }
+          }
+          if (has_catalog_id) {
+            adblock->SetEnabledListIds(ids);
+          }
           published = adblock->PublishGeneration(pairs);
         }
         if (!published) {

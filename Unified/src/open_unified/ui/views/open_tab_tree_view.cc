@@ -234,6 +234,11 @@ class RenameField : public views::Textfield,
     SetBackgroundEnabled(false);
   }
 
+  void CancelSilently() {
+    callback_.Reset();
+    weak_factory_.InvalidateWeakPtrs();
+  }
+
   void Finish(bool commit) {
     if (!callback_) {
       return;
@@ -248,7 +253,15 @@ class RenameField : public views::Textfield,
   // views::Textfield:
   void OnBlur() override {
     views::Textfield::OnBlur();
-    Finish(true);
+    if (!callback_) {
+      return;
+    }
+    // Defer commit out of focus/view-removal dispatch so removing a row during
+    // Reconcile() never synchronously re-enters BrowserModel/OpenViewObserver
+    // iteration.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&RenameField::Finish,
+                                  weak_factory_.GetWeakPtr(), true));
   }
 
   // views::TextfieldController:
@@ -270,6 +283,7 @@ class RenameField : public views::Textfield,
 
  private:
   CommitCallback callback_;
+  base::WeakPtrFactory<RenameField> weak_factory_{this};
 };
 
 BEGIN_METADATA(RenameField)
@@ -336,6 +350,11 @@ class OpenTabTreeView::HeaderView : public views::View,
   explicit HeaderView(OpenTabTreeView* tree) : tree_(tree) {
     set_context_menu_controller(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kHeading);
+  }
+  ~HeaderView() override {
+    if (rename_) {
+      rename_->CancelSilently();
+    }
   }
 
   void Refresh() {
@@ -597,6 +616,12 @@ class OpenTabTreeView::RowView : public views::View,
   void Refresh() {
     UpdateAccessibility();
     SchedulePaint();
+  }
+
+  void CancelRename() {
+    if (rename_) {
+      rename_->CancelSilently();
+    }
   }
 
   void BeginRename() {
@@ -1676,6 +1701,7 @@ void OpenTabTreeView::Reconcile(bool animate) {
   for (auto& [key, view] : row_views_) {
     RowView* row = view;
     view = nullptr;
+    row->CancelRename();
     list_->ForgetRow(row);
     list_->RemoveChildViewT(row);
   }

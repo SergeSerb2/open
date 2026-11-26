@@ -1324,7 +1324,8 @@ void OpenAdBlockProfileService::OnDiskStateLoaded(DiskState state) {
   // EasyPrivacy, resources.json) into the profile cache, compile off-thread,
   // and publish generation 1 automatically so real ads are blocked out of the
   // box without requiring any manual Settings action.
-  if (!state.has_current_generation && !is_off_the_record_) {
+  if (!state.has_current_generation && !is_off_the_record_ &&
+      compile_seq_ == 0) {
     RecompileEnabledLists(/*force_reseed_bundled=*/false,
                           /*wipe_cache_first=*/false,
                           /*auto_download_missing=*/true);
@@ -2223,6 +2224,9 @@ bool OpenAdBlockProfileService::PublishGeneration(
     }
     return false;
   }
+  // Supersede any in-flight RecompileEnabledLists() so an older background
+  // compile cannot later overwrite this newly published generation.
+  ++compile_seq_;
   io_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&WriteGenerationOnBlockingSequence, lists_dir_,
