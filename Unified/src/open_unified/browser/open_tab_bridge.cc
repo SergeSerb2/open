@@ -254,6 +254,7 @@ void OpenTabBridge::Shutdown() {
   browser_collection_observation_.Reset();
   ClearObservedStrips();
   windows_.clear();
+  browsers_.clear();
   contents_.clear();
 }
 
@@ -282,10 +283,11 @@ void OpenTabBridge::AdoptStartupBrowsers() {
           return true;
         }
         WindowBrowsers& wb = windows_[main];
-        if (!wb.by_profile.contains(*profile)) {
+        const bool primary = !wb.by_profile.contains(*profile);
+        if (primary) {
           wb.by_profile[*profile] = browser;
-          AddObservedStrip(browser->GetTabStripModel());
         }
+        TrackBrowser(browser, main, *profile, primary);
         // Chromium's startup tabs (NTP, session restore, command-line URLs)
         // are not Open's; Open's model is the session.
         TabStripModel* strip = browser->GetTabStripModel();
@@ -339,8 +341,44 @@ BrowserWindowInterface* OpenTabBridge::EnsureBrowser(
     return nullptr;
   }
   wb.by_profile[profile_id] = browser;
-  AddObservedStrip(browser->GetTabStripModel());
+  TrackBrowser(browser, window_id, profile_id, /*primary=*/true);
   return browser;
+}
+
+void OpenTabBridge::TrackBrowser(BrowserWindowInterface* browser,
+                                 const WindowID& window_id,
+                                 const ProfileID& profile_id,
+                                 bool primary) {
+  ManagedBrowser& managed = browsers_[browser];
+  managed.window = window_id;
+  managed.profile = profile_id;
+  managed.primary = managed.primary || primary;
+  AddObservedStrip(browser->GetTabStripModel());
+}
+
+void OpenTabBridge::ResyncBrowserLater(BrowserWindowInterface* browser) {
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<OpenTabBridge> self,
+             base::WeakPtr<BrowserWindowInterface> browser) {
+            if (self && browser && self->ProfileOfBrowser(browser.get())) {
+              self->ResyncBrowser(browser.get());
+            }
+          },
+          weak_factory_.GetWeakPtr(), browser->GetWeakPtr()));
+}
+
+void OpenTabBridge::ForgetContents(const ItemID& tab_id,
+                                   content::WebContents* contents) {
+  auto it = contents_.find(tab_id);
+  if (it == contents_.end() || it->second != contents) {
+    return;  // Already forgotten, or the tab is backed by another page.
+  }
+  for (Observer& observer : observers_) {
+    observer.OnTabContentsDetaching(tab_id, contents);
+  }
+  contents_.erase(tab_id);
 }
 
 void OpenTabBridge::ShowBrowserForSpace(const WindowID& window_id,
@@ -405,8 +443,12 @@ void OpenTabBridge::RunScheduledResync() {
 }
 
 void OpenTabBridge::ResyncAll() {
-  for (auto& [window_id, wb] : windows_) {
-    for (auto& [profile_id, browser] : wb.by_profile) {
+  std::vector<BrowserWindowInterface*> browsers;
+  for (const auto& [browser, managed] : browsers_) {
+    browsers.push_back(browser);
+  }
+  for (BrowserWindowInterface* browser : browsers) {
+    if (browsers_.contains(browser)) {
       ResyncBrowser(browser);
     }
   }
@@ -433,32 +475,46 @@ std::vector<ItemID> OpenTabBridge::StripOrderFor(
 }
 
 void OpenTabBridge::ResyncBrowser(BrowserWindowInterface* browser) {
-  std::optional<ProfileID> profile = ProfileOfBrowser(browser);
-  if (!profile) {
+  auto managed = browsers_.find(browser);
+  if (managed == browsers_.end()) {
     return;
   }
+  const bool primary = managed->second.primary;
+  const ProfileID profile = managed->second.profile;
   base::AutoReset<bool> applying(&applying_, true);
   TabStripModel* strip = browser->GetTabStripModel();
-  const std::vector<ItemID> order = StripOrderFor(*profile);
+  const std::vector<ItemID> order = StripOrderFor(profile);
   const std::set<ItemID> wanted(order.begin(), order.end());
 
-  // 1. Close pages whose sidebar item is gone.
-  EnsureNonEmpty(browser);
+  // 1. Close pages whose sidebar item is gone. The tab stays tracked until
+  // TabStripModel reports the removal (kRemoved, handled even while
+  // |applying_|): a beforeunload handler may delay or cancel the close.
+  // Only the primary Browser keeps its window alive with an empty-state
+  // page; another window of the Profile closes with its last page.
+  if (primary) {
+    EnsureNonEmpty(browser);
+  }
+  std::vector<content::WebContents*> doomed;
   for (int i = strip->count() - 1; i >= 0; --i) {
     content::WebContents* wc = strip->GetWebContentsAt(i);
     std::optional<ItemID> id = TabIdForWebContents(wc);
-    if (!id || wanted.contains(*id)) {
+    if (id && !wanted.contains(*id)) {
+      doomed.push_back(wc);
+    }
+  }
+  for (content::WebContents* wc : doomed) {
+    const int index = strip->GetIndexOfWebContents(wc);
+    if (index == TabStripModel::kNoTab) {
       continue;
     }
-    for (Observer& observer : observers_) {
-      observer.OnTabContentsDetaching(*id, wc);
-    }
-    contents_.erase(*id);
-    if (strip->count() == 1) {
+    if (primary && strip->count() == 1) {
       EnsureNonEmpty(browser);
     }
     strip->CloseWebContentsAt(strip->GetIndexOfWebContents(wc),
                               TabCloseTypes::CLOSE_NONE);
+  }
+  if (!primary) {
+    return;  // Extra windows keep Chromium's order.
   }
 
   // 2. Order loaded pages like the sidebar (chrome.tabs indices).
@@ -663,26 +719,25 @@ void OpenTabBridge::UnloadTab(const ItemID& tab_id) {
   }
   content::WebContents* wc = it->second;
   BrowserWindowInterface* browser = BrowserForTab(tab_id);
-  for (Observer& observer : observers_) {
-    observer.OnTabContentsDetaching(tab_id, wc);
+  if (browser) {
+    base::AutoReset<bool> applying(&applying_, true);
+    TabStripModel* strip = browser->GetTabStripModel();
+    if (browsers_[browser].primary) {
+      EnsureNonEmpty(browser);
+    }
+    const int index = strip->GetIndexOfWebContents(wc);
+    if (index != TabStripModel::kNoTab) {
+      // kRemoved (handled while |applying_|) forgets the page.
+      strip->DetachAndDeleteWebContentsAt(index);
+    }
   }
-  contents_.erase(it);
+  ForgetContents(tab_id, wc);  // No-op when kRemoved already did it.
   model_util::UpdateLive(service_->model(), tab_id, [](TabLiveState& live) {
     live.has_web_content = false;
     live.is_loading = false;
     live.is_audible = false;
     live.sleep_phase = SleepPhase::kSleeping;
   });
-  if (!browser) {
-    return;
-  }
-  base::AutoReset<bool> applying(&applying_, true);
-  TabStripModel* strip = browser->GetTabStripModel();
-  EnsureNonEmpty(browser);
-  const int index = strip->GetIndexOfWebContents(wc);
-  if (index != TabStripModel::kNoTab) {
-    strip->DetachAndDeleteWebContentsAt(index);
-  }
 }
 
 // --- Commands ----------------------------------------------------------------
@@ -851,23 +906,28 @@ void OpenTabBridge::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
-  if (applying_ || !started_) {
+  if (!started_) {
     return;
   }
   BrowserWindowInterface* browser = nullptr;
-  for (auto& [window_id, wb] : windows_) {
-    for (auto& [profile_id, candidate] : wb.by_profile) {
-      if (candidate->GetTabStripModel() == tab_strip_model) {
-        browser = candidate;
-      }
+  for (const auto& [candidate, managed] : browsers_) {
+    if (candidate->GetTabStripModel() == tab_strip_model) {
+      browser = candidate;
+      break;
     }
   }
   if (!browser) {
     return;
   }
 
+  // Tracking (contents_, OnTabContentsDetaching/Attached) follows every
+  // removal and replacement, also the bridge's own (|applying_|); only
+  // model mutations are suppressed while the bridge applies the model.
   switch (change.type()) {
     case TabStripModelChange::kInserted:
+      if (applying_) {
+        break;
+      }
       for (const auto& inserted : change.GetInsert()->contents) {
         content::WebContents* wc = inserted.contents;
         if (!IsEmptyState(wc) && !TabIdForWebContents(wc)) {
@@ -881,17 +941,12 @@ void OpenTabBridge::OnTabStripModelChanged(
         if (!id) {
           continue;
         }
-        for (Observer& observer : observers_) {
-          observer.OnTabContentsDetaching(*id, removed.contents);
-        }
-        if (auto it = contents_.find(*id);
-            it != contents_.end() && it->second == removed.contents) {
-          contents_.erase(it);
-        }
+        ForgetContents(*id, removed.contents);
         // A window closing (or browser shutdown) keeps the sidebar intact;
         // only a single page closing (window.close(), chrome.tabs.remove,
         // Chromium's own close commands) closes the sidebar item.
-        if (removed.remove_reason == TabRemovedReason::kDeleted &&
+        if (!applying_ &&
+            removed.remove_reason == TabRemovedReason::kDeleted &&
             !tab_strip_model->closing_all()) {
           OnChromiumClosedTab(removed.contents);
         }
@@ -913,21 +968,17 @@ void OpenTabBridge::OnTabStripModelChanged(
     case TabStripModelChange::kMoved:
       // The sidebar order is canonical; a chrome.tabs.move or drag is put
       // back after the notification (no TabStripModel re-entry).
-      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              [](base::WeakPtr<OpenTabBridge> self,
-                 BrowserWindowInterface* browser) {
-                if (self && self->ProfileOfBrowser(browser)) {
-                  self->ResyncBrowser(browser);
-                }
-              },
-              weak_factory_.GetWeakPtr(), base::Unretained(browser)));
+      if (!applying_) {
+        ResyncBrowserLater(browser);
+      }
       break;
     case TabStripModelChange::kSelectionOnly:
       break;
   }
 
+  if (applying_) {
+    return;
+  }
   if (selection.active_tab_changed() && selection.new_contents) {
     std::optional<ItemID> id = TabIdForWebContents(selection.new_contents);
     std::optional<WindowID> window_id = WindowOfBrowser(browser);
@@ -998,15 +1049,7 @@ void OpenTabBridge::AdoptChromiumTab(BrowserWindowInterface* browser,
     observer.OnTabContentsAttached(id, contents);
   }
   // Move it to its sidebar position once the insert notification is over.
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](base::WeakPtr<OpenTabBridge> self,
-                        BrowserWindowInterface* browser) {
-                       if (self && self->ProfileOfBrowser(browser)) {
-                         self->ResyncBrowser(browser);
-                       }
-                     },
-                     weak_factory_.GetWeakPtr(), base::Unretained(browser)));
+  ResyncBrowserLater(browser);
 }
 
 void OpenTabBridge::OnChromiumClosedTab(content::WebContents* contents) {
@@ -1017,6 +1060,16 @@ void OpenTabBridge::OnChromiumClosedTab(content::WebContents* contents) {
   base::AutoReset<bool> applying(&applying_, true);
   // Archiving goes through BrowserModel's ArchiveSink.
   service_->model().CloseTab(*id);
+  // Pinned tabs and Favorites stay in the sidebar without a page: reset
+  // their live state so the row shows them unloaded (as UnloadTab()).
+  if (service_->model().FindNode(*id)) {
+    model_util::UpdateLive(service_->model(), *id, [](TabLiveState& live) {
+      live.has_web_content = false;
+      live.is_loading = false;
+      live.is_audible = false;
+      live.sleep_phase = SleepPhase::kSleeping;
+    });
+  }
 }
 
 void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
@@ -1034,11 +1087,13 @@ void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
   if (!profile) {
     return;
   }
-  WindowBrowsers& wb = windows_[service_->MainWindowId()];
-  if (!wb.by_profile.contains(*profile)) {
+  const WindowID main = service_->MainWindowId();
+  WindowBrowsers& wb = windows_[main];
+  const bool primary = !wb.by_profile.contains(*profile);
+  if (primary) {
     wb.by_profile[*profile] = browser;
   }
-  AddObservedStrip(browser->GetTabStripModel());
+  TrackBrowser(browser, main, *profile, primary);
 }
 
 void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
@@ -1047,6 +1102,7 @@ void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
       return entry.second == browser;
     });
   }
+  browsers_.erase(browser);
   RemoveObservedStrip(browser->GetTabStripModel());
 }
 
@@ -1171,12 +1227,10 @@ BrowserWindowInterface* OpenTabBridge::BrowserForTab(
   if (!wc) {
     return nullptr;
   }
-  for (const auto& [window_id, wb] : windows_) {
-    for (const auto& [profile_id, browser] : wb.by_profile) {
-      if (browser->GetTabStripModel()->GetIndexOfWebContents(wc) !=
-          TabStripModel::kNoTab) {
-        return browser;
-      }
+  for (const auto& [browser, managed] : browsers_) {
+    if (browser->GetTabStripModel()->GetIndexOfWebContents(wc) !=
+        TabStripModel::kNoTab) {
+      return browser;
     }
   }
   return nullptr;
@@ -1208,26 +1262,16 @@ OpenTabBridge::LoadedTabs() const {
 
 std::optional<WindowID> OpenTabBridge::WindowOfBrowser(
     BrowserWindowInterface* browser) const {
-  for (const auto& [window_id, wb] : windows_) {
-    for (const auto& [profile_id, candidate] : wb.by_profile) {
-      if (candidate == browser) {
-        return window_id;
-      }
-    }
-  }
-  return std::nullopt;
+  auto it = browsers_.find(browser);
+  return it == browsers_.end() ? std::nullopt
+                               : std::optional<WindowID>(it->second.window);
 }
 
 std::optional<ProfileID> OpenTabBridge::ProfileOfBrowser(
     BrowserWindowInterface* browser) const {
-  for (const auto& [window_id, wb] : windows_) {
-    for (const auto& [profile_id, candidate] : wb.by_profile) {
-      if (candidate == browser) {
-        return profile_id;
-      }
-    }
-  }
-  return std::nullopt;
+  auto it = browsers_.find(browser);
+  return it == browsers_.end() ? std::nullopt
+                               : std::optional<ProfileID>(it->second.profile);
 }
 
 }  // namespace open_unified

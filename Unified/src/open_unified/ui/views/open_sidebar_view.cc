@@ -1085,6 +1085,11 @@ class OpenSidebarView::SwitcherStripView : public views::View,
   }
 
   // views::View:
+  void RemovedFromWidget() override {
+    // The widget's compositor may die after this view leaves it.
+    reveal_->SetCompositor(nullptr);
+  }
+
   void OnPaint(gfx::Canvas* canvas) override {
     OpenSidebarContext* ctx = sidebar_->context_;
     const OpenSpaceThemeState& focused = ctx->ThemeStateFor(ctx->FocusedSpaceId());

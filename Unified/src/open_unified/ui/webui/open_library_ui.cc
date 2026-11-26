@@ -206,7 +206,8 @@ void OpenLibraryUI::GetArchive(const base::DictValue& payload, Reply reply) {
 void OpenLibraryUI::RestoreArchived(const base::DictValue& payload,
                                     Reply reply) {
   const std::string id = json::GetString(payload, "id");
-  ProfileServices* ps = ServicesFor(profile_id());
+  // The row's Profile (Library lists every Profile's Archive).
+  ProfileServices* ps = ServicesFor(ProfileFromPayload(payload));
   if (!ps || id.empty()) {
     ReplyError(std::move(reply), "no such item");
     return;
@@ -278,7 +279,8 @@ void OpenLibraryUI::OpenDownload(const base::DictValue& payload,
                                  Reply reply) {
   const std::string id = json::GetString(payload, "id");
   const bool reveal = json::GetBool(payload, "reveal", false);
-  ProfileServices* ps = ServicesFor(profile_id());
+  // The download's Profile (Library lists every Profile's downloads).
+  ProfileServices* ps = ServicesFor(ProfileFromPayload(payload));
   if (!ps || id.empty()) {
     ReplyError(std::move(reply), "no such download");
     return;

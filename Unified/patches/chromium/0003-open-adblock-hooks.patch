@@ -82,64 +82,75 @@ index db67331..edaa22a 100644
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -815,6 +815,9 @@
+@@ -815,6 +815,12 @@
  #include "chrome/common/request_header_integrity/request_header_integrity_url_loader_throttle.h"  // nogncheck crbug.com/40147906
  #endif
  
 +// open_unified hook 0003-include begin
++#include "open_unified/buildflags.h"
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +#include "open_unified/browser/open_chromium_hooks.h"  // nogncheck
++#endif
 +// open_unified hook 0003-include end
  #include "base/win/windows_h_disallowed.h"
  
  using blink::mojom::EffectiveConnectionType;
-@@ -6798,6 +6801,11 @@
+@@ -6798,6 +6804,13 @@
      network::mojom::URLLoaderFactoryOverridePtr* factory_override,
      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
      bool is_for_network_service) {
 +  // open_unified hook 0003-url-loader-factory begin
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +  open_unified::hooks::MaybeProxyURLLoaderFactoryForAdBlock(
 +      browser_context, frame, render_process_id, type, request_initiator,
 +      isolation_info, factory_builder);
++#endif
 +  // open_unified hook 0003-url-loader-factory end
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
    auto* web_request_api =
        extensions::BrowserContextKeyedAPIFactory<extensions::WebRequestAPI>::Get(
-@@ -6949,6 +6957,11 @@
+@@ -6949,6 +6962,13 @@
  
  bool ChromeContentBrowserClient::WillInterceptWebSocket(
      content::RenderFrameHost* frame) {
 +  // open_unified hook 0003-intercept-websocket begin
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +  if (open_unified::hooks::WillInterceptWebSocket(frame)) {
 +    return true;
 +  }
++#endif
 +  // open_unified hook 0003-intercept-websocket end
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
    if (!frame) {
      return false;
-@@ -6994,6 +7007,13 @@
+@@ -6994,6 +7014,15 @@
      mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
          handshake_client,
      content::ContentBrowserClient::WebSocketOptions options) {
 +  // open_unified hook 0003-create-websocket begin
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +  if (open_unified::hooks::InterceptCreateWebSocket(
 +          this, frame, factory, url, site_for_cookies, user_agent,
 +          handshake_client, options)) {
 +    return;
 +  }
++#endif
 +  // open_unified hook 0003-create-websocket end
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
    // TODO(crbug.com/40195467): Request w/o a frame also should be proxied.
    if (!frame) {
-@@ -7018,6 +7038,13 @@
+@@ -7018,6 +7047,15 @@
      mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
          handshake_client,
      WillCreateWebTransportCallback callback) {
 +  // open_unified hook 0003-web-transport begin
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +  if (open_unified::hooks::InterceptWillCreateWebTransport(
 +          this, process_id, frame_routing_id, url, initiator_origin,
 +          handshake_client, callback)) {
 +    return;
 +  }
++#endif
 +  // open_unified hook 0003-web-transport end
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
    DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -147,22 +158,27 @@ diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/ch
 diff --git a/chrome/browser/chrome_content_browser_client_receiver_bindings.cc b/chrome/browser/chrome_content_browser_client_receiver_bindings.cc
 --- a/chrome/browser/chrome_content_browser_client_receiver_bindings.cc
 +++ b/chrome/browser/chrome_content_browser_client_receiver_bindings.cc
-@@ -60,6 +60,9 @@
+@@ -60,6 +60,12 @@
  #include "printing/buildflags/buildflags.h"
  #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
  #include "third_party/widevine/cdm/buildflags.h"
 +// open_unified hook 0003-include begin
++#include "open_unified/buildflags.h"
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +#include "open_unified/browser/open_chromium_hooks.h"  // nogncheck
++#endif
 +// open_unified hook 0003-include end
  
  #if BUILDFLAG(IS_ANDROID)
  #include "chrome/browser/plugins/plugin_observer_android.h"
-@@ -227,6 +230,9 @@
+@@ -227,6 +233,11 @@
      service_manager::BinderRegistry* registry,
      blink::AssociatedInterfaceRegistry* associated_registry,
      content::RenderProcessHost* render_process_host) {
 +  // open_unified hook 0003-expose-interfaces begin
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +  open_unified::hooks::ExposeInterfacesToRenderer(registry, render_process_host);
++#endif
 +  // open_unified hook 0003-expose-interfaces end
    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
        content::GetUIThreadTaskRunner({});
@@ -170,23 +186,28 @@ diff --git a/chrome/browser/chrome_content_browser_client_receiver_bindings.cc b
 diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
 --- a/chrome/renderer/chrome_content_renderer_client.cc
 +++ b/chrome/renderer/chrome_content_renderer_client.cc
-@@ -190,6 +190,9 @@
+@@ -190,6 +190,12 @@
  #include "ui/base/webui/jstemplate_builder.h"
  #include "url/origin.h"
  #include "v8/include/v8-isolate.h"
 +// open_unified hook 0003-include begin
++#include "open_unified/buildflags.h"
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +#include "open/adblock/renderer/open_adblock_renderer_agent.h"  // nogncheck
++#endif
 +// open_unified hook 0003-include end
  
  #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
      BUILDFLAG(IS_CHROMEOS)
-@@ -651,6 +654,10 @@
+@@ -651,6 +657,12 @@
  
  void ChromeContentRendererClient::RenderFrameCreated(
      content::RenderFrame* render_frame) {
 +  // open_unified hook 0003-renderer-agent begin
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
 +  // Deletes itself with the frame (content::RenderFrameObserver).
 +  new open_engine::OpenAdBlockRendererAgent(render_frame);
++#endif
 +  // open_unified hook 0003-renderer-agent end
    ChromeRenderFrameObserver* render_frame_observer =
        new ChromeRenderFrameObserver(render_frame, web_cache_impl_.get());

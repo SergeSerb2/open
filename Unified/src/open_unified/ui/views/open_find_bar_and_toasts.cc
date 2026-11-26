@@ -175,8 +175,10 @@ gfx::Size OpenFindBarView::CalculatePreferredSize(
   // Preferred width 300 at low priority: never wider than the anchor.
   int width = find_bar_metrics::kWidth;
   if (available_size.width().is_bounded()) {
-    width =
-        std::min(width, available_size.width().value() - GetInsets().width());
+    // Never negative, even when the anchor is narrower than the insets.
+    width = std::max(
+        0, std::min(width,
+                    available_size.width().value() - GetInsets().width()));
   }
   return gfx::Size(width + GetInsets().width(),
                    find_bar_metrics::kHeight + GetInsets().height());

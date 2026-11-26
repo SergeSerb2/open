@@ -220,11 +220,13 @@ source_set("open_unified_browser") {
     "//components/favicon/core",
     "//components/find_in_page",
     "//components/input",
+    "//components/javascript_dialogs",
     "//components/keyed_service/content",
     "//components/sessions",
     "//components/tabs:public",
     "//components/vector_icons",
     "//components/web_cache/browser",
+    "//components/web_modal",
     "//content/public/browser",
     "//content/public/common",
     "//extensions/browser",
@@ -253,7 +255,11 @@ source_set("open_unified_browser") {
     "//url",
   ]
   if (is_win) {
-    libs = [ "ws2_32.lib" ]
+    libs = [
+      # Owner-only DACL of automation.token.
+      "advapi32.lib",
+      "ws2_32.lib",
+    ]
   }
   if (is_mac) {
     frameworks = [ "AppKit.framework" ]

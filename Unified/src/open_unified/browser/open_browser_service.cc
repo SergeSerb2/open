@@ -4,15 +4,21 @@
 
 #include "open_unified/browser/open_browser_service.h"
 
+#include <algorithm>
 #include <filesystem>
+#include <set>
+#include <string_view>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -20,7 +26,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/storage_partition.h"
 #include "open_unified/browser/open_boost_controller.h"
 #include "open_unified/browser/open_extension_bridge.h"
 #include "open_unified/browser/open_sleep_controller.h"
@@ -39,6 +44,7 @@
 #include "open_unified/core/sync/sync_engine.h"
 #include "open_unified/ui/webui/open_ipc_contract.h"
 #include "open_unified/ui/webui/open_webui_config.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if BUILDFLAG(OPEN_ENABLE_AUTOMATION)
 #include "open_unified/browser/open_automation_server.h"
@@ -79,10 +85,45 @@ void OpenStore(const base::SequenceBound<Store>& store) {
 
 namespace {
 
+// Local directory names of Profiles that arrive through Sync. A remote
+// payload's dataDirectoryName is never trusted (path traversal, collisions
+// with another Profile's Chromium directory): it is reduced to
+// [A-Za-z0-9 _-]{1,64}, "Default" (any case) stays reserved for the first
+// local Profile, and a name already taken gets " 2", " 3", ...
+constexpr size_t kMaxProfileDirectoryLength = 64;
+
+std::string SanitizeProfileDirectoryName(std::string_view raw,
+                                         const std::set<std::string>& taken) {
+  std::string name;
+  for (char c : raw) {
+    if (base::IsAsciiAlphaNumeric(c) || c == ' ' || c == '_' || c == '-') {
+      name.push_back(c);
+    }
+  }
+  name = std::string(base::TrimString(name, " ", base::TRIM_ALL));
+  if (name.size() > kMaxProfileDirectoryLength) {
+    name.resize(kMaxProfileDirectoryLength);
+    name = std::string(base::TrimString(name, " ", base::TRIM_TRAILING));
+  }
+  if (name.empty() || base::ToLowerASCII(name) == "default") {
+    name = "Profile";
+  }
+  std::string candidate = name;
+  for (int n = 2; taken.contains(base::ToLowerASCII(candidate)); ++n) {
+    const std::string suffix = " " + base::NumberToString(n);
+    std::string stem = name.substr(
+        0, std::min(name.size(), kMaxProfileDirectoryLength - suffix.size()));
+    candidate = std::string(base::TrimString(stem, " ", base::TRIM_TRAILING)) +
+                suffix;
+  }
+  return candidate;
+}
+
+// The app-wide SyncDataAdapter: one Open Account carries every Profile's
+// workspace (Spaces of all Profiles), as on macOS Open.
 class OpenSyncDataAdapter final : public SyncDataAdapter {
  public:
-  OpenSyncDataAdapter(BrowserModel* model, base::FilePath state_dir)
-      : model_(model), state_dir_(std::move(state_dir)) {}
+  explicit OpenSyncDataAdapter(BrowserModel* model) : model_(model) {}
   ~OpenSyncDataAdapter() override = default;
 
   SyncLocalBundle CollectLocalData(
@@ -118,30 +159,75 @@ class OpenSyncDataAdapter final : public SyncDataAdapter {
   }
 
   SyncApplyOutcome ApplyRemoteData(
-      const SyncRemoteBundle& /*bundle*/,
+      const SyncRemoteBundle& bundle,
       SyncApplyMode /*mode*/,
       const SyncCategorySettings& /*categories*/) override {
-    return SyncApplyOutcome{};
+    SyncApplyOutcome outcome;
+    if (!model_) {
+      return outcome;
+    }
+    for (const SyncRemoteRecord& record : bundle.records) {
+      if (record.collection != SyncCollection::kWorkspaceProfile ||
+          record.deleted || !record.payload_json) {
+        continue;
+      }
+      std::optional<base::DictValue> dict =
+          SyncCollectionCodecs::DecodeJsonDict(*record.payload_json);
+      std::optional<Profile> remote =
+          dict ? SyncCollectionCodecs::DecodeProfile(*dict) : std::nullopt;
+      if (!remote) {
+        outcome.warnings.push_back("workspace.profile " + record.record_id +
+                                   ": unreadable payload");
+        continue;
+      }
+      const base::DictValue* fields = dict->FindDict("profile");
+      const std::string* raw_dir =
+          (fields ? fields : &*dict)->FindString("dataDirectoryName");
+      const std::string local_dir = LocalDirectoryFor(
+          remote->id, raw_dir ? std::string_view(*raw_dir)
+                              : std::string_view(remote->name));
+      VLOG(1) << "Open sync: remote Profile " << remote->id
+              << " maps to local directory \"" << local_dir << "\"";
+    }
+    return outcome;
   }
 
   bool PrepareLocalBackup(const base::FilePath& backup_dir) override {
     return base::CreateDirectory(backup_dir);
   }
 
+  // The local Chromium directory name for a Profile id: the local Profile's
+  // own when it exists, else a sanitized unique name kept for this session
+  // (the model gains synced Profiles through these names).
+  std::string LocalDirectoryFor(const ProfileID& id, std::string_view raw) {
+    if (const Profile* local = model_->FindProfile(id)) {
+      return local->data_directory_name;
+    }
+    if (auto it = remote_dirs_.find(id); it != remote_dirs_.end()) {
+      return it->second;
+    }
+    std::set<std::string> taken = {"default"};
+    for (const Profile& profile : model_->profiles()) {
+      taken.insert(base::ToLowerASCII(profile.data_directory_name));
+    }
+    for (const auto& [remote_id, dir] : remote_dirs_) {
+      taken.insert(base::ToLowerASCII(dir));
+    }
+    std::string dir = SanitizeProfileDirectoryName(raw, taken);
+    remote_dirs_.emplace(id, dir);
+    return dir;
+  }
+
  private:
   raw_ptr<BrowserModel> model_;
-  base::FilePath state_dir_;
+  std::map<ProfileID, std::string> remote_dirs_;
 };
 
 }  // namespace
 
 ProfileServices::ProfileServices() = default;
 
-ProfileServices::~ProfileServices() {
-  if (sync) {
-    sync->Shutdown();
-  }
-}
+ProfileServices::~ProfileServices() = default;
 
 OpenAdBlockProfileService* ProfileServices::adblock() const {
   return chrome_profile
@@ -199,6 +285,10 @@ void OpenBrowserService::LoadOrCreateState() {
   const base::FilePath state_dir = user_data_dir_.AppendASCII(kStateDirName);
   base::CreateDirectory(state_dir);
   snapshot_store_ = std::make_unique<SnapshotStore>(user_data_dir_);
+  // browser.json is serialized on the UI thread and written on Open's file
+  // sequence (BLOCK_SHUTDOWN): debounced saves and the shutdown save never
+  // block BrowserThread::UI.
+  snapshot_store_->SetIoTaskRunner(file_runner_);
   std::vector<std::string> repairs;
   std::string error;
   model_ = snapshot_store_->Load(&repairs, &error);
@@ -233,6 +323,7 @@ void OpenBrowserService::Start() {
   started_ = true;
 
   StartProfiles();
+  StartSync();
   ConfigureSyncFromCommandLine();
 
   tab_bridge_ = std::make_unique<OpenTabBridge>(this);
@@ -256,6 +347,7 @@ void OpenBrowserService::Start() {
   }
 
   MaybeStartAutomationServer();
+  FlushPendingExternalUrls();
 }
 
 void OpenBrowserService::Shutdown() {
@@ -270,10 +362,17 @@ void OpenBrowserService::Shutdown() {
   if (sleep_controller_) {
     sleep_controller_->Shutdown();
   }
+  // Serialized here, written on |file_runner_| (BLOCK_SHUTDOWN: the write
+  // completes before the process exits; the UI thread does not wait).
   std::string error;
   if (!snapshot_store_->SaveNow(*model_, &error)) {
     LOG(ERROR) << "Open: browser.json not saved at shutdown: " << error;
   }
+  if (sync_) {
+    sync_->Shutdown();
+  }
+  sync_.reset();
+  sync_adapter_.reset();
   window_controller_->Shutdown();
   boost_controller_.reset();
   sleep_controller_.reset();
@@ -283,7 +382,9 @@ void OpenBrowserService::Shutdown() {
   tab_bridge_.reset();
   // SequenceBound posts each store's destruction to its runner
   // (BLOCK_SHUTDOWN), so pending writes finish.
+  profile_observations_.RemoveAllObservations();
   profiles_.clear();
+  pending_external_urls_.clear();
 }
 
 void OpenBrowserService::StartProfiles() {
@@ -311,6 +412,9 @@ ProfileServices* OpenBrowserService::ProfileServicesFor(const ProfileID& id) {
   const Profile* profile = model_->FindProfile(id);
   if (!profile) {
     return nullptr;
+  }
+  if (destroying_profile_) {
+    return nullptr;  // Never reload a Profile from its destruction.
   }
   // Synchronous for Profiles present at startup (the first window needs
   // them); Profiles created later go through CreateProfile() (async).
@@ -366,32 +470,13 @@ std::unique_ptr<ProfileServices> OpenBrowserService::CreateProfileServices(
              }));
   s->documents.emplace(s->store_runner, profile_dir);
 
-  s->sync_adapter = std::make_unique<OpenSyncDataAdapter>(
-      model_.get(), s->state_dir);
-  s->sync = std::make_unique<SyncEngine>(
-      ToStdPath(s->state_dir.AppendASCII("Sync")), model_.get(),
-      OpenPlatform::Get()->CreateSecretStore(s->state_dir),
-      chrome_profile->GetDefaultStoragePartition()
-          ->GetURLLoaderFactoryForBrowserProcess());
-  s->sync->SetDataAdapter(s->sync_adapter.get());
-  s->sync->SetStatusObserver(base::BindRepeating(
-      [](base::WeakPtr<OpenBrowserService> self, const SyncStatusInfo& info) {
-        if (!self) {
-          return;
-        }
-        self->BroadcastEvent(
-            webui::kEventSyncStatusChanged,
-            base::Value(base::DictValue()
-                            .Set("signed_in", info.signed_in)
-                            .Set("state", info.state)
-                            .Set("server_url", info.server_url)
-                            .Set("revision",
-                                 static_cast<double>(info.revision))));
-      },
-      weak_factory_.GetWeakPtr()));
-  s->sync->StartIfSignedIn();
-
   s->extensions = std::make_unique<OpenExtensionBridge>(this, chrome_profile);
+  if (!profile_observations_.IsObservingSource(chrome_profile)) {
+    profile_observations_.AddObservation(chrome_profile);
+  }
+  if (window_controller_) {
+    window_controller_->ObserveExtensionBridge(s->extensions.get());
+  }
   return s;
 }
 
@@ -447,6 +532,46 @@ OpenViewController* OpenBrowserService::view_controller() {
 OpenExtensionBridge* OpenBrowserService::extension_bridge() {
   ProfileServices* services = ProfileServicesFor(ActiveProfileId());
   return services ? services->extensions.get() : nullptr;
+}
+
+std::vector<OpenExtensionBridge*> OpenBrowserService::AllExtensionBridges() {
+  std::vector<OpenExtensionBridge*> bridges;
+  for (const auto& [id, services] : profiles_) {
+    if (services->extensions) {
+      bridges.push_back(services->extensions.get());
+    }
+  }
+  return bridges;
+}
+
+void OpenBrowserService::OnProfileWillBeDestroyed(::Profile* profile) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (profile_observations_.IsObservingSource(profile)) {
+    profile_observations_.RemoveObservation(profile);
+  }
+  auto it = std::find_if(profiles_.begin(), profiles_.end(),
+                         [profile](const auto& entry) {
+                           return entry.second->chrome_profile == profile;
+                         });
+  if (it == profiles_.end()) {
+    return;
+  }
+  base::AutoReset<raw_ptr<::Profile>> destroying(&destroying_profile_,
+                                                 profile);
+  const ProfileID id = it->first;
+  std::unique_ptr<ProfileServices> services = std::move(it->second);
+  profiles_.erase(it);
+  if (window_controller_ && services->extensions) {
+    window_controller_->UnobserveExtensionBridge(services->extensions.get());
+  }
+  // Stores go to their sequence for destruction; the extension bridge drops
+  // its ToolbarActionsModel / ExtensionRegistry observations while those
+  // KeyedServices still exist.
+  services.reset();
+  if (started_ && id == recent_history_profile_) {
+    // The command bar must not keep rows of a Profile that is gone.
+    suggest_->SetRecentHistory({});
+  }
 }
 
 void OpenBrowserService::CreateProfile(
@@ -678,6 +803,39 @@ void OpenBrowserService::MaybeStartAutomationServer() {
 #endif
 }
 
+void OpenBrowserService::StartSync() {
+  if (sync_) {
+    return;
+  }
+  // One engine for the whole app, rooted in <user data>/State/Sync. Its
+  // credentials use a secret-store account key derived from that directory,
+  // so two user-data directories (or test profiles) never share a login.
+  // Network: the browser process's own loader factory (no Profile's cookies).
+  const base::FilePath state_dir = user_data_dir_.AppendASCII(kStateDirName);
+  sync_adapter_ = std::make_unique<OpenSyncDataAdapter>(model_.get());
+  sync_ = std::make_unique<SyncEngine>(
+      ToStdPath(state_dir.AppendASCII("Sync")), model_.get(),
+      OpenPlatform::Get()->CreateSecretStore(state_dir),
+      g_browser_process->shared_url_loader_factory());
+  sync_->SetDataAdapter(sync_adapter_.get());
+  sync_->SetStatusObserver(base::BindRepeating(
+      [](base::WeakPtr<OpenBrowserService> self, const SyncStatusInfo& info) {
+        if (!self) {
+          return;
+        }
+        self->BroadcastEvent(
+            webui::kEventSyncStatusChanged,
+            base::Value(base::DictValue()
+                            .Set("signed_in", info.signed_in)
+                            .Set("state", info.state)
+                            .Set("server_url", info.server_url)
+                            .Set("revision",
+                                 static_cast<double>(info.revision))));
+      },
+      weak_factory_.GetWeakPtr()));
+  sync_->StartIfSignedIn();
+}
+
 void OpenBrowserService::ConfigureSyncFromCommandLine() {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -686,9 +844,31 @@ void OpenBrowserService::ConfigureSyncFromCommandLine() {
   }
   const std::string url =
       command_line.GetSwitchValueASCII(switches::kSyncServer);
-  ProfileServices* services = ProfileServicesFor(ActiveProfileId());
-  if (services && services->sync && !services->sync->Status().signed_in) {
-    services->sync->ConfigureServer(url, {}, base::DoNothing());
+  if (sync_ && !sync_->Status().signed_in) {
+    sync_->ConfigureServer(url, {}, base::DoNothing());
+  }
+}
+
+void OpenBrowserService::RouteExternalUrls(const std::vector<GURL>& urls) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (const GURL& url : urls) {
+    if (url.is_valid()) {
+      pending_external_urls_.push_back(url);
+    }
+  }
+  if (started_) {
+    FlushPendingExternalUrls();
+  }
+}
+
+void OpenBrowserService::FlushPendingExternalUrls() {
+  if (!started_ || !window_controller_) {
+    return;
+  }
+  std::vector<GURL> urls = std::move(pending_external_urls_);
+  pending_external_urls_.clear();
+  for (const GURL& url : urls) {
+    window_controller_->RouteExternalUrl(url, std::nullopt);
   }
 }
 

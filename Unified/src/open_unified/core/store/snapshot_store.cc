@@ -15,7 +15,12 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/location.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/task/thread_pool.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
+#include "content/public/browser/browser_thread.h"
 #include "open_unified/core/model/uuid_util.h"
 
 namespace open_unified {
@@ -658,6 +663,29 @@ void RepairDuplicateIds(std::vector<Profile>* profiles,
   }
 }
 
+std::string WriteSnapshotOnIoSequence(base::FilePath file_path,
+                                      std::string encoded) {
+  if (!base::CreateDirectory(file_path.DirName())) {
+    return "SnapshotStore: failed to create State directory";
+  }
+  if (!base::ImportantFileWriter::WriteFileAtomically(file_path, encoded)) {
+    return "SnapshotStore: atomic write to browser.json failed";
+  }
+  return {};
+}
+
+void MoveCorruptSnapshotAside(const base::FilePath& file_path) {
+  const int64_t epoch_ms = base::Time::Now().InMillisecondsSinceUnixEpoch();
+  const int64_t epoch_sec = epoch_ms / 1000;
+  base::FilePath dest = file_path.DirName().AppendASCII(
+      "browser.corrupt-" + base::NumberToString(epoch_sec) + ".json");
+  if (base::PathExists(dest)) {
+    dest = file_path.DirName().AppendASCII(
+        "browser.corrupt-" + base::NumberToString(epoch_ms) + ".json");
+  }
+  base::Move(file_path, dest);
+}
+
 }  // namespace
 
 SnapshotStore::SnapshotStore(base::FilePath data_root)
@@ -666,11 +694,27 @@ SnapshotStore::SnapshotStore(base::FilePath data_root)
 
 SnapshotStore::~SnapshotStore() {
   save_timer_.Stop();
+  weak_factory_.InvalidateWeakPtrs();
 }
 
 void SnapshotStore::SetSaveFailureCallback(
     base::RepeatingCallback<void(const std::string&)> callback) {
   on_save_failure_ = std::move(callback);
+}
+
+void SnapshotStore::SetIoTaskRunner(
+    scoped_refptr<base::SequencedTaskRunner> runner) {
+  io_runner_ = std::move(runner);
+}
+
+scoped_refptr<base::SequencedTaskRunner>
+SnapshotStore::GetOrCreateIoTaskRunner() {
+  if (!io_runner_ && base::ThreadPoolInstance::Get()) {
+    io_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+  }
+  return io_runner_;
 }
 
 void SnapshotStore::ScheduleSave(const BrowserModel* model) {
@@ -711,34 +755,65 @@ void SnapshotStore::ScheduleMetadataSave(const BrowserModel* model) {
 }
 
 void SnapshotStore::OnTimerFired() {
+  FlushAsync();
+}
+
+void SnapshotStore::OnAsyncWriteComplete(
+    base::OnceCallback<void(bool ok, std::string error)> done,
+    std::string error) {
+  const bool ok = error.empty();
+  if (!ok && on_save_failure_) {
+    on_save_failure_.Run(error);
+  }
+  if (done) {
+    std::move(done).Run(ok, std::move(error));
+  }
+}
+
+void SnapshotStore::FlushAsync(
+    base::OnceCallback<void(bool ok, std::string error)> done) {
+  save_timer_.Stop();
   if (!dirty_model_) {
+    if (done) {
+      std::move(done).Run(true, {});
+    }
     return;
   }
   const BrowserModel* model = dirty_model_;
   dirty_model_ = nullptr;
   dirty_since_.reset();
-  std::string err;
-  if (!SaveNow(*model, &err)) {
-    // Keep dirty so the next change or flush retries.
-    dirty_model_ = model;
-    dirty_since_ = base::TimeTicks::Now();
+
+  base::DictValue root = SerializeModel(*model);
+  std::string encoded;
+  if (!base::JSONWriter::Write(root, &encoded)) {
+    std::string err = "SnapshotStore: failed to serialize browser model to JSON";
     if (on_save_failure_) {
       on_save_failure_.Run(err);
     }
+    if (done) {
+      std::move(done).Run(false, std::move(err));
+    }
+    return;
   }
+
+  if (auto runner = GetOrCreateIoTaskRunner()) {
+    runner->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        base::BindOnce(&WriteSnapshotOnIoSequence, file_path_,
+                       std::move(encoded)),
+        base::BindOnce(&SnapshotStore::OnAsyncWriteComplete,
+                       weak_factory_.GetWeakPtr(), std::move(done)));
+    return;
+  }
+
+  std::string err = WriteSnapshotOnIoSequence(file_path_, std::move(encoded));
+  OnAsyncWriteComplete(std::move(done), std::move(err));
 }
 
 bool SnapshotStore::SaveNow(const BrowserModel& model, std::string* error_out) {
   save_timer_.Stop();
   dirty_model_ = nullptr;
   dirty_since_.reset();
-
-  if (!base::CreateDirectory(file_path_.DirName())) {
-    if (error_out) {
-      *error_out = "SnapshotStore: failed to create State directory";
-    }
-    return false;
-  }
 
   base::DictValue root = SerializeModel(model);
   std::string encoded;
@@ -749,9 +824,28 @@ bool SnapshotStore::SaveNow(const BrowserModel& model, std::string* error_out) {
     return false;
   }
 
-  if (!base::ImportantFileWriter::WriteFileAtomically(file_path_, encoded)) {
+  const bool on_ui_thread =
+      content::BrowserThread::IsThreadInitialized(content::BrowserThread::UI) &&
+      content::BrowserThread::CurrentlyOn(content::BrowserThread::UI);
+  if (on_ui_thread) {
+    if (auto runner = GetOrCreateIoTaskRunner()) {
+      // Never perform blocking disk I/O on BrowserThread::UI; the runner uses
+      // BLOCK_SHUTDOWN so writes finish cleanly before exit.
+      runner->PostTaskAndReplyWithResult(
+          FROM_HERE,
+          base::BindOnce(&WriteSnapshotOnIoSequence, file_path_,
+                         std::move(encoded)),
+          base::BindOnce(&SnapshotStore::OnAsyncWriteComplete,
+                         weak_factory_.GetWeakPtr(),
+                         base::OnceCallback<void(bool, std::string)>()));
+      return true;
+    }
+  }
+
+  std::string err = WriteSnapshotOnIoSequence(file_path_, std::move(encoded));
+  if (!err.empty()) {
     if (error_out) {
-      *error_out = "SnapshotStore: atomic write to browser.json failed";
+      *error_out = std::move(err);
     }
     return false;
   }
@@ -777,6 +871,7 @@ std::unique_ptr<BrowserModel> SnapshotStore::Load(
     if (error_out) {
       *error_out = "SnapshotStore: failed to read browser.json";
     }
+    MoveCorruptSnapshotAside(file_path_);
     return nullptr;
   }
   auto parsed = base::JSONReader::ReadDict(raw, base::JSON_PARSE_RFC);
@@ -784,9 +879,15 @@ std::unique_ptr<BrowserModel> SnapshotStore::Load(
     if (error_out) {
       *error_out = "SnapshotStore: invalid JSON in browser.json";
     }
+    MoveCorruptSnapshotAside(file_path_);
     return nullptr;
   }
-  return DeserializeModel(*parsed, repairs_out, error_out);
+  auto model = DeserializeModel(*parsed, repairs_out, error_out);
+  if (!model) {
+    MoveCorruptSnapshotAside(file_path_);
+    return nullptr;
+  }
+  return model;
 }
 
 // --- Static Serialization / Deserialization ---

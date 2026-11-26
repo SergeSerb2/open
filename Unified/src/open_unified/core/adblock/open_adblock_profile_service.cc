@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/functional/bind.h"
@@ -135,8 +136,25 @@ bool WriteGenerationOnBlockingSequence(
   if (!base::JSONWriter::Write(pointer, &pointer_text)) {
     return false;
   }
-  return base::ImportantFileWriter::WriteFileAtomically(
-      lists_dir.AppendASCII(kCurrentPointerName), pointer_text);
+  if (!base::ImportantFileWriter::WriteFileAtomically(
+          lists_dir.AppendASCII(kCurrentPointerName), pointer_text)) {
+    return false;
+  }
+
+  // P2-4: Prune old generations/<k> directories where k < next_gen - 1 on this
+  // background sequence after current.json has been atomically updated.
+  base::FilePath generations_dir = lists_dir.AppendASCII("generations");
+  base::FileEnumerator enumerator(generations_dir, /*recursive=*/false,
+                                  base::FileEnumerator::DIRECTORIES);
+  for (base::FilePath entry = enumerator.Next(); !entry.empty();
+       entry = enumerator.Next()) {
+    int gen_num = 0;
+    if (base::StringToInt(entry.BaseName().AsUTF8Unsafe(), &gen_num) &&
+        gen_num < next_gen - 1) {
+      base::DeletePathRecursively(entry);
+    }
+  }
+  return true;
 }
 
 std::vector<AdBlockListInfo> BuildBuiltinCatalog() {
@@ -631,6 +649,20 @@ OpenAdBlockProfileService::~OpenAdBlockProfileService() {
 void OpenAdBlockProfileService::Shutdown() {
   weak_factory_.InvalidateWeakPtrs();
   status_observer_.Reset();
+  OpenAdBlockProfileServiceFactory::GetInstance()->UnregisterService(this);
+  if (parent_service_) {
+    parent_service_->RemoveOffTheRecordChild(this);
+    parent_service_ = nullptr;
+  }
+  if (!otr_children_.empty()) {
+    auto children = std::move(otr_children_);
+    otr_children_.clear();
+    for (OpenAdBlockProfileService* child : children) {
+      if (child) {
+        child->OnParentShutdown();
+      }
+    }
+  }
   if (service_) {
     service_->Shutdown();
     service_.reset();
@@ -640,8 +672,104 @@ void OpenAdBlockProfileService::Shutdown() {
 
 void OpenAdBlockProfileService::BindOffTheRecordParent(
     OpenAdBlockProfileService* parent) {
-  if (parent) {
-    InitializeFromParent(parent);
+  if (!parent || parent == this) {
+    return;
+  }
+  if (parent_service_ && parent_service_ != parent) {
+    parent_service_->RemoveOffTheRecordChild(this);
+  }
+  parent_service_ = parent;
+  parent->AddOffTheRecordChild(this);
+  InitializeFromParent(parent);
+}
+
+void OpenAdBlockProfileService::AddOffTheRecordChild(
+    OpenAdBlockProfileService* child) {
+  if (!child || child == this) {
+    return;
+  }
+  if (std::find(otr_children_.begin(), otr_children_.end(), child) ==
+      otr_children_.end()) {
+    otr_children_.push_back(child);
+  }
+}
+
+void OpenAdBlockProfileService::RemoveOffTheRecordChild(
+    OpenAdBlockProfileService* child) {
+  std::erase(otr_children_, child);
+}
+
+void OpenAdBlockProfileService::OnParentShutdown() {
+  parent_service_ = nullptr;
+}
+
+void OpenAdBlockProfileService::OnParentEnabledChanged(bool enabled) {
+  config_mutated_ = true;
+  if (enabled_ == enabled) {
+    return;
+  }
+  enabled_ = enabled;
+  if (service_) {
+    service_->SetEnabled(enabled_);
+  }
+  ResetURLLoaderFactories();
+  if (status_observer_) {
+    status_observer_.Run(GetSnapshot());
+  }
+}
+
+void OpenAdBlockProfileService::OnParentEnabledListsChanged(
+    const std::set<std::string>& enabled_lists) {
+  config_mutated_ = true;
+  if (enabled_list_ids_ == enabled_lists) {
+    return;
+  }
+  enabled_list_ids_ = enabled_lists;
+  if (status_observer_) {
+    status_observer_.Run(GetSnapshot());
+  }
+}
+
+void OpenAdBlockProfileService::OnParentExcludedDomainAdded(
+    const std::string& domain) {
+  exclusions_mutated_ = true;
+  if (!excluded_domains_.insert(domain).second) {
+    return;
+  }
+  ApplyExclusionsToEngine();
+  ResetURLLoaderFactories();
+  if (status_observer_) {
+    status_observer_.Run(GetSnapshot());
+  }
+}
+
+void OpenAdBlockProfileService::OnParentExcludedDomainRemoved(
+    const std::string& domain) {
+  exclusions_mutated_ = true;
+  if (excluded_domains_.erase(domain) == 0) {
+    return;
+  }
+  ApplyExclusionsToEngine();
+  ResetURLLoaderFactories();
+  if (status_observer_) {
+    status_observer_.Run(GetSnapshot());
+  }
+}
+
+void OpenAdBlockProfileService::OnParentExcludedDomainsReplaced(
+    const std::set<std::string>& domains) {
+  exclusions_mutated_ = true;
+  excluded_domains_ = domains;
+  ApplyExclusionsToEngine();
+  ResetURLLoaderFactories();
+  if (status_observer_) {
+    status_observer_.Run(GetSnapshot());
+  }
+}
+
+void OpenAdBlockProfileService::OnParentGenerationPublished() {
+  if (service_ && !lists_dir_.empty()) {
+    service_->LoadFromDirectory(lists_dir_, /*prefer_dat=*/true);
   }
 }
 
@@ -738,11 +866,18 @@ void OpenAdBlockProfileService::OnDiskStateLoaded(DiskState state) {
       enabled_list_ids_ = std::move(state.enabled_list_ids);
     }
     service_->SetEnabled(enabled_);
+    for (OpenAdBlockProfileService* child : otr_children_) {
+      child->OnParentEnabledChanged(enabled_);
+      child->OnParentEnabledListsChanged(enabled_list_ids_);
+    }
     changed = true;
   }
   if (!exclusions_mutated_ && state.has_exclusions) {
     excluded_domains_ = std::move(state.excluded_domains);
     ApplyExclusionsToEngine();
+    for (OpenAdBlockProfileService* child : otr_children_) {
+      child->OnParentExcludedDomainsReplaced(excluded_domains_);
+    }
     changed = true;
   }
   if (changed && status_observer_) {
@@ -770,6 +905,9 @@ void OpenAdBlockProfileService::SetEnabled(bool enabled) {
     service_->SetEnabled(enabled_);
   }
   ResetURLLoaderFactories();
+  for (OpenAdBlockProfileService* child : otr_children_) {
+    child->OnParentEnabledChanged(enabled_);
+  }
   if (status_observer_) {
     status_observer_.Run(GetSnapshot());
   }
@@ -803,6 +941,9 @@ bool OpenAdBlockProfileService::SetListEnabled(std::string_view list_id,
   if (!is_off_the_record_) {
     SaveConfigToDisk();
   }
+  for (OpenAdBlockProfileService* child : otr_children_) {
+    child->OnParentEnabledListsChanged(enabled_list_ids_);
+  }
   if (status_observer_) {
     status_observer_.Run(GetSnapshot());
   }
@@ -825,6 +966,9 @@ void OpenAdBlockProfileService::SetEnabledListIds(
   enabled_list_ids_ = std::move(next);
   if (!is_off_the_record_) {
     SaveConfigToDisk();
+  }
+  for (OpenAdBlockProfileService* child : otr_children_) {
+    child->OnParentEnabledListsChanged(enabled_list_ids_);
   }
   if (status_observer_) {
     status_observer_.Run(GetSnapshot());
@@ -858,6 +1002,9 @@ bool OpenAdBlockProfileService::AddExcludedDomain(std::string_view domain) {
   }
   ApplyExclusionsToEngine();
   ResetURLLoaderFactories();
+  for (OpenAdBlockProfileService* child : otr_children_) {
+    child->OnParentExcludedDomainAdded(*norm);
+  }
   return true;
 }
 
@@ -875,6 +1022,9 @@ bool OpenAdBlockProfileService::RemoveExcludedDomain(std::string_view domain) {
   }
   ApplyExclusionsToEngine();
   ResetURLLoaderFactories();
+  for (OpenAdBlockProfileService* child : otr_children_) {
+    child->OnParentExcludedDomainRemoved(*norm);
+  }
   return true;
 }
 
@@ -893,6 +1043,9 @@ void OpenAdBlockProfileService::SetExcludedDomains(
   }
   ApplyExclusionsToEngine();
   ResetURLLoaderFactories();
+  for (OpenAdBlockProfileService* child : otr_children_) {
+    child->OnParentExcludedDomainsReplaced(excluded_domains_);
+  }
 }
 
 void OpenAdBlockProfileService::ReloadLists(
@@ -944,6 +1097,9 @@ void OpenAdBlockProfileService::OnGenerationPublishedReply(
   }
   if (ok && self->service_ && !self->lists_dir_.empty()) {
     self->service_->LoadFromDirectory(self->lists_dir_, /*prefer_dat=*/true);
+    for (OpenAdBlockProfileService* child : self->otr_children_) {
+      child->OnParentGenerationPublished();
+    }
   }
   if (done) {
     std::move(done).Run(ok);
@@ -1180,6 +1336,36 @@ OpenAdBlockProfileServiceFactory::GetInstance() {
   return instance.get();
 }
 
+// static
+void OpenAdBlockProfileServiceFactory::SetOriginalContextResolver(
+    OriginalContextResolver resolver) {
+  GetInstance()->original_context_resolver_ = std::move(resolver);
+}
+
+void OpenAdBlockProfileServiceFactory::UnregisterService(
+    OpenAdBlockProfileService* service) {
+  if (!service) {
+    return;
+  }
+  for (auto it = regular_services_by_path_.begin();
+       it != regular_services_by_path_.end();) {
+    if (it->second == service) {
+      it = regular_services_by_path_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  for (auto it = unbound_otr_by_path_.begin();
+       it != unbound_otr_by_path_.end();) {
+    std::erase(it->second, service);
+    if (it->second.empty()) {
+      it = unbound_otr_by_path_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 OpenAdBlockProfileServiceFactory::OpenAdBlockProfileServiceFactory()
     : BrowserContextKeyedServiceFactory(
           "OpenAdBlockProfileService",
@@ -1199,7 +1385,46 @@ OpenAdBlockProfileServiceFactory::GetBrowserContextToUse(
 std::unique_ptr<KeyedService>
 OpenAdBlockProfileServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return std::make_unique<OpenAdBlockProfileService>(context);
+  auto service = std::make_unique<OpenAdBlockProfileService>(context);
+  if (!context) {
+    return service;
+  }
+
+  const base::FilePath path = context->GetPath();
+  if (context->IsOffTheRecord()) {
+    OpenAdBlockProfileService* parent = nullptr;
+    if (original_context_resolver_) {
+      content::BrowserContext* original =
+          original_context_resolver_.Run(context);
+      if (original && original != context && !original->IsOffTheRecord()) {
+        parent = GetForBrowserContext(original);
+      }
+    }
+    if (!parent && !path.empty()) {
+      auto it = regular_services_by_path_.find(path);
+      if (it != regular_services_by_path_.end()) {
+        parent = it->second;
+      }
+    }
+    if (parent) {
+      service->BindOffTheRecordParent(parent);
+    } else if (!path.empty()) {
+      unbound_otr_by_path_[path].push_back(service.get());
+    }
+  } else if (!path.empty()) {
+    regular_services_by_path_[path] = service.get();
+    if (auto it = unbound_otr_by_path_.find(path);
+        it != unbound_otr_by_path_.end()) {
+      auto pending = std::move(it->second);
+      unbound_otr_by_path_.erase(it);
+      for (OpenAdBlockProfileService* otr : pending) {
+        if (otr) {
+          otr->BindOffTheRecordParent(service.get());
+        }
+      }
+    }
+  }
+  return service;
 }
 
 }  // namespace open_unified

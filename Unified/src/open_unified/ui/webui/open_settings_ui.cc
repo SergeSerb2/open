@@ -11,8 +11,11 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/no_destructor.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
@@ -136,11 +139,22 @@ base::ListValue DevicesToValue(const std::vector<SyncDeviceInfo>& devices) {
       .TakeList();
 }
 
-SyncEngine* SyncFor(const ProfileID& profile_id) {
+// Account & Sync is app-wide: one Open Account for every Profile
+// (OpenBrowserService::sync()). |profile_id| is the page's Profile, kept for
+// call sites that reply with Profile data.
+SyncEngine* SyncFor(const ProfileID& /*profile_id*/) {
   OpenBrowserService* service = OpenBrowserService::Get();
-  ProfileServices* ps = service ? service->ProfileServicesFor(profile_id)
-                                : nullptr;
-  return ps ? ps->sync.get() : nullptr;
+  return service ? service->sync() : nullptr;
+}
+
+// Preferences.json writes run one at a time, in order, on this sequence
+// (BLOCK_SHUTDOWN): an older snapshot can never land after a newer one.
+scoped_refptr<base::SequencedTaskRunner> PreferencesFileRunner() {
+  static base::NoDestructor<scoped_refptr<base::SequencedTaskRunner>> runner(
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
+  return *runner;
 }
 
 std::string NormalizeHost(std::string host) {
@@ -254,6 +268,14 @@ std::string RoutingExplanation(const RoutingDecision& decision) {
 }
 
 // Removes browsing data of one Chromium Profile, then deletes itself.
+//
+// Chromium 156's BrowsingDataRemoverImpl::RemoveAndReply() DCHECKs that the
+// observer is registered (AddObserver) before the task starts, and calls
+// only that task's observer when it is done; the single registration below
+// is that requirement, not a duplicate. Shutdown: when the Profile (and its
+// remover) goes away with the task pending, ~BrowsingDataRemoverImpl reports
+// the task done (failed) to registered observers, so this object still
+// deletes itself; the reply then reaches a closed page as a no-op.
 class DataRemovalObserver : public content::BrowsingDataRemover::Observer {
  public:
   static void Start(content::BrowsingDataRemover* remover,
@@ -267,20 +289,27 @@ class DataRemovalObserver : public content::BrowsingDataRemover::Observer {
   }
 
   void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
-    remover_->RemoveObserver(this);
-    std::move(done_).Run();
+    if (!done_) {
+      return;  // Already finished (never runs twice).
+    }
+    observation_.Reset();
+    base::OnceClosure done = std::move(done_);
     delete this;
+    std::move(done).Run();
   }
 
  private:
   DataRemovalObserver(content::BrowsingDataRemover* remover,
                       base::OnceClosure done)
-      : remover_(remover), done_(std::move(done)) {
-    remover_->AddObserver(this);
+      : done_(std::move(done)) {
+    observation_.Observe(remover);
   }
+  ~DataRemovalObserver() override = default;
 
-  raw_ptr<content::BrowsingDataRemover> remover_;
   base::OnceClosure done_;
+  base::ScopedObservation<content::BrowsingDataRemover,
+                          content::BrowsingDataRemover::Observer>
+      observation_{this};
 };
 
 }  // namespace
@@ -486,10 +515,8 @@ void OpenPreferences::Save() {
   if (!json || path.empty()) {
     return;
   }
-  base::ThreadPool::PostTask(
+  PreferencesFileRunner()->PostTask(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-       base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
       base::BindOnce(
           [](base::FilePath path, std::string json) {
             base::CreateDirectory(path.DirName());
@@ -627,6 +654,9 @@ void OpenSettingsUI::ResetPreference(const base::DictValue& payload,
 // static
 base::DictValue OpenSettingsUI::ProfileSummary(const ProfileID& profile_id) {
   OpenBrowserService* service = OpenBrowserService::Get();
+  if (!service) {
+    return base::DictValue();  // During shutdown.
+  }
   const BrowserModel& model = service->model();
   const Profile* profile = model.FindProfile(profile_id);
   if (!profile) {
@@ -937,7 +967,8 @@ void OpenSettingsUI::TestRoutingUrl(const base::DictValue& payload,
 // static
 base::DictValue OpenSettingsUI::AdBlockState(const ProfileID& profile_id) {
   OpenBrowserService* service = OpenBrowserService::Get();
-  ProfileServices* ps = service->ProfileServicesFor(profile_id);
+  ProfileServices* ps =
+      service ? service->ProfileServicesFor(profile_id) : nullptr;
   OpenAdBlockProfileService* adblock = ps ? ps->adblock() : nullptr;
   open_engine::OpenAdBlockService* engine =
       adblock ? adblock->service() : nullptr;
@@ -977,9 +1008,11 @@ base::DictValue OpenSettingsUI::AdBlockState(const ProfileID& profile_id) {
     exclusions.Append(domain);
   }
   int blocked = 0;
-  for (const auto& [tab_id, contents] : service->tab_bridge()->LoadedTabs()) {
-    if (model_util::ProfileOfNode(service->model(), tab_id) == profile_id) {
-      blocked += OpenAdBlockProfileService::GetTotalStoppedCount(contents);
+  if (OpenTabBridge* bridge = service->tab_bridge()) {
+    for (const auto& [tab_id, contents] : bridge->LoadedTabs()) {
+      if (model_util::ProfileOfNode(service->model(), tab_id) == profile_id) {
+        blocked += OpenAdBlockProfileService::GetTotalStoppedCount(contents);
+      }
     }
   }
   d.Set("global_enabled", snapshot.enabled);
@@ -1191,7 +1224,10 @@ void OpenSettingsUI::GetExtensions(const base::DictValue& payload,
 
 void OpenSettingsUI::ToggleExtension(const base::DictValue& payload,
                                      Reply reply) {
-  ProfileServices* ps = service()->ProfileServicesFor(profile_id());
+  // payload.profile_id picks the Profile (Settings lists every Profile's
+  // extensions); the page's Profile otherwise.
+  ProfileServices* ps =
+      service()->ProfileServicesFor(ProfileFromPayload(payload));
   const std::string id = json::GetString(payload, "id");
   if (!ps || !ps->extensions || id.empty()) {
     ReplyError(std::move(reply), "no such extension");

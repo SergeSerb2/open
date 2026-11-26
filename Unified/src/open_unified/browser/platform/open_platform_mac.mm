@@ -164,11 +164,15 @@ class MacKeychainSecretStore final : public SecretStore {
         status = SecItemAdd((__bridge CFDictionaryRef)add_query, nullptr);
       }
       if (status == errSecSuccess) {
+        used_fallback_ = false;
         file_fallback_.DeleteSecret(service, account);
         return true;
       }
       LOG(WARNING) << "SecItem save failed (" << status
                    << "); using 0600 file fallback";
+      // Remove any existing Keychain entry before writing the fallback file so
+      // a stale Keychain token can never win on the next LoadSecret().
+      SecItemDelete((__bridge CFDictionaryRef)query);
       used_fallback_ = true;
       return file_fallback_.SaveSecret(service, account, secret);
     }

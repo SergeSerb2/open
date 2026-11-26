@@ -1177,6 +1177,20 @@ class SplitPaneView : public views::View, public content::WebContentsObserver {
 
   const ItemID& tab_id() const { return spec_.tab_id; }
   views::WebView* web_view() { return web_view_; }
+
+  // Releases the shown WebContents when the next Update() brings another, so
+  // the old one is free before any pane attaches it. Update() then sees a
+  // change and attaches the new one.
+  void DetachWebContentsIfChanging(content::WebContents* next) {
+    if (spec_.web_contents == next || !spec_.web_contents) {
+      return;
+    }
+    Observe(nullptr);
+    web_view_->SetWebContents(nullptr);
+    web_view_->SetVisible(false);
+    spec_.web_contents = nullptr;
+    applied_radii_.reset();
+  }
   OpenPaneChromeView* chrome() { return chrome_; }
 
   struct Context {
@@ -1603,6 +1617,41 @@ void OpenSplitContainerView::SetPresentation(SplitPresentation presentation) {
   drag_initial_frames_.clear();
   drag_current_frames_.clear();
 
+  // Detach before attach: a WebContents can move between panes (or from a
+  // removed pane to a new one). Every pane that lets go of a WebContents does
+  // so before any pane attaches one, so no late detach pulls a WebContents's
+  // native view out of the pane that now shows it.
+  // 1. Remove the panes that are no longer shown (their destructors detach).
+  {
+    std::vector<raw_ptr<split_internal::SplitPaneView>> kept;
+    kept.reserve(panes_.size());
+    for (auto& old : panes_) {
+      if (!old) {
+        continue;
+      }
+      const bool wanted = std::any_of(
+          presentation_.panes.begin(), presentation_.panes.end(),
+          [&](const SplitPaneSpec& spec) {
+            return spec.tab_id == old->tab_id();
+          });
+      if (wanted) {
+        kept.push_back(old);
+      } else {
+        split_internal::SplitPaneView* doomed = old.get();
+        old = nullptr;
+        RemoveChildViewT(doomed);
+      }
+    }
+    panes_ = std::move(kept);
+  }
+  // 2. Kept panes whose WebContents changes release the old one now.
+  for (const SplitPaneSpec& spec : presentation_.panes) {
+    if (split_internal::SplitPaneView* pane = FindPane(spec.tab_id)) {
+      pane->DetachWebContentsIfChanging(spec.web_contents);
+    }
+  }
+  // 3. Create the new panes (they attach in their constructors); kept panes
+  // attach their new WebContents in Update() below.
   std::vector<raw_ptr<split_internal::SplitPaneView>> next;
   next.reserve(presentation_.panes.size());
   for (const SplitPaneSpec& spec : presentation_.panes) {
@@ -1612,13 +1661,6 @@ void OpenSplitContainerView::SetPresentation(SplitPresentation presentation) {
           std::make_unique<split_internal::SplitPaneView>(this, spec));
     }
     next.push_back(pane);
-  }
-  for (auto& old : panes_) {
-    if (std::find(next.begin(), next.end(), old) == next.end()) {
-      split_internal::SplitPaneView* doomed = old.get();
-      old = nullptr;
-      RemoveChildViewT(doomed);
-    }
   }
   panes_ = std::move(next);
   for (size_t i = 0; i < panes_.size(); ++i) {

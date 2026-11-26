@@ -672,17 +672,38 @@ OpenSiteControlBubble::OpenSiteControlBubble(SiteControlDelegate* delegate)
     : delegate_(delegate) {}
 
 OpenSiteControlBubble::~OpenSiteControlBubble() {
+  DiscardBubble(/*synchronous=*/true);
+}
+
+void OpenSiteControlBubble::DiscardBubble(bool synchronous) {
+  weak_factory_.InvalidateWeakPtrs();
   contents_ = nullptr;
-  widget_.reset();
-  bubble_delegate_.reset();
+  if (synchronous) {
+    if (widget_) {
+      widget_->CloseNow();
+    }
+    widget_.reset();
+    bubble_delegate_.reset();
+    return;
+  }
+  // Posted in order: the widget is deleted before its delegate.
+  if (widget_) {
+    widget_->Hide();
+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(widget_));
+  }
+  if (bubble_delegate_) {
+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(bubble_delegate_));
+  }
 }
 
 void OpenSiteControlBubble::Show(views::View* anchor,
                                  const SiteControlState& state,
                                  const secondary::Appearance& appearance) {
-  if (IsShowing()) {
-    Close();
-  }
+  // Reopening replaces the panel: release the old bubble (and cancel its
+  // closed callback) before the members are reassigned.
+  DiscardBubble(/*synchronous=*/false);
   bubble_delegate_ = std::make_unique<views::BubbleDialogDelegate>(
       anchor, views::BubbleBorder::TOP_LEFT, views::BubbleBorder::DIALOG_SHADOW,
       /*autosize=*/true);
@@ -700,7 +721,7 @@ void OpenSiteControlBubble::Show(views::View* anchor,
   widget_ = views::BubbleDialogDelegate::CreateBubble(
       bubble_delegate_.get(),
       base::BindOnce(&OpenSiteControlBubble::OnWidgetClosed,
-                     base::Unretained(this)));
+                     weak_factory_.GetWeakPtr()));
   widget_->Show();
 }
 
@@ -730,16 +751,7 @@ void OpenSiteControlBubble::OnWidgetClosed(views::Widget::ClosedReason reason) {
   // The close can start inside the widget's own activation handling, so hide
   // now and delete on the next task (widget first, then its delegate, which
   // must outlive it).
-  contents_ = nullptr;
-  if (widget_) {
-    widget_->Hide();
-    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
-        FROM_HERE, std::move(widget_));
-  }
-  if (bubble_delegate_) {
-    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
-        FROM_HERE, std::move(bubble_delegate_));
-  }
+  DiscardBubble(/*synchronous=*/false);
   if (delegate_) {
     delegate_->OnSiteControlClosed();
   }

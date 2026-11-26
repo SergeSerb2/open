@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstring>
 #include <list>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/no_destructor.h"
 #include "base/process/process_handle.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -84,13 +86,19 @@
 #include <ws2tcpip.h>
 // winsock2.h must come first.
 #include <afunix.h>
+#include <windows.h>
+#include <sddl.h>
 #ifdef FindWindow
 #undef FindWindow
 #endif
 #else
 #include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -182,9 +190,15 @@ class PendingReply : public base::RefCountedThreadSafe<PendingReply> {
       : done_(base::WaitableEvent::ResetPolicy::MANUAL,
               base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
+  // The first completion wins (a ReplyGuard may complete a dropped reply
+  // after a late real one).
   void Complete(std::string line) {
     {
       base::AutoLock lock(lock_);
+      if (completed_) {
+        return;
+      }
+      completed_ = true;
       line_ = std::move(line);
     }
     done_.Signal();
@@ -207,6 +221,7 @@ class PendingReply : public base::RefCountedThreadSafe<PendingReply> {
   ~PendingReply() = default;
 
   base::Lock lock_;
+  bool completed_ = false;
   std::string line_;
   base::WaitableEvent done_;
 };
@@ -227,6 +242,35 @@ std::string ResponseLine(const base::Value& id,
          "\n";
 }
 
+// Answers a command's PendingReply with an error when the reply callback is
+// destroyed without running (a handler or a Chromium callback dropped it,
+// or the UI task was discarded at shutdown), so the connection thread never
+// waits forever.
+class ReplyGuard {
+ public:
+  ReplyGuard(base::Value id, scoped_refptr<PendingReply> pending)
+      : id_(std::move(id)), pending_(std::move(pending)) {}
+  ReplyGuard(const ReplyGuard&) = delete;
+  ReplyGuard& operator=(const ReplyGuard&) = delete;
+  ~ReplyGuard() {
+    if (pending_) {
+      pending_->Complete(ResponseLine(
+          id_, base::unexpected("command dropped without a reply")));
+    }
+  }
+
+  void Complete(base::expected<base::Value, std::string> result) {
+    if (pending_) {
+      pending_->Complete(ResponseLine(id_, std::move(result)));
+      pending_.reset();
+    }
+  }
+
+ private:
+  base::Value id_;
+  scoped_refptr<PendingReply> pending_;
+};
+
 }  // namespace
 
 // ===========================================================================
@@ -246,6 +290,8 @@ class OpenAutomationServer::Transport : public base::PlatformThread::Delegate {
         unix_path_(std::move(unix_path)) {}
 
   ~Transport() override {
+    // Joins below wait at most one poll interval (250 ms) per thread.
+    base::ScopedAllowBaseSyncPrimitivesForTesting allow_join;
     stop_.store(true);
     if (accept_thread_) {
       base::PlatformThread::Join(*accept_thread_);
@@ -261,6 +307,7 @@ class OpenAutomationServer::Transport : public base::PlatformThread::Delegate {
     }
     connections.clear();  // Joins each thread.
     if (!unix_path_.empty()) {
+      base::ScopedAllowBlockingForTesting allow_blocking;
       base::DeleteFile(unix_path_);
     }
   }
@@ -285,12 +332,32 @@ class OpenAutomationServer::Transport : public base::PlatformThread::Delegate {
       if (client == kInvalidSocket) {
         continue;
       }
+      ReapFinishedConnections();
       auto connection = std::make_unique<Connection>(this, client);
       if (connection->Start()) {
         base::AutoLock lock(lock_);
         connections_.push_back(std::move(connection));
       }
     }
+  }
+
+  // Joins and frees connections whose thread has ended (the peer closed or
+  // sent a bad request), so a long harness run does not keep one dead
+  // thread handle and socket per past connection.
+  void ReapFinishedConnections() {
+    std::list<std::unique_ptr<Connection>> finished;
+    {
+      base::AutoLock lock(lock_);
+      for (auto it = connections_.begin(); it != connections_.end();) {
+        if ((*it)->finished()) {
+          finished.push_back(std::move(*it));
+          it = connections_.erase(it);
+        } else {
+          ++it;
+        }
+      }
+    }
+    finished.clear();  // Outside the lock: each join returns at once.
   }
 
  private:
@@ -318,9 +385,16 @@ class OpenAutomationServer::Transport : public base::PlatformThread::Delegate {
       stop_.store(true);
       ShutdownSocket(socket_);
     }
+    bool finished() const { return finished_.load(); }
 
     void ThreadMain() override {
       base::PlatformThread::SetName("OpenAutomationConn");
+      Serve();
+      finished_.store(true);
+    }
+
+   private:
+    void Serve() {
       std::string buffer;
       char chunk[64 * 1024];
       while (!stop_.load() && !transport_->stop_.load()) {
@@ -353,7 +427,6 @@ class OpenAutomationServer::Transport : public base::PlatformThread::Delegate {
       }
     }
 
-   private:
     // Returns false when the connection must end.
     bool HandleLine(const std::string& line) {
       std::optional<base::DictValue> request =
@@ -381,29 +454,28 @@ class OpenAutomationServer::Transport : public base::PlatformThread::Delegate {
         args = std::move(*a);
       }
       auto pending = base::MakeRefCounted<PendingReply>();
+      // The guard travels with the task, then with the reply callback: if
+      // either is destroyed unrun, the request is answered with an error.
+      auto guard = std::make_unique<ReplyGuard>(id.Clone(), pending);
       transport_->ui_task_runner_->PostTask(
           FROM_HERE,
           base::BindOnce(
               [](base::WeakPtr<OpenAutomationServer> server, std::string cmd,
-                 base::DictValue args, base::Value id,
-                 scoped_refptr<PendingReply> pending) {
+                 base::DictValue args, std::unique_ptr<ReplyGuard> guard) {
                 if (!server) {
-                  pending->Complete(ResponseLine(
-                      id, base::unexpected("shutting down")));
+                  guard->Complete(base::unexpected("shutting down"));
                   return;
                 }
                 server->Dispatch(
                     cmd, std::move(args),
                     base::BindOnce(
-                        [](base::Value id, scoped_refptr<PendingReply> pending,
+                        [](std::unique_ptr<ReplyGuard> guard,
                            base::expected<base::Value, std::string> result) {
-                          pending->Complete(
-                              ResponseLine(id, std::move(result)));
+                          guard->Complete(std::move(result));
                         },
-                        std::move(id), pending));
+                        std::move(guard)));
               },
-              transport_->server_, *cmd, std::move(args), id.Clone(),
-              pending));
+              transport_->server_, *cmd, std::move(args), std::move(guard)));
       if (!pending->Wait(stop_)) {
         return false;
       }
@@ -413,6 +485,7 @@ class OpenAutomationServer::Transport : public base::PlatformThread::Delegate {
     raw_ptr<Transport> transport_;
     SocketHandle socket_;
     std::atomic<bool> stop_{false};
+    std::atomic<bool> finished_{false};
     std::optional<base::PlatformThreadHandle> thread_;
   };
 
@@ -571,7 +644,8 @@ base::DictValue TabRow(const ItemID& id) {
   return row;
 }
 
-// Waits on the UI thread until a page is live and not loading.
+// Waits on the UI thread until a page is live and not loading. Live
+// waiters are tracked so the server's teardown answers them at once.
 class LoadWaiter {
  public:
   static void Start(ItemID tab_id, base::TimeDelta timeout, Reply reply) {
@@ -579,11 +653,28 @@ class LoadWaiter {
     waiter->Check();
   }
 
+  // OpenAutomationServer teardown: every pending wait fails now.
+  static void CancelAll() {
+    std::set<LoadWaiter*> waiters;
+    waiters.swap(Live());
+    for (LoadWaiter* waiter : waiters) {
+      waiter->Finish(base::unexpected("shutting down"));
+    }
+  }
+
  private:
+  static std::set<LoadWaiter*>& Live() {
+    static base::NoDestructor<std::set<LoadWaiter*>> live;
+    return *live;
+  }
+
   LoadWaiter(ItemID tab_id, base::TimeDelta timeout, Reply reply)
       : tab_id_(std::move(tab_id)),
         deadline_(base::TimeTicks::Now() + timeout),
-        reply_(std::move(reply)) {}
+        reply_(std::move(reply)) {
+    Live().insert(this);
+  }
+  ~LoadWaiter() { Live().erase(this); }
 
   void Check() {
     OpenBrowserService* service = Svc();
@@ -855,6 +946,61 @@ base::DictValue AdBlockStateFor(const ProfileID& profile_id) {
   return state;
 }
 
+// Creates |path| readable and writable by the current user only, and fails
+// rather than following a planted link or reusing another user's file.
+bool WriteOwnerOnlyFile(const base::FilePath& path, const std::string& data) {
+  base::DeleteFile(path);  // A stale file of an earlier run.
+#if BUILDFLAG(IS_WIN)
+  PSECURITY_DESCRIPTOR descriptor = nullptr;
+  // Protected DACL: full access for the owner (and SYSTEM) only.
+  if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+          L"D:P(A;;FA;;;OW)(A;;FA;;;SY)", SDDL_REVISION_1, &descriptor,
+          nullptr)) {
+    return false;
+  }
+  SECURITY_ATTRIBUTES attributes = {};
+  attributes.nLength = sizeof(attributes);
+  attributes.lpSecurityDescriptor = descriptor;
+  attributes.bInheritHandle = FALSE;
+  HANDLE file = CreateFileW(path.value().c_str(), GENERIC_WRITE, 0,
+                            &attributes, CREATE_NEW,
+                            FILE_ATTRIBUTE_NORMAL, nullptr);
+  LocalFree(descriptor);
+  if (file == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+  DWORD written = 0;
+  const bool ok =
+      WriteFile(file, data.data(), static_cast<DWORD>(data.size()), &written,
+                nullptr) &&
+      written == data.size();
+  CloseHandle(file);
+  return ok;
+#else
+  const int fd = open(path.value().c_str(),
+                      O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+                      0600);
+  if (fd < 0) {
+    return false;
+  }
+  size_t offset = 0;
+  bool ok = true;
+  while (offset < data.size()) {
+    const ssize_t n = write(fd, data.data() + offset, data.size() - offset);
+    if (n < 0 && errno == EINTR) {
+      continue;
+    }
+    if (n <= 0) {
+      ok = false;
+      break;
+    }
+    offset += static_cast<size_t>(n);
+  }
+  ok = (close(fd) == 0) && ok;
+  return ok;
+#endif
+}
+
 base::DictValue SyncStatusValue(const SyncStatusInfo& info) {
   base::DictValue categories;
   for (const auto& [name, enabled] : info.categories) {
@@ -927,11 +1073,19 @@ OpenAutomationServer::OpenAutomationServer(OpenBrowserService* service)
 }
 
 OpenAutomationServer::~OpenAutomationServer() {
-  // Transports join their threads; replies still queued for the UI thread
-  // find the server gone and answer "shutting down".
+  // Requests still queued for the UI thread find the server gone and answer
+  // "shutting down"; pending waits answer now; transports join their threads
+  // (each wakes within one poll interval).
   weak_factory_.InvalidateWeakPtrs();
+  LoadWaiter::CancelAll();
   unix_transport_.reset();
   tcp_transport_.reset();
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  for (const base::FilePath& path : {token_path_, port_path_}) {
+    if (!path.empty()) {
+      base::DeleteFile(path);
+    }
+  }
 }
 
 bool OpenAutomationServer::ListenUnix(const base::FilePath& path) {
@@ -951,17 +1105,45 @@ bool OpenAutomationServer::ListenUnix(const base::FilePath& path) {
     return false;
   }
   address.sun_family = AF_UNIX;
+#if BUILDFLAG(IS_WIN)
   std::memcpy(address.sun_path, utf8.c_str(), utf8.size() + 1);
-#if !BUILDFLAG(IS_WIN)
-  const mode_t old_mask = umask(0077);
-#endif
   const bool bound =
       bind(s, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0 &&
       listen(s, 8) == 0;
-#if !BUILDFLAG(IS_WIN)
-  umask(old_mask);
-  if (bound) {
-    chmod(utf8.c_str(), 0600);
+#else
+  // No process-wide umask change (other threads create files too): the
+  // socket is bound inside a fresh 0700 directory next to its final path,
+  // made 0600, then renamed into place, so it is never reachable with
+  // looser permissions.
+  bool bound = false;
+  std::string private_dir =
+      path.DirName().AppendASCII(".open-automation-XXXXXX").AsUTF8Unsafe();
+  if (mkdtemp(private_dir.data())) {
+    const std::string staged = private_dir + "/s";
+    if (staged.size() < sizeof(address.sun_path)) {
+      std::memcpy(address.sun_path, staged.c_str(), staged.size() + 1);
+      bound = bind(s, reinterpret_cast<sockaddr*>(&address),
+                   sizeof(address)) == 0 &&
+              chmod(staged.c_str(), 0600) == 0 && listen(s, 8) == 0 &&
+              rename(staged.c_str(), utf8.c_str()) == 0;
+      if (!bound) {
+        unlink(staged.c_str());
+      }
+    }
+    rmdir(private_dir.c_str());
+  }
+  if (!bound) {
+    // A staging path too long for sun_path: bind in place, then restrict
+    // (the data directory itself is private to the user).
+    CloseSocket(s);
+    s = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (s == kInvalidSocket) {
+      return false;
+    }
+    std::memcpy(address.sun_path, utf8.c_str(), utf8.size() + 1);
+    bound = bind(s, reinterpret_cast<sockaddr*>(&address), sizeof(address)) ==
+                0 &&
+            chmod(utf8.c_str(), 0600) == 0 && listen(s, 8) == 0;
   }
 #endif
   if (!bound) {
@@ -1007,17 +1189,22 @@ int OpenAutomationServer::ListenTcp(int port,
   getsockname(s, reinterpret_cast<sockaddr*>(&bound), &length);
   const int bound_port = ntohs(bound.sin_port);
 
-  // Token and port files: the harness reads both from the data root.
+  // Token and port files: the harness reads both from the data root. The
+  // token file is created owner-only from the first byte (never written
+  // then chmod-ed) and removed when the server stops.
   const std::string token = base::HexEncode(base::RandBytesAsVector(16));
   const base::FilePath token_path =
       user_data_dir.AppendASCII("automation.token");
   base::CreateDirectory(user_data_dir);
-  base::WriteFile(token_path, token);
-  base::WriteFile(user_data_dir.AppendASCII("automation.port"),
-                  base::NumberToString(bound_port));
-#if !BUILDFLAG(IS_WIN)
-  chmod(token_path.value().c_str(), 0600);
-#endif
+  if (!WriteOwnerOnlyFile(token_path, token)) {
+    LOG(ERROR) << "Open automation: cannot create "
+               << token_path.AsUTF8Unsafe();
+    CloseSocket(s);
+    return 0;
+  }
+  token_path_ = token_path;
+  port_path_ = user_data_dir.AppendASCII("automation.port");
+  base::WriteFile(port_path_, base::NumberToString(bound_port));
 
   tcp_transport_ = std::make_unique<Transport>(weak_factory_.GetWeakPtr(), s,
                                                token, base::FilePath());
@@ -1422,10 +1609,14 @@ void OpenAutomationServer::RegisterCommands() {
             return;
           }
           if (OpenWindowUi* ui = MainUi(); ui && ui->command_bar_shown()) {
+            // The bar lives in its own child widget (focus is in its field).
+            views::Widget* target = ui->command_bar_widget()
+                                        ? ui->command_bar_widget()
+                                        : browser_view->GetWidget();
             ui::KeyEvent press(ui::EventType::kKeyPressed, key->code, flags);
-            browser_view->GetWidget()->OnKeyEvent(&press);
+            target->OnKeyEvent(&press);
             ui::KeyEvent release(ui::EventType::kKeyReleased, key->code, flags);
-            browser_view->GetWidget()->OnKeyEvent(&release);
+            target->OnKeyEvent(&release);
             Ok(std::move(reply), base::DictValue().Set("handled",
                                                           "commandBar"));
             return;
@@ -2019,26 +2210,21 @@ void OpenAutomationServer::RegisterCommands() {
   // --- Sync ------------------------------------------------------------------
   Add("sync-status", base::BindRepeating([](const base::DictValue&,
                                             Reply reply) {
-        OpenBrowserService* service = Svc();
-        ProfileServices* ps =
-            service->ProfileServicesFor(service->ActiveProfileId());
-        if (!ps || !ps->sync) {
+        SyncEngine* sync = Svc()->sync();
+        if (!sync) {
           Err(std::move(reply), "sync unavailable");
           return;
         }
-        Ok(std::move(reply), SyncStatusValue(ps->sync->Status()));
+        Ok(std::move(reply), SyncStatusValue(sync->Status()));
       }));
 
   Add("sync", base::BindRepeating([](const base::DictValue& args,
                                      Reply reply) {
-        OpenBrowserService* service = Svc();
-        ProfileServices* ps =
-            service->ProfileServicesFor(service->ActiveProfileId());
-        if (!ps || !ps->sync) {
+        SyncEngine* sync = Svc()->sync();
+        if (!sync) {
           Err(std::move(reply), "sync unavailable");
           return;
         }
-        SyncEngine* sync = ps->sync.get();
         const std::string op = json::GetString(args, "op", "status");
         const std::string server = json::GetString(args, "server");
         const std::string email = json::GetString(args, "email");
@@ -2057,12 +2243,9 @@ void OpenAutomationServer::RegisterCommands() {
               [](base::OnceCallback<void(SyncStatusInfo)> status_reply,
                  SyncResult result) {
                 OpenBrowserService* service = Svc();
-                ProfileServices* ps =
-                    service ? service->ProfileServicesFor(
-                                  service->ActiveProfileId())
-                            : nullptr;
-                SyncStatusInfo info =
-                    ps && ps->sync ? ps->sync->Status() : SyncStatusInfo();
+                SyncStatusInfo info = service && service->sync()
+                                          ? service->sync()->Status()
+                                          : SyncStatusInfo();
                 if (!result.ok) {
                   info.error_message = result.error_message;
                 }
@@ -2078,12 +2261,9 @@ void OpenAutomationServer::RegisterCommands() {
                   [](base::OnceCallback<void(SyncStatusInfo)> status_reply,
                      base::expected<std::string, std::string> result) {
                     OpenBrowserService* service = Svc();
-                    ProfileServices* ps =
-                        service ? service->ProfileServicesFor(
-                                      service->ActiveProfileId())
-                                : nullptr;
-                    SyncStatusInfo info =
-                        ps && ps->sync ? ps->sync->Status() : SyncStatusInfo();
+                    SyncStatusInfo info = service && service->sync()
+                                              ? service->sync()->Status()
+                                              : SyncStatusInfo();
                     if (!result.has_value()) {
                       info.error_message = result.error();
                     }
@@ -2097,12 +2277,9 @@ void OpenAutomationServer::RegisterCommands() {
                   [](base::OnceCallback<void(SyncStatusInfo)> status_reply,
                      base::expected<bool, std::string> result) {
                     OpenBrowserService* service = Svc();
-                    ProfileServices* ps =
-                        service ? service->ProfileServicesFor(
-                                      service->ActiveProfileId())
-                                : nullptr;
-                    SyncStatusInfo info =
-                        ps && ps->sync ? ps->sync->Status() : SyncStatusInfo();
+                    SyncStatusInfo info = service && service->sync()
+                                              ? service->sync()->Status()
+                                              : SyncStatusInfo();
                     if (!result.has_value()) {
                       info.error_message = result.error();
                     }

@@ -233,14 +233,14 @@ void OpenCommandBarView::Present(const CommandBarRequest& request) {
   field_->SetTextColorId(std::nullopt);
   close_button_->SetVisible(mode_ == CommandBarMode::kLittleOpen);
 
-  typed_ =
-      request.mode == CommandBarMode::kEditCurrentUrl
-          ? request.initial_text.substr(
-                0, std::min(request.initial_text.size(), m::kMaxInputLength))
-          : std::u16string();
+  // Any mode may open prefilled (Cmd/Ctrl+L's URL, Little Open's Edit URL,
+  // automation `command-bar open text=...`); the text is fully selected so
+  // typing replaces it.
+  const std::u16string initial_text = request.initial_text.substr(
+      0, std::min(request.initial_text.size(), m::kMaxInputLength));
+  typed_ = initial_text;
   field_->SetText(typed_);
   field_->ClearEditHistory();
-  // Cmd/Ctrl+L: the URL is fully selected; typing replaces it.
   field_->SelectAll(false);
   pre_edit_text_ = typed_;
   pre_edit_selection_ = gfx::Range(0, typed_.size());
@@ -253,6 +253,15 @@ void OpenCommandBarView::Present(const CommandBarRequest& request) {
     scope_from_command_ = true;
     EnterScopeInternal({scope, std::string(), ScopeTitle(scope), false},
                        std::u16string());
+    if (!initial_text.empty()) {
+      // Entering the scope clears the field; the prefill is the scope query.
+      typed_ = initial_text;
+      SetFieldText(typed_, 0, typed_.size());
+      field_->ClearEditHistory();
+      pre_edit_text_ = typed_;
+      pre_edit_selection_ = gfx::Range(0, typed_.size());
+      RunQuery();
+    }
   } else {
     UpdatePlaceholder();
     RunQuery();

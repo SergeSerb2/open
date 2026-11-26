@@ -22,6 +22,9 @@
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/find_in_page/find_notification_details.h"
 #include "components/find_in_page/find_types.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "components/javascript_dialogs/tab_modal_dialog_manager.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
@@ -29,7 +32,9 @@
 #include "content/public/browser/web_contents.h"
 #include "open_unified/browser/open_boost_controller.h"
 #include "open_unified/browser/open_browser_service.h"
+#include "open_unified/browser/open_chromium_hooks.h"
 #include "open_unified/browser/open_model_util.h"
+#include "open_unified/browser/platform/open_platform.h"
 #include "open_unified/core/adblock/open_adblock_profile_service.h"
 #include "open_unified/core/commands/command_registry.h"
 #include "open_unified/core/routing/routing_evaluator.h"
@@ -170,16 +175,64 @@ SitePermissionSetting ToPermissionSetting(ContentSetting setting) {
 }
 
 // Open commands bound as window accelerators (their CommandRegistry
-// shortcuts, user overrides included). Everything else keeps Chromium's
-// accelerator table for now.
+// shortcuts, user overrides included), registered at high priority so they
+// win over Chromium's accelerator table and, through
+// BrowserView::PreHandleKeyboardEvent, over the page. Navigation (Back,
+// Forward, Reload), zoom, Print and the like keep Chromium's own handling.
 constexpr CommandId kWindowAcceleratorCommands[] = {
+    CommandId::kNewTab,
+    CommandId::kOpenCommandBar,
+    CommandId::kToggleSidebar,
+    CommandId::kArchiveTab,
+    CommandId::kCopyUrl,
+    CommandId::kPinUnpinTab,
+    CommandId::kAddSplitView,
+    CommandId::kCloseSplitPane,
+    CommandId::kNextSpace,
+    CommandId::kPreviousSpace,
+    CommandId::kNextTab,
+    CommandId::kPreviousTab,
+    CommandId::kViewLibrary,
+    CommandId::kViewHistory,
+    CommandId::kViewArchive,
+    CommandId::kViewDownloads,
+    CommandId::kSettings,
     CommandId::kFind,
     CommandId::kFindNext,
     CommandId::kFindPrevious,
     CommandId::kTabSwitcherForward,
     CommandId::kTabSwitcherBackward,
     CommandId::kNewLittleOpenWindow,
+    CommandId::kGoToTab1,
+    CommandId::kGoToTab2,
+    CommandId::kGoToTab3,
+    CommandId::kGoToTab4,
+    CommandId::kGoToTab5,
+    CommandId::kGoToTab6,
+    CommandId::kGoToTab7,
+    CommandId::kGoToTab8,
+    CommandId::kGoToTab9,
+    CommandId::kGoToSpace1,
+    CommandId::kGoToSpace2,
+    CommandId::kGoToSpace3,
+    CommandId::kGoToSpace4,
+    CommandId::kGoToSpace5,
+    CommandId::kGoToSpace6,
+    CommandId::kGoToSpace7,
+    CommandId::kGoToSpace8,
+    CommandId::kGoToSpace9,
 };
+
+// Index 0..8 of a Go to Tab / Go to Space command, or -1.
+int GoToTabIndex(CommandId command) {
+  const int n = static_cast<int>(command) - static_cast<int>(CommandId::kGoToTab1);
+  return n >= 0 && n < 9 ? n : -1;
+}
+int GoToSpaceIndex(CommandId command) {
+  const int n =
+      static_cast<int>(command) - static_cast<int>(CommandId::kGoToSpace1);
+  return n >= 0 && n < 9 ? n : -1;
+}
 
 // Seeds longer than this are cut (docs/re/page-chrome.md §1).
 constexpr size_t kFindSeedMaxLength = 40;
@@ -413,11 +466,12 @@ GURL UrlForCommandBarIntent(const CommandBarIntent& intent) {
   return GURL();
 }
 
-// Pages Open shows outside the tab strip (Peek, Little Open). Chromium 156
-// keeps TabHelpers::AttachTabHelpers() private to its friend list, so these
-// get the helpers their Open features need: find in page (the Find bar) and
-// Open's ad blocking. Sidebar tabs get the full set through TabStripModel.
+// Pages Open shows outside the tab strip (Peek, Little Open) get the full
+// tab helper set through hook 0010 (TabHelpers::AttachTabHelpers(): find in
+// page, JavaScript dialogs, permission prompts, autofill, ...), plus Open's
+// ad-block counter. Sidebar tabs get the same set through TabStripModel.
 void AttachOverlayPageHelpers(content::WebContents* contents) {
+  hooks::AttachTabHelpers(contents);
   find_in_page::FindTabHelper::CreateForWebContents(contents);
   OpenAdBlockProfileService::EnsureTabHelper(contents);
 }
@@ -450,8 +504,8 @@ void OpenWindowController::Start() {
   started_ = true;
   service_->model().AddObserver(this);
   service_->tab_bridge()->AddObserver(this);
-  if (OpenExtensionBridge* extensions = service_->extension_bridge()) {
-    extensions->AddObserver(this);
+  for (OpenExtensionBridge* extensions : service_->AllExtensionBridges()) {
+    ObserveExtensionBridge(extensions);
   }
   // Chromium's startup Browser got its OpenBrowserView before the bridges
   // existed (hook 0002 runs between PreBrowserStart and PostBrowserStart).
@@ -472,8 +526,32 @@ void OpenWindowController::Shutdown() {
   if (OpenTabBridge* bridge = service_->tab_bridge()) {
     bridge->RemoveObserver(this);
   }
-  if (OpenExtensionBridge* extensions = service_->extension_bridge()) {
-    extensions->RemoveObserver(this);
+  extension_observations_.RemoveAllObservations();
+}
+
+void OpenWindowController::ObserveExtensionBridge(OpenExtensionBridge* bridge) {
+  if (bridge && !extension_observations_.IsObservingSource(bridge)) {
+    extension_observations_.AddObservation(bridge);
+  }
+}
+
+void OpenWindowController::UnobserveExtensionBridge(
+    OpenExtensionBridge* bridge) {
+  if (bridge && extension_observations_.IsObservingSource(bridge)) {
+    extension_observations_.RemoveObservation(bridge);
+  }
+}
+
+void OpenWindowController::NotifyPeekChanged(const WindowID& window_id) {
+  for (OpenViewObserver& observer : view_observers_) {
+    observer.OnPeekChanged(window_id);
+  }
+}
+
+void OpenWindowController::NotifyCommandBarStateChanged(
+    const WindowID& window_id) {
+  for (OpenViewObserver& observer : view_observers_) {
+    observer.OnCommandBarStateChanged(window_id);
   }
 }
 
@@ -502,12 +580,30 @@ OpenWindowUi* OpenWindowController::MainWindowUi() {
 }
 
 OpenWindowUi* OpenWindowController::WindowUiFor(const WindowID& window_id) {
-  for (auto& [browser_view, ui] : windows_) {
-    if (ui->window_id() == window_id) {
+  return const_cast<OpenWindowUi*>(WindowUiForConst(window_id));
+}
+
+const OpenWindowUi* OpenWindowController::WindowUiForConst(
+    const WindowID& window_id) const {
+  // Several Browsers (one per Profile) can show one Open window; the
+  // visible one is the window's current page.
+  const OpenWindowUi* fallback = nullptr;
+  for (const auto& [browser_view, ui] : windows_) {
+    if (ui->window_id() != window_id) {
+      continue;
+    }
+    if (browser_view->GetWidget() && browser_view->GetWidget()->IsVisible()) {
       return ui.get();
     }
+    fallback = fallback ? fallback : ui.get();
   }
-  return nullptr;
+  return fallback;
+}
+
+OpenWindowUi* OpenWindowController::WindowUiForBrowserView(
+    BrowserView* browser_view) {
+  auto it = windows_.find(browser_view);
+  return it == windows_.end() ? nullptr : it->second.get();
 }
 
 OpenLittleOpenController* OpenWindowController::OpenLittleOpen(
@@ -628,6 +724,14 @@ content::WebContents* OpenWindowController::ActiveWebContents() const {
   return bridge ? bridge->ActiveWebContents() : nullptr;
 }
 
+content::WebContents* OpenWindowController::ActiveWebContentsFor(
+    const WindowID& window_id) const {
+  if (const OpenWindowUi* ui = WindowUiForConst(window_id)) {
+    return ui->ActiveWebContents();
+  }
+  return ActiveWebContents();
+}
+
 // --- Reads ----------------------------------------------------------------
 
 const BrowserWindowState* OpenWindowController::GetWindowState(
@@ -661,8 +765,8 @@ const SidebarNode* OpenWindowController::FindNode(
 
 const Tab* OpenWindowController::GetActiveTab(
     const WindowID& window_id) const {
-  OpenTabBridge* bridge = service_->tab_bridge();
-  std::optional<ItemID> id = bridge ? bridge->ActiveTabId() : std::nullopt;
+  std::optional<ItemID> id =
+      OpenTabBridge::TabIdForWebContents(ActiveWebContentsFor(window_id));
   return id ? service_->model().FindTab(*id) : nullptr;
 }
 
@@ -743,8 +847,9 @@ OpenWindowController::GetPinnedToolbarActions(
 
 // --- Intents -----------------------------------------------------------------
 
-void OpenWindowController::NavigateActive(int direction) {
-  content::WebContents* contents = ActiveWebContents();
+void OpenWindowController::NavigateActive(const WindowID& window_id,
+                                          int direction) {
+  content::WebContents* contents = ActiveWebContentsFor(window_id);
   if (!contents) {
     return;
   }
@@ -787,16 +892,16 @@ void OpenWindowController::HandleIntent(const WindowID& window_id,
       model.SetSidebarWidth(window_id, intent.value);
       break;
     case OpenIntentKind::kGoBack:
-      NavigateActive(-1);
+      NavigateActive(window_id, -1);
       break;
     case OpenIntentKind::kGoForward:
-      NavigateActive(+1);
+      NavigateActive(window_id, +1);
       break;
     case OpenIntentKind::kReload:
-      NavigateActive(0);
+      NavigateActive(window_id, 0);
       break;
     case OpenIntentKind::kStopLoading:
-      if (content::WebContents* contents = ActiveWebContents()) {
+      if (content::WebContents* contents = ActiveWebContentsFor(window_id)) {
         contents->Stop();
       }
       break;
@@ -814,7 +919,7 @@ void OpenWindowController::HandleIntent(const WindowID& window_id,
       }
       break;
     case OpenIntentKind::kCopyCurrentUrl:
-      if (content::WebContents* contents = ActiveWebContents()) {
+      if (content::WebContents* contents = ActiveWebContentsFor(window_id)) {
         ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
             .WriteText(
                 base::UTF8ToUTF16(contents->GetLastCommittedURL().spec()));
@@ -1098,16 +1203,8 @@ OpenWindowUi::OpenWindowUi(OpenWindowController* controller,
       browser_view_(browser_view),
       open_view_(open_view),
       window_id_(std::move(window_id)) {
-  auto command_bar = std::make_unique<OpenCommandBarView>(this);
-  command_bar->SetVisible(false);
-  command_bar_ = static_cast<OpenCommandBarView*>(open_view_->SetOverlay(
-      OpenBrowserView::OverlaySlot::kCommandBar, std::move(command_bar)));
-
-  auto peek = std::make_unique<OpenPeekOverlayView>(this);
-  peek->SetVisible(false);
-  peek_ = static_cast<OpenPeekOverlayView*>(open_view_->SetOverlay(
-      OpenBrowserView::OverlaySlot::kPeek, std::move(peek)));
-
+  // Command Bar and Peek widgets are created on first use (EnsureCommandBar,
+  // EnsurePeek).
   split_ = static_cast<OpenSplitContainerView*>(open_view_->SetSplitContainer(
       std::make_unique<OpenSplitContainerView>(this)));
 
@@ -1124,6 +1221,7 @@ OpenWindowUi::OpenWindowUi(OpenWindowController* controller,
     mru_.push_back(active->id);
   }
   RegisterAccelerators();
+  ApplyWindowEffects();
   UpdatePanel();
 }
 
@@ -1131,11 +1229,13 @@ OpenWindowUi::~OpenWindowUi() {
   if (views::FocusManager* focus_manager = browser_view_->GetFocusManager()) {
     focus_manager->UnregisterAccelerators(this);
   }
+  escape_registered_ = false;
   switcher_monitor_.reset();
   find_observation_.Reset();
   panel_observation_.Reset();
-  panel_tracker_ = nullptr;
-  // Child widgets first: their views call back into this object.
+  // Every view that holds a raw_ptr to this object as its delegate goes
+  // before this object does, also on an early shutdown (the browser window
+  // still open): child widgets first, then the slots OpenBrowserView owns.
   find_bar_ = nullptr;
   find_host_.reset();
   toasts_ = nullptr;
@@ -1143,8 +1243,43 @@ OpenWindowUi::~OpenWindowUi() {
   switcher_ = nullptr;
   switcher_host_.reset();
   site_controls_.reset();
-  if (peek_ && peek_->is_showing()) {
-    peek_->Hide();
+  if (peek_) {
+    peek_->Hide();  // Detaches the page from the card's WebView.
+  }
+  peek_ = nullptr;
+  peek_host_.reset();
+  command_bar_ = nullptr;
+  command_bar_host_.reset();
+  if (open_view_) {
+    open_view_->SetOverlay(OpenBrowserView::OverlaySlot::kCommandBar, nullptr);
+    open_view_->SetOverlay(OpenBrowserView::OverlaySlot::kPeek, nullptr);
+    open_view_->SetOverlay(OpenBrowserView::OverlaySlot::kFindBarAndToasts,
+                           nullptr);
+    split_ = nullptr;
+    open_view_->SetSplitContainer(nullptr);
+  }
+  panel_tracker_ = nullptr;
+  if (peek_contents_) {
+    peek_contents_->SetDelegate(nullptr);
+  }
+  peek_contents_.reset();
+}
+
+content::WebContents* OpenWindowUi::ActiveWebContents() const {
+  content::WebContents* contents =
+      browser_view_ ? browser_view_->GetActiveWebContents() : nullptr;
+  // The blank page that keeps an empty window alive is not an Open tab.
+  return OpenTabBridge::TabIdForWebContents(contents) ? contents : nullptr;
+}
+
+std::optional<ItemID> OpenWindowUi::ActiveTabId() const {
+  return OpenTabBridge::TabIdForWebContents(ActiveWebContents());
+}
+
+void OpenWindowUi::ApplyWindowEffects() {
+  views::Widget* w = widget();
+  if (OpenPlatform* platform = OpenPlatform::Get(); platform && w) {
+    platform->ApplyWindowEffects(w, CurrentAppearance().dark);
   }
 }
 
@@ -1178,9 +1313,38 @@ secondary::Appearance OpenWindowUi::CurrentAppearance() const {
 
 // --- Command Bar -------------------------------------------------------------
 
+void OpenWindowUi::EnsureCommandBar() {
+  if (command_bar_host_ || !widget()) {
+    return;
+  }
+  auto view = std::make_unique<OpenCommandBarView>(this);
+  view->SetVisible(false);
+  command_bar_ = view.get();
+  command_bar_host_ = std::make_unique<secondary::OverlayWidgetHost>(
+      widget(), std::move(view), "OpenCommandBar");
+  UpdateOverlayAnchors();
+}
+
+void OpenWindowUi::EnsurePeek() {
+  if (peek_host_ || !widget()) {
+    return;
+  }
+  auto view = std::make_unique<OpenPeekOverlayView>(this);
+  view->SetVisible(false);
+  peek_ = view.get();
+  peek_host_ = std::make_unique<secondary::OverlayWidgetHost>(
+      widget(), std::move(view), "OpenPeek");
+  UpdateOverlayAnchors();
+}
+
+views::Widget* OpenWindowUi::command_bar_widget() const {
+  return command_bar_host_ ? command_bar_host_->widget() : nullptr;
+}
+
 void OpenWindowUi::ShowCommandBar(CommandBarMode mode,
                                   const std::u16string& initial_text,
                                   std::optional<gfx::Rect> anchor_in_screen) {
+  EnsureCommandBar();
   if (!command_bar_) {
     return;
   }
@@ -1196,17 +1360,30 @@ void OpenWindowUi::ShowCommandBar(CommandBarMode mode,
     local.set_origin(origin);
     request.inline_anchor = local;
   }
+  const bool was_shown = command_bar_shown();
+  // The widget shows before Present() so the field can take focus.
+  UpdateOverlayAnchors();
+  command_bar_host_->Show();
   command_bar_->SetVisible(true);
   command_bar_->Present(request);
+  UpdateEscapeRegistration();
+  if (!was_shown) {
+    controller_->NotifyCommandBarStateChanged(window_id_);
+  }
 }
 
 void OpenWindowUi::HideCommandBar() {
   if (command_bar_ && command_bar_->is_presented()) {
+    // OnCommandBarDismissed() hides the widget and notifies.
     command_bar_->Dismiss(CommandBarDismissReason::kProgrammatic);
   }
   if (command_bar_) {
     command_bar_->SetVisible(false);
   }
+  if (command_bar_host_ && command_bar_host_->IsVisible()) {
+    command_bar_host_->Hide();
+  }
+  UpdateEscapeRegistration();
 }
 
 bool OpenWindowUi::command_bar_shown() const {
@@ -1244,7 +1421,7 @@ CommandBarResults OpenWindowUi::QuerySuggestions(const CommandBarQuery& query) {
   OpenBrowserService* s = service();
   return QueryCommandBar(s, query, s->ActiveProfileId(),
                          model_util::FocusedSpace(s->model(), window_id_),
-                         s->tab_bridge()->ActiveTabId());
+                         ActiveTabId());
 }
 
 std::optional<CommandBarScopeTarget> OpenWindowUi::ResolveSiteSearch(
@@ -1262,7 +1439,7 @@ void OpenWindowUi::OpenUrlWithDisposition(const GURL& url,
   OpenTabBridge* bridge = service()->tab_bridge();
   switch (disposition) {
     case CommandBarDisposition::kCurrentTab:
-      if (std::optional<ItemID> active = bridge->ActiveTabId()) {
+      if (std::optional<ItemID> active = ActiveTabId()) {
         bridge->Navigate(*active, url);
         return;
       }
@@ -1275,7 +1452,7 @@ void OpenWindowUi::OpenUrlWithDisposition(const GURL& url,
       bridge->OpenTab(url, /*background=*/true);
       return;
     case CommandBarDisposition::kSplitView: {
-      std::optional<ItemID> active = bridge->ActiveTabId();
+      std::optional<ItemID> active = ActiveTabId();
       const ItemID opened = bridge->OpenTab(url, /*background=*/true);
       if (active && !opened.empty()) {
         service()->model().MakeSplit({*active, opened});
@@ -1288,104 +1465,193 @@ void OpenWindowUi::OpenUrlWithDisposition(const GURL& url,
 void OpenWindowUi::RunAction(const std::string& action_id) {
   const CommandDefinition* command =
       service()->commands().FindByStringId(action_id);
-  if (!command) {
-    return;
+  if (command) {
+    RunCommandId(command->command_id);
   }
-  OpenTabBridge* bridge = service()->tab_bridge();
-  std::optional<ItemID> active = bridge->ActiveTabId();
+}
+
+bool OpenWindowUi::RunCommandId(CommandId command) {
+  OpenBrowserService* s = service();
+  OpenTabBridge* bridge = s->tab_bridge();
+  if (!bridge) {
+    return false;
+  }
+  BrowserModel& model = s->model();
+  std::optional<ItemID> active = ActiveTabId();
   auto open_page = [&](std::string_view host, std::string_view path) {
     bridge->OpenTab(GURL(webui::OpenWebUIURL(host, path)),
                     /*background=*/false);
   };
-  switch (command->command_id) {
+  auto intent = [&](OpenIntentKind kind) {
+    controller_->HandleIntent(window_id_, OpenIntent::Of(kind));
+  };
+  if (const int index = GoToTabIndex(command); index >= 0) {
+    // Arc: Cmd/Ctrl+1..8 go to that sidebar item, 9 to the last one.
+    const std::optional<SpaceID> space =
+        model_util::FocusedSpace(model, window_id_);
+    const std::vector<ItemID> ids =
+        space ? model_util::OrderedTabIds(model, *space)
+              : std::vector<ItemID>();
+    if (ids.empty()) {
+      return true;
+    }
+    const size_t target = index == 8 ? ids.size() - 1
+                                     : std::min(static_cast<size_t>(index),
+                                                ids.size() - 1);
+    bridge->SelectNode(ids[target]);
+    return true;
+  }
+  if (const int index = GoToSpaceIndex(command); index >= 0) {
+    const std::vector<SpaceID> spaces =
+        controller_->GetWindowSpaceIds(window_id_);
+    if (static_cast<size_t>(index) < spaces.size()) {
+      bridge->FocusSpace(spaces[static_cast<size_t>(index)]);
+    }
+    return true;
+  }
+  switch (command) {
     case CommandId::kNewTab:
     case CommandId::kOpenCommandBar:
-      ShowCommandBar(CommandBarMode::kNewTab, std::u16string(), std::nullopt);
-      break;
+      if (command == CommandId::kOpenCommandBar && active) {
+        // Cmd/Ctrl+L edits the current URL (Arc).
+        const Tab* tab = model.FindTab(*active);
+        ShowCommandBar(CommandBarMode::kEditCurrentUrl,
+                       tab ? base::UTF8ToUTF16(tab->url) : std::u16string(),
+                       std::nullopt);
+      } else {
+        ShowCommandBar(CommandBarMode::kNewTab, std::u16string(),
+                       std::nullopt);
+      }
+      return true;
     case CommandId::kSettings:
       open_page(webui::kHostSettings, "");
-      break;
+      return true;
     case CommandId::kViewLibrary:
       open_page(webui::kHostLibrary, "");
-      break;
+      return true;
     case CommandId::kViewHistory:
       open_page(webui::kHostLibrary, "history");
-      break;
+      return true;
     case CommandId::kViewArchive:
       open_page(webui::kHostLibrary, "archive");
-      break;
+      return true;
     case CommandId::kViewDownloads:
       open_page(webui::kHostLibrary, "downloads");
-      break;
+      return true;
     case CommandId::kViewMedia:
       open_page(webui::kHostLibrary, "media");
-      break;
+      return true;
     case CommandId::kViewBoosts:
     case CommandId::kNewBoost:
       open_page(webui::kHostBoosts, "");
-      break;
+      return true;
     case CommandId::kNewEasel:
       open_page(webui::kHostEasel, "");
-      break;
+      return true;
     case CommandId::kNewNote:
       open_page(webui::kHostNote, "");
-      break;
+      return true;
     case CommandId::kToggleSidebar:
-      controller_->HandleIntent(window_id_,
-                                OpenIntent::Of(OpenIntentKind::kToggleSidebar));
-      break;
+      intent(OpenIntentKind::kToggleSidebar);
+      return true;
     case CommandId::kNewSpace:
-      controller_->HandleIntent(window_id_,
-                                OpenIntent::Of(OpenIntentKind::kNewSpace));
-      break;
+      intent(OpenIntentKind::kNewSpace);
+      return true;
+    case CommandId::kNextSpace:
+    case CommandId::kPreviousSpace: {
+      const std::vector<SpaceID> spaces =
+          controller_->GetWindowSpaceIds(window_id_);
+      const std::optional<SpaceID> focused =
+          model_util::FocusedSpace(model, window_id_);
+      if (spaces.size() < 2 || !focused) {
+        return true;
+      }
+      auto it = std::find(spaces.begin(), spaces.end(), *focused);
+      const size_t current =
+          it == spaces.end() ? 0 : static_cast<size_t>(it - spaces.begin());
+      const size_t next =
+          command == CommandId::kNextSpace
+              ? (current + 1) % spaces.size()
+              : (current + spaces.size() - 1) % spaces.size();
+      bridge->FocusSpace(spaces[next]);
+      return true;
+    }
+    case CommandId::kNextTab:
+    case CommandId::kPreviousTab: {
+      const std::optional<SpaceID> space =
+          model_util::FocusedSpace(model, window_id_);
+      const std::vector<ItemID> ids =
+          space ? model_util::OrderedTabIds(model, *space)
+                : std::vector<ItemID>();
+      if (ids.empty()) {
+        return true;
+      }
+      auto it = active ? std::find(ids.begin(), ids.end(), *active)
+                       : ids.end();
+      size_t next = 0;
+      if (it != ids.end()) {
+        const size_t current = static_cast<size_t>(it - ids.begin());
+        next = command == CommandId::kNextTab
+                   ? (current + 1) % ids.size()
+                   : (current + ids.size() - 1) % ids.size();
+      }
+      bridge->SelectNode(ids[next]);
+      return true;
+    }
     case CommandId::kAddSplitView:
       if (active) {
         bridge->ToggleSplit(*active);
       }
-      break;
+      return true;
+    case CommandId::kCloseSplitPane:
+      if (active) {
+        if (std::optional<NodeParent> parent = model.GetParent(*active);
+            parent && parent->kind == NodeParentKind::kSplitPane) {
+          model.RemovePane(parent->owner_id, *active, /*archive=*/true);
+        }
+      }
+      return true;
     case CommandId::kPinUnpinTab:
       if (active) {
         bridge->TogglePin(*active);
       }
-      break;
+      return true;
     case CommandId::kArchiveTab:
       if (active) {
         bridge->CloseNode(*active);
       }
-      break;
+      return true;
     case CommandId::kReload:
-      controller_->HandleIntent(window_id_,
-                                OpenIntent::Of(OpenIntentKind::kReload));
-      break;
+      intent(OpenIntentKind::kReload);
+      return true;
     case CommandId::kGoBack:
-      controller_->HandleIntent(window_id_,
-                                OpenIntent::Of(OpenIntentKind::kGoBack));
-      break;
+      intent(OpenIntentKind::kGoBack);
+      return true;
     case CommandId::kGoForward:
-      controller_->HandleIntent(window_id_,
-                                OpenIntent::Of(OpenIntentKind::kGoForward));
-      break;
+      intent(OpenIntentKind::kGoForward);
+      return true;
     case CommandId::kCopyUrl:
-      controller_->HandleIntent(
-          window_id_, OpenIntent::Of(OpenIntentKind::kCopyCurrentUrl));
-      break;
+      if (content::WebContents* contents = ActiveWebContents()) {
+        CopyUrl(contents->GetLastCommittedURL());
+      }
+      return true;
     case CommandId::kFind:
       ShowFindBar();
-      break;
+      return true;
     case CommandId::kFindNext:
       FindNext(/*forward=*/true);
-      break;
+      return true;
     case CommandId::kFindPrevious:
       FindNext(/*forward=*/false);
-      break;
+      return true;
     case CommandId::kNewLittleOpenWindow:
     case CommandId::kLittleOpenGlobal:
       controller_->OpenLittleOpen(std::nullopt);
-      break;
+      return true;
     default:
       // Other actions run through Chromium's own command handling where it
       // exists (Print, zoom).
-      break;
+      return false;
   }
 }
 
@@ -1417,16 +1683,28 @@ void OpenWindowUi::OnCommandBarDismissed(
   if (command_bar_) {
     command_bar_->SetVisible(false);
   }
-  if (content::WebContents* contents = controller_->ActiveWebContents()) {
+  if (command_bar_host_) {
+    command_bar_host_->Hide();
+  }
+  UpdateEscapeRegistration();
+  // Back to the page under the bar: Peek's when Peek shows, else the tab.
+  if (peek_shown() && peek_contents_) {
+    peek_contents_->Focus();
+  } else if (content::WebContents* contents = ActiveWebContents()) {
     contents->Focus();
   }
+  controller_->NotifyCommandBarStateChanged(window_id_);
 }
 
 // --- Peek --------------------------------------------------------------------
 
 void OpenWindowUi::OpenPeek(const GURL& url,
                             const std::optional<ItemID>& source_node) {
-  if (!peek_ || !url.is_valid()) {
+  if (!url.is_valid()) {
+    return;
+  }
+  EnsurePeek();
+  if (!peek_) {
     return;
   }
   ClosePeek();
@@ -1434,12 +1712,27 @@ void OpenWindowUi::OpenPeek(const GURL& url,
   content::WebContents::CreateParams params(browser->GetProfile());
   peek_contents_ = content::WebContents::Create(params);
   AttachOverlayPageHelpers(peek_contents_.get());
+  // Unhandled keys (Esc, Cmd/Ctrl+O) come back to the window; JavaScript
+  // dialogs are tab-modal to this window.
+  peek_contents_->SetDelegate(this);
+  if (auto* modal = web_modal::WebContentsModalDialogManager::FromWebContents(
+          peek_contents_.get())) {
+    modal->SetDelegate(this);
+  }
   peek_contents_->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(url));
   peek_source_ = source_node;
   peek_->SetAppearance(CurrentAppearance());
+  UpdateOverlayAnchors();
+  peek_host_->Show();
+  // The Command Bar (when open) stays above Peek.
+  if (command_bar_host_ && command_bar_host_->IsVisible()) {
+    command_bar_host_->Show();
+  }
   peek_->SetVisible(true);
   peek_->Show(peek_contents_.get(), open_view_->GetPanelBounds());
+  UpdateEscapeRegistration();
+  controller_->NotifyPeekChanged(window_id_);
 }
 
 void OpenWindowUi::ExpandPeek() {
@@ -1447,14 +1740,32 @@ void OpenWindowUi::ExpandPeek() {
 }
 
 void OpenWindowUi::ClosePeek() {
+  const bool was_shown = peek_shown();
   if (peek_ && peek_->is_showing()) {
     peek_->Hide();
   }
   if (peek_) {
     peek_->SetVisible(false);
   }
+  if (peek_host_ && peek_host_->IsVisible()) {
+    peek_host_->Hide();
+  }
+  if (peek_contents_) {
+    if (auto* modal = web_modal::WebContentsModalDialogManager::FromWebContents(
+            peek_contents_.get())) {
+      modal->SetDelegate(nullptr);
+    }
+    peek_contents_->SetDelegate(nullptr);
+  }
   peek_contents_.reset();
   peek_source_.reset();
+  UpdateEscapeRegistration();
+  if (was_shown) {
+    if (content::WebContents* contents = ActiveWebContents()) {
+      contents->Focus();
+    }
+    controller_->NotifyPeekChanged(window_id_);
+  }
 }
 
 bool OpenWindowUi::peek_shown() const {
@@ -1491,7 +1802,7 @@ void OpenWindowUi::OnPeekOpenInSplit() {
 
 open_unified::SiteControlState OpenWindowUi::BuildSiteControlState() const {
   open_unified::SiteControlState state;
-  content::WebContents* contents = controller_->ActiveWebContents();
+  content::WebContents* contents = ActiveWebContents();
   if (!contents) {
     return state;
   }
@@ -1499,7 +1810,7 @@ open_unified::SiteControlState OpenWindowUi::BuildSiteControlState() const {
   state.host = base::UTF8ToUTF16(url.host());
   state.secure = url.SchemeIsCryptographic();
   OpenBrowserService* s = service();
-  if (std::optional<ItemID> tab = s->tab_bridge()->ActiveTabId()) {
+  if (std::optional<ItemID> tab = ActiveTabId()) {
     if (std::optional<ProfileID> profile =
             model_util::ProfileOfNode(s->model(), *tab)) {
       state.boost_active =
@@ -1543,7 +1854,7 @@ open_unified::SiteControlState OpenWindowUi::BuildSiteControlState() const {
 }
 
 void OpenWindowUi::ShowSiteControls(views::View* anchor) {
-  if (!controller_->ActiveWebContents()) {
+  if (!ActiveWebContents()) {
     return;
   }
   if (!site_controls_) {
@@ -1574,7 +1885,7 @@ void OpenWindowUi::CopyUrl(const GURL& url) {
 }
 
 void OpenWindowUi::OnSiteControlAction(SiteControlAction action) {
-  content::WebContents* contents = controller_->ActiveWebContents();
+  content::WebContents* contents = ActiveWebContents();
   if (!contents) {
     return;
   }
@@ -1590,7 +1901,7 @@ void OpenWindowUi::OnSiteControlAction(SiteControlAction action) {
                       /*background=*/false);
       break;
     case SiteControlAction::kSplit:
-      if (std::optional<ItemID> active = bridge->ActiveTabId()) {
+      if (std::optional<ItemID> active = ActiveTabId()) {
         bridge->ToggleSplit(*active);
       }
       break;
@@ -1618,7 +1929,7 @@ void OpenWindowUi::OnSiteControlExtensionPressed(
 void OpenWindowUi::OnSiteControlPermissionChanged(
     SitePermissionKind kind,
     SitePermissionSetting setting) {
-  content::WebContents* contents = controller_->ActiveWebContents();
+  content::WebContents* contents = ActiveWebContents();
   if (!contents) {
     return;
   }
@@ -1639,7 +1950,7 @@ void OpenWindowUi::OnSiteControlPermissionChanged(
 }
 
 void OpenWindowUi::OnSiteControlAdBlockToggled(bool enabled) {
-  content::WebContents* contents = controller_->ActiveWebContents();
+  content::WebContents* contents = ActiveWebContents();
   if (!contents) {
     return;
   }
@@ -1687,7 +1998,7 @@ void OpenWindowUi::UpdatePanel() {
       split_->SetPresentation(SplitPresentation());
       open_view_->SetSplitViewActive(false);
       // Chromium's contents view shows the active page again.
-      if (content::WebContents* active = controller_->ActiveWebContents()) {
+      if (content::WebContents* active = ActiveWebContents()) {
         if (views::WebView* web_view =
                 browser_view_->GetActiveContentsWebView()) {
           web_view->SetWebContents(active);
@@ -1827,7 +2138,7 @@ void OpenWindowUi::ActivateWindow() {
 }
 
 void OpenWindowUi::FocusPage() {
-  if (content::WebContents* contents = controller_->ActiveWebContents()) {
+  if (content::WebContents* contents = ActiveWebContents()) {
     contents->Focus();
   }
 }
@@ -1894,6 +2205,18 @@ void OpenWindowUi::EnsureTabSwitcher() {
 void OpenWindowUi::UpdateOverlayAnchors() {
   using Alignment = secondary::OverlayWidgetHost::Alignment;
   const gfx::Rect panel = PanelRectInWidget();
+  // Command Bar and Peek cover the client area: their views lay out in
+  // OpenBrowserView's coordinates (the widget's origin is OpenBrowserView's).
+  const gfx::Rect window = WindowRectInWidget();
+  if (command_bar_host_) {
+    command_bar_host_->SetAnchor(window, Alignment::kFill);
+  }
+  if (peek_host_) {
+    peek_host_->SetAnchor(window, Alignment::kFill);
+    if (peek_ && peek_->is_showing()) {
+      peek_->SetContentRect(open_view_->GetPanelBounds());
+    }
+  }
   if (find_host_) {
     // Open's Views chrome has no content toolbar above the page.
     find_host_->SetAnchor(
@@ -1921,7 +2244,7 @@ void OpenWindowUi::OnViewIsDeleting(views::View* observed_view) {
 // --- Find in page --------------------------------------------------------------
 
 find_in_page::FindTabHelper* OpenWindowUi::FindHelper() const {
-  content::WebContents* contents = controller_->ActiveWebContents();
+  content::WebContents* contents = ActiveWebContents();
   return contents ? find_in_page::FindTabHelper::FromWebContents(contents)
                   : nullptr;
 }
@@ -1931,7 +2254,7 @@ bool OpenWindowUi::find_bar_shown() const {
 }
 
 void OpenWindowUi::ShowFindBar(std::optional<std::u16string> query) {
-  content::WebContents* contents = controller_->ActiveWebContents();
+  content::WebContents* contents = ActiveWebContents();
   find_in_page::FindTabHelper* helper =
       contents ? find_in_page::FindTabHelper::FromWebContents(contents)
                : nullptr;
@@ -1984,7 +2307,7 @@ void OpenWindowUi::ShowFindBar(std::optional<std::u16string> query) {
   if (!reports_change && !find_bar_->query().empty()) {
     OnFindQueryChanged(std::u16string(find_bar_->query()));
   }
-  SetEscapeRegistered(true);
+  UpdateEscapeRegistration();
 }
 
 void OpenWindowUi::FindNext(bool forward) {
@@ -2006,7 +2329,7 @@ void OpenWindowUi::CloseFindBar() {
   if (find_host_) {
     find_host_->Hide();
   }
-  SetEscapeRegistered(false);
+  UpdateEscapeRegistration();
   if (was_shown) {
     FocusPage();
   }
@@ -2065,7 +2388,7 @@ void OpenWindowUi::OnFindTabHelperDestroyed(
   if (find_host_) {
     find_host_->Hide();
   }
-  SetEscapeRegistered(false);
+  UpdateEscapeRegistration();
 }
 
 // --- Toasts --------------------------------------------------------------------
@@ -2088,6 +2411,8 @@ void OpenWindowUi::OnModelChanged() {
   }
   const bool switched = last_focused_space_.has_value() && focused.has_value();
   last_focused_space_ = focused;
+  // A Space with a light or dark theme switches the native window effects.
+  ApplyWindowEffects();
   if (!switched) {
     return;
   }
@@ -2132,7 +2457,7 @@ std::vector<TabSwitcherItem> OpenWindowUi::BuildSwitcherItems() const {
   };
   // Current tab first, then most recently used.
   if (bridge) {
-    if (std::optional<ItemID> active = bridge->ActiveTabId()) {
+    if (std::optional<ItemID> active = ActiveTabId()) {
       add(*active);
     }
   }
@@ -2274,27 +2599,26 @@ void OpenWindowUi::RegisterAccelerators() {
   }
   focus_manager->UnregisterAccelerators(this);
   accelerator_commands_.clear();
-  const bool had_escape = escape_registered_;
   escape_registered_ = false;
   const CommandRegistry& commands = service()->commands();
   for (CommandId command : kWindowAcceleratorCommands) {
     for (const KeyboardShortcut& shortcut :
          commands.EffectiveShortcuts(command)) {
       std::optional<ui::Accelerator> accelerator = ToAccelerator(shortcut);
-      if (!accelerator || accelerator_commands_.contains(*accelerator)) {
+      if (!accelerator || accelerator_commands_.contains(*accelerator) ||
+          (accelerator->key_code() == ui::VKEY_ESCAPE &&
+           accelerator->modifiers() == ui::EF_NONE)) {
         continue;
       }
       accelerator_commands_.emplace(*accelerator, command);
       // High priority: ahead of Chromium's accelerator table (IDC_FIND,
-      // IDC_SELECT_NEXT_TAB) and, through BrowserView::PreHandleKeyboardEvent,
-      // ahead of the page.
+      // IDC_SELECT_NEXT_TAB, IDC_NEW_TAB, ...) and, through
+      // BrowserView::PreHandleKeyboardEvent, ahead of the page.
       focus_manager->RegisterAccelerator(
           *accelerator, ui::AcceleratorManager::kHighPriority, this);
     }
   }
-  if (had_escape) {
-    SetEscapeRegistered(true);
-  }
+  UpdateEscapeRegistration();
 }
 
 void OpenWindowUi::SetEscapeRegistered(bool registered) {
@@ -2302,7 +2626,6 @@ void OpenWindowUi::SetEscapeRegistered(bool registered) {
   if (!focus_manager || registered == escape_registered_) {
     return;
   }
-  // Esc belongs to the page except while the find bar shows.
   const ui::Accelerator escape(ui::VKEY_ESCAPE, ui::EF_NONE);
   if (registered) {
     focus_manager->RegisterAccelerator(
@@ -2311,6 +2634,12 @@ void OpenWindowUi::SetEscapeRegistered(bool registered) {
     focus_manager->UnregisterAccelerator(escape, this);
   }
   escape_registered_ = registered;
+}
+
+void OpenWindowUi::UpdateEscapeRegistration() {
+  // Esc belongs to the page except while an Open overlay shows.
+  SetEscapeRegistered(command_bar_shown() || peek_shown() ||
+                      find_bar_shown());
 }
 
 bool OpenWindowUi::RunShortcut(CommandId command) {
@@ -2334,22 +2663,49 @@ bool OpenWindowUi::RunShortcut(CommandId command) {
     case CommandId::kTabSwitcherBackward:
       TabSwitcherStep(/*reverse=*/true);
       return true;
-    case CommandId::kNewLittleOpenWindow:
-      controller_->OpenLittleOpen(std::nullopt);
-      return true;
+    case CommandId::kCopyUrl:
+    case CommandId::kArchiveTab:
+    case CommandId::kPinUnpinTab:
+    case CommandId::kAddSplitView:
+      // Page commands need a page; an empty window lets Chromium decide.
+      if (!ActiveWebContents()) {
+        return false;
+      }
+      return RunCommandId(command);
     default:
-      return false;
+      return RunCommandId(command);
   }
+}
+
+bool OpenWindowUi::HandleFindCommand(CommandId command) {
+  return RunShortcut(command);
 }
 
 bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_ESCAPE &&
       accelerator.modifiers() == ui::EF_NONE && escape_registered_) {
+    // The topmost Open overlay takes Esc: Command Bar, then Peek, then the
+    // find bar.
+    if (command_bar_shown()) {
+      views::FocusManager* focus_manager = browser_view_->GetFocusManager();
+      views::View* focused =
+          focus_manager ? focus_manager->GetFocusedView() : nullptr;
+      if (focused && command_bar_->Contains(focused)) {
+        // The bar's field handles Esc itself (IME composition first).
+        return false;
+      }
+      command_bar_->Dismiss(CommandBarDismissReason::kEscape);
+      return true;
+    }
+    if (peek_shown()) {
+      OnPeekDismissed(PeekDismissReason::kEscape);
+      return true;
+    }
     if (find_bar_shown()) {
       CloseFindBar();
       return true;
     }
-    SetEscapeRegistered(false);
+    UpdateEscapeRegistration();
     return false;
   }
   auto it = accelerator_commands_.find(accelerator);
@@ -2358,6 +2714,37 @@ bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
 
 bool OpenWindowUi::CanHandleAccelerators() const {
   return browser_view_ && browser_view_->GetWidget();
+}
+
+// --- Peek page delegate ---------------------------------------------------------
+
+bool OpenWindowUi::HandleKeyboardEvent(
+    content::WebContents* source,
+    const input::NativeWebKeyboardEvent& event) {
+  // Keys Peek's page did not consume go to the window's FocusManager, where
+  // Peek's Esc and Cmd/Ctrl+O and Open's shortcuts are registered.
+  views::FocusManager* focus_manager =
+      browser_view_ ? browser_view_->GetFocusManager() : nullptr;
+  return focus_manager && unhandled_keyboard_event_handler_.HandleKeyboardEvent(
+                              event, focus_manager);
+}
+
+content::JavaScriptDialogManager* OpenWindowUi::GetJavaScriptDialogManager(
+    content::WebContents* source) {
+  // Created by TabHelpers::AttachTabHelpers() (hook 0010).
+  return javascript_dialogs::TabModalDialogManager::FromWebContents(source);
+}
+
+web_modal::WebContentsModalDialogHost*
+OpenWindowUi::GetWebContentsModalDialogHost(
+    content::WebContents* web_contents) {
+  BrowserWindowInterface* browser =
+      browser_view_ ? browser_view_->browser() : nullptr;
+  return browser ? browser->GetWebContentsModalDialogHostForWindow() : nullptr;
+}
+
+bool OpenWindowUi::IsWebContentsVisible(content::WebContents* web_contents) {
+  return peek_shown() && web_contents == peek_contents_.get();
 }
 
 // --- Automation readback -----------------------------------------------------
@@ -2493,6 +2880,17 @@ OpenLittleOpenController::OpenLittleOpenController(
 
 OpenLittleOpenController::~OpenLittleOpenController() {
   Observe(nullptr);
+  // Open web-modal dialogs close with their host.
+  for (web_modal::ModalDialogHostObserver& observer : modal_observers_) {
+    observer.OnHostDestroying();
+  }
+  if (contents_) {
+    if (auto* modal = web_modal::WebContentsModalDialogManager::FromWebContents(
+            contents_.get())) {
+      modal->SetDelegate(nullptr);
+    }
+    contents_->SetDelegate(nullptr);
+  }
   bar_ = nullptr;
   // The window (and its WebView) goes before the page it shows.
   window_.reset();
@@ -2556,6 +2954,13 @@ void OpenLittleOpenController::Navigate(const GURL& url) {
     contents_ =
         content::WebContents::Create(content::WebContents::CreateParams(profile));
     AttachOverlayPageHelpers(contents_.get());
+    // Unhandled keys (Cmd/Ctrl+O) reach the Little Open window; JavaScript
+    // dialogs show inside it.
+    contents_->SetDelegate(this);
+    if (auto* modal = web_modal::WebContentsModalDialogManager::FromWebContents(
+            contents_.get())) {
+      modal->SetDelegate(this);
+    }
     Observe(contents_.get());
   }
   contents_->GetController().LoadURLWithParams(
@@ -2604,6 +3009,9 @@ void OpenLittleOpenController::EnterPageMode() {
   UpdateState();
   if (contents_) {
     contents_->Focus();
+  }
+  for (web_modal::ModalDialogHostObserver& observer : modal_observers_) {
+    observer.OnPositionRequiresUpdate();
   }
 }
 
@@ -2851,6 +3259,61 @@ void OpenLittleOpenController::DidFinishNavigation(
   service()->RecordVisit(profile_id_, url.spec(),
                          base::UTF16ToUTF8(contents_->GetTitle()),
                          /*typed=*/false);
+}
+
+// --- Page delegate and web-modal host ------------------------------------------
+
+bool OpenLittleOpenController::HandleKeyboardEvent(
+    content::WebContents* source,
+    const input::NativeWebKeyboardEvent& event) {
+  views::Widget* widget = window_ ? window_->widget() : nullptr;
+  views::FocusManager* focus_manager =
+      widget ? widget->GetFocusManager() : nullptr;
+  return focus_manager && unhandled_keyboard_event_handler_.HandleKeyboardEvent(
+                              event, focus_manager);
+}
+
+content::JavaScriptDialogManager*
+OpenLittleOpenController::GetJavaScriptDialogManager(
+    content::WebContents* source) {
+  return javascript_dialogs::TabModalDialogManager::FromWebContents(source);
+}
+
+web_modal::WebContentsModalDialogHost*
+OpenLittleOpenController::GetWebContentsModalDialogHost(
+    content::WebContents* web_contents) {
+  return window_ && window_->widget() ? this : nullptr;
+}
+
+bool OpenLittleOpenController::IsWebContentsVisible(
+    content::WebContents* web_contents) {
+  return !closing_ && is_page() && window_->widget()->IsVisible();
+}
+
+gfx::NativeView OpenLittleOpenController::GetHostView() const {
+  return window_ && window_->widget() ? window_->widget()->GetNativeView()
+                                      : gfx::NativeView();
+}
+
+gfx::Point OpenLittleOpenController::GetDialogPosition(const gfx::Size& size) {
+  // Centered at the top of the page, as Chromium's tab-modal dialogs.
+  const gfx::Size max = GetMaximumDialogSize();
+  return gfx::Point(std::max(0, (max.width() - size.width()) / 2), 0);
+}
+
+gfx::Size OpenLittleOpenController::GetMaximumDialogSize() {
+  views::Widget* widget = window_ ? window_->widget() : nullptr;
+  return widget ? widget->GetClientAreaBoundsInScreen().size() : gfx::Size();
+}
+
+void OpenLittleOpenController::AddObserver(
+    web_modal::ModalDialogHostObserver* observer) {
+  modal_observers_.AddObserver(observer);
+}
+
+void OpenLittleOpenController::RemoveObserver(
+    web_modal::ModalDialogHostObserver* observer) {
+  modal_observers_.RemoveObserver(observer);
 }
 
 }  // namespace open_unified

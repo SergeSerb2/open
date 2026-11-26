@@ -33,7 +33,7 @@ import os
 import socket
 import sys
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Union
 
 
 class OpenError(RuntimeError):
@@ -93,15 +93,22 @@ class OpenClient:
 
   @classmethod
   def wait_for(cls, deadline_s: float = 60.0, poll_s: float = 0.25,
+               port: Union[int, Callable[[], int], None] = None,
                **connect_args) -> "OpenClient":
-    """Connects once the browser listens and answers ping."""
+    """Connects once the browser listens and answers ping.
+
+    |port| may be a callable (read <user data>/automation.port): it is
+    called on every attempt, so a port file that does not exist yet, or is
+    being written, is retried instead of failing the run."""
     end = time.monotonic() + deadline_s
     last_error: Optional[BaseException] = None
+    timeout = connect_args.pop("timeout", 120.0)
     while time.monotonic() < end:
       try:
-        client = cls.connect(timeout=10.0, **connect_args)
+        resolved = port() if callable(port) else port
+        client = cls.connect(timeout=10.0, port=resolved, **connect_args)
         client.call("ping")
-        client._sock.settimeout(connect_args.get("timeout", 120.0))
+        client._sock.settimeout(timeout)
         return client
       except (OSError, OpenError, ValueError, json.JSONDecodeError) as e:
         last_error = e
@@ -181,22 +188,47 @@ class OpenClient:
     (chrome.send -> C++ handler -> window.__openRpcResolve), the same path
     the Preact frontend uses."""
     req_id = 900000 + (abs(hash((method, time.monotonic()))) % 90000)
+    # bridge.ts installs window.__openRpcResolve lazily (its first RPC, and
+    # only while the global is unset). Wait briefly for that, so the hook
+    # below wraps the page's handler instead of shadowing it.
+    try:
+      self.wait_until(
+          lambda: self.call(
+              "eval", _timeout=10, tab=tab,
+              js="typeof window.__openRpcResolve === 'function' || "
+                 "window.__openE2EHooked === true"),
+          timeout=10, interval=0.1, what="bridge.ts resolver")
+    except TimeoutError:
+      pass  # A page that has made no RPC yet; the accessor still chains.
     fire_script = """
 (() => {
   const id = %d, method = %s, payload = %s;
   window.__openE2ERpc = window.__openE2ERpc || {};
+  window.__openE2EIds = window.__openE2EIds || new Set();
   delete window.__openE2ERpc[id];
   if (!window.__openE2EHooked) {
     window.__openE2EHooked = true;
-    const prev = window.__openRpcResolve;
-    window.__openRpcResolve = (requestId, ok, value) => {
-      if (window.__openE2ERpc && requestId >= 900000) {
+    // Chain, never replace: |inner| is the page's own handler (bridge.ts),
+    // whenever it is assigned; E2E ids are answered here, every other id
+    // goes to |inner|. While the page has no handler and no E2E call is in
+    // flight, the getter stays undefined so bridge.ts still installs its own.
+    let inner = window.__openRpcResolve;
+    const ids = window.__openE2EIds;
+    const route = (requestId, ok, value) => {
+      if (ids.has(requestId)) {
+        ids.delete(requestId);
         window.__openE2ERpc[requestId] = {ok: !!ok, value};
         return;
       }
-      if (prev) prev(requestId, ok, value);
+      if (typeof inner === 'function') inner(requestId, ok, value);
     };
+    Object.defineProperty(window, '__openRpcResolve', {
+      configurable: true,
+      get() { return (inner || ids.size) ? route : undefined; },
+      set(fn) { if (fn !== route) inner = fn; },
+    });
   }
+  window.__openE2EIds.add(id);
   chrome.send('open.rpc', [id, method, payload]);
   return id;
 })()

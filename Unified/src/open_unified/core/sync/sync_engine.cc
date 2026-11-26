@@ -17,6 +17,8 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/task/thread_pool.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "net/http/http_request_headers.h"
@@ -32,13 +34,132 @@ namespace open_unified {
 namespace {
 
 constexpr char kSecretServiceName[] = "com.open.browser.sync";
-constexpr char kSecretAccountName[] = "sync-credentials-v1";
+constexpr char kSecretAccountPrefix[] = "sync-credentials-v1:";
 constexpr int kMaxBackups = 3;
+constexpr size_t kSyncMaxBlobsPerPass = 256;
+constexpr size_t kSyncMaxTotalBlobBytesPerPass = 64 * 1024 * 1024;
 constexpr double kPushDebounceSec = 2.0;
 constexpr double kPushMaxCoalesceSec = 10.0;
 constexpr double kWsMinBackoffSec = 1.0;
 constexpr double kWsMaxBackoffSec = 60.0;
 constexpr int kWsPingIntervalSec = 25;
+
+void WipeDictString(base::DictValue& dict, std::string_view key) {
+  if (base::Value* v = dict.Find(key); v && v->is_string()) {
+    SyncCrypto::SecureZero(v->GetString());
+  }
+}
+
+std::string TruncateUtf8Bytes(std::string_view input, size_t max_bytes) {
+  return std::string(base::TruncateUTF8ToByteSize(input, max_bytes));
+}
+
+void WriteStateAtomicOnIo(base::FilePath path, std::string json) {
+  if (!base::CreateDirectory(path.DirName())) {
+    return;
+  }
+  base::ImportantFileWriter::WriteFileAtomically(path, json);
+}
+
+void DeleteStateOnIo(base::FilePath path) {
+  base::DeleteFile(path);
+}
+
+std::set<std::string> ComputeDirtyKeys(
+    const SyncLocalBundle& local,
+    const std::map<std::string, SyncRecordMirror>& mirror,
+    const std::set<SyncCollection>& enabled,
+    const SyncVaultKeys& vault_keys) {
+  std::set<std::string> dirty;
+  std::set<std::string> local_keys;
+  for (const auto& rec : local.records) {
+    if (!enabled.contains(rec.collection) ||
+        !IsValidSyncRecordId(rec.record_id)) {
+      continue;
+    }
+    std::string key =
+        SyncPersistedState::MirrorKey(rec.collection, rec.record_id);
+    local_keys.insert(key);
+    std::string hash =
+        SyncCrypto::ComputePayloadHash(rec.payload_json, vault_keys);
+    auto it = mirror.find(key);
+    if (it != mirror.end() && !it->second.deleted &&
+        it->second.payload_hash == hash) {
+      continue;
+    }
+    dirty.insert(std::move(key));
+  }
+  for (const auto& [key, known] : mirror) {
+    if (known.deleted || local_keys.contains(key)) {
+      continue;
+    }
+    auto parsed = SyncPersistedState::ParseMirrorKey(key);
+    if (parsed && enabled.contains(parsed->first) &&
+        local.complete_collections.contains(parsed->first)) {
+      dirty.insert(key);
+    }
+  }
+  return dirty;
+}
+
+SyncLocalBundle FilterLocalBundleExcluding(
+    const SyncLocalBundle& local,
+    const std::set<SyncCollection>& excluded) {
+  if (excluded.empty()) {
+    return local;
+  }
+  SyncLocalBundle out;
+  out.blobs = local.blobs;
+  out.warnings = local.warnings;
+  for (const auto& rec : local.records) {
+    if (!excluded.contains(rec.collection)) {
+      out.records.push_back(rec);
+    }
+  }
+  for (SyncCollection col : local.complete_collections) {
+    if (!excluded.contains(col)) {
+      out.complete_collections.insert(col);
+    }
+  }
+  return out;
+}
+
+struct ChangePasswordDerivedKeys {
+  std::optional<SyncDerivedPasswordKeys> current_keys;
+  std::optional<SyncDerivedPasswordKeys> new_keys;
+};
+
+struct SignUpDerivedMaterial {
+  std::optional<SyncKdfParams> kdf;
+  std::optional<std::vector<uint8_t>> vault_key;
+  std::optional<SyncGeneratedRecoveryKey> recovery;
+  std::optional<SyncDerivedPasswordKeys> pw_keys;
+  std::optional<SyncDerivedRecoveryKeys> rec_keys;
+
+  ~SignUpDerivedMaterial() {
+    if (vault_key) {
+      SyncCrypto::SecureZero(*vault_key);
+    }
+  }
+  SignUpDerivedMaterial() = default;
+  SignUpDerivedMaterial(SignUpDerivedMaterial&&) noexcept = default;
+  SignUpDerivedMaterial& operator=(SignUpDerivedMaterial&&) noexcept = default;
+  SignUpDerivedMaterial(const SignUpDerivedMaterial&) = delete;
+  SignUpDerivedMaterial& operator=(const SignUpDerivedMaterial&) = delete;
+};
+
+struct RecoverDerivedMaterial {
+  std::optional<SyncKdfParams> new_kdf;
+  std::optional<SyncGeneratedRecoveryKey> new_rec;
+  std::optional<SyncDerivedPasswordKeys> new_pw_keys;
+  std::optional<SyncDerivedRecoveryKeys> new_rec_keys;
+
+  RecoverDerivedMaterial() = default;
+  RecoverDerivedMaterial(RecoverDerivedMaterial&&) noexcept = default;
+  RecoverDerivedMaterial& operator=(RecoverDerivedMaterial&&) noexcept = default;
+  RecoverDerivedMaterial(const RecoverDerivedMaterial&) = delete;
+  RecoverDerivedMaterial& operator=(const RecoverDerivedMaterial&) = delete;
+};
 
 // --- JSON helpers for open_types.h ---
 
@@ -997,9 +1118,11 @@ std::optional<Profile> SyncCollectionCodecs::DecodeProfile(
       }
     }
   }
-  if (const auto* dir = p->FindString("dataDirectoryName")) {
-    out.data_directory_name = *dir;
-  }
+  // Never trust dataDirectoryName from a remote Profile payload (prevents path
+  // traversal and directory collisions); leave it empty so the local adapter
+  // assigns a sanitized unique directory matching [A-Za-z0-9 _-]{1,64} with
+  // "Default" reserved.
+  out.data_directory_name.clear();
   out.favorites_empty_state_dismissed =
       p->FindBool("favoritesEmptyStateDismissed").value_or(false);
   if (const auto* st = p->FindDict("settings")) {
@@ -2011,6 +2134,16 @@ SyncCollectionCodecs::DecodeSitePermissionsProfile(
 
 // --- SyncEngine implementation ---
 
+SyncEngine::SyncPassContext::SyncPassContext() = default;
+SyncEngine::SyncPassContext::~SyncPassContext() = default;
+
+SyncEngine::BlobDownloadResult::BlobDownloadResult() = default;
+SyncEngine::BlobDownloadResult::BlobDownloadResult(
+    BlobDownloadResult&&) noexcept = default;
+SyncEngine::BlobDownloadResult& SyncEngine::BlobDownloadResult::operator=(
+    BlobDownloadResult&&) noexcept = default;
+SyncEngine::BlobDownloadResult::~BlobDownloadResult() = default;
+
 SyncEngine::SyncEngine(base::FilePath data_root,
                        std::unique_ptr<SyncHttpTransport> http_transport,
                        std::unique_ptr<SecretStore> secret_store,
@@ -2024,6 +2157,10 @@ SyncEngine::SyncEngine(base::FilePath data_root,
   }
   snapshot_.uses_file_credential_store =
       secret_store_ && secret_store_->UsesFileBackend();
+}
+
+void SyncEngine::SetCredentialAccountKey(std::string account_key) {
+  credential_account_key_ = std::move(account_key);
 }
 
 SyncEngine::SyncEngine(
@@ -2193,6 +2330,26 @@ base::FilePath SyncEngine::BackupsDirPath() const {
   return data_root_.AppendASCII("State").AppendASCII("SyncBackups");
 }
 
+std::string SyncEngine::CredentialAccountKey() const {
+  if (!credential_account_key_.empty()) {
+    return credential_account_key_;
+  }
+  std::string utf8 = data_root_.AsUTF8Unsafe();
+  std::string digest = SyncCrypto::Sha256Hex(
+      reinterpret_cast<const uint8_t*>(utf8.data()), utf8.size());
+  return std::string(kSecretAccountPrefix) + digest.substr(0, 16);
+}
+
+scoped_refptr<base::SequencedTaskRunner> SyncEngine::GetOrCreateIoTaskRunner()
+    const {
+  if (!io_task_runner_ && base::ThreadPoolInstance::Get()) {
+    io_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+  }
+  return io_task_runner_;
+}
+
 // static
 std::string SyncEngine::GenerateUuidLower() {
   return base::Uuid::GenerateRandomV4().AsLowercaseString();
@@ -2281,8 +2438,14 @@ bool SyncEngine::SaveStateToDisk() const {
   d.Set("pendingBackfillCategories", std::move(backfill));
 
   base::FilePath path = StateFilePath();
-  if (!base::CreateDirectory(path.DirName())) return false;
   std::string json = SyncCollectionCodecs::EncodeDeterministicJson(d);
+  if (auto runner = GetOrCreateIoTaskRunner()) {
+    runner->PostTask(
+        FROM_HERE,
+        base::BindOnce(&WriteStateAtomicOnIo, std::move(path), std::move(json)));
+    return true;
+  }
+  if (!base::CreateDirectory(path.DirName())) return false;
   return base::ImportantFileWriter::WriteFileAtomically(path, json);
 }
 
@@ -2359,7 +2522,13 @@ std::optional<SyncPersistedState> SyncEngine::LoadStateFromDisk() const {
 }
 
 void SyncEngine::DeleteStateFromDisk() const {
-  base::DeleteFile(StateFilePath());
+  base::FilePath path = StateFilePath();
+  if (auto runner = GetOrCreateIoTaskRunner()) {
+    runner->PostTask(FROM_HERE,
+                     base::BindOnce(&DeleteStateOnIo, std::move(path)));
+    return;
+  }
+  base::DeleteFile(path);
 }
 
 bool SyncEngine::SaveCredentialsToStore(const SyncCredentials& creds) {
@@ -2371,11 +2540,17 @@ bool SyncEngine::SaveCredentialsToStore(const SyncCredentials& creds) {
         static_cast<double>(creds.tokens.access_token_expires_at_ms));
   d.Set("vaultKeyBase64", creds.vault_key_base64);
   std::string json;
+  json.reserve(creds.tokens.access_token.size() +
+               creds.tokens.refresh_token.size() +
+               creds.vault_key_base64.size() + 256);
   base::JSONWriter::Write(d, &json);
+  WipeDictString(d, "accessToken");
+  WipeDictString(d, "refreshToken");
+  WipeDictString(d, "vaultKeyBase64");
   std::vector<uint8_t> bytes(json.begin(), json.end());
   SyncCrypto::SecureZero(json);
-  bool ok =
-      secret_store_->SaveSecret(kSecretServiceName, kSecretAccountName, bytes);
+  bool ok = secret_store_->SaveSecret(kSecretServiceName,
+                                      CredentialAccountKey(), bytes);
   SyncCrypto::SecureZero(bytes);
   return ok;
 }
@@ -2383,7 +2558,7 @@ bool SyncEngine::SaveCredentialsToStore(const SyncCredentials& creds) {
 std::optional<SyncCredentials> SyncEngine::LoadCredentialsFromStore() {
   if (!secret_store_) return std::nullopt;
   auto bytes =
-      secret_store_->LoadSecret(kSecretServiceName, kSecretAccountName);
+      secret_store_->LoadSecret(kSecretServiceName, CredentialAccountKey());
   if (!bytes) return std::nullopt;
   std::string_view sv(reinterpret_cast<const char*>(bytes->data()),
                       bytes->size());
@@ -2393,19 +2568,25 @@ std::optional<SyncCredentials> SyncEngine::LoadCredentialsFromStore() {
   const auto* at = dict->FindString("accessToken");
   const auto* rt = dict->FindString("refreshToken");
   const auto* vk = dict->FindString("vaultKeyBase64");
-  if (!at || !rt || !vk) return std::nullopt;
-  SyncCredentials creds;
-  creds.tokens.access_token = *at;
-  creds.tokens.refresh_token = *rt;
-  creds.tokens.access_token_expires_at_ms = static_cast<int64_t>(
-      dict->FindDouble("accessTokenExpiresAt").value_or(0.0));
-  creds.vault_key_base64 = *vk;
-  return creds;
+  std::optional<SyncCredentials> result;
+  if (at && rt && vk) {
+    SyncCredentials creds;
+    creds.tokens.access_token = *at;
+    creds.tokens.refresh_token = *rt;
+    creds.tokens.access_token_expires_at_ms = static_cast<int64_t>(
+        dict->FindDouble("accessTokenExpiresAt").value_or(0.0));
+    creds.vault_key_base64 = *vk;
+    result = std::move(creds);
+  }
+  WipeDictString(*dict, "accessToken");
+  WipeDictString(*dict, "refreshToken");
+  WipeDictString(*dict, "vaultKeyBase64");
+  return result;
 }
 
 void SyncEngine::DeleteCredentialsFromStore() {
   if (secret_store_) {
-    secret_store_->DeleteSecret(kSecretServiceName, kSecretAccountName);
+    secret_store_->DeleteSecret(kSecretServiceName, CredentialAccountKey());
   }
 }
 
@@ -2531,10 +2712,13 @@ void SyncEngine::StartIfSignedIn() {
   SyncNow();
 }
 
-void SyncEngine::SendJson(
+void SyncEngine::SendRaw(
     const std::string& method,
     const std::string& full_url,
-    std::optional<base::DictValue> body,
+    std::string content_type,
+    std::string accept_header,
+    std::vector<uint8_t> body,
+    size_t max_response_bytes,
     std::optional<std::string> bearer_token,
     base::OnceCallback<void(SyncHttpResponse)> callback) {
   if (!http_transport_) {
@@ -2546,13 +2730,29 @@ void SyncEngine::SendJson(
   SyncHttpRequest req;
   req.method = method;
   req.url = full_url;
-  req.headers["Accept"] = "application/json";
+  if (!accept_header.empty()) {
+    req.headers["Accept"] = std::move(accept_header);
+  }
   if (state_ && !state_->device_id.empty()) {
     req.headers["X-Open-Device-Id"] = state_->device_id;
   }
   if (bearer_token) {
     req.headers["Authorization"] = "Bearer " + *bearer_token;
   }
+  req.content_type = std::move(content_type);
+  req.body = std::move(body);
+  req.max_response_bytes = max_response_bytes;
+  http_transport_->Send(std::move(req), std::move(callback));
+}
+
+void SyncEngine::SendJson(
+    const std::string& method,
+    const std::string& full_url,
+    std::optional<base::DictValue> body,
+    std::optional<std::string> bearer_token,
+    base::OnceCallback<void(SyncHttpResponse)> callback) {
+  std::vector<uint8_t> raw_body;
+  std::string content_type;
   if (body) {
     std::string serialized;
     base::JSONWriter::Write(*body, &serialized);
@@ -2562,10 +2762,12 @@ void SyncEngine::SendJson(
       std::move(callback).Run(std::move(resp));
       return;
     }
-    req.content_type = "application/json";
-    req.body.assign(serialized.begin(), serialized.end());
+    content_type = "application/json";
+    raw_body.assign(serialized.begin(), serialized.end());
   }
-  http_transport_->Send(std::move(req), std::move(callback));
+  SendRaw(method, full_url, std::move(content_type), "application/json",
+          std::move(raw_body), kSyncMaxJsonResponseBytes,
+          std::move(bearer_token), std::move(callback));
 }
 
 void SyncEngine::RefreshAccessToken(
@@ -2591,7 +2793,10 @@ void SyncEngine::RefreshAccessToken(
       base::BindOnce(
           [](base::WeakPtr<SyncEngine> self, uint64_t gen,
              SyncHttpResponse resp) {
-            if (!self) return;
+            if (!self) {
+              SyncCrypto::SecureZero(resp.body);
+              return;
+            }
             self->refresh_in_flight_ = false;
             auto callbacks = std::move(self->pending_refresh_callbacks_);
             self->pending_refresh_callbacks_.clear();
@@ -2614,19 +2819,126 @@ void SyncEngine::RefreshAccessToken(
                   self->SaveCredentialsToStore(*self->credentials_);
                   ok = true;
                 }
+                WipeDictString(*d, "accessToken");
+                WipeDictString(*d, "refreshToken");
               }
-            } else if (self->session_generation_ == gen &&
-                       (resp.status_code == 401 || resp.status_code == 403)) {
-              self->last_reauth_email_ =
-                  self->state_ ? self->state_->email : std::nullopt;
-              self->SetStatus(SyncStatusKind::kNeedsReauth,
-                              "Your session ended. Sign in again.");
+            } else if (self->session_generation_ == gen) {
+              auto [code, msg] = ParseServerError(resp);
+              if (resp.status_code == 401 || resp.status_code == 403 ||
+                  code == "TOKEN_REUSED") {
+                // Keep sync state (mirror/revision/categories) so re-auth can
+                // resume cleanly, but clear credentials and stored secret.
+                self->StopWebSocket();
+                self->push_debounce_timer_.Stop();
+                self->push_burst_started_ms_ = 0;
+                self->credentials_.reset();
+                self->DeleteCredentialsFromStore();
+                self->last_reauth_email_ =
+                    self->state_ ? self->state_->email : std::nullopt;
+                self->SetStatus(SyncStatusKind::kNeedsReauth,
+                                "Your session ended. Sign in again.");
+              }
             }
+            SyncCrypto::SecureZero(resp.body);
             for (auto& cb : callbacks) {
               std::move(cb).Run(ok);
             }
           },
           weak_factory_.GetWeakPtr(), gen));
+}
+
+void SyncEngine::SendAuthenticatedBinary(
+    const std::string& method,
+    const std::string& path,
+    std::string content_type,
+    std::string accept_header,
+    std::vector<uint8_t> body,
+    size_t max_response_bytes,
+    base::OnceCallback<void(SyncHttpResponse)> callback) {
+  if (!state_ || !credentials_) {
+    SyncHttpResponse resp;
+    resp.status_code = 401;
+    resp.error_message = "Not signed in.";
+    std::move(callback).Run(std::move(resp));
+    return;
+  }
+
+  const int64_t now_ms = NowEpochMs();
+  const int64_t exp_ms = credentials_->tokens.access_token_expires_at_ms;
+  if (exp_ms > 0 && exp_ms - now_ms < 60000) {
+    RefreshAccessToken(base::BindOnce(
+        [](base::WeakPtr<SyncEngine> self, std::string method, std::string path,
+           std::string content_type, std::string accept_header,
+           std::vector<uint8_t> body, size_t max_response_bytes,
+           base::OnceCallback<void(SyncHttpResponse)> cb, bool refreshed) {
+          if (!self || !refreshed || !self->state_ || !self->credentials_) {
+            SyncHttpResponse resp;
+            resp.status_code = 401;
+            resp.error_message = "Session expired.";
+            std::move(cb).Run(std::move(resp));
+            return;
+          }
+          self->SendRaw(method, self->state_->server_url + path,
+                        std::move(content_type), std::move(accept_header),
+                        std::move(body), max_response_bytes,
+                        self->credentials_->tokens.access_token, std::move(cb));
+        },
+        weak_factory_.GetWeakPtr(), method, path, std::move(content_type),
+        std::move(accept_header), std::move(body), max_response_bytes,
+        std::move(callback)));
+    return;
+  }
+
+  std::vector<uint8_t> retry_body = body;
+  std::string full_url = state_->server_url + path;
+  uint64_t gen = session_generation_;
+
+  SendRaw(
+      method, full_url, content_type, accept_header, std::move(body),
+      max_response_bytes, credentials_->tokens.access_token,
+      base::BindOnce(
+          [](base::WeakPtr<SyncEngine> self, uint64_t gen, std::string method,
+             std::string path, std::string content_type,
+             std::string accept_header, std::vector<uint8_t> retry_body,
+             size_t max_response_bytes,
+             base::OnceCallback<void(SyncHttpResponse)> cb,
+             SyncHttpResponse resp) {
+            if (!self || self->session_generation_ != gen) {
+              std::move(cb).Run(std::move(resp));
+              return;
+            }
+            if (resp.status_code == 401) {
+              auto [code, msg] = ParseServerError(resp);
+              if (code != "INVALID_CREDENTIALS") {
+                self->RefreshAccessToken(base::BindOnce(
+                    [](base::WeakPtr<SyncEngine> s, std::string m,
+                       std::string p, std::string ct, std::string ah,
+                       std::vector<uint8_t> rb, size_t max_bytes,
+                       base::OnceCallback<void(SyncHttpResponse)> inner_cb,
+                       bool refreshed) {
+                      if (!s || !refreshed || !s->state_ || !s->credentials_) {
+                        SyncHttpResponse fail;
+                        fail.status_code = 401;
+                        fail.error_message = "Session expired.";
+                        std::move(inner_cb).Run(std::move(fail));
+                        return;
+                      }
+                      s->SendRaw(m, s->state_->server_url + p, std::move(ct),
+                                 std::move(ah), std::move(rb), max_bytes,
+                                 s->credentials_->tokens.access_token,
+                                 std::move(inner_cb));
+                    },
+                    self, method, path, std::move(content_type),
+                    std::move(accept_header), std::move(retry_body),
+                    max_response_bytes, std::move(cb)));
+                return;
+              }
+            }
+            std::move(cb).Run(std::move(resp));
+          },
+          weak_factory_.GetWeakPtr(), gen, method, path,
+          std::move(content_type), std::move(accept_header),
+          std::move(retry_body), max_response_bytes, std::move(callback)));
 }
 
 void SyncEngine::SendAuthenticatedJson(
@@ -2740,153 +3052,195 @@ void SyncEngine::SignUp(const std::string& server_url,
   }
   SetStatus(SyncStatusKind::kSyncing, "Creating your account...");
 
-  auto kdf = SyncKdfParams::Generate();
-  auto vault_key = SyncCrypto::RandomBytes(kSyncKeyBytes);
-  auto recovery = SyncCrypto::GenerateRecoveryKey();
-  if (!kdf || !vault_key || !recovery) {
-    SetStatus(SyncStatusKind::kSignedOut);
-    std::move(callback).Run({false, "CRYPTO", "Key generation failed."});
-    return;
+  uint64_t gen = session_generation_;
+  std::string trimmed_name = TruncateUtf8Bytes(
+      base::TrimWhitespaceASCII(display_name, base::TRIM_ALL),
+      kSyncMaxDisplayNameLength);
+
+  auto derive_task = base::BindOnce(
+      [](std::string normalized_email, std::string pw) -> SignUpDerivedMaterial {
+        SignUpDerivedMaterial mat;
+        mat.kdf = SyncKdfParams::Generate();
+        mat.vault_key = SyncCrypto::RandomBytes(kSyncKeyBytes);
+        mat.recovery = SyncCrypto::GenerateRecoveryKey();
+        if (mat.kdf && mat.vault_key && mat.recovery) {
+          mat.pw_keys =
+              SyncCrypto::DerivePasswordKeys(normalized_email, pw, *mat.kdf);
+          mat.rec_keys =
+              SyncCrypto::DeriveRecoveryKeys(mat.recovery->raw_bytes);
+        }
+        SyncCrypto::SecureZero(pw);
+        return mat;
+      },
+      normalized, password);
+
+  auto on_derived = base::BindOnce(
+      [](base::WeakPtr<SyncEngine> self, uint64_t gen, std::string server_url,
+         std::string normalized, std::string trimmed_name, ResultCallback cb,
+         SignUpDerivedMaterial mat) {
+        if (!self) {
+          return;
+        }
+        if (self->session_generation_ != gen) {
+          std::move(cb).Run({false, "CANCELLED", "Account creation cancelled."});
+          return;
+        }
+        if (!mat.kdf || !mat.vault_key || !mat.recovery || !mat.pw_keys ||
+            !mat.rec_keys) {
+          self->SetStatus(SyncStatusKind::kSignedOut);
+          std::move(cb).Run({false, "CRYPTO", "Key derivation failed."});
+          return;
+        }
+        auto wrapped_pw = SyncCrypto::WrapVaultKey(
+            *mat.vault_key, mat.pw_keys->password_wrap_key,
+            SyncVaultWrapKind::kPassword, normalized);
+        auto wrapped_rec = SyncCrypto::WrapVaultKey(
+            *mat.vault_key, mat.rec_keys->recovery_wrap_key,
+            SyncVaultWrapKind::kRecovery, normalized);
+        if (!wrapped_pw || !wrapped_rec) {
+          self->SetStatus(SyncStatusKind::kSignedOut);
+          std::move(cb).Run({false, "CRYPTO", "Vault key wrapping failed."});
+          return;
+        }
+
+        std::string device_id = GenerateUuidLower();
+        std::string device_name = TruncateUtf8Bytes(
+            OpenPlatform::Get()->GetDeviceName(), kSyncMaxDeviceNameLength);
+
+        base::DictValue kdf_dict;
+        kdf_dict.Set("algorithm", mat.kdf->algorithm);
+        kdf_dict.Set("iterations", mat.kdf->iterations);
+        kdf_dict.Set("saltBase64", mat.kdf->salt_base64);
+
+        base::DictValue body;
+        body.Set("email", normalized);
+        body.Set("displayName", trimmed_name);
+        body.Set("kdfParams", std::move(kdf_dict));
+        body.Set("authVerifier", base::Base64Encode(mat.pw_keys->auth_verifier));
+        body.Set("recoveryAuthVerifier",
+                 base::Base64Encode(mat.rec_keys->recovery_auth_verifier));
+        body.Set("wrappedVaultKeyByPassword", base::Base64Encode(*wrapped_pw));
+        body.Set("wrappedVaultKeyByRecovery", base::Base64Encode(*wrapped_rec));
+        body.Set("deviceId", device_id);
+        body.Set("deviceName", device_name);
+        body.Set("platform", OpenPlatform::Get()->GetSyncPlatformName());
+
+        std::string vk_b64 = base::Base64Encode(*mat.vault_key);
+        std::string recovery_formatted = mat.recovery->formatted;
+
+        self->SendJson(
+            "POST", server_url + "/v1/auth/register", std::move(body),
+            std::nullopt,
+            base::BindOnce(
+                [](base::WeakPtr<SyncEngine> s, uint64_t expected_gen,
+                   std::string url, std::string mail, std::string dev_id,
+                   std::string dev_name, std::string vk_b64,
+                   std::string recovery_formatted, ResultCallback done_cb,
+                   SyncHttpResponse resp) {
+                  if (!s) {
+                    SyncCrypto::SecureZero(vk_b64);
+                    SyncCrypto::SecureZero(recovery_formatted);
+                    return;
+                  }
+                  if (s->session_generation_ != expected_gen) {
+                    SyncCrypto::SecureZero(vk_b64);
+                    SyncCrypto::SecureZero(recovery_formatted);
+                    std::move(done_cb).Run(
+                        {false, "CANCELLED", "Account creation cancelled."});
+                    return;
+                  }
+                  if (resp.status_code < 200 || resp.status_code >= 300) {
+                    SyncCrypto::SecureZero(vk_b64);
+                    SyncCrypto::SecureZero(recovery_formatted);
+                    auto [code, msg] = ParseServerError(resp);
+                    s->SetStatus(SyncStatusKind::kSignedOut);
+                    std::move(done_cb).Run({false, code, msg});
+                    return;
+                  }
+                  std::string_view sv(
+                      reinterpret_cast<const char*>(resp.body.data()),
+                      resp.body.size());
+                  auto dict =
+                      base::JSONReader::ReadDict(sv, base::JSON_PARSE_RFC);
+                  if (!dict || !dict->FindString("accountId") ||
+                      !dict->FindString("accessToken") ||
+                      !dict->FindString("refreshToken")) {
+                    SyncCrypto::SecureZero(vk_b64);
+                    SyncCrypto::SecureZero(recovery_formatted);
+                    s->SetStatus(SyncStatusKind::kSignedOut);
+                    std::move(done_cb).Run(
+                        {false, "DECODING", "Malformed register response."});
+                    return;
+                  }
+                  auto raw_vk = base::Base64Decode(vk_b64);
+                  auto keys = raw_vk ? SyncVaultKeys::DeriveFromVaultKey(*raw_vk)
+                                     : std::nullopt;
+                  if (raw_vk) SyncCrypto::SecureZero(*raw_vk);
+                  if (!keys) {
+                    SyncCrypto::SecureZero(vk_b64);
+                    s->SetStatus(SyncStatusKind::kSignedOut);
+                    std::move(done_cb).Run(
+                        {false, "CRYPTO", "Failed deriving vault subkeys."});
+                    return;
+                  }
+
+                  SyncCredentials creds;
+                  creds.tokens.access_token = *dict->FindString("accessToken");
+                  creds.tokens.refresh_token =
+                      *dict->FindString("refreshToken");
+                  creds.tokens.access_token_expires_at_ms =
+                      static_cast<int64_t>(
+                          dict->FindDouble("accessTokenExpiresAt")
+                              .value_or(0.0));
+                  creds.vault_key_base64 = std::move(vk_b64);
+                  WipeDictString(*dict, "accessToken");
+                  WipeDictString(*dict, "refreshToken");
+                  s->SaveCredentialsToStore(creds);
+
+                  SyncPersistedState st;
+                  st.server_url = url;
+                  st.account_id = *dict->FindString("accountId");
+                  st.email = dict->FindString("email")
+                                 ? *dict->FindString("email")
+                                 : mail;
+                  if (const auto* dn = dict->FindString("displayName");
+                      dn && !dn->empty()) {
+                    st.display_name = *dn;
+                  }
+                  st.device_id = dev_id;
+                  st.device_name = dev_name;
+                  st.last_reset_revision =
+                      dict->FindInt("resetRevision").value_or(0);
+                  st.categories = s->snapshot_.categories;
+
+                  ++s->session_generation_;
+                  s->state_ = std::move(st);
+                  s->credentials_ = std::move(creds);
+                  s->vault_keys_ = std::move(*keys);
+                  s->SaveStateToDisk();
+                  s->SetStatus(SyncStatusKind::kIdle, "Up to date");
+                  s->StartWebSocket();
+                  s->SyncNow();
+
+                  SyncResult res;
+                  res.ok = true;
+                  res.recovery_key = std::move(recovery_formatted);
+                  std::move(done_cb).Run(std::move(res));
+                },
+                self, gen, server_url, normalized, device_id, device_name,
+                std::move(vk_b64), std::move(recovery_formatted),
+                std::move(cb)));
+      },
+      weak_factory_.GetWeakPtr(), gen, *valid_url, normalized,
+      std::move(trimmed_name), std::move(callback));
+
+  if (base::ThreadPoolInstance::Get()) {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+        std::move(derive_task), std::move(on_derived));
+  } else {
+    std::move(on_derived).Run(std::move(derive_task).Run());
   }
-  auto pw_keys = SyncCrypto::DerivePasswordKeys(normalized, password, *kdf);
-  auto rec_keys = SyncCrypto::DeriveRecoveryKeys(recovery->raw_bytes);
-  if (!pw_keys || !rec_keys) {
-    SyncCrypto::SecureZero(*vault_key);
-    SetStatus(SyncStatusKind::kSignedOut);
-    std::move(callback).Run({false, "CRYPTO", "Key derivation failed."});
-    return;
-  }
-  auto wrapped_pw = SyncCrypto::WrapVaultKey(
-      *vault_key, pw_keys->password_wrap_key, SyncVaultWrapKind::kPassword,
-      normalized);
-  auto wrapped_rec = SyncCrypto::WrapVaultKey(
-      *vault_key, rec_keys->recovery_wrap_key, SyncVaultWrapKind::kRecovery,
-      normalized);
-  if (!wrapped_pw || !wrapped_rec) {
-    SyncCrypto::SecureZero(*vault_key);
-    SetStatus(SyncStatusKind::kSignedOut);
-    std::move(callback).Run({false, "CRYPTO", "Vault key wrapping failed."});
-    return;
-  }
-
-  std::string device_id = GenerateUuidLower();
-  std::string device_name = OpenPlatform::Get()->GetDeviceName();
-  if (device_name.size() > kSyncMaxDeviceNameLength) {
-    device_name.resize(kSyncMaxDeviceNameLength);
-  }
-  std::string trimmed_name(
-      base::TrimWhitespaceASCII(display_name, base::TRIM_ALL));
-  if (trimmed_name.size() > kSyncMaxDisplayNameLength) {
-    trimmed_name.resize(kSyncMaxDisplayNameLength);
-  }
-
-  base::DictValue kdf_dict;
-  kdf_dict.Set("algorithm", kdf->algorithm);
-  kdf_dict.Set("iterations", kdf->iterations);
-  kdf_dict.Set("saltBase64", kdf->salt_base64);
-
-  base::DictValue body;
-  body.Set("email", normalized);
-  body.Set("displayName", trimmed_name);
-  body.Set("kdfParams", std::move(kdf_dict));
-  body.Set("authVerifier", base::Base64Encode(pw_keys->auth_verifier));
-  body.Set("recoveryAuthVerifier",
-           base::Base64Encode(rec_keys->recovery_auth_verifier));
-  body.Set("wrappedVaultKeyByPassword", base::Base64Encode(*wrapped_pw));
-  body.Set("wrappedVaultKeyByRecovery", base::Base64Encode(*wrapped_rec));
-  body.Set("deviceId", device_id);
-  body.Set("deviceName", device_name);
-  body.Set("platform", OpenPlatform::Get()->GetSyncPlatformName());
-
-  std::string vk_b64 = base::Base64Encode(*vault_key);
-  SyncCrypto::SecureZero(*vault_key);
-  std::string recovery_formatted = recovery->formatted;
-
-  SendJson(
-      "POST", *valid_url + "/v1/auth/register", std::move(body), std::nullopt,
-      base::BindOnce(
-          [](base::WeakPtr<SyncEngine> self, std::string server_url,
-             std::string email, std::string device_id, std::string device_name,
-             std::string vk_b64, std::string recovery_formatted,
-             ResultCallback cb, SyncHttpResponse resp) {
-            if (!self) {
-              SyncCrypto::SecureZero(vk_b64);
-              SyncCrypto::SecureZero(recovery_formatted);
-              return;
-            }
-            if (resp.status_code < 200 || resp.status_code >= 300) {
-              SyncCrypto::SecureZero(vk_b64);
-              SyncCrypto::SecureZero(recovery_formatted);
-              auto [code, msg] = ParseServerError(resp);
-              self->SetStatus(SyncStatusKind::kSignedOut);
-              std::move(cb).Run({false, code, msg});
-              return;
-            }
-            std::string_view sv(
-                reinterpret_cast<const char*>(resp.body.data()),
-                resp.body.size());
-            auto dict = base::JSONReader::ReadDict(sv, base::JSON_PARSE_RFC);
-            if (!dict || !dict->FindString("accountId") ||
-                !dict->FindString("accessToken") ||
-                !dict->FindString("refreshToken")) {
-              SyncCrypto::SecureZero(vk_b64);
-              SyncCrypto::SecureZero(recovery_formatted);
-              self->SetStatus(SyncStatusKind::kSignedOut);
-              std::move(cb).Run(
-                  {false, "DECODING", "Malformed register response."});
-              return;
-            }
-            auto raw_vk = base::Base64Decode(vk_b64);
-            auto keys = raw_vk ? SyncVaultKeys::DeriveFromVaultKey(*raw_vk)
-                               : std::nullopt;
-            if (raw_vk) SyncCrypto::SecureZero(*raw_vk);
-            if (!keys) {
-              SyncCrypto::SecureZero(vk_b64);
-              self->SetStatus(SyncStatusKind::kSignedOut);
-              std::move(cb).Run(
-                  {false, "CRYPTO", "Failed deriving vault subkeys."});
-              return;
-            }
-
-            SyncCredentials creds;
-            creds.tokens.access_token = *dict->FindString("accessToken");
-            creds.tokens.refresh_token = *dict->FindString("refreshToken");
-            creds.tokens.access_token_expires_at_ms = static_cast<int64_t>(
-                dict->FindDouble("accessTokenExpiresAt").value_or(0.0));
-            creds.vault_key_base64 = std::move(vk_b64);
-            self->SaveCredentialsToStore(creds);
-
-            SyncPersistedState st;
-            st.server_url = server_url;
-            st.account_id = *dict->FindString("accountId");
-            st.email = dict->FindString("email") ? *dict->FindString("email")
-                                                 : email;
-            if (const auto* dn = dict->FindString("displayName");
-                dn && !dn->empty()) {
-              st.display_name = *dn;
-            }
-            st.device_id = device_id;
-            st.device_name = device_name;
-            st.last_reset_revision = dict->FindInt("resetRevision").value_or(0);
-            st.categories = self->snapshot_.categories;
-
-            ++self->session_generation_;
-            self->state_ = std::move(st);
-            self->credentials_ = std::move(creds);
-            self->vault_keys_ = std::move(*keys);
-            self->SaveStateToDisk();
-            self->SetStatus(SyncStatusKind::kIdle, "Up to date");
-            self->StartWebSocket();
-            self->SyncNow();
-
-            SyncResult res;
-            res.ok = true;
-            res.recovery_key = std::move(recovery_formatted);
-            std::move(cb).Run(std::move(res));
-          },
-          weak_factory_.GetWeakPtr(), *valid_url, normalized, device_id,
-          device_name, std::move(vk_b64), std::move(recovery_formatted),
-          std::move(callback)));
 }
 
 void SyncEngine::SignIn(const std::string& server_url,
@@ -2911,18 +3265,24 @@ void SyncEngine::SignIn(const std::string& server_url,
   }
   SetStatus(SyncStatusKind::kSyncing, "Signing in...");
 
+  uint64_t gen = session_generation_;
   base::DictValue kdf_req;
   kdf_req.Set("email", normalized);
   SendJson(
       "POST", *valid_url + "/v1/auth/kdf-params", std::move(kdf_req),
       std::nullopt,
       base::BindOnce(
-          [](base::WeakPtr<SyncEngine> self, std::string server_url,
-             std::string email, std::string password,
+          [](base::WeakPtr<SyncEngine> self, uint64_t gen,
+             std::string server_url, std::string email, std::string password,
              std::optional<FirstSyncStrategy> initial_strategy,
              ResultCallback cb, SyncHttpResponse resp) {
             if (!self) {
               SyncCrypto::SecureZero(password);
+              return;
+            }
+            if (self->session_generation_ != gen) {
+              SyncCrypto::SecureZero(password);
+              std::move(cb).Run({false, "CANCELLED", "Sign-in cancelled."});
               return;
             }
             if (resp.status_code < 200 || resp.status_code >= 300) {
@@ -2950,160 +3310,216 @@ void SyncEngine::SignIn(const std::string& server_url,
             params.iterations = *kp->FindInt("iterations");
             params.salt_base64 = *kp->FindString("saltBase64");
 
-            auto derived =
-                SyncCrypto::DerivePasswordKeys(email, password, params);
-            SyncCrypto::SecureZero(password);
-            if (!derived) {
-              self->SetStatus(SyncStatusKind::kSignedOut);
-              std::move(cb).Run(
-                  {false, "CRYPTO", "Password key derivation failed."});
-              return;
-            }
+            auto derive_task = base::BindOnce(
+                [](std::string mail, std::string pw,
+                   SyncKdfParams kdf_params)
+                    -> std::optional<SyncDerivedPasswordKeys> {
+                  auto derived =
+                      SyncCrypto::DerivePasswordKeys(mail, pw, kdf_params);
+                  SyncCrypto::SecureZero(pw);
+                  return derived;
+                },
+                email, std::move(password), std::move(params));
 
-            std::string device_id = GenerateUuidLower();
-            std::string device_name = OpenPlatform::Get()->GetDeviceName();
-            base::DictValue login_body;
-            login_body.Set("email", email);
-            login_body.Set("authVerifier",
-                           base::Base64Encode(derived->auth_verifier));
-            login_body.Set("deviceId", device_id);
-            login_body.Set("deviceName", device_name);
-            login_body.Set("platform",
-                           OpenPlatform::Get()->GetSyncPlatformName());
+            auto on_derived = base::BindOnce(
+                [](base::WeakPtr<SyncEngine> s, uint64_t expected_gen,
+                   std::string server_url, std::string email,
+                   std::optional<FirstSyncStrategy> initial_strategy,
+                   ResultCallback cb,
+                   std::optional<SyncDerivedPasswordKeys> derived) {
+                  if (!s) {
+                    return;
+                  }
+                  if (s->session_generation_ != expected_gen) {
+                    std::move(cb).Run(
+                        {false, "CANCELLED", "Sign-in cancelled."});
+                    return;
+                  }
+                  if (!derived) {
+                    s->SetStatus(SyncStatusKind::kSignedOut);
+                    std::move(cb).Run(
+                        {false, "CRYPTO", "Password key derivation failed."});
+                    return;
+                  }
 
-            std::vector<uint8_t> wrap_key =
-                std::move(derived->password_wrap_key);
-            self->SendJson(
-                "POST", server_url + "/v1/auth/login", std::move(login_body),
-                std::nullopt,
-                base::BindOnce(
-                    [](base::WeakPtr<SyncEngine> s, std::string url,
-                       std::string mail, std::string dev_id,
-                       std::string dev_name, std::vector<uint8_t> wrap_key,
-                       std::optional<FirstSyncStrategy> strategy,
-                       ResultCallback done_cb, SyncHttpResponse login_resp) {
-                      if (!s) {
-                        SyncCrypto::SecureZero(wrap_key);
-                        return;
-                      }
-                      if (login_resp.status_code < 200 ||
-                          login_resp.status_code >= 300) {
-                        SyncCrypto::SecureZero(wrap_key);
-                        auto [code, msg] = ParseServerError(login_resp);
-                        s->SetStatus(SyncStatusKind::kSignedOut);
-                        std::move(done_cb).Run({false, code, msg});
-                        return;
-                      }
-                      std::string_view lsv(
-                          reinterpret_cast<const char*>(login_resp.body.data()),
-                          login_resp.body.size());
-                      auto ld =
-                          base::JSONReader::ReadDict(lsv, base::JSON_PARSE_RFC);
-                      if (!ld || !ld->FindString("accountId") ||
-                          !ld->FindString("accessToken") ||
-                          !ld->FindString("refreshToken") ||
-                          !ld->FindString("wrappedVaultKeyByPassword")) {
-                        SyncCrypto::SecureZero(wrap_key);
-                        s->SetStatus(SyncStatusKind::kSignedOut);
-                        std::move(done_cb).Run(
-                            {false, "DECODING", "Malformed login response."});
-                        return;
-                      }
-                      auto wrapped = base::Base64Decode(
-                          *ld->FindString("wrappedVaultKeyByPassword"));
-                      auto vk = wrapped ? SyncCrypto::UnwrapVaultKey(
+                  std::string device_id = GenerateUuidLower();
+                  std::string device_name = TruncateUtf8Bytes(
+                      OpenPlatform::Get()->GetDeviceName(),
+                      kSyncMaxDeviceNameLength);
+                  base::DictValue login_body;
+                  login_body.Set("email", email);
+                  login_body.Set("authVerifier",
+                                 base::Base64Encode(derived->auth_verifier));
+                  login_body.Set("deviceId", device_id);
+                  login_body.Set("deviceName", device_name);
+                  login_body.Set("platform",
+                                 OpenPlatform::Get()->GetSyncPlatformName());
+
+                  std::vector<uint8_t> wrap_key =
+                      std::move(derived->password_wrap_key);
+                  s->SendJson(
+                      "POST", server_url + "/v1/auth/login",
+                      std::move(login_body), std::nullopt,
+                      base::BindOnce(
+                          [](base::WeakPtr<SyncEngine> eng,
+                             uint64_t expected_gen, std::string url,
+                             std::string mail, std::string dev_id,
+                             std::string dev_name,
+                             std::vector<uint8_t> wrap_key,
+                             std::optional<FirstSyncStrategy> strategy,
+                             ResultCallback done_cb,
+                             SyncHttpResponse login_resp) {
+                            if (!eng) {
+                              SyncCrypto::SecureZero(wrap_key);
+                              return;
+                            }
+                            if (eng->session_generation_ != expected_gen) {
+                              SyncCrypto::SecureZero(wrap_key);
+                              std::move(done_cb).Run(
+                                  {false, "CANCELLED", "Sign-in cancelled."});
+                              return;
+                            }
+                            if (login_resp.status_code < 200 ||
+                                login_resp.status_code >= 300) {
+                              SyncCrypto::SecureZero(wrap_key);
+                              auto [code, msg] = ParseServerError(login_resp);
+                              eng->SetStatus(SyncStatusKind::kSignedOut);
+                              std::move(done_cb).Run({false, code, msg});
+                              return;
+                            }
+                            std::string_view lsv(
+                                reinterpret_cast<const char*>(
+                                    login_resp.body.data()),
+                                login_resp.body.size());
+                            auto ld = base::JSONReader::ReadDict(
+                                lsv, base::JSON_PARSE_RFC);
+                            if (!ld || !ld->FindString("accountId") ||
+                                !ld->FindString("accessToken") ||
+                                !ld->FindString("refreshToken") ||
+                                !ld->FindString("wrappedVaultKeyByPassword")) {
+                              SyncCrypto::SecureZero(wrap_key);
+                              eng->SetStatus(SyncStatusKind::kSignedOut);
+                              std::move(done_cb).Run(
+                                  {false, "DECODING",
+                                   "Malformed login response."});
+                              return;
+                            }
+                            auto wrapped = base::Base64Decode(
+                                *ld->FindString("wrappedVaultKeyByPassword"));
+                            auto vk =
+                                wrapped ? SyncCrypto::UnwrapVaultKey(
                                               *wrapped, wrap_key,
                                               SyncVaultWrapKind::kPassword,
                                               mail)
                                         : std::nullopt;
-                      SyncCrypto::SecureZero(wrap_key);
-                      if (!vk) {
-                        s->SetStatus(SyncStatusKind::kSignedOut);
-                        std::move(done_cb).Run(
-                            {false, "INVALID_CREDENTIALS",
-                             "Could not decrypt vault key."});
-                        return;
-                      }
-                      auto keys = SyncVaultKeys::DeriveFromVaultKey(*vk);
-                      std::string vk_b64 = base::Base64Encode(*vk);
-                      SyncCrypto::SecureZero(*vk);
-                      if (!keys) {
-                        SyncCrypto::SecureZero(vk_b64);
-                        s->SetStatus(SyncStatusKind::kSignedOut);
-                        std::move(done_cb).Run(
-                            {false, "CRYPTO", "Vault key derivation failed."});
-                        return;
-                      }
+                            SyncCrypto::SecureZero(wrap_key);
+                            if (!vk) {
+                              eng->SetStatus(SyncStatusKind::kSignedOut);
+                              std::move(done_cb).Run(
+                                  {false, "INVALID_CREDENTIALS",
+                                   "Could not decrypt vault key."});
+                              return;
+                            }
+                            auto keys = SyncVaultKeys::DeriveFromVaultKey(*vk);
+                            std::string vk_b64 = base::Base64Encode(*vk);
+                            SyncCrypto::SecureZero(*vk);
+                            if (!keys) {
+                              SyncCrypto::SecureZero(vk_b64);
+                              eng->SetStatus(SyncStatusKind::kSignedOut);
+                              std::move(done_cb).Run(
+                                  {false, "CRYPTO",
+                                   "Vault key derivation failed."});
+                              return;
+                            }
 
-                      SyncCloudSummary summary;
-                      summary.server_revision =
-                          ld->FindInt("serverRevision").value_or(0);
-                      summary.reset_revision =
-                          ld->FindInt("resetRevision").value_or(0);
-                      summary.has_cloud_data =
-                          ld->FindBool("hasCloudData").value_or(false);
-                      if (const auto* cc = ld->FindDict("collectionCounts")) {
-                        for (const auto [k, v] : *cc) {
-                          if (v.is_int()) summary.collection_counts[k] = v.GetInt();
-                        }
-                      }
+                            SyncCloudSummary summary;
+                            summary.server_revision =
+                                ld->FindInt("serverRevision").value_or(0);
+                            summary.reset_revision =
+                                ld->FindInt("resetRevision").value_or(0);
+                            summary.has_cloud_data =
+                                ld->FindBool("hasCloudData").value_or(false);
+                            if (const auto* cc =
+                                    ld->FindDict("collectionCounts")) {
+                              for (const auto [k, v] : *cc) {
+                                if (v.is_int())
+                                  summary.collection_counts[k] = v.GetInt();
+                              }
+                            }
 
-                      SyncCredentials creds;
-                      creds.tokens.access_token =
-                          *ld->FindString("accessToken");
-                      creds.tokens.refresh_token =
-                          *ld->FindString("refreshToken");
-                      creds.tokens.access_token_expires_at_ms =
-                          static_cast<int64_t>(
-                              ld->FindDouble("accessTokenExpiresAt")
-                                  .value_or(0.0));
-                      creds.vault_key_base64 = std::move(vk_b64);
-                      s->SaveCredentialsToStore(creds);
+                            SyncCredentials creds;
+                            creds.tokens.access_token =
+                                *ld->FindString("accessToken");
+                            creds.tokens.refresh_token =
+                                *ld->FindString("refreshToken");
+                            creds.tokens.access_token_expires_at_ms =
+                                static_cast<int64_t>(
+                                    ld->FindDouble("accessTokenExpiresAt")
+                                        .value_or(0.0));
+                            creds.vault_key_base64 = std::move(vk_b64);
+                            WipeDictString(*ld, "accessToken");
+                            WipeDictString(*ld, "refreshToken");
+                            eng->SaveCredentialsToStore(creds);
 
-                      SyncPersistedState st;
-                      st.server_url = url;
-                      st.account_id = *ld->FindString("accountId");
-                      st.email = ld->FindString("email")
-                                     ? *ld->FindString("email")
-                                     : mail;
-                      if (const auto* dn = ld->FindString("displayName");
-                          dn && !dn->empty()) {
-                        st.display_name = *dn;
-                      }
-                      st.device_id = dev_id;
-                      st.device_name = dev_name;
-                      st.last_reset_revision = summary.reset_revision;
-                      st.categories = s->snapshot_.categories;
-                      if (summary.has_cloud_data) {
-                        st.awaiting_initial_choice = summary;
-                      }
+                            SyncPersistedState st;
+                            st.server_url = url;
+                            st.account_id = *ld->FindString("accountId");
+                            st.email = ld->FindString("email")
+                                           ? *ld->FindString("email")
+                                           : mail;
+                            if (const auto* dn = ld->FindString("displayName");
+                                dn && !dn->empty()) {
+                              st.display_name = *dn;
+                            }
+                            st.device_id = dev_id;
+                            st.device_name = dev_name;
+                            st.last_reset_revision = summary.reset_revision;
+                            st.categories = eng->snapshot_.categories;
+                            if (summary.has_cloud_data) {
+                              st.awaiting_initial_choice = summary;
+                            }
 
-                      ++s->session_generation_;
-                      s->state_ = std::move(st);
-                      s->credentials_ = std::move(creds);
-                      s->vault_keys_ = std::move(*keys);
-                      s->SaveStateToDisk();
+                            ++eng->session_generation_;
+                            eng->state_ = std::move(st);
+                            eng->credentials_ = std::move(creds);
+                            eng->vault_keys_ = std::move(*keys);
+                            eng->SaveStateToDisk();
 
-                      if (!summary.has_cloud_data) {
-                        s->SetStatus(SyncStatusKind::kIdle, "Up to date");
-                        s->StartWebSocket();
-                        s->SyncNow();
-                        std::move(done_cb).Run({true});
-                      } else if (strategy) {
-                        s->CompleteInitialSync(*strategy, std::move(done_cb));
-                      } else {
-                        s->SetStatus(SyncStatusKind::kAwaitingInitialChoice,
-                                     "Choose how to sync this device.");
-                        SyncResult res;
-                        res.ok = true;
-                        res.needs_initial_choice = summary;
-                        std::move(done_cb).Run(std::move(res));
-                      }
-                    },
-                    self, server_url, email, device_id, device_name,
-                    std::move(wrap_key), initial_strategy, std::move(cb)));
+                            if (!summary.has_cloud_data) {
+                              eng->SetStatus(SyncStatusKind::kIdle,
+                                             "Up to date");
+                              eng->StartWebSocket();
+                              eng->SyncNow();
+                              std::move(done_cb).Run({true});
+                            } else if (strategy) {
+                              eng->CompleteInitialSync(*strategy,
+                                                       std::move(done_cb));
+                            } else {
+                              eng->SetStatus(
+                                  SyncStatusKind::kAwaitingInitialChoice,
+                                  "Choose how to sync this device.");
+                              SyncResult res;
+                              res.ok = true;
+                              res.needs_initial_choice = summary;
+                              std::move(done_cb).Run(std::move(res));
+                            }
+                          },
+                          s, expected_gen, server_url, email, device_id,
+                          device_name, std::move(wrap_key), initial_strategy,
+                          std::move(cb)));
+                },
+                self, gen, server_url, email, initial_strategy, std::move(cb));
+
+            if (base::ThreadPoolInstance::Get()) {
+              base::ThreadPool::PostTaskAndReplyWithResult(
+                  FROM_HERE,
+                  {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+                  std::move(derive_task), std::move(on_derived));
+            } else {
+              std::move(on_derived).Run(std::move(derive_task).Run());
+            }
           },
-          weak_factory_.GetWeakPtr(), *valid_url, normalized, password,
+          weak_factory_.GetWeakPtr(), gen, *valid_url, normalized, password,
           initial_strategy, std::move(callback)));
 }
 
@@ -3148,6 +3564,7 @@ void SyncEngine::RecoverAccount(
   }
   SetStatus(SyncStatusKind::kSyncing, "Recovering your account...");
 
+  uint64_t gen = session_generation_;
   base::DictValue chal_body;
   chal_body.Set("email", normalized);
   chal_body.Set("recoveryAuthVerifier",
@@ -3159,14 +3576,20 @@ void SyncEngine::RecoverAccount(
       "POST", *valid_url + "/v1/auth/recovery-challenge", std::move(chal_body),
       std::nullopt,
       base::BindOnce(
-          [](base::WeakPtr<SyncEngine> self, std::string server_url,
-             std::string email, std::string new_password,
-             std::vector<uint8_t> old_wrap_key,
+          [](base::WeakPtr<SyncEngine> self, uint64_t gen,
+             std::string server_url, std::string email,
+             std::string new_password, std::vector<uint8_t> old_wrap_key,
              std::optional<FirstSyncStrategy> strategy, ResultCallback cb,
              SyncHttpResponse resp) {
             if (!self) {
               SyncCrypto::SecureZero(new_password);
               SyncCrypto::SecureZero(old_wrap_key);
+              return;
+            }
+            if (self->session_generation_ != gen) {
+              SyncCrypto::SecureZero(new_password);
+              SyncCrypto::SecureZero(old_wrap_key);
+              std::move(cb).Run({false, "CANCELLED", "Recovery cancelled."});
               return;
             }
             if (resp.status_code < 200 || resp.status_code >= 300) {
@@ -3207,184 +3630,251 @@ void SyncEngine::RecoverAccount(
               return;
             }
 
-            auto new_kdf = SyncKdfParams::Generate();
-            auto new_rec = SyncCrypto::GenerateRecoveryKey();
-            auto new_pw_keys =
-                new_kdf ? SyncCrypto::DerivePasswordKeys(email, new_password,
-                                                         *new_kdf)
-                        : std::nullopt;
-            SyncCrypto::SecureZero(new_password);
-            auto new_rec_keys =
-                new_rec ? SyncCrypto::DeriveRecoveryKeys(new_rec->raw_bytes)
-                        : std::nullopt;
-            if (!new_kdf || !new_rec || !new_pw_keys || !new_rec_keys) {
-              SyncCrypto::SecureZero(*vault_key);
-              self->SetStatus(SyncStatusKind::kSignedOut);
-              std::move(cb).Run({false, "CRYPTO", "Recovery re-wrap failed."});
-              return;
+            std::string recovery_ticket = *dict->FindString("recoveryTicket");
+            auto derive_task = base::BindOnce(
+                [](std::string mail, std::string pw) -> RecoverDerivedMaterial {
+                  RecoverDerivedMaterial mat;
+                  mat.new_kdf = SyncKdfParams::Generate();
+                  mat.new_rec = SyncCrypto::GenerateRecoveryKey();
+                  if (mat.new_kdf) {
+                    mat.new_pw_keys =
+                        SyncCrypto::DerivePasswordKeys(mail, pw, *mat.new_kdf);
+                  }
+                  SyncCrypto::SecureZero(pw);
+                  if (mat.new_rec) {
+                    mat.new_rec_keys =
+                        SyncCrypto::DeriveRecoveryKeys(mat.new_rec->raw_bytes);
+                  }
+                  return mat;
+                },
+                email, std::move(new_password));
+
+            auto on_derived = base::BindOnce(
+                [](base::WeakPtr<SyncEngine> s, uint64_t expected_gen,
+                   std::string server_url, std::string email,
+                   std::string recovery_ticket, std::vector<uint8_t> vault_key,
+                   std::optional<FirstSyncStrategy> strategy, ResultCallback cb,
+                   RecoverDerivedMaterial mat) {
+                  if (!s) {
+                    SyncCrypto::SecureZero(vault_key);
+                    return;
+                  }
+                  if (s->session_generation_ != expected_gen) {
+                    SyncCrypto::SecureZero(vault_key);
+                    std::move(cb).Run(
+                        {false, "CANCELLED", "Recovery cancelled."});
+                    return;
+                  }
+                  if (!mat.new_kdf || !mat.new_rec || !mat.new_pw_keys ||
+                      !mat.new_rec_keys) {
+                    SyncCrypto::SecureZero(vault_key);
+                    s->SetStatus(SyncStatusKind::kSignedOut);
+                    std::move(cb).Run(
+                        {false, "CRYPTO", "Recovery re-wrap failed."});
+                    return;
+                  }
+                  auto new_wrapped_pw = SyncCrypto::WrapVaultKey(
+                      vault_key, mat.new_pw_keys->password_wrap_key,
+                      SyncVaultWrapKind::kPassword, email);
+                  auto new_wrapped_rec = SyncCrypto::WrapVaultKey(
+                      vault_key, mat.new_rec_keys->recovery_wrap_key,
+                      SyncVaultWrapKind::kRecovery, email);
+                  std::string vk_b64 = base::Base64Encode(vault_key);
+                  SyncCrypto::SecureZero(vault_key);
+                  if (!new_wrapped_pw || !new_wrapped_rec) {
+                    SyncCrypto::SecureZero(vk_b64);
+                    s->SetStatus(SyncStatusKind::kSignedOut);
+                    std::move(cb).Run(
+                        {false, "CRYPTO", "Vault wrapping failed."});
+                    return;
+                  }
+
+                  std::string device_id = GenerateUuidLower();
+                  std::string device_name = TruncateUtf8Bytes(
+                      OpenPlatform::Get()->GetDeviceName(),
+                      kSyncMaxDeviceNameLength);
+                  base::DictValue kdf_d;
+                  kdf_d.Set("algorithm", mat.new_kdf->algorithm);
+                  kdf_d.Set("iterations", mat.new_kdf->iterations);
+                  kdf_d.Set("saltBase64", mat.new_kdf->salt_base64);
+
+                  base::DictValue rec_body;
+                  rec_body.Set("email", email);
+                  rec_body.Set("recoveryTicket", recovery_ticket);
+                  rec_body.Set("newKdfParams", std::move(kdf_d));
+                  rec_body.Set(
+                      "newAuthVerifier",
+                      base::Base64Encode(mat.new_pw_keys->auth_verifier));
+                  rec_body.Set("newRecoveryAuthVerifier",
+                               base::Base64Encode(
+                                   mat.new_rec_keys->recovery_auth_verifier));
+                  rec_body.Set("newWrappedVaultKeyByPassword",
+                               base::Base64Encode(*new_wrapped_pw));
+                  rec_body.Set("newWrappedVaultKeyByRecovery",
+                               base::Base64Encode(*new_wrapped_rec));
+                  rec_body.Set("deviceId", device_id);
+                  rec_body.Set("deviceName", device_name);
+                  rec_body.Set("platform",
+                               OpenPlatform::Get()->GetSyncPlatformName());
+
+                  std::string new_rec_formatted = mat.new_rec->formatted;
+                  s->SendJson(
+                      "POST", server_url + "/v1/auth/recover",
+                      std::move(rec_body), std::nullopt,
+                      base::BindOnce(
+                          [](base::WeakPtr<SyncEngine> eng,
+                             uint64_t expected_gen, std::string url,
+                             std::string mail, std::string dev_id,
+                             std::string dev_name, std::string vk_b64,
+                             std::string new_rec_fmt,
+                             std::optional<FirstSyncStrategy> strat,
+                             ResultCallback done_cb, SyncHttpResponse r) {
+                            if (!eng) {
+                              SyncCrypto::SecureZero(vk_b64);
+                              SyncCrypto::SecureZero(new_rec_fmt);
+                              return;
+                            }
+                            if (eng->session_generation_ != expected_gen) {
+                              SyncCrypto::SecureZero(vk_b64);
+                              SyncCrypto::SecureZero(new_rec_fmt);
+                              std::move(done_cb).Run(
+                                  {false, "CANCELLED", "Recovery cancelled."});
+                              return;
+                            }
+                            if (r.status_code < 200 || r.status_code >= 300) {
+                              SyncCrypto::SecureZero(vk_b64);
+                              SyncCrypto::SecureZero(new_rec_fmt);
+                              auto [code, msg] = ParseServerError(r);
+                              eng->SetStatus(SyncStatusKind::kSignedOut);
+                              std::move(done_cb).Run({false, code, msg});
+                              return;
+                            }
+                            std::string_view rsv(
+                                reinterpret_cast<const char*>(r.body.data()),
+                                r.body.size());
+                            auto rd = base::JSONReader::ReadDict(
+                                rsv, base::JSON_PARSE_RFC);
+                            if (!rd || !rd->FindString("accountId") ||
+                                !rd->FindString("accessToken") ||
+                                !rd->FindString("refreshToken")) {
+                              SyncCrypto::SecureZero(vk_b64);
+                              SyncCrypto::SecureZero(new_rec_fmt);
+                              eng->SetStatus(SyncStatusKind::kSignedOut);
+                              std::move(done_cb).Run(
+                                  {false, "DECODING",
+                                   "Malformed recover response."});
+                              return;
+                            }
+                            auto raw_vk = base::Base64Decode(vk_b64);
+                            auto keys =
+                                raw_vk ? SyncVaultKeys::DeriveFromVaultKey(
+                                             *raw_vk)
+                                       : std::nullopt;
+                            if (raw_vk) SyncCrypto::SecureZero(*raw_vk);
+                            if (!keys) {
+                              SyncCrypto::SecureZero(vk_b64);
+                              SyncCrypto::SecureZero(new_rec_fmt);
+                              eng->SetStatus(SyncStatusKind::kSignedOut);
+                              std::move(done_cb).Run(
+                                  {false, "CRYPTO",
+                                   "Vault key derivation failed."});
+                              return;
+                            }
+
+                            SyncCloudSummary summary;
+                            summary.server_revision =
+                                rd->FindInt("serverRevision").value_or(0);
+                            summary.reset_revision =
+                                rd->FindInt("resetRevision").value_or(0);
+                            summary.has_cloud_data =
+                                rd->FindBool("hasCloudData").value_or(false);
+                            if (const auto* cc =
+                                    rd->FindDict("collectionCounts")) {
+                              for (const auto [k, v] : *cc) {
+                                if (v.is_int())
+                                  summary.collection_counts[k] = v.GetInt();
+                              }
+                            }
+
+                            SyncCredentials creds;
+                            creds.tokens.access_token =
+                                *rd->FindString("accessToken");
+                            creds.tokens.refresh_token =
+                                *rd->FindString("refreshToken");
+                            creds.tokens.access_token_expires_at_ms =
+                                static_cast<int64_t>(
+                                    rd->FindDouble("accessTokenExpiresAt")
+                                        .value_or(0.0));
+                            creds.vault_key_base64 = std::move(vk_b64);
+                            WipeDictString(*rd, "accessToken");
+                            WipeDictString(*rd, "refreshToken");
+                            eng->SaveCredentialsToStore(creds);
+
+                            SyncPersistedState st;
+                            st.server_url = url;
+                            st.account_id = *rd->FindString("accountId");
+                            st.email = mail;
+                            st.device_id = dev_id;
+                            st.device_name = dev_name;
+                            st.last_reset_revision = summary.reset_revision;
+                            st.categories = eng->snapshot_.categories;
+                            if (summary.has_cloud_data) {
+                              st.awaiting_initial_choice = summary;
+                            }
+
+                            ++eng->session_generation_;
+                            eng->state_ = std::move(st);
+                            eng->credentials_ = std::move(creds);
+                            eng->vault_keys_ = std::move(*keys);
+                            eng->SaveStateToDisk();
+
+                            SyncResult res;
+                            res.ok = true;
+                            res.recovery_key = std::move(new_rec_fmt);
+                            if (!summary.has_cloud_data) {
+                              eng->SetStatus(SyncStatusKind::kIdle,
+                                             "Up to date");
+                              eng->StartWebSocket();
+                              eng->SyncNow();
+                              std::move(done_cb).Run(std::move(res));
+                            } else if (strat) {
+                              eng->CompleteInitialSync(
+                                  *strat,
+                                  base::BindOnce(
+                                      [](std::string rk,
+                                         ResultCallback final_cb,
+                                         SyncResult init_res) {
+                                        init_res.recovery_key = std::move(rk);
+                                        std::move(final_cb).Run(
+                                            std::move(init_res));
+                                      },
+                                      res.recovery_key, std::move(done_cb)));
+                            } else {
+                              eng->SetStatus(
+                                  SyncStatusKind::kAwaitingInitialChoice,
+                                  "Choose how to sync this device.");
+                              res.needs_initial_choice = summary;
+                              std::move(done_cb).Run(std::move(res));
+                            }
+                          },
+                          s, expected_gen, server_url, email, device_id,
+                          device_name, std::move(vk_b64),
+                          std::move(new_rec_formatted), strategy,
+                          std::move(cb)));
+                },
+                self, gen, server_url, email, std::move(recovery_ticket),
+                std::move(*vault_key), strategy, std::move(cb));
+
+            if (base::ThreadPoolInstance::Get()) {
+              base::ThreadPool::PostTaskAndReplyWithResult(
+                  FROM_HERE,
+                  {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+                  std::move(derive_task), std::move(on_derived));
+            } else {
+              std::move(on_derived).Run(std::move(derive_task).Run());
             }
-            auto new_wrapped_pw = SyncCrypto::WrapVaultKey(
-                *vault_key, new_pw_keys->password_wrap_key,
-                SyncVaultWrapKind::kPassword, email);
-            auto new_wrapped_rec = SyncCrypto::WrapVaultKey(
-                *vault_key, new_rec_keys->recovery_wrap_key,
-                SyncVaultWrapKind::kRecovery, email);
-            std::string vk_b64 = base::Base64Encode(*vault_key);
-            SyncCrypto::SecureZero(*vault_key);
-            if (!new_wrapped_pw || !new_wrapped_rec) {
-              SyncCrypto::SecureZero(vk_b64);
-              self->SetStatus(SyncStatusKind::kSignedOut);
-              std::move(cb).Run({false, "CRYPTO", "Vault wrapping failed."});
-              return;
-            }
-
-            std::string device_id = GenerateUuidLower();
-            std::string device_name = OpenPlatform::Get()->GetDeviceName();
-            base::DictValue kdf_d;
-            kdf_d.Set("algorithm", new_kdf->algorithm);
-            kdf_d.Set("iterations", new_kdf->iterations);
-            kdf_d.Set("saltBase64", new_kdf->salt_base64);
-
-            base::DictValue rec_body;
-            rec_body.Set("email", email);
-            rec_body.Set("recoveryTicket", *dict->FindString("recoveryTicket"));
-            rec_body.Set("newKdfParams", std::move(kdf_d));
-            rec_body.Set("newAuthVerifier",
-                         base::Base64Encode(new_pw_keys->auth_verifier));
-            rec_body.Set(
-                "newRecoveryAuthVerifier",
-                base::Base64Encode(new_rec_keys->recovery_auth_verifier));
-            rec_body.Set("newWrappedVaultKeyByPassword",
-                         base::Base64Encode(*new_wrapped_pw));
-            rec_body.Set("newWrappedVaultKeyByRecovery",
-                         base::Base64Encode(*new_wrapped_rec));
-            rec_body.Set("deviceId", device_id);
-            rec_body.Set("deviceName", device_name);
-            rec_body.Set("platform",
-                         OpenPlatform::Get()->GetSyncPlatformName());
-
-            std::string new_rec_formatted = new_rec->formatted;
-            self->SendJson(
-                "POST", server_url + "/v1/auth/recover", std::move(rec_body),
-                std::nullopt,
-                base::BindOnce(
-                    [](base::WeakPtr<SyncEngine> s, std::string url,
-                       std::string mail, std::string dev_id,
-                       std::string dev_name, std::string vk_b64,
-                       std::string new_rec_fmt,
-                       std::optional<FirstSyncStrategy> strat,
-                       ResultCallback done_cb, SyncHttpResponse r) {
-                      if (!s) {
-                        SyncCrypto::SecureZero(vk_b64);
-                        return;
-                      }
-                      if (r.status_code < 200 || r.status_code >= 300) {
-                        SyncCrypto::SecureZero(vk_b64);
-                        auto [code, msg] = ParseServerError(r);
-                        s->SetStatus(SyncStatusKind::kSignedOut);
-                        std::move(done_cb).Run({false, code, msg});
-                        return;
-                      }
-                      std::string_view rsv(
-                          reinterpret_cast<const char*>(r.body.data()),
-                          r.body.size());
-                      auto rd =
-                          base::JSONReader::ReadDict(rsv, base::JSON_PARSE_RFC);
-                      if (!rd || !rd->FindString("accountId") ||
-                          !rd->FindString("accessToken") ||
-                          !rd->FindString("refreshToken")) {
-                        SyncCrypto::SecureZero(vk_b64);
-                        s->SetStatus(SyncStatusKind::kSignedOut);
-                        std::move(done_cb).Run(
-                            {false, "DECODING", "Malformed recover response."});
-                        return;
-                      }
-                      auto raw_vk = base::Base64Decode(vk_b64);
-                      auto keys = raw_vk
-                                      ? SyncVaultKeys::DeriveFromVaultKey(*raw_vk)
-                                      : std::nullopt;
-                      if (raw_vk) SyncCrypto::SecureZero(*raw_vk);
-                      if (!keys) {
-                        SyncCrypto::SecureZero(vk_b64);
-                        s->SetStatus(SyncStatusKind::kSignedOut);
-                        std::move(done_cb).Run(
-                            {false, "CRYPTO", "Vault key derivation failed."});
-                        return;
-                      }
-
-                      SyncCloudSummary summary;
-                      summary.server_revision =
-                          rd->FindInt("serverRevision").value_or(0);
-                      summary.reset_revision =
-                          rd->FindInt("resetRevision").value_or(0);
-                      summary.has_cloud_data =
-                          rd->FindBool("hasCloudData").value_or(false);
-                      if (const auto* cc = rd->FindDict("collectionCounts")) {
-                        for (const auto [k, v] : *cc) {
-                          if (v.is_int()) summary.collection_counts[k] = v.GetInt();
-                        }
-                      }
-
-                      SyncCredentials creds;
-                      creds.tokens.access_token =
-                          *rd->FindString("accessToken");
-                      creds.tokens.refresh_token =
-                          *rd->FindString("refreshToken");
-                      creds.tokens.access_token_expires_at_ms =
-                          static_cast<int64_t>(
-                              rd->FindDouble("accessTokenExpiresAt")
-                                  .value_or(0.0));
-                      creds.vault_key_base64 = std::move(vk_b64);
-                      s->SaveCredentialsToStore(creds);
-
-                      SyncPersistedState st;
-                      st.server_url = url;
-                      st.account_id = *rd->FindString("accountId");
-                      st.email = mail;
-                      st.device_id = dev_id;
-                      st.device_name = dev_name;
-                      st.last_reset_revision = summary.reset_revision;
-                      st.categories = s->snapshot_.categories;
-                      if (summary.has_cloud_data) {
-                        st.awaiting_initial_choice = summary;
-                      }
-
-                      ++s->session_generation_;
-                      s->state_ = std::move(st);
-                      s->credentials_ = std::move(creds);
-                      s->vault_keys_ = std::move(*keys);
-                      s->SaveStateToDisk();
-
-                      SyncResult res;
-                      res.ok = true;
-                      res.recovery_key = std::move(new_rec_fmt);
-                      if (!summary.has_cloud_data) {
-                        s->SetStatus(SyncStatusKind::kIdle, "Up to date");
-                        s->StartWebSocket();
-                        s->SyncNow();
-                        std::move(done_cb).Run(std::move(res));
-                      } else if (strat) {
-                        s->CompleteInitialSync(
-                            *strat,
-                            base::BindOnce(
-                                [](std::string rk, ResultCallback final_cb,
-                                   SyncResult init_res) {
-                                  init_res.recovery_key = std::move(rk);
-                                  std::move(final_cb).Run(std::move(init_res));
-                                },
-                                res.recovery_key, std::move(done_cb)));
-                      } else {
-                        s->SetStatus(SyncStatusKind::kAwaitingInitialChoice,
-                                     "Choose how to sync this device.");
-                        res.needs_initial_choice = summary;
-                        std::move(done_cb).Run(std::move(res));
-                      }
-                    },
-                    self, server_url, email, device_id, device_name,
-                    std::move(vk_b64), std::move(new_rec_formatted), strategy,
-                    std::move(cb)));
           },
-          weak_factory_.GetWeakPtr(), *valid_url, normalized, new_password,
+          weak_factory_.GetWeakPtr(), gen, *valid_url, normalized, new_password,
           std::move(old_wrap_key), initial_strategy, std::move(callback)));
 }
 
@@ -3417,6 +3907,7 @@ void SyncEngine::ChangePassword(const std::string& current_password,
         {false, "WEAK_PASSWORD", "Password must be at least 8 characters."});
     return;
   }
+  uint64_t gen = session_generation_;
   std::string email = *state_->email;
   base::DictValue kdf_req;
   kdf_req.Set("email", email);
@@ -3424,12 +3915,19 @@ void SyncEngine::ChangePassword(const std::string& current_password,
       "POST", state_->server_url + "/v1/auth/kdf-params", std::move(kdf_req),
       std::nullopt,
       base::BindOnce(
-          [](base::WeakPtr<SyncEngine> self, std::string email,
+          [](base::WeakPtr<SyncEngine> self, uint64_t gen, std::string email,
              std::string cur_pw, std::string new_pw, bool revoke_others,
              ResultCallback cb, SyncHttpResponse resp) {
-            if (!self || !self->credentials_) {
+            if (!self) {
               SyncCrypto::SecureZero(cur_pw);
               SyncCrypto::SecureZero(new_pw);
+              return;
+            }
+            if (self->session_generation_ != gen || !self->credentials_) {
+              SyncCrypto::SecureZero(cur_pw);
+              SyncCrypto::SecureZero(new_pw);
+              std::move(cb).Run(
+                  {false, "CANCELLED", "Password change cancelled."});
               return;
             }
             if (resp.status_code < 200 || resp.status_code >= 300) {
@@ -3456,58 +3954,101 @@ void SyncEngine::ChangePassword(const std::string& current_password,
             cur_kdf.iterations = *kp->FindInt("iterations");
             cur_kdf.salt_base64 = *kp->FindString("saltBase64");
 
-            auto cur_keys =
-                SyncCrypto::DerivePasswordKeys(email, cur_pw, cur_kdf);
             auto new_kdf = SyncKdfParams::Generate();
-            auto new_keys =
-                new_kdf
-                    ? SyncCrypto::DerivePasswordKeys(email, new_pw, *new_kdf)
-                    : std::nullopt;
-            SyncCrypto::SecureZero(cur_pw);
-            SyncCrypto::SecureZero(new_pw);
-            auto vk = base::Base64Decode(self->credentials_->vault_key_base64);
-            auto wrapped =
-                (vk && new_keys)
-                    ? SyncCrypto::WrapVaultKey(*vk, new_keys->password_wrap_key,
-                                               SyncVaultWrapKind::kPassword,
-                                               email)
-                    : std::nullopt;
-            if (vk) SyncCrypto::SecureZero(*vk);
-            if (!cur_keys || !new_kdf || !new_keys || !wrapped) {
-              std::move(cb).Run({false, "CRYPTO", "Key derivation failed."});
+            if (!new_kdf) {
+              SyncCrypto::SecureZero(cur_pw);
+              SyncCrypto::SecureZero(new_pw);
+              std::move(cb).Run({false, "CRYPTO", "KDF generation failed."});
               return;
             }
 
-            base::DictValue nk;
-            nk.Set("algorithm", new_kdf->algorithm);
-            nk.Set("iterations", new_kdf->iterations);
-            nk.Set("saltBase64", new_kdf->salt_base64);
+            auto derive_task = base::BindOnce(
+                [](std::string mail, std::string cpw, SyncKdfParams ckdf,
+                   std::string npw,
+                   SyncKdfParams nkdf) -> ChangePasswordDerivedKeys {
+                  ChangePasswordDerivedKeys out;
+                  out.current_keys =
+                      SyncCrypto::DerivePasswordKeys(mail, cpw, ckdf);
+                  out.new_keys = SyncCrypto::DerivePasswordKeys(mail, npw, nkdf);
+                  SyncCrypto::SecureZero(cpw);
+                  SyncCrypto::SecureZero(npw);
+                  return out;
+                },
+                email, std::move(cur_pw), std::move(cur_kdf), std::move(new_pw),
+                *new_kdf);
 
-            base::DictValue body;
-            body.Set("currentAuthVerifier",
-                     base::Base64Encode(cur_keys->auth_verifier));
-            body.Set("newKdfParams", std::move(nk));
-            body.Set("newAuthVerifier",
-                     base::Base64Encode(new_keys->auth_verifier));
-            body.Set("newWrappedVaultKeyByPassword",
-                     base::Base64Encode(*wrapped));
-            body.Set("revokeOtherSessions", revoke_others);
+            auto on_derived = base::BindOnce(
+                [](base::WeakPtr<SyncEngine> s, uint64_t expected_gen,
+                   std::string email, SyncKdfParams new_kdf, bool revoke_others,
+                   ResultCallback cb, ChangePasswordDerivedKeys derived) {
+                  if (!s) {
+                    return;
+                  }
+                  if (s->session_generation_ != expected_gen ||
+                      !s->credentials_) {
+                    std::move(cb).Run(
+                        {false, "CANCELLED", "Password change cancelled."});
+                    return;
+                  }
+                  auto vk =
+                      base::Base64Decode(s->credentials_->vault_key_base64);
+                  auto wrapped =
+                      (vk && derived.new_keys)
+                          ? SyncCrypto::WrapVaultKey(
+                                *vk, derived.new_keys->password_wrap_key,
+                                SyncVaultWrapKind::kPassword, email)
+                          : std::nullopt;
+                  if (vk) SyncCrypto::SecureZero(*vk);
+                  if (!derived.current_keys || !derived.new_keys || !wrapped) {
+                    std::move(cb).Run(
+                        {false, "CRYPTO", "Key derivation failed."});
+                    return;
+                  }
 
-            self->SendAuthenticatedJson(
-                "POST", "/v1/auth/change-password", std::move(body),
-                base::BindOnce(
-                    [](ResultCallback done, SyncHttpResponse r) {
-                      if (r.status_code >= 200 && r.status_code < 300) {
-                        std::move(done).Run({true});
-                      } else {
-                        auto [c, m] = ParseServerError(r);
-                        std::move(done).Run({false, c, m});
-                      }
-                    },
-                    std::move(cb)));
+                  base::DictValue nk;
+                  nk.Set("algorithm", new_kdf.algorithm);
+                  nk.Set("iterations", new_kdf.iterations);
+                  nk.Set("saltBase64", new_kdf.salt_base64);
+
+                  base::DictValue body;
+                  body.Set("currentAuthVerifier",
+                           base::Base64Encode(
+                               derived.current_keys->auth_verifier));
+                  body.Set("newKdfParams", std::move(nk));
+                  body.Set(
+                      "newAuthVerifier",
+                      base::Base64Encode(derived.new_keys->auth_verifier));
+                  body.Set("newWrappedVaultKeyByPassword",
+                           base::Base64Encode(*wrapped));
+                  body.Set("revokeOtherSessions", revoke_others);
+
+                  s->SendAuthenticatedJson(
+                      "POST", "/v1/auth/change-password", std::move(body),
+                      base::BindOnce(
+                          [](ResultCallback done, SyncHttpResponse r) {
+                            if (r.status_code >= 200 && r.status_code < 300) {
+                              std::move(done).Run({true});
+                            } else {
+                              auto [c, m] = ParseServerError(r);
+                              std::move(done).Run({false, c, m});
+                            }
+                          },
+                          std::move(cb)));
+                },
+                self, gen, email, std::move(*new_kdf), revoke_others,
+                std::move(cb));
+
+            if (base::ThreadPoolInstance::Get()) {
+              base::ThreadPool::PostTaskAndReplyWithResult(
+                  FROM_HERE,
+                  {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+                  std::move(derive_task), std::move(on_derived));
+            } else {
+              std::move(on_derived).Run(std::move(derive_task).Run());
+            }
           },
-          weak_factory_.GetWeakPtr(), email, current_password, new_password,
-          revoke_other_sessions, std::move(callback)));
+          weak_factory_.GetWeakPtr(), gen, email, current_password,
+          new_password, revoke_other_sessions, std::move(callback)));
 }
 
 void SyncEngine::UpdateDisplayName(const std::string& display_name,
@@ -3516,10 +4057,9 @@ void SyncEngine::UpdateDisplayName(const std::string& display_name,
     std::move(callback).Run({false, "NOT_SIGNED_IN", "Not signed in."});
     return;
   }
-  std::string trimmed(base::TrimWhitespaceASCII(display_name, base::TRIM_ALL));
-  if (trimmed.size() > kSyncMaxDisplayNameLength) {
-    trimmed.resize(kSyncMaxDisplayNameLength);
-  }
+  std::string trimmed = TruncateUtf8Bytes(
+      base::TrimWhitespaceASCII(display_name, base::TRIM_ALL),
+      kSyncMaxDisplayNameLength);
   base::DictValue body;
   body.Set("displayName", trimmed);
   SendAuthenticatedJson(
@@ -3647,6 +4187,7 @@ void SyncEngine::DeleteAccount(const std::string& password,
     std::move(callback).Run({false, "NOT_SIGNED_IN", "Not signed in."});
     return;
   }
+  uint64_t gen = session_generation_;
   std::string email = *state_->email;
   base::DictValue kdf_req;
   kdf_req.Set("email", email);
@@ -3654,10 +4195,16 @@ void SyncEngine::DeleteAccount(const std::string& password,
       "POST", state_->server_url + "/v1/auth/kdf-params", std::move(kdf_req),
       std::nullopt,
       base::BindOnce(
-          [](base::WeakPtr<SyncEngine> self, std::string email,
+          [](base::WeakPtr<SyncEngine> self, uint64_t gen, std::string email,
              std::string password, ResultCallback cb, SyncHttpResponse resp) {
             if (!self) {
               SyncCrypto::SecureZero(password);
+              return;
+            }
+            if (self->session_generation_ != gen) {
+              SyncCrypto::SecureZero(password);
+              std::move(cb).Run(
+                  {false, "CANCELLED", "Account deletion cancelled."});
               return;
             }
             if (resp.status_code < 200 || resp.status_code >= 300) {
@@ -3682,36 +4229,85 @@ void SyncEngine::DeleteAccount(const std::string& password,
             kdf.iterations = *kp->FindInt("iterations");
             kdf.salt_base64 = *kp->FindString("saltBase64");
 
-            auto keys = SyncCrypto::DerivePasswordKeys(email, password, kdf);
-            SyncCrypto::SecureZero(password);
-            if (!keys) {
-              std::move(cb).Run({false, "CRYPTO", "Key derivation failed."});
-              return;
+            auto derive_task = base::BindOnce(
+                [](std::string mail, std::string pw,
+                   SyncKdfParams kdf_params)
+                    -> std::optional<SyncDerivedPasswordKeys> {
+                  auto keys =
+                      SyncCrypto::DerivePasswordKeys(mail, pw, kdf_params);
+                  SyncCrypto::SecureZero(pw);
+                  return keys;
+                },
+                email, std::move(password), std::move(kdf));
+
+            auto on_derived = base::BindOnce(
+                [](base::WeakPtr<SyncEngine> s, uint64_t expected_gen,
+                   ResultCallback cb,
+                   std::optional<SyncDerivedPasswordKeys> keys) {
+                  if (!s) {
+                    return;
+                  }
+                  if (s->session_generation_ != expected_gen) {
+                    std::move(cb).Run(
+                        {false, "CANCELLED", "Account deletion cancelled."});
+                    return;
+                  }
+                  if (!keys) {
+                    std::move(cb).Run(
+                        {false, "CRYPTO", "Key derivation failed."});
+                    return;
+                  }
+                  base::DictValue body;
+                  body.Set("authVerifier",
+                           base::Base64Encode(keys->auth_verifier));
+                  s->SendAuthenticatedJson(
+                      "DELETE", "/v1/account", std::move(body),
+                      base::BindOnce(
+                          [](base::WeakPtr<SyncEngine> eng,
+                             uint64_t expected_gen, ResultCallback done,
+                             SyncHttpResponse r) {
+                            if (!eng) return;
+                            if (eng->session_generation_ != expected_gen) {
+                              std::move(done).Run(
+                                  {false, "CANCELLED",
+                                   "Account deletion cancelled."});
+                              return;
+                            }
+                            if (r.status_code >= 200 && r.status_code < 300) {
+                              eng->ClearLocalSession(SyncStatusKind::kSignedOut,
+                                                     "Signed out");
+                              std::move(done).Run({true});
+                            } else {
+                              auto [c, m] = ParseServerError(r);
+                              std::move(done).Run({false, c, m});
+                            }
+                          },
+                          s, expected_gen, std::move(cb)));
+                },
+                self, gen, std::move(cb));
+
+            if (base::ThreadPoolInstance::Get()) {
+              base::ThreadPool::PostTaskAndReplyWithResult(
+                  FROM_HERE,
+                  {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+                  std::move(derive_task), std::move(on_derived));
+            } else {
+              std::move(on_derived).Run(std::move(derive_task).Run());
             }
-            base::DictValue body;
-            body.Set("authVerifier", base::Base64Encode(keys->auth_verifier));
-            self->SendAuthenticatedJson(
-                "DELETE", "/v1/account", std::move(body),
-                base::BindOnce(
-                    [](base::WeakPtr<SyncEngine> s, ResultCallback done,
-                       SyncHttpResponse r) {
-                      if (!s) return;
-                      if (r.status_code >= 200 && r.status_code < 300) {
-                        s->ClearLocalSession(SyncStatusKind::kSignedOut,
-                                             "Signed out");
-                        std::move(done).Run({true});
-                      } else {
-                        auto [c, m] = ParseServerError(r);
-                        std::move(done).Run({false, c, m});
-                      }
-                    },
-                    self, std::move(cb)));
           },
-          weak_factory_.GetWeakPtr(), email, password, std::move(callback)));
+          weak_factory_.GetWeakPtr(), gen, email, password,
+          std::move(callback)));
 }
 
 void SyncEngine::SyncNow(ResultCallback callback) {
-  if (!is_signed_in()) {
+  if (status_ == SyncStatusKind::kNeedsReauth) {
+    if (callback) {
+      std::move(callback).Run(
+          {false, "NEEDS_REAUTH", "Your session ended. Sign in again."});
+    }
+    return;
+  }
+  if (!is_signed_in() || !credentials_) {
     if (callback) {
       std::move(callback).Run({false, "NOT_SIGNED_IN", "Not signed in."});
     }
@@ -3810,7 +4406,7 @@ void SyncEngine::StopAndFlush() {
 void SyncEngine::StartSyncPass(
     int round,
     std::optional<FirstSyncStrategy> initial_strategy) {
-  if (!is_signed_in() || !data_adapter_) {
+  if (!is_signed_in() || !credentials_ || !data_adapter_) {
     FinishSyncPass(false, "NO_DATA_ADAPTER", "Sync is not ready.");
     return;
   }
@@ -3822,35 +4418,54 @@ void SyncEngine::StartSyncPass(
     state_->mirror.clear();
     state_->pending_backfill_categories.clear();
     PushLocalDiff(
-        local, SyncPushMode::kReplaceCloud,
+        local, SyncPushMode::kReplaceCloud, /*cursor_base=*/std::nullopt,
         base::BindOnce(
-            [](base::WeakPtr<SyncEngine> self, bool ok, bool /*conflicts*/,
-               std::string err) {
+            [](base::WeakPtr<SyncEngine> self, PushDiffResult result) {
               if (!self) return;
-              if (ok && self->state_) {
+              if (result.ok && self->state_) {
                 self->state_->awaiting_initial_choice.reset();
                 self->state_->last_sync_at_ms = NowEpochMs();
                 self->SaveStateToDisk();
                 self->StartWebSocket();
               }
-              self->FinishSyncPass(ok, ok ? "" : "SYNC_ERROR", err);
+              self->FinishSyncPass(result.ok, result.ok ? "" : "SYNC_ERROR",
+                                   result.error);
             },
             weak_factory_.GetWeakPtr()));
     return;
   }
 
-  SetStatus(SyncStatusKind::kSyncing, "Checking for changes...");
-  auto pull_state = std::make_shared<PullPassState>();
-  pull_state->start_since =
-      initial_strategy.has_value() ? 0 : state_->last_pulled_revision;
-  pull_state->current_since = pull_state->start_since;
-  pull_state->current_revision = pull_state->start_since;
-  pull_state->reset_revision = state_->last_reset_revision;
+  auto ctx = std::make_shared<SyncPassContext>();
+  ctx->round = round;
+  ctx->generation = session_generation_;
+  ctx->initial_strategy = initial_strategy;
+  ctx->categories = state_->categories;
+  ctx->enabled = state_->categories.EnabledCollections();
 
-  PullAllPages(pull_state,
-               base::BindOnce(&SyncEngine::OnPullCompletedForPass,
-                              weak_factory_.GetWeakPtr(), round,
-                              initial_strategy, pull_state));
+  if (!initial_strategy) {
+    for (SyncCategory cat : state_->pending_backfill_categories) {
+      if (ctx->categories.IsEnabled(cat)) {
+        ctx->processed_backfill.push_back(cat);
+        for (SyncCollection col : SyncCollectionsForCategory(cat)) {
+          ctx->backfill_collections.insert(col);
+        }
+      }
+    }
+  }
+
+  SetStatus(SyncStatusKind::kSyncing,
+            initial_strategy.has_value() ? "Downloading your cloud data..."
+                                         : "Checking for changes...");
+  ctx->pull_state = std::make_shared<PullPassState>();
+  ctx->pull_state->start_since =
+      initial_strategy.has_value() ? 0 : state_->last_pulled_revision;
+  ctx->pull_state->current_since = ctx->pull_state->start_since;
+  ctx->pull_state->current_revision = ctx->pull_state->start_since;
+  ctx->pull_state->reset_revision = state_->last_reset_revision;
+
+  PullAllPages(ctx->pull_state,
+               base::BindOnce(&SyncEngine::OnInitialPullCompleted,
+                              weak_factory_.GetWeakPtr(), ctx));
 }
 
 void SyncEngine::PullAllPages(
@@ -3999,63 +4614,257 @@ void SyncEngine::PullAllPages(
           weak_factory_.GetWeakPtr(), gen, pull_state, std::move(on_done)));
 }
 
-void SyncEngine::OnPullCompletedForPass(
-    int round,
-    std::optional<FirstSyncStrategy> initial_strategy,
-    std::shared_ptr<PullPassState> pull_state,
-    bool ok,
-    std::string error) {
-  if (!ok || !is_signed_in() || !data_adapter_) {
-    FinishSyncPass(false, "SYNC_PULL_FAILED", error);
+void SyncEngine::OnInitialPullCompleted(std::shared_ptr<SyncPassContext> ctx,
+                                        bool ok,
+                                        std::string error) {
+  if (!ok || !is_signed_in() || !data_adapter_ ||
+      session_generation_ != ctx->generation) {
+    FinishSyncPass(false, "SYNC_PULL_FAILED",
+                   error.empty() ? "Sync cancelled." : error);
     return;
   }
 
   // If the server resetRevision advanced since last pull, re-pull from 0.
-  if (!initial_strategy && !pull_state->full_resync &&
-      pull_state->reset_revision > state_->last_reset_revision &&
+  if (!ctx->initial_strategy && !ctx->pull_state->full_resync &&
+      ctx->pull_state->reset_revision > state_->last_reset_revision &&
       state_->last_pulled_revision > 0) {
-    auto full_state = std::make_shared<PullPassState>();
-    full_state->start_since = 0;
-    full_state->current_since = 0;
-    full_state->full_resync = true;
-    PullAllPages(full_state,
-                 base::BindOnce(&SyncEngine::OnPullCompletedForPass,
-                                weak_factory_.GetWeakPtr(), round,
-                                initial_strategy, full_state));
+    ctx->pull_state = std::make_shared<PullPassState>();
+    ctx->pull_state->start_since = 0;
+    ctx->pull_state->current_since = 0;
+    ctx->pull_state->full_resync = true;
+    PullAllPages(ctx->pull_state,
+                 base::BindOnce(&SyncEngine::OnInitialPullCompleted,
+                                weak_factory_.GetWeakPtr(), ctx));
     return;
   }
 
-  // Proceed to apply pulled changes (and download any referenced blobs if needed).
-  ApplyAndFinishPass(round, initial_strategy, pull_state, {});
+  ctx->full_reset = ctx->pull_state->full_resync;
+  for (const auto& w : ctx->pull_state->warnings) {
+    ctx->pass_warnings.push_back(w);
+  }
+
+  // P1-2: Category backfill — pull from revision 0 filtered to newly enabled
+  // collections before deciding what to push or apply.
+  if (!ctx->initial_strategy && !ctx->full_reset &&
+      !ctx->backfill_collections.empty()) {
+    auto backfill_state = std::make_shared<PullPassState>();
+    backfill_state->start_since = 0;
+    backfill_state->current_since = 0;
+    backfill_state->current_revision = 0;
+    backfill_state->reset_revision = state_->last_reset_revision;
+    backfill_state->filter_collections.assign(
+        ctx->backfill_collections.begin(), ctx->backfill_collections.end());
+    PullAllPages(backfill_state,
+                 base::BindOnce(&SyncEngine::OnBackfillPullCompleted,
+                                weak_factory_.GetWeakPtr(), ctx,
+                                backfill_state));
+    return;
+  }
+
+  ContinueAfterPulls(std::move(ctx));
 }
 
-void SyncEngine::ApplyAndFinishPass(
-    int round,
-    std::optional<FirstSyncStrategy> initial_strategy,
-    std::shared_ptr<PullPassState> pull_state,
-    std::map<std::string, std::vector<uint8_t>> blobs) {
-  if (!is_signed_in() || !data_adapter_) {
+void SyncEngine::OnBackfillPullCompleted(
+    std::shared_ptr<SyncPassContext> ctx,
+    std::shared_ptr<PullPassState> backfill_state,
+    bool ok,
+    std::string error) {
+  if (!ok || !is_signed_in() || !data_adapter_ ||
+      session_generation_ != ctx->generation) {
+    FinishSyncPass(false, "SYNC_PULL_FAILED",
+                   error.empty() ? "Sync cancelled." : error);
+    return;
+  }
+
+  for (const auto& w : backfill_state->warnings) {
+    ctx->pass_warnings.push_back(w);
+  }
+
+  ctx->backfill_records.clear();
+  for (const auto& key : backfill_state->order) {
+    auto it = backfill_state->by_key.find(key);
+    if (it == backfill_state->by_key.end()) continue;
+    const SyncRemoteRecord& rec = it->second;
+    ctx->backfill_records.push_back(rec);
+
+    auto existing = ctx->pull_state->by_key.find(key);
+    if (existing == ctx->pull_state->by_key.end()) {
+      ctx->pull_state->order.push_back(key);
+      ctx->pull_state->by_key[key] = rec;
+    } else if (existing->second.revision < rec.revision) {
+      existing->second = rec;
+    }
+  }
+
+  ContinueAfterPulls(std::move(ctx));
+}
+
+void SyncEngine::ContinueAfterPulls(std::shared_ptr<SyncPassContext> ctx) {
+  if (!is_signed_in() || !data_adapter_ ||
+      session_generation_ != ctx->generation) {
     FinishSyncPass(false, "CANCELLED", "Sync cancelled.");
     return;
   }
 
-  const auto enabled = state_->categories.EnabledCollections();
-  const bool replace_local =
-      (initial_strategy == FirstSyncStrategy::kReplaceLocalWithCloud) ||
-      pull_state->full_resync;
+  // P1-1: LWW push-before-pull order (matching macOS SyncEngine.swift:840-875).
+  // Collect local dirty records BEFORE applying remote changes, push dirty
+  // keys first (excluding backfill collections which merge cloud first), and
+  // re-pull if the server reports conflicts.
+  if (!ctx->initial_strategy && !ctx->full_reset) {
+    SyncLocalBundle local =
+        data_adapter_->CollectLocalData(ctx->categories, *vault_keys_);
+    for (const auto& w : local.warnings) {
+      ctx->pass_warnings.push_back(w);
+    }
+    ctx->dirty_before_apply = ComputeDirtyKeys(
+        local, state_->mirror, ctx->enabled, *vault_keys_);
+    ctx->pre_apply_local = std::move(local);
 
-  if (replace_local) {
-    state_->mirror.clear();
+    SyncLocalBundle first = FilterLocalBundleExcluding(
+        *ctx->pre_apply_local, ctx->backfill_collections);
+    std::set<std::string> early_dirty = ComputeDirtyKeys(
+        first, state_->mirror, ctx->enabled, *vault_keys_);
+    if (!early_dirty.empty()) {
+      SetStatus(SyncStatusKind::kSyncing, "Uploading changes...");
+      PushLocalDiff(first, SyncPushMode::kDelta,
+                    /*cursor_base=*/ctx->pull_state->current_revision,
+                    base::BindOnce(&SyncEngine::OnEarlyPushCompleted,
+                                   weak_factory_.GetWeakPtr(), ctx));
+      return;
+    }
   }
 
-  std::vector<SyncRemoteRecord> changed;
-  for (const auto& key : pull_state->order) {
-    auto it = pull_state->by_key.find(key);
-    if (it == pull_state->by_key.end()) continue;
+  PrepareApplyRemote(std::move(ctx));
+}
+
+void SyncEngine::OnEarlyPushCompleted(std::shared_ptr<SyncPassContext> ctx,
+                                      PushDiffResult result) {
+  if (!result.ok || !is_signed_in() || !data_adapter_ ||
+      session_generation_ != ctx->generation) {
+    FinishSyncPass(false, "SYNC_PUSH_FAILED",
+                   result.error.empty() ? "Sync cancelled." : result.error);
+    return;
+  }
+
+  std::set<std::string> still_dirty = ComputeDirtyKeys(
+      *ctx->pre_apply_local, state_->mirror, ctx->enabled, *vault_keys_);
+  ctx->pushed_first.clear();
+  for (const auto& key : ctx->dirty_before_apply) {
+    if (!still_dirty.contains(key)) {
+      ctx->pushed_first.insert(key);
+    }
+  }
+  ctx->dirty_before_apply = std::move(still_dirty);
+  ctx->cursor_after_push = result.clean_cursor;
+
+  if (result.had_conflicts) {
+    // Server holds strictly newer copies for some records; re-pull them.
+    SetStatus(SyncStatusKind::kSyncing, "Checking for changes...");
+    ctx->cursor_after_push.reset();
+    auto repull = std::make_shared<PullPassState>();
+    repull->start_since = state_->last_pulled_revision;
+    repull->current_since = repull->start_since;
+    repull->current_revision = repull->start_since;
+    repull->reset_revision = state_->last_reset_revision;
+    PullAllPages(repull,
+                 base::BindOnce(&SyncEngine::OnConflictRepullCompleted,
+                                weak_factory_.GetWeakPtr(), ctx, repull));
+    return;
+  }
+
+  PrepareApplyRemote(std::move(ctx));
+}
+
+void SyncEngine::OnConflictRepullCompleted(
+    std::shared_ptr<SyncPassContext> ctx,
+    std::shared_ptr<PullPassState> repull_state,
+    bool ok,
+    std::string error) {
+  if (!ok || !is_signed_in() || !data_adapter_ ||
+      session_generation_ != ctx->generation) {
+    FinishSyncPass(false, "SYNC_PULL_FAILED",
+                   error.empty() ? "Sync cancelled." : error);
+    return;
+  }
+
+  if (!repull_state->full_resync &&
+      repull_state->reset_revision > state_->last_reset_revision &&
+      state_->last_pulled_revision > 0) {
+    auto full_repull = std::make_shared<PullPassState>();
+    full_repull->start_since = 0;
+    full_repull->current_since = 0;
+    full_repull->full_resync = true;
+    PullAllPages(full_repull,
+                 base::BindOnce(&SyncEngine::OnConflictRepullCompleted,
+                                weak_factory_.GetWeakPtr(), ctx, full_repull));
+    return;
+  }
+
+  for (const auto& w : repull_state->warnings) {
+    ctx->pass_warnings.push_back(w);
+  }
+  ctx->pull_state = std::move(repull_state);
+  ctx->full_reset = ctx->pull_state->full_resync;
+
+  if (!ctx->full_reset) {
+    for (const auto& rec : ctx->backfill_records) {
+      std::string key =
+          SyncPersistedState::MirrorKey(rec.collection, rec.record_id);
+      auto existing = ctx->pull_state->by_key.find(key);
+      if (existing == ctx->pull_state->by_key.end()) {
+        ctx->pull_state->order.push_back(key);
+        ctx->pull_state->by_key[key] = rec;
+      } else if (existing->second.revision < rec.revision) {
+        existing->second = rec;
+      }
+    }
+  } else {
+    ctx->pre_apply_local.reset();
+    ctx->dirty_before_apply.clear();
+    ctx->pushed_first.clear();
+  }
+
+  PrepareApplyRemote(std::move(ctx));
+}
+
+void SyncEngine::PrepareApplyRemote(std::shared_ptr<SyncPassContext> ctx) {
+  if (!is_signed_in() || !data_adapter_ ||
+      session_generation_ != ctx->generation) {
+    FinishSyncPass(false, "CANCELLED", "Sync cancelled.");
+    return;
+  }
+
+  const bool replace_local =
+      (ctx->initial_strategy == FirstSyncStrategy::kReplaceLocalWithCloud) ||
+      ctx->full_reset;
+  const bool is_initial_snapshot =
+      ctx->initial_strategy == FirstSyncStrategy::kReplaceLocalWithCloud ||
+      ctx->initial_strategy == FirstSyncStrategy::kMergeLocalAndCloud;
+
+  if (is_initial_snapshot) {
+    state_->mirror.clear();
+  } else if (ctx->full_reset) {
+    std::erase_if(state_->mirror, [&](const auto& pair) {
+      auto parsed = SyncPersistedState::ParseMirrorKey(pair.first);
+      return !parsed || ctx->enabled.contains(parsed->first);
+    });
+  }
+
+  ctx->remote.clear();
+  ctx->changed.clear();
+  for (const auto& key : ctx->pull_state->order) {
+    auto it = ctx->pull_state->by_key.find(key);
+    if (it == ctx->pull_state->by_key.end()) continue;
     const auto& rec = it->second;
-    if (!enabled.contains(rec.collection)) continue;
-    if (replace_local) {
-      if (!rec.deleted) changed.push_back(rec);
+    if (!ctx->enabled.contains(rec.collection)) continue;
+    // Skip keys that won the early LWW push.
+    if (ctx->pushed_first.contains(key)) continue;
+
+    ctx->remote.push_back(rec);
+    if (replace_local || is_initial_snapshot) {
+      if (!rec.deleted) {
+        ctx->changed.push_back(rec);
+      }
     } else {
       auto mit = state_->mirror.find(key);
       if (mit == state_->mirror.end() && rec.deleted) continue;
@@ -4064,12 +4873,199 @@ void SyncEngine::ApplyAndFinishPass(
           mit->second.deleted == rec.deleted) {
         continue;
       }
-      changed.push_back(rec);
+      ctx->changed.push_back(rec);
     }
   }
 
-  std::set<std::string> applied_keys;
-  if (!changed.empty() || replace_local) {
+  if (!ctx->changed.empty()) {
+    DownloadBlobsForRecords(
+        ctx->changed, ctx->generation,
+        base::BindOnce(&SyncEngine::ApplyAndFinishPass,
+                       weak_factory_.GetWeakPtr(), ctx));
+    return;
+  }
+
+  ApplyAndFinishPass(std::move(ctx), BlobDownloadResult{});
+}
+
+struct SyncEngine::BlobDownloadState {
+  uint64_t generation = 0;
+  std::vector<SyncRemoteRecord> records;
+  std::vector<SyncedAssetRef> queue;
+  size_t index = 0;
+  size_t total_bytes = 0;
+  BlobDownloadResult result;
+  base::OnceCallback<void(BlobDownloadResult)> on_done;
+};
+
+void SyncEngine::DownloadBlobsForRecords(
+    const std::vector<SyncRemoteRecord>& records,
+    uint64_t generation,
+    base::OnceCallback<void(BlobDownloadResult)> on_done) {
+  auto st = std::make_shared<BlobDownloadState>();
+  st->generation = generation;
+  st->records = records;
+  st->on_done = std::move(on_done);
+
+  std::set<std::string> planned_ids;
+  size_t planned_bytes = 0;
+  bool any_planned_record = false;
+
+  for (const auto& rec : records) {
+    if (!SyncCollectionCarriesAssets(rec.collection) || rec.deleted ||
+        !rec.payload_json) {
+      continue;
+    }
+    auto refs = SyncCollectionCodecs::ProbeAssetRefs(*rec.payload_json);
+    std::vector<SyncedAssetRef> fresh;
+    std::set<std::string> fresh_ids;
+    size_t fresh_bytes = 0;
+    for (const auto& ref : refs) {
+      if (!SyncCrypto::IsValidBlobId(ref.blob_id)) continue;
+      if (planned_ids.contains(ref.blob_id) ||
+          !fresh_ids.insert(ref.blob_id).second) {
+        continue;
+      }
+      fresh.push_back(ref);
+      fresh_bytes += static_cast<size_t>(std::max<int64_t>(0, ref.byte_length)) +
+                     kSyncNonceBytes + kSyncGcmTagBytes;
+    }
+    if (fresh.empty()) continue;
+    if (any_planned_record &&
+        (planned_ids.size() + fresh.size() > kSyncMaxBlobsPerPass ||
+         planned_bytes + fresh_bytes > kSyncMaxTotalBlobBytesPerPass)) {
+      st->result.had_cap_skips = true;
+      continue;
+    }
+    any_planned_record = true;
+    for (auto& ref : fresh) {
+      planned_ids.insert(ref.blob_id);
+      st->queue.push_back(std::move(ref));
+    }
+    planned_bytes += fresh_bytes;
+  }
+
+  if (!st->queue.empty()) {
+    SetStatus(SyncStatusKind::kSyncing, "Downloading attachments...");
+  }
+  DownloadNextBlob(std::move(st));
+}
+
+void SyncEngine::DownloadNextBlob(std::shared_ptr<BlobDownloadState> s) {
+  if (!is_signed_in() || session_generation_ != s->generation || !state_ ||
+      !vault_keys_) {
+    s->result.ok = false;
+    s->result.error = "Sync cancelled.";
+    std::move(s->on_done).Run(std::move(s->result));
+    return;
+  }
+
+  if (s->index >= s->queue.size() ||
+      (s->index > 0 && s->total_bytes >= kSyncMaxTotalBlobBytesPerPass)) {
+    if (s->index < s->queue.size()) {
+      s->result.had_cap_skips = true;
+    }
+    for (const auto& rec : s->records) {
+      if (!SyncCollectionCarriesAssets(rec.collection) || rec.deleted ||
+          !rec.payload_json) {
+        continue;
+      }
+      auto refs = SyncCollectionCodecs::ProbeAssetRefs(*rec.payload_json);
+      for (const auto& ref : refs) {
+        if (!SyncCrypto::IsValidBlobId(ref.blob_id)) continue;
+        if (!s->result.blobs.contains(ref.blob_id)) {
+          s->result.deferred_keys.insert(
+              SyncPersistedState::MirrorKey(rec.collection, rec.record_id));
+          break;
+        }
+      }
+    }
+    std::move(s->on_done).Run(std::move(s->result));
+    return;
+  }
+
+  const SyncedAssetRef ref = s->queue[s->index];
+  SendAuthenticatedBinary(
+      "GET", "/v1/blobs/" + ref.blob_id, /*content_type=*/"",
+      /*accept_header=*/"application/octet-stream", /*body=*/{},
+      kSyncMaxBlobBytes,
+      base::BindOnce(
+          [](base::WeakPtr<SyncEngine> self,
+             std::shared_ptr<BlobDownloadState> state, SyncedAssetRef asset,
+             SyncHttpResponse resp) {
+            if (!self || self->session_generation_ != state->generation ||
+                !self->state_ || !self->vault_keys_) {
+              state->result.ok = false;
+              state->result.error = "Sync cancelled.";
+              std::move(state->on_done).Run(std::move(state->result));
+              return;
+            }
+            if (resp.status_code == 401 || resp.status_code == 403) {
+              auto [code, msg] = ParseServerError(resp);
+              state->result.ok = false;
+              state->result.error = msg;
+              std::move(state->on_done).Run(std::move(state->result));
+              return;
+            }
+            if (resp.status_code >= 200 && resp.status_code < 300) {
+              state->total_bytes += resp.body.size();
+              auto plain = SyncCrypto::OpenBlob(
+                  resp.body, *self->vault_keys_, *self->state_->account_id,
+                  asset.blob_id);
+              bool verified =
+                  plain.has_value() &&
+                  SyncCrypto::ComputeBlobId(plain->data(), plain->size(),
+                                            *self->vault_keys_) ==
+                      asset.blob_id &&
+                  (asset.sha256.empty() ||
+                   SyncCrypto::Sha256Hex(plain->data(), plain->size()) ==
+                       asset.sha256);
+              if (verified) {
+                state->result.blobs[asset.blob_id] = std::move(*plain);
+              } else {
+                state->result.warnings.push_back(
+                    "Skipped " + asset.filename +
+                    ": the attachment failed verification.");
+              }
+            } else {
+              auto [code, msg] = ParseServerError(resp);
+              state->result.warnings.push_back(
+                  "Could not download " + asset.filename + ": " + msg);
+            }
+            ++state->index;
+            self->DownloadNextBlob(std::move(state));
+          },
+          weak_factory_.GetWeakPtr(), std::move(s), ref));
+}
+
+void SyncEngine::ApplyAndFinishPass(std::shared_ptr<SyncPassContext> ctx,
+                                    BlobDownloadResult blob_result) {
+  if (!blob_result.ok || !is_signed_in() || !data_adapter_ ||
+      session_generation_ != ctx->generation) {
+    FinishSyncPass(
+        false, "SYNC_BLOB_FAILED",
+        blob_result.error.empty() ? "Sync cancelled." : blob_result.error);
+    return;
+  }
+
+  for (const auto& w : blob_result.warnings) {
+    ctx->pass_warnings.push_back(w);
+  }
+
+  // Defer records whose referenced blobs failed or were skipped by pass cap.
+  if (!blob_result.deferred_keys.empty()) {
+    std::erase_if(ctx->changed, [&](const SyncRemoteRecord& rec) {
+      return blob_result.deferred_keys.contains(
+          SyncPersistedState::MirrorKey(rec.collection, rec.record_id));
+    });
+  }
+
+  const bool replace_local =
+      (ctx->initial_strategy == FirstSyncStrategy::kReplaceLocalWithCloud) ||
+      ctx->full_reset;
+
+  std::set<std::string> echo_candidates;
+  if (!ctx->changed.empty() || replace_local) {
     SetStatus(SyncStatusKind::kSyncing, "Applying changes...");
     if (replace_local) {
       base::FilePath backup_dir =
@@ -4092,19 +5088,25 @@ void SyncEngine::ApplyAndFinishPass(
     }
 
     SyncRemoteBundle bundle;
-    bundle.records = changed;
-    bundle.blobs = std::move(blobs);
-    bundle.is_full_snapshot = replace_local || initial_strategy.has_value();
+    bundle.records = ctx->changed;
+    bundle.blobs = std::move(blob_result.blobs);
+    bundle.is_full_snapshot = replace_local || ctx->initial_strategy.has_value();
+
+    for (const auto& [blob_id, _] : bundle.blobs) {
+      state_->uploaded_blob_ids.insert(blob_id);
+    }
 
     is_applying_remote_ = true;
     SyncApplyOutcome outcome = data_adapter_->ApplyRemoteData(
         bundle,
         replace_local ? SyncApplyMode::kReplaceLocal
                       : SyncApplyMode::kMergeOrDelta,
-        state_->categories);
+        ctx->categories);
     is_applying_remote_ = false;
 
-    for (const auto& w : outcome.warnings) warnings_.push_back(w);
+    for (const auto& w : outcome.warnings) {
+      ctx->pass_warnings.push_back(w);
+    }
     for (const auto& ext : outcome.pending_extension_installs) {
       bool exists = std::any_of(
           state_->pending_extension_installs.begin(),
@@ -4117,41 +5119,105 @@ void SyncEngine::ApplyAndFinishPass(
         state_->pending_extension_installs.push_back(ext);
       }
     }
-    for (const auto& rec : changed) {
+    for (const auto& rec : ctx->changed) {
       std::string key =
           SyncPersistedState::MirrorKey(rec.collection, rec.record_id);
       state_->mirror[key] = SyncRecordMirror{
           rec.payload_hash, rec.client_updated_at_ms, rec.deleted};
-      if (!rec.deleted) applied_keys.insert(key);
-    }
-  }
-
-  state_->last_pulled_revision =
-      std::max(state_->last_pulled_revision, pull_state->current_revision);
-  state_->last_reset_revision =
-      std::max(state_->last_reset_revision, pull_state->reset_revision);
-  state_->pending_backfill_categories.clear();
-  SaveStateToDisk();
-
-  // Collect local state to suppress echoes and push local edits.
-  SyncLocalBundle local =
-      data_adapter_->CollectLocalData(state_->categories, *vault_keys_);
-
-  // Echo suppression: align mirror hashes with re-serialized local form.
-  for (const auto& rec : local.records) {
-    std::string key =
-        SyncPersistedState::MirrorKey(rec.collection, rec.record_id);
-    if (applied_keys.contains(key)) {
-      auto it = state_->mirror.find(key);
-      if (it != state_->mirror.end()) {
-        it->second.payload_hash =
-            SyncCrypto::ComputePayloadHash(rec.payload_json, *vault_keys_);
-        it->second.deleted = false;
+      if (!rec.deleted && !ctx->dirty_before_apply.contains(key)) {
+        echo_candidates.insert(key);
       }
     }
   }
 
-  if (initial_strategy == FirstSyncStrategy::kReplaceLocalWithCloud) {
+  // Record tombstones the server sent for records this device never had.
+  for (const auto& rec : ctx->remote) {
+    if (!rec.deleted) continue;
+    std::string key =
+        SyncPersistedState::MirrorKey(rec.collection, rec.record_id);
+    if (blob_result.deferred_keys.contains(key)) continue;
+    if (!state_->mirror.contains(key)) {
+      state_->mirror[key] = SyncRecordMirror{
+          rec.payload_hash, rec.client_updated_at_ms, /*deleted=*/true};
+    }
+  }
+
+  state_->last_pulled_revision =
+      std::max({state_->last_pulled_revision, ctx->pull_state->current_revision,
+                ctx->cursor_after_push.value_or(0)});
+  state_->last_reset_revision =
+      std::max(state_->last_reset_revision, ctx->pull_state->reset_revision);
+
+  // P1-2: Clear ONLY the backfill categories that were processed in this pass.
+  if (ctx->initial_strategy.has_value()) {
+    state_->pending_backfill_categories.clear();
+  } else if (!ctx->processed_backfill.empty()) {
+    std::set<SyncCategory> done_cats(ctx->processed_backfill.begin(),
+                                     ctx->processed_backfill.end());
+    std::erase_if(state_->pending_backfill_categories,
+                  [&](SyncCategory cat) { return done_cats.contains(cat); });
+  }
+
+  // P1-3: Re-queue deferred asset records' categories for backfill retry.
+  if (!blob_result.deferred_keys.empty()) {
+    for (const auto& key : blob_result.deferred_keys) {
+      if (auto parsed = SyncPersistedState::ParseMirrorKey(key)) {
+        SyncCategory cat = SyncCategoryForCollection(parsed->first);
+        auto& bf = state_->pending_backfill_categories;
+        if (std::find(bf.begin(), bf.end(), cat) == bf.end()) {
+          bf.push_back(cat);
+        }
+      }
+    }
+    if (blob_result.had_cap_skips) {
+      follow_up_sync_requested_ = true;
+    }
+    ctx->pass_warnings.push_back(
+        "Some attachments are still downloading; their Easels and Notes "
+        "follow in the next sync pass.");
+  }
+
+  for (const auto& w : ctx->pass_warnings) {
+    warnings_.push_back(w);
+  }
+  SaveStateToDisk();
+
+  // If nothing arrived and the early push covered every collection, we are done.
+  if (!ctx->initial_strategy && ctx->changed.empty() &&
+      ctx->pre_apply_local.has_value() && ctx->backfill_collections.empty()) {
+    state_->last_sync_at_ms = NowEpochMs();
+    SaveStateToDisk();
+    FinishSyncPass(true, "", "");
+    return;
+  }
+
+  // Collect local state to suppress echoes and push remaining local edits.
+  SyncLocalBundle local =
+      (ctx->changed.empty() && ctx->pre_apply_local.has_value())
+          ? std::move(*ctx->pre_apply_local)
+          : data_adapter_->CollectLocalData(ctx->categories, *vault_keys_);
+
+  // Echo suppression: align mirror hashes with re-serialized local form.
+  std::map<std::string, std::string> local_hashes;
+  for (const auto& rec : local.records) {
+    std::string key =
+        SyncPersistedState::MirrorKey(rec.collection, rec.record_id);
+    local_hashes[key] =
+        SyncCrypto::ComputePayloadHash(rec.payload_json, *vault_keys_);
+  }
+  for (const auto& key : echo_candidates) {
+    auto it = state_->mirror.find(key);
+    if (it == state_->mirror.end()) continue;
+    auto hit = local_hashes.find(key);
+    if (hit != local_hashes.end()) {
+      it->second.payload_hash = hit->second;
+      it->second.deleted = false;
+    } else if (!it->second.deleted) {
+      state_->mirror.erase(it);
+    }
+  }
+
+  if (ctx->initial_strategy == FirstSyncStrategy::kReplaceLocalWithCloud) {
     state_->awaiting_initial_choice.reset();
     state_->last_sync_at_ms = NowEpochMs();
     SaveStateToDisk();
@@ -4162,17 +5228,20 @@ void SyncEngine::ApplyAndFinishPass(
 
   SetStatus(SyncStatusKind::kSyncing, "Uploading changes...");
   PushLocalDiff(
-      local, SyncPushMode::kDelta,
+      local, SyncPushMode::kDelta, /*cursor_base=*/std::nullopt,
       base::BindOnce(
           [](base::WeakPtr<SyncEngine> self, int round,
-             std::optional<FirstSyncStrategy> strategy, bool ok,
-             bool had_conflicts, std::string error) {
+             std::optional<FirstSyncStrategy> strategy, PushDiffResult result) {
             if (!self) return;
-            if (!ok) {
-              self->FinishSyncPass(false, "SYNC_PUSH_FAILED", error);
+            if (!result.ok) {
+              self->FinishSyncPass(false, "SYNC_PUSH_FAILED", result.error);
               return;
             }
-            if (had_conflicts && round < 2) {
+            if (result.had_conflicts && round < 2) {
+              if (strategy && self->state_) {
+                self->state_->awaiting_initial_choice.reset();
+                self->SaveStateToDisk();
+              }
               // Server had newer LWW records; run another round to pull & converge.
               self->StartSyncPass(round + 1, std::nullopt);
               return;
@@ -4189,16 +5258,19 @@ void SyncEngine::ApplyAndFinishPass(
             }
             self->FinishSyncPass(true, "", "");
           },
-          weak_factory_.GetWeakPtr(), round, initial_strategy));
+          weak_factory_.GetWeakPtr(), ctx->round, ctx->initial_strategy));
 }
 
 void SyncEngine::PushLocalDiff(
     const SyncLocalBundle& local,
     SyncPushMode mode,
-    base::OnceCallback<void(bool ok, bool had_conflicts, std::string error)>
-        on_done) {
-  if (!is_signed_in()) {
-    std::move(on_done).Run(false, false, "Not signed in.");
+    std::optional<int> cursor_base,
+    base::OnceCallback<void(PushDiffResult)> on_done) {
+  if (!is_signed_in() || !credentials_) {
+    PushDiffResult res;
+    res.ok = false;
+    res.error = "Not signed in.";
+    std::move(on_done).Run(std::move(res));
     return;
   }
 
@@ -4220,6 +5292,7 @@ void SyncEngine::PushLocalDiff(
   }
 
   std::vector<PendingPushMutation> mutations;
+  std::set<std::string> needed_blobs;
   for (const auto& [key, pair] : local_by_key) {
     const auto& [rec, hash] = pair;
     const SyncRecordMirror* known = nullptr;
@@ -4238,6 +5311,14 @@ void SyncEngine::PushLocalDiff(
     if (!sealed || sealed->size() > kSyncMaxRecordCiphertextBytes) {
       warnings_.push_back("Skipped oversized record " + key);
       continue;
+    }
+    if (SyncCollectionCarriesAssets(rec.collection)) {
+      for (const auto& ref :
+           SyncCollectionCodecs::ProbeAssetRefs(rec.payload_json)) {
+        if (SyncCrypto::IsValidBlobId(ref.blob_id)) {
+          needed_blobs.insert(ref.blob_id);
+        }
+      }
     }
     PendingPushMutation m;
     m.key = key;
@@ -4261,7 +5342,8 @@ void SyncEngine::PushLocalDiff(
     for (const auto& [key, known] : state_->mirror) {
       if (known.deleted || local_by_key.contains(key)) continue;
       auto parsed = SyncPersistedState::ParseMirrorKey(key);
-      if (!parsed || !local.complete_collections.contains(parsed->first)) {
+      if (!parsed || !enabled.contains(parsed->first) ||
+          !local.complete_collections.contains(parsed->first)) {
         continue;
       }
       int64_t ts = std::max(now_ms, known.client_updated_at_ms + 1);
@@ -4306,27 +5388,163 @@ void SyncEngine::PushLocalDiff(
     batches->emplace_back();
   }
   if (batches->empty()) {
-    std::move(on_done).Run(true, false, "");
+    PushDiffResult nothing;
+    nothing.ok = true;
+    nothing.current_revision = state_->last_pulled_revision;
+    nothing.reset_revision = state_->last_reset_revision;
+    nothing.clean_cursor = cursor_base.value_or(state_->last_pulled_revision);
+    std::move(on_done).Run(std::move(nothing));
     return;
   }
 
-  PushMutationBatches(batches, 0, mode, /*any_conflicts=*/false,
-                      std::move(on_done));
+  // P1-3: Queue unuploaded blobs referenced by dirty asset-carrying records.
+  auto blob_queue = std::make_shared<std::vector<SyncLocalBlob>>();
+  if (!needed_blobs.empty()) {
+    std::set<std::string> known_blobs =
+        (mode == SyncPushMode::kReplaceCloud) ? std::set<std::string>()
+                                              : state_->uploaded_blob_ids;
+    std::set<std::string> queued_ids;
+    for (const auto& blob : local.blobs) {
+      if (needed_blobs.contains(blob.blob_id) &&
+          !known_blobs.contains(blob.blob_id) &&
+          queued_ids.insert(blob.blob_id).second) {
+        blob_queue->push_back(blob);
+      }
+    }
+    for (const auto& id : needed_blobs) {
+      if (!known_blobs.contains(id) && !queued_ids.contains(id)) {
+        warnings_.push_back(
+            "An Easel or Note references a missing attachment (" +
+            id.substr(0, 8) + ").");
+      }
+    }
+  }
+
+  UploadBlobsAndPushBatches(std::move(blob_queue), /*blob_index=*/0,
+                            session_generation_, std::move(batches), mode,
+                            cursor_base, std::move(on_done));
+}
+
+void SyncEngine::UploadBlobsAndPushBatches(
+    std::shared_ptr<std::vector<SyncLocalBlob>> blob_queue,
+    size_t blob_index,
+    uint64_t generation,
+    std::shared_ptr<std::vector<std::vector<PendingPushMutation>>> batches,
+    SyncPushMode mode,
+    std::optional<int> cursor_base,
+    base::OnceCallback<void(PushDiffResult)> on_done) {
+  if (!is_signed_in() || !credentials_ || !state_ || !vault_keys_ ||
+      session_generation_ != generation) {
+    PushDiffResult res;
+    res.ok = false;
+    res.error = "Sync cancelled.";
+    std::move(on_done).Run(std::move(res));
+    return;
+  }
+
+  while (blob_index < blob_queue->size()) {
+    const SyncLocalBlob& blob = (*blob_queue)[blob_index];
+    if (!SyncCrypto::IsValidBlobId(blob.blob_id) ||
+        blob.data.size() + kSyncNonceBytes + kSyncGcmTagBytes >
+            kSyncMaxBlobBytes) {
+      warnings_.push_back("Skipped an attachment larger than 20 MB.");
+      ++blob_index;
+      continue;
+    }
+    auto sealed = SyncCrypto::SealBlob(blob.data, *vault_keys_,
+                                       *state_->account_id, blob.blob_id);
+    if (!sealed || sealed->size() > kSyncMaxBlobBytes) {
+      warnings_.push_back("Skipped an attachment that failed encryption.");
+      ++blob_index;
+      continue;
+    }
+
+    SetStatus(SyncStatusKind::kSyncing, "Uploading attachments...");
+    std::string blob_id = blob.blob_id;
+    SendAuthenticatedBinary(
+        "PUT", "/v1/blobs/" + blob_id,
+        /*content_type=*/"application/octet-stream",
+        /*accept_header=*/"application/json", std::move(*sealed),
+        kSyncMaxJsonResponseBytes,
+        base::BindOnce(
+            [](base::WeakPtr<SyncEngine> self,
+               std::shared_ptr<std::vector<SyncLocalBlob>> queue,
+               size_t next_index, uint64_t gen, std::string uploaded_id,
+               std::shared_ptr<std::vector<std::vector<PendingPushMutation>>>
+                   mut_batches,
+               SyncPushMode push_mode, std::optional<int> cb_cursor,
+               base::OnceCallback<void(PushDiffResult)> done,
+               SyncHttpResponse resp) {
+              if (!self || self->session_generation_ != gen || !self->state_) {
+                PushDiffResult fail;
+                fail.ok = false;
+                fail.error = "Sync cancelled.";
+                std::move(done).Run(std::move(fail));
+                return;
+              }
+              if (resp.status_code == 401 || resp.status_code == 403) {
+                auto [code, msg] = ParseServerError(resp);
+                PushDiffResult fail;
+                fail.ok = false;
+                fail.error = msg;
+                std::move(done).Run(std::move(fail));
+                return;
+              }
+              if (resp.status_code >= 200 && resp.status_code < 300) {
+                self->state_->uploaded_blob_ids.insert(uploaded_id);
+                self->SaveStateToDisk();
+              } else {
+                auto [code, msg] = ParseServerError(resp);
+                self->warnings_.push_back("Could not upload attachment (" +
+                                          uploaded_id.substr(0, 8) +
+                                          "): " + msg);
+              }
+              self->UploadBlobsAndPushBatches(
+                  std::move(queue), next_index, gen, std::move(mut_batches),
+                  push_mode, cb_cursor, std::move(done));
+            },
+            weak_factory_.GetWeakPtr(), std::move(blob_queue), blob_index + 1,
+            generation, std::move(blob_id), std::move(batches), mode,
+            cursor_base, std::move(on_done)));
+    return;
+  }
+
+  std::optional<int> initial_chain =
+      cursor_base.value_or(state_->last_pulled_revision);
+  PushMutationBatches(std::move(batches), /*batch_index=*/0, mode, cursor_base,
+                      initial_chain, /*any_conflicts=*/false,
+                      state_->last_pulled_revision, state_->last_reset_revision,
+                      /*total_accepted=*/0, std::move(on_done));
 }
 
 void SyncEngine::PushMutationBatches(
     std::shared_ptr<std::vector<std::vector<PendingPushMutation>>> batches,
     size_t batch_index,
     SyncPushMode mode,
+    std::optional<int> cursor_base,
+    std::optional<int> chain_cursor,
     bool any_conflicts,
-    base::OnceCallback<void(bool ok, bool had_conflicts, std::string error)>
-        on_done) {
-  if (!is_signed_in()) {
-    std::move(on_done).Run(false, any_conflicts, "Not signed in.");
+    int last_revision,
+    int last_reset_revision,
+    int total_accepted,
+    base::OnceCallback<void(PushDiffResult)> on_done) {
+  if (!is_signed_in() || !credentials_) {
+    PushDiffResult res;
+    res.ok = false;
+    res.had_conflicts = any_conflicts;
+    res.error = "Not signed in.";
+    std::move(on_done).Run(std::move(res));
     return;
   }
   if (batch_index >= batches->size()) {
-    std::move(on_done).Run(true, any_conflicts, "");
+    PushDiffResult res;
+    res.ok = true;
+    res.had_conflicts = any_conflicts;
+    res.current_revision = last_revision;
+    res.reset_revision = last_reset_revision;
+    res.accepted_count = total_accepted;
+    res.clean_cursor = chain_cursor;
+    std::move(on_done).Run(std::move(res));
     return;
   }
 
@@ -4350,22 +5568,33 @@ void SyncEngine::PushMutationBatches(
   body.Set("mutations", std::move(wire_muts));
 
   uint64_t gen = session_generation_;
+  int known_reset = state_->last_reset_revision;
   SendAuthenticatedJson(
       "POST", "/v1/sync/push", std::move(body),
       base::BindOnce(
           [](base::WeakPtr<SyncEngine> self, uint64_t gen,
              std::shared_ptr<std::vector<std::vector<PendingPushMutation>>>
                  batches,
-             size_t idx, SyncPushMode used_mode, bool prev_conflicts,
-             base::OnceCallback<void(bool, bool, std::string)> done,
+             size_t idx, SyncPushMode used_mode, std::optional<int> cursor_base,
+             std::optional<int> chain_cursor, int known_reset,
+             bool prev_conflicts, int total_accepted,
+             base::OnceCallback<void(PushDiffResult)> done,
              SyncHttpResponse resp) {
             if (!self || self->session_generation_ != gen || !self->state_) {
-              std::move(done).Run(false, prev_conflicts, "Sync cancelled.");
+              PushDiffResult fail;
+              fail.ok = false;
+              fail.had_conflicts = prev_conflicts;
+              fail.error = "Sync cancelled.";
+              std::move(done).Run(std::move(fail));
               return;
             }
             if (resp.status_code < 200 || resp.status_code >= 300) {
               auto [c, m] = ParseServerError(resp);
-              std::move(done).Run(false, prev_conflicts, m);
+              PushDiffResult fail;
+              fail.ok = false;
+              fail.had_conflicts = prev_conflicts;
+              fail.error = m;
+              std::move(done).Run(std::move(fail));
               return;
             }
             std::string_view sv(
@@ -4373,8 +5602,11 @@ void SyncEngine::PushMutationBatches(
                 resp.body.size());
             auto dict = base::JSONReader::ReadDict(sv, base::JSON_PARSE_RFC);
             if (!dict) {
-              std::move(done).Run(false, prev_conflicts,
-                                  "Malformed push response.");
+              PushDiffResult fail;
+              fail.ok = false;
+              fail.had_conflicts = prev_conflicts;
+              fail.error = "Malformed push response.";
+              std::move(done).Run(std::move(fail));
               return;
             }
 
@@ -4398,31 +5630,44 @@ void SyncEngine::PushMutationBatches(
                                 .value_or(self->state_->last_reset_revision);
             int accepted = dict->FindInt("acceptedCount").value_or(0);
 
+            const bool was_replace = (used_mode == SyncPushMode::kReplaceCloud);
+            std::optional<int> start =
+                was_replace
+                    ? std::optional<int>(reset_rev)
+                    : (reset_rev == known_reset ? chain_cursor : std::nullopt);
+            std::optional<int> next_chain;
+            if (start && conflicted_keys.empty() && cur_rev >= *start &&
+                cur_rev <= *start + accepted) {
+              next_chain = cur_rev;
+            }
+
             for (const auto& m : (*batches)[idx]) {
               if (!conflicted_keys.contains(m.key)) {
                 self->state_->mirror[m.key] = SyncRecordMirror{
                     m.payload_hash, m.client_updated_at_ms, m.deleted};
               }
             }
-            if (used_mode == SyncPushMode::kReplaceCloud) {
-              self->state_->last_reset_revision = reset_rev;
-              self->state_->last_pulled_revision =
-                  conflicted_keys.empty() ? cur_rev : reset_rev;
-            } else if (conflicted_keys.empty() &&
-                       reset_rev == self->state_->last_reset_revision &&
-                       cur_rev >= self->state_->last_pulled_revision &&
-                       cur_rev <=
-                           self->state_->last_pulled_revision + accepted) {
-              self->state_->last_pulled_revision = cur_rev;
+            if (!cursor_base.has_value()) {
+              if (was_replace) {
+                self->state_->last_reset_revision = reset_rev;
+                self->state_->last_pulled_revision =
+                    next_chain.value_or(reset_rev);
+              } else if (next_chain.has_value()) {
+                self->state_->last_pulled_revision =
+                    std::max(self->state_->last_pulled_revision, *next_chain);
+              }
             }
             self->SaveStateToDisk();
 
             // Multi-batch replaceCloud uses replaceCloud once, then delta.
-            self->PushMutationBatches(batches, idx + 1, SyncPushMode::kDelta,
-                                      has_conflicts, std::move(done));
+            self->PushMutationBatches(
+                batches, idx + 1, SyncPushMode::kDelta, cursor_base, next_chain,
+                has_conflicts, cur_rev, reset_rev, total_accepted + accepted,
+                std::move(done));
           },
           weak_factory_.GetWeakPtr(), gen, batches, batch_index, mode,
-          any_conflicts, std::move(on_done)));
+          cursor_base, chain_cursor, known_reset, any_conflicts, total_accepted,
+          std::move(on_done)));
 }
 
 void SyncEngine::FinishSyncPass(bool ok,
@@ -4443,7 +5688,8 @@ void SyncEngine::FinishSyncPass(bool ok,
     }
   }
 
-  if (follow_up_sync_requested_ && is_signed_in() &&
+  if (follow_up_sync_requested_ && is_signed_in() && credentials_ &&
+      status_ != SyncStatusKind::kNeedsReauth &&
       !state_->awaiting_initial_choice) {
     follow_up_sync_requested_ = false;
     SyncNow();

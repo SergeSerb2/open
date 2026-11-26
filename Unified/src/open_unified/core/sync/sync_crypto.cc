@@ -224,7 +224,9 @@ bool SyncCrypto::IsValidNormalizedEmail(std::string_view normalized_email) {
     return false;
   }
   for (unsigned char c : normalized_email) {
-    if (IsWhitespaceByte(c)) {
+    // Reject whitespace, ASCII control chars (<= 0x20, 0x7F), and non-ASCII
+    // bytes (>= 0x80) so ASCII lowercasing in NormalizeEmail is exact.
+    if (c <= 0x20 || c >= 0x7F) {
       return false;
     }
   }

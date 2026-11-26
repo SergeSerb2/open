@@ -306,10 +306,12 @@ class Browser:
       if ready:
         break
       time.sleep(0.2)
+    # The port file is read on every connection attempt (inside wait_for):
+    # it may not exist yet, or be half written, when the socket is ready.
     self.client = OpenClient.wait_for(
         deadline_s=max(5.0, end - time.monotonic()),
         user_data_dir=self.user_data,
-        port=self._port() if self.use_port else None)
+        port=self._port if self.use_port else None)
     return self
 
   def _port(self) -> int:
@@ -529,10 +531,18 @@ def suite_command_bar(ctx: Context):
   check(not ctx.call("command-bar")["shown"], "bar still open after enter")
 
 
+def wait_peek_loaded(ctx: Context, fragment: str) -> Dict:
+  def _loaded():
+    state = ctx.call("peek-state")
+    return state if (state.get("shown") and not state.get("loading") and
+                     fragment in state.get("url", "")) else None
+  return ctx.client.wait_until(_loaded, timeout=30, what=f"Peek {fragment}")
+
+
 def suite_peek(ctx: Context):
   state = ctx.call("peek-open", url=ctx.fixtures.url("/page/31.html"))
   check(state["shown"], "Peek not shown")
-  time.sleep(1.0)
+  wait_peek_loaded(ctx, "/page/31.html")
   ctx.snapshot("peek")
   state = ctx.call("peek-expand")
   check(not state["shown"], "Peek still shown after expand")
@@ -542,6 +552,21 @@ def suite_peek(ctx: Context):
   state = ctx.call("peek-open", url=ctx.fixtures.url("/page/32.html"))
   check(state["shown"], "second Peek not shown")
   check(not ctx.call("peek-close")["shown"], "Peek not closed")
+
+  # Esc takes the topmost overlay first: Command Bar over Peek, then Peek.
+  ctx.call("peek-open", url=ctx.fixtures.url("/page/33.html"))
+  wait_peek_loaded(ctx, "/page/33.html")
+  ctx.call("command-bar", action="open")
+  check(ctx.call("command-bar")["shown"], "bar over Peek not shown")
+  ctx.call("key", key="escape")
+  ctx.client.wait_until(lambda: not ctx.call("command-bar")["shown"],
+                        what="Esc closes the Command Bar first")
+  check(ctx.call("peek-state")["shown"], "Esc closed Peek under the bar")
+  handled = ctx.call("key", key="escape")
+  check(handled.get("handled") == "accelerator",
+        f"Esc over Peek not an Open accelerator: {handled}")
+  ctx.client.wait_until(lambda: not ctx.call("peek-state")["shown"],
+                        what="Esc closes Peek")
 
 
 def suite_adblock(ctx: Context):
@@ -641,7 +666,54 @@ def suite_sync(ctx: Context):
   check(not status["signedIn"], "logout failed")
 
 
+WEBUI_HOSTS = ("settings", "library", "boosts", "easel", "note",
+               "onboarding", "welcome")
+
+# Mounted Preact root and failed subresources of an open:// page:
+# resource timing entries with an error status (or no response at all for a
+# same-document asset), stylesheets without a sheet, and broken images.
+WEBUI_HEALTH_JS = """
+(() => {
+  const app = document.getElementById('app');
+  const failed = [];
+  for (const e of performance.getEntriesByType('resource')) {
+    const status = e.responseStatus;
+    if (typeof status === 'number' && status >= 400) {
+      failed.push(e.name + ' ' + status);
+    }
+  }
+  for (const link of document.querySelectorAll('link[rel=stylesheet]')) {
+    if (!link.sheet) failed.push(link.href + ' (stylesheet)');
+  }
+  for (const img of document.querySelectorAll('img')) {
+    if (img.complete && img.src && img.naturalWidth === 0) {
+      failed.push(img.src + ' (image)');
+    }
+  }
+  return {mounted: !!app && app.childElementCount > 0,
+          children: app ? app.childElementCount : -1,
+          failed, url: location.href};
+})()
+"""
+
+
 def suite_webui(ctx: Context):
+  # Every open:// host serves its bundle: #app mounted, no failed loads.
+  for host in WEBUI_HOSTS:
+    tab = ctx.call("open", url=f"open://{host}/")["id"]
+    ctx.call("wait", tab=tab, timeout=30)
+    health = ctx.client.wait_until(
+        lambda: (lambda h: h if isinstance(h, dict) and h.get("mounted")
+                 else None)(ctx.client.eval(WEBUI_HEALTH_JS, tab=tab)),
+        timeout=30, what=f"open://{host} #app mounted")
+    check(health["url"].startswith(f"open://{host}") or
+          health["url"].startswith(f"chrome://open-{host}"),
+          f"open://{host} landed on {health['url']}")
+    check(not health["failed"],
+          f"open://{host} failed resource loads: {health['failed']}")
+    ctx.notes[f"webui_{host}_children"] = health["children"]
+    ctx.call("close", tab=tab)
+
   settings_tab = ctx.call("open", url="open://settings/")["id"]
   ctx.call("wait", tab=settings_tab, timeout=30)
   state = ctx.call("tab-state", tab=settings_tab)
@@ -705,6 +777,190 @@ def suite_extensions(ctx: Context):
         isinstance(result["actions"], list), "extensions shape")
 
 
+def find_state_with_matches(ctx: Context) -> Dict:
+  def _counted():
+    state = ctx.call("find-bar")
+    return state if state.get("matches", -1) >= 0 else None
+  return ctx.client.wait_until(_counted, timeout=15, what="find results")
+
+
+def suite_find_bar(ctx: Context):
+  tab = ctx.open_page("/page/51.html")
+  ctx.call("select", tab=tab)
+  state = ctx.call("find-bar", action="open", text="marker")
+  check(state["shown"], "find bar not shown")
+  check(state.get("query") == "marker", f"query {state.get('query')!r}")
+  state = find_state_with_matches(ctx)
+  check(state["matches"] >= 1, f"no match for 'marker': {state}")
+  ctx.call("find-bar", action="next")
+  check(ctx.call("find-bar")["shown"], "next closed the bar")
+  ctx.snapshot("find-bar")
+
+  # Esc closes the bar (an Open accelerator only while the bar shows).
+  handled = ctx.call("key", key="escape")
+  check(handled.get("handled") == "accelerator", f"Esc: {handled}")
+  check(not ctx.call("find-bar")["shown"], "Esc did not close the find bar")
+
+  # Mod+F opens it again with the previous query (Open's accelerator wins
+  # over Chromium's IDC_FIND).
+  handled = ctx.call("key", key="f", modifiers=["mod"])
+  check(handled.get("handled") == "accelerator", f"Mod+F: {handled}")
+  state = ctx.call("find-bar")
+  check(state["shown"], "Mod+F did not open Open's find bar")
+  check(state.get("query") == "marker", "previous query not restored")
+
+  # A query with no match counts 0.
+  ctx.call("find-bar", action="open", text="zz-no-such-text-zz")
+  ctx.client.wait_until(
+      lambda: ctx.call("find-bar").get("matches") == 0,
+      timeout=15, what="zero matches")
+  ctx.call("find-bar", action="close")
+  check(not ctx.call("find-bar")["shown"], "find bar still shown")
+
+
+def suite_toasts(ctx: Context):
+  state = ctx.call("toasts", action="copied-url")
+  check(state["shown"] and state["count"] >= 1, f"toast not shown: {state}")
+  ctx.snapshot("toast")
+  ctx.client.wait_until(lambda: not ctx.call("toasts")["shown"], timeout=20,
+                        what="toast auto-dismiss")
+  # Copy URL through its shortcut: clipboard write + the same toast.
+  tab = ctx.open_page("/page/52.html")
+  ctx.call("select", tab=tab)
+  handled = ctx.call("key", key="c", modifiers=["mod", "shift"])
+  check(handled.get("handled") == "accelerator", f"Copy URL key: {handled}")
+  ctx.client.wait_until(lambda: ctx.call("toasts")["shown"], timeout=5,
+                        what="Copied URL toast")
+  ctx.client.wait_until(lambda: not ctx.call("toasts")["shown"], timeout=20,
+                        what="toast auto-dismiss")
+  # Closing a Today tab shows "Tab Archived" (with Undo).
+  extra = ctx.open_page("/page/53.html")
+  ctx.call("close", tab=extra)
+  ctx.client.wait_until(lambda: ctx.call("toasts")["shown"], timeout=5,
+                        what="Tab Archived toast")
+
+
+def selected_tab(ctx: Context) -> Optional[str]:
+  return next((t["id"] for t in ctx.tabs() if t["selected"]), None)
+
+
+def suite_tab_switcher(ctx: Context):
+  a = ctx.open_page("/page/61.html")
+  b = ctx.open_page("/page/62.html")
+  ctx.call("select", tab=b)
+  check(selected_tab(ctx) == b, "setup: b not selected")
+  state = ctx.call("tab-switcher", action="forward")
+  check(state["active"], f"switcher not active: {state}")
+  check(state["mru"][:2] == [b, a], f"MRU order {state['mru'][:2]}")
+  ctx.call("tab-switcher", action="commit")
+  ctx.client.wait_until(lambda: selected_tab(ctx) == a,
+                        what="switcher commit selects the previous tab")
+  check(not ctx.call("tab-switcher")["active"], "switcher still active")
+  # Cancel keeps the selection.
+  ctx.call("tab-switcher", action="forward")
+  ctx.call("tab-switcher", action="cancel")
+  check(not ctx.call("tab-switcher")["active"], "cancel left it active")
+  check(selected_tab(ctx) == a, "cancel changed the selection")
+
+
+def live_little_opens(ctx: Context) -> List[Dict]:
+  return [w for w in ctx.call("little-open")["windows"]
+          if not w.get("closing")]
+
+
+def suite_little_open(ctx: Context):
+  url = ctx.fixtures.url("/page/71.html")
+  state = ctx.call("little-open", action="open", url=url)
+  check(any("/page/71.html" in w.get("url", "") for w in state["windows"]),
+        f"Little Open page not opened: {state}")
+  window = ctx.client.wait_until(
+      lambda: next((w for w in live_little_opens(ctx)
+                    if "/page/71.html" in w.get("url", "") and
+                    not w.get("loading")), None),
+      timeout=30, what="Little Open page loaded")
+  check(window["mode"] == "page", f"mode {window['mode']}")
+  ctx.snapshot("little-open")
+  ctx.call("little-open", action="open-in-space")
+  tab = ctx.client.wait_until(lambda: ctx.tab_by_url("/page/71.html"),
+                              what="Open in Space made a tab")
+  check(tab["selected"], "the new tab is not selected")
+  ctx.client.wait_until(lambda: not live_little_opens(ctx),
+                        what="Little Open closed after Open in Space")
+
+  # Bar mode (no URL), then close.
+  state = ctx.call("little-open", action="open")
+  check(any(w["mode"] == "bar" for w in state["windows"]), "no bar window")
+  ctx.call("little-open", action="close")
+  ctx.client.wait_until(lambda: not live_little_opens(ctx),
+                        what="Little Open bar closed")
+
+  # Air Traffic Control: an external link goes to Little Open (default
+  # setting) or to a Space, never nowhere.
+  routed = ctx.fixtures.url("/page/72.html")
+  ctx.call("little-open", action="route", url=routed)
+  ctx.client.wait_until(
+      lambda: any("/page/72.html" in w.get("url", "")
+                  for w in live_little_opens(ctx)) or
+      ctx.tab_by_url("/page/72.html"),
+      what="routed external link")
+  for _ in live_little_opens(ctx):
+    ctx.call("little-open", action="close")
+
+
+def suite_site_controls(ctx: Context):
+  tab = ctx.open_page("/page/81.html")
+  ctx.call("select", tab=tab)
+  state = ctx.call("site-controls", action="open")
+  check(state["shown"], f"Site Control not shown: {state}")
+  check(state["host"] == "127.0.0.1", f"host {state['host']}")
+  check(state["secure"] is False, "http page reported secure")
+  check(isinstance(state["extensions"], list), "extensions shape")
+  ctx.snapshot("site-controls")
+  ctx.call("site-controls", action="close")
+  ctx.client.wait_until(lambda: not ctx.call("site-controls")["shown"],
+                        what="Site Control closed")
+
+
+BOOST_COLOR = "rgb(1, 2, 3)"
+
+
+def suite_boosts(ctx: Context):
+  boosts_tab = ctx.call("open", url="open://boosts/")["id"]
+  ctx.call("wait", tab=boosts_tab, timeout=30)
+  saved = ctx.client.webui_rpc(boosts_tab, "boosts.save", {"boost": {
+      "name": "E2E Boost", "host_pattern": "127.0.0.1", "enabled": True,
+      "custom_css": "body { background: %s !important; }" % BOOST_COLOR}})
+  boost = saved["boost"]
+  check(boost.get("id"), f"saved Boost has no id: {boost}")
+  listed = ctx.client.webui_rpc(boosts_tab, "boosts.list", {})["boosts"]
+  check(any(b["id"] == boost["id"] for b in listed), "Boost not listed")
+
+  page = ctx.open_page("/page/91.html")
+  ctx.client.wait_until(
+      lambda: ctx.client.eval(
+          "getComputedStyle(document.body).backgroundColor", tab=page) ==
+      BOOST_COLOR, timeout=20, what="Boost CSS applied")
+  ctx.snapshot("boost-applied")
+
+  # Toggle goes through the store (read-modify-write) and the list reads
+  # the store, so both reflect the change.
+  toggled = ctx.client.webui_rpc(boosts_tab, "boosts.toggle",
+                                 {"id": boost["id"], "enabled": False})
+  check(toggled["boost"]["enabled"] is False, f"toggle reply {toggled}")
+  listed = ctx.client.webui_rpc(boosts_tab, "boosts.list", {})["boosts"]
+  check(any(b["id"] == boost["id"] and b["enabled"] is False for b in listed),
+        "toggle not stored")
+  ctx.call("navigate", tab=page, url=ctx.fixtures.url("/page/91.html"))
+  ctx.call("wait", tab=page)
+  ctx.client.wait_until(
+      lambda: ctx.client.eval(
+          "getComputedStyle(document.body).backgroundColor", tab=page) !=
+      BOOST_COLOR, timeout=20, what="disabled Boost not applied")
+  ctx.client.webui_rpc(boosts_tab, "boosts.delete", {"id": boost["id"]})
+  listed = ctx.client.webui_rpc(boosts_tab, "boosts.list", {})["boosts"]
+  check(not any(b["id"] == boost["id"] for b in listed), "Boost not deleted")
+
+
 SUITES: Dict[str, Callable[[Context], None]] = {
     "startup": suite_startup,
     "spaces": suite_spaces,
@@ -712,10 +968,16 @@ SUITES: Dict[str, Callable[[Context], None]] = {
     "split": suite_split,
     "command-bar": suite_command_bar,
     "peek": suite_peek,
+    "find-bar": suite_find_bar,
+    "toasts": suite_toasts,
+    "tab-switcher": suite_tab_switcher,
+    "little-open": suite_little_open,
+    "site-controls": suite_site_controls,
     "adblock": suite_adblock,
     "sleep": suite_sleep,
     "sync": suite_sync,
     "webui": suite_webui,
+    "boosts": suite_boosts,
     "extensions": suite_extensions,
     "snapshot": suite_snapshot,
 }

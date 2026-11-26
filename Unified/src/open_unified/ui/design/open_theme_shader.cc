@@ -152,7 +152,9 @@ SkMatrix FieldMatrix(int n, const gfx::RectF& window_rect) {
 }
 
 SkMatrix TileMatrix(float device_scale, const gfx::PointF& origin) {
-  SkMatrix m = SkMatrix::Scale(1.0f / device_scale, 1.0f / device_scale);
+  // A zero, negative, or NaN scale draws the tile at 1:1.
+  const float inverse = device_scale > 0.0f ? 1.0f / device_scale : 1.0f;
+  SkMatrix m = SkMatrix::Scale(inverse, inverse);
   m.postTranslate(origin.x(), origin.y());
   return m;
 }

@@ -9,9 +9,9 @@ How `browser/` (Track 6) wires Chromium 156.0.8078.48 to the code of Tracks
 
 | File | Role |
 |---|---|
-| `open_chromium_hooks.{h,cc}` | The only header patched Chromium files include (`// nogncheck`). One function per hook in `Unified/patches/chromium/series`. |
+| `open_chromium_hooks.{h,cc}` | The only header patched Chromium files include (`// nogncheck`, after `open_unified/buildflags.h`, inside `#if BUILDFLAG(OPEN_UNIFIED_BROWSER)`; every call site too). One function per hook in `Unified/patches/chromium/series` (0001–0012). |
 | `open_browser_main_extra_parts.{h,cc}` | `ChromeBrowserMainExtraParts` (hook 0009): factory registration in `PreProfileInit`, service creation in `PreBrowserStart`, `Start()` in `PostBrowserStart`, teardown in `PostMainMessageLoopRun`. |
-| `open_browser_service.{h,cc}` | Process coordinator: `BrowserModel` + `SnapshotStore`, per-Profile stores on one `MayBlock` sequence (`RunOnStore()`), `SyncEngine`, ad-block KeyedService, `CommandRegistry`, `SuggestEngine`, `RoutingEvaluator`, the bridges and the automation server. Implements `BrowserModel::ArchiveSink`. |
+| `open_browser_service.{h,cc}` | Process coordinator: `BrowserModel` + `SnapshotStore` (writes on Open's file sequence, `SetIoTaskRunner`), per-Profile stores on one `MayBlock` sequence (`RunOnStore()`), one app-wide `SyncEngine` (`sync()`, state in `<user data>/State/Sync`), ad-block KeyedService, `CommandRegistry`, `SuggestEngine`, `RoutingEvaluator`, the bridges and the automation server. Implements `BrowserModel::ArchiveSink`; observes every Chromium Profile (`OnProfileWillBeDestroyed` drops its `ProfileServices`). |
 | `open_tab_bridge.{h,cc}` | `TabStripModel` <-> `BrowserModel`. One Chromium Browser per (window, Profile); loaded tabs only, in sidebar order; lazy WebContents; adoption of Chromium-created tabs; page -> model propagation. |
 | `open_window_controller.{h,cc}` | Track 4's `OpenViewController` and one `OpenWindowUi` per window that hosts Track 5's views and implements their delegates. |
 | `open_sleep_controller.{h,cc}` | Track 2's `SleepScheduler` callbacks -> freeze / OPNH capture + `WebContents::Discard` / destroy / restore. |
@@ -90,18 +90,31 @@ Asks:
   An empty, event-transparent view in the `kFindBarAndToasts` slot tracks
   the web panel's bounds; its `OnViewBoundsChanged` re-anchors the widgets
   (window resize, sidebar slide).
-- Accelerators: `OpenWindowUi` registers the CommandRegistry shortcuts of
-  `find`, `find-next`, `find-previous`, `tab-switcher-forward/backward` and
-  `new-little-open-window` (user overrides included; re-registered by
-  `PersistShortcuts()`) on the window's FocusManager at
-  `kHighPriority`, ahead of Chromium's table and, through
+- Command Bar and Peek live in `secondary::OverlayWidgetHost` child
+  widgets that cover the client area (`Alignment::kFill`), like the find
+  bar: a views layer cannot take clicks over a native page on Windows
+  (HWND) or macOS (NSView). `~OpenWindowUi` destroys them and clears the
+  `kCommandBar`/`kPeek`/`kFindBarAndToasts` slots and the split container
+  before the object goes, so no view keeps a dangling delegate. Show and
+  dismiss emit `OnCommandBarStateChanged` / `OnPeekChanged`.
+- Every `OpenWindowUi` reads its own Browser's active tab
+  (`OpenWindowUi::ActiveWebContents()`), never the main window's.
+- Accelerators: `OpenWindowUi` registers the CommandRegistry window
+  shortcuts Open handles (`new-tab`, `open-command-bar`, `toggle-sidebar`,
+  `archive-tab`, `copy-url`, `pin-unpin-tab`, `add-split-view`,
+  `close-split-pane`, `next/previous-space`, `next/previous-tab`,
+  `go-to-tab-1..9`, `go-to-space-1..9`, `view-library/history/archive/
+  downloads`, `settings`, `find*`, `tab-switcher-*`,
+  `new-little-open-window`; user overrides included; re-registered by
+  `PersistShortcuts()`) on the window's FocusManager at `kHighPriority`,
+  ahead of Chromium's table and, through
   `BrowserView::PreHandleKeyboardEvent`, ahead of the page. Esc is
-  registered only while the find bar shows.
-  - Ask (hooks owner, macOS): Cmd+F/Cmd+G are also NSMenu key equivalents
-    (IDC_FIND, IDC_FIND_NEXT). If the menu wins over the views accelerator
-    on macOS, route those IDC ids to `OpenWindowUi::ShowFindBar()` /
-    `FindNext()` from `chrome::ExecuteCommand` (new hook) so Chromium's own
-    find bar never appears.
+  registered only while an overlay shows and goes to the topmost one:
+  Command Bar (its own field keeps Esc while it has focus), Peek, find bar.
+  - Resolved (hook 0012): IDC_FIND/IDC_FIND_NEXT/IDC_FIND_PREVIOUS from any
+    path (macOS menu key equivalents included) reach
+    `BrowserCommandController::HandleCommandWithDisposition()`, which asks
+    `hooks::HandleBrowserCommand()` first.
 - Find bar: drives `find_in_page::FindTabHelper` of the active page
   (`StartFinding` / `StopFinding`, results through `FindResultObserver`).
   Seed: the page's selection (40 characters), else the previous query. A
@@ -123,15 +136,18 @@ Asks:
   Control through `RoutingEvaluator`, honoring
   `links.externalLinksLittleOpen`). "Open in <Space>" reopens the URL as a
   Today tab of that Space (Peek's approach; form state does not carry over
-  yet) and closes the window. Ask (hooks owner): call
-  `RouteExternalUrl()` for OS-handed URLs (macOS `application:openURLs:`,
-  Windows/Linux command-line URLs) so Air Traffic Control runs for them.
-- Peek and Little Open pages are not tab-strip tabs. Chromium 156 keeps
-  `TabHelpers::AttachTabHelpers()` private (friend list), so they get
-  `FindTabHelper` and Open's ad-block helper only. Ask (hooks owner): a
-  friend for an Open adopter class in `tab_helpers.h` (as CEF's
-  `CefBrowserPlatformDelegateAlloy`) if they need permission prompts,
-  JavaScript dialogs or autofill.
+  yet) and closes the window. Resolved (hook 0011): OS-handed URLs
+  (Windows/Linux command line and second launches through
+  `StartupBrowserCreatorImpl::DetermineURLsAndLaunch()`, macOS
+  `application:openURLs:`) go to `OpenBrowserService::RouteExternalUrls()`,
+  queued until `Start()`.
+- Peek and Little Open pages are not tab-strip tabs. Resolved (hook 0010):
+  `tab_helpers.h` friends `open_unified::hooks::AttachTabHelpers()`, so
+  they get the full helper set. `OpenWindowUi` (Peek) and
+  `OpenLittleOpenController` are their `WebContentsDelegate`s
+  (`views::UnhandledKeyboardEventHandler`: Esc and Cmd/Ctrl+O work while
+  the page has focus; tab-modal JavaScript dialogs) and web-modal dialog
+  delegates (Peek: the window's host; Little Open: its own window).
 - Automation (`open_enable_automation`): `find-bar`, `toasts`,
   `tab-switcher`, `little-open` (open, route, open-in-space, close, state).
 

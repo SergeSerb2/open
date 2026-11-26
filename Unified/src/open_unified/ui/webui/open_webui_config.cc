@@ -13,6 +13,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -358,9 +359,11 @@ OpenWebUIConfig::OpenWebUIConfig(std::string_view host)
 OpenWebUIConfig::~OpenWebUIConfig() = default;
 
 bool OpenWebUIConfig::IsWebUIEnabled(content::BrowserContext* browser_context) {
-  // Open's pages read and change Profile data; incognito windows get
-  // Settings and Library through their original Profile only.
-  return OpenBrowserService::Get() != nullptr;
+  // Open's pages read and change Profile data (history, archive, Boosts,
+  // documents, settings): never in an off-the-record context, so an
+  // incognito window cannot reach or write the original Profile's stores.
+  return OpenBrowserService::Get() != nullptr && browser_context &&
+         !browser_context->IsOffTheRecord();
 }
 
 std::unique_ptr<content::WebUIController>

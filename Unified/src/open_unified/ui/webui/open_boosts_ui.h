@@ -5,6 +5,9 @@
 #ifndef OPEN_UNIFIED_UI_WEBUI_OPEN_BOOSTS_UI_H_
 #define OPEN_UNIFIED_UI_WEBUI_OPEN_BOOSTS_UI_H_
 
+#include <optional>
+#include <string>
+
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "open_unified/ui/webui/open_webui_config.h"
@@ -30,6 +33,12 @@ class OpenBoostsUI : public OpenRpcDomain {
   // Saves |boost| (store runner), refreshes the controller's cache and
   // replies {boost}.
   void SaveAndReply(Boost boost, Reply reply);
+  // Reply of a read-modify-write store task (Toggle, RemoveZap): reloads
+  // the controller's cache, then replies {boost} or |error|.
+  static void ReplySaved(ProfileID profile,
+                         Reply reply,
+                         std::string error,
+                         std::optional<Boost> saved);
 
   base::WeakPtrFactory<OpenBoostsUI> weak_factory_{this};
 };

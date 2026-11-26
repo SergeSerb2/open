@@ -51,6 +51,7 @@
 #include "ui/views/view_targeter.h"
 #include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 
 namespace open_unified {
 
@@ -81,7 +82,8 @@ theme::ContentAppearance ToAppearance(bool dark) {
               : theme::ContentAppearance::kLight;
 }
 
-constexpr int kFrameResizeBorder = 5;
+// Resize band inside the edges of a frameless (Windows / Linux) window.
+constexpr int kFrameResizeBorder = 8;
 // Bound the favicon decode cache.
 constexpr size_t kFaviconCacheLimit = 512;
 
@@ -1157,6 +1159,8 @@ void OpenBrowserView::ApplySidebarOffset(double offset) {
 void OpenBrowserView::ApplyPanelSlide(double shown_fraction) {
   LayoutPanel(Lerp(PanelBoundsFor(true, sidebar_width_),
                    PanelBoundsFor(false, sidebar_width_), shown_fraction));
+  // The Find bar and toasts follow the panel on every slide frame.
+  LayoutOverlays();
 }
 
 void OpenBrowserView::OnSidebarSlideSettled() {
@@ -1555,8 +1559,19 @@ int OpenBrowserView::NonClientHitTest(const gfx::Point& point) const {
     return HTNOWHERE;
   }
   const views::Widget* widget = GetWidget();
-  if (window_controls_ == WindowControls::kCustomLeading && widget &&
-      !widget->IsMaximized() && !widget->IsFullscreen()) {
+  // Open removes the native frame (WantsFramelessWindow()), so on Windows and
+  // Linux this view supplies the resize edges; macOS keeps the system's
+  // resize edges unless Open draws its own window controls.
+#if BUILDFLAG(IS_MAC)
+  const bool draws_own_frame =
+      window_controls_ == WindowControls::kCustomLeading;
+#else
+  const bool draws_own_frame = WantsFramelessWindow();
+#endif
+  const bool can_resize =
+      widget && !widget->IsMaximized() && !widget->IsFullscreen() &&
+      (!widget->widget_delegate() || widget->widget_delegate()->CanResize());
+  if (draws_own_frame && can_resize) {
     const bool left = point.x() < kFrameResizeBorder;
     const bool right = point.x() >= width() - kFrameResizeBorder;
     const bool top = point.y() < kFrameResizeBorder;
@@ -1573,9 +1588,12 @@ int OpenBrowserView::NonClientHitTest(const gfx::Point& point) const {
   views::View* target =
       const_cast<OpenBrowserView*>(this)->GetEventHandlerForPoint(point);
   if (!target || target == this) {
-    // The 10 pt frame inset and anything behind the panel.
+    // The 10 pt frame inset and anything behind the panel: drag the window.
     return HTCAPTION;
   }
+  // Empty drag regions (the sidebar's top bar background) are tagged; the
+  // controls inside them, every other control, and the web content stay
+  // client.
   if (target->GetProperty(kOpenWindowDragKey)) {
     return HTCAPTION;
   }

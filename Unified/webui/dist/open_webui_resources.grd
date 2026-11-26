@@ -20,7 +20,7 @@
       <include name="IDR_OPEN_WEBUI_ASSETS_LIBRARY_BBASSNDN_CSS" file="assets/library-BBasSNDN.css" resource_path="assets/library-BBasSNDN.css" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_LIBRARY_CEKRKQXK_JS" file="assets/library-CekRkqXK.js" resource_path="assets/library-CekRkqXK.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_NOTE_CNQL237O_CSS" file="assets/note-CNQl237O.css" resource_path="assets/note-CNQl237O.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_NOTE_DTUBUUPD_JS" file="assets/note-DTUbUUPd.js" resource_path="assets/note-DTUbUUPd.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_NOTE_DTKBL5IX_JS" file="assets/note-DTkBl5Ix.js" resource_path="assets/note-DTkBl5Ix.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_BXUZJ8D2_JS" file="assets/onboarding-BXuzJ8d2.js" resource_path="assets/onboarding-BXuzJ8d2.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_DIWDPS9U_CSS" file="assets/onboarding-DIwDps9u.css" resource_path="assets/onboarding-DIwDps9u.css" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_DXVBAVYB_JS" file="assets/settings-DXvBavyB.js" resource_path="assets/settings-DXvBavyB.js" use_base_dir="true" type="BINDATA" />

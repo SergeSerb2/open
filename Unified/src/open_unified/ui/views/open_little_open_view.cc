@@ -120,7 +120,12 @@ class LittleOpenWindowDelegate : public views::WidgetDelegate {
         &LittleOpenWindowDelegate::OnWindowClosing, base::Unretained(this)));
   }
 
-  void set_contents(OpenLittleOpenView* contents) { contents_ = contents; }
+  void set_contents(OpenLittleOpenView* contents) {
+    contents_ = contents;
+    if (frame_) {
+      frame_->set_contents(contents);
+    }
+  }
 
   // Notifies on the next task, so the owner may delete the window there.
   void OnWindowClosing() {
@@ -140,12 +145,21 @@ class LittleOpenWindowDelegate : public views::WidgetDelegate {
       views::Widget* widget) override {
     auto frame = std::make_unique<LittleOpenFrameView>(widget);
     frame->set_contents(contents_);
+    frame_ = frame.get();
     return frame;
+  }
+
+  // Drops every pointer into the widget's view tree before the widget is
+  // destroyed (the frame and contents views die with the widget).
+  void ReleaseViews() {
+    set_contents(nullptr);
+    frame_ = nullptr;
   }
 
  private:
   raw_ptr<LittleOpenDelegate> delegate_;
   raw_ptr<OpenLittleOpenView> contents_ = nullptr;
+  raw_ptr<LittleOpenFrameView> frame_ = nullptr;
   base::WeakPtrFactory<LittleOpenWindowDelegate> weak_factory_{this};
 };
 
@@ -294,11 +308,13 @@ class SpacePickerView : public views::View {
       return;
     }
     const SpaceID id = spaces_[index].id;
-    views::Widget* widget = GetWidget();
-    on_pick_.Run(id);
-    if (widget) {
+    // Copy the callback and close first: the pick can destroy the owning
+    // Little Open view, and with it this picker's widget and delegate.
+    PickCallback on_pick = on_pick_;
+    if (views::Widget* widget = GetWidget()) {
       widget->Close();
     }
+    on_pick.Run(id);
   }
 
   std::vector<LittleOpenSpaceChoice> spaces_;
@@ -420,15 +436,23 @@ gfx::Rect OpenLittleOpenView::DefaultBarBounds(const gfx::Rect& work_area) {
 // static
 gfx::Rect OpenLittleOpenView::PageBoundsFromBar(const gfx::Rect& bar_bounds,
                                                 const gfx::Rect& work_area) {
-  const int width = std::clamp(m::kPageSize.width(),
-                               m::kMinimumPageSize.width(), work_area.width());
+  // std::clamp needs lo <= hi: a work area smaller than the minimum page
+  // size (or empty) caps the minimum instead.
+  const int max_width = std::max(0, work_area.width());
+  const int max_height = std::max(0, work_area.height());
+  const int width = std::clamp(
+      m::kPageSize.width(), std::min(m::kMinimumPageSize.width(), max_width),
+      max_width);
   const int height = std::clamp(
-      m::kPageSize.height(), m::kMinimumPageSize.height() + m::kTitleBarHeight,
-      work_area.height());
+      m::kPageSize.height(),
+      std::min(m::kMinimumPageSize.height() + m::kTitleBarHeight, max_height),
+      max_height);
   int x = bar_bounds.right() - width;
   int y = bar_bounds.y();
-  x = std::clamp(x, work_area.x(), work_area.right() - width);
-  y = std::clamp(y, work_area.y(), work_area.bottom() - height);
+  x = std::clamp(x, work_area.x(),
+                 std::max(work_area.x(), work_area.right() - width));
+  y = std::clamp(y, work_area.y(),
+                 std::max(work_area.y(), work_area.bottom() - height));
   return gfx::Rect(x, y, width, height);
 }
 
@@ -467,8 +491,7 @@ void OpenLittleOpenView::SetState(const LittleOpenState& state) {
 
 void OpenLittleOpenView::SetBarContents(std::unique_ptr<views::View> contents) {
   if (bar_contents_) {
-    RemoveChildViewT(bar_contents_.get());
-    bar_contents_ = nullptr;
+    RemoveChildViewT(bar_contents_.ExtractAsDangling());
   }
   if (contents) {
     bar_contents_ = AddChildView(std::move(contents));
@@ -836,7 +859,12 @@ OpenLittleOpenWindow::OpenLittleOpenWindow() = default;
 
 OpenLittleOpenWindow::~OpenLittleOpenWindow() {
   view_ = nullptr;
-  widget_.reset();  // First: the widget refers to its delegate.
+  // The widget owns the contents and frame views: drop the delegate's raw
+  // pointers to them before the widget destroys them.
+  if (delegate_) {
+    static_cast<LittleOpenWindowDelegate*>(delegate_.get())->ReleaseViews();
+  }
+  widget_.reset();  // Then the widget: it refers to its delegate.
   delegate_.reset();
 }
 

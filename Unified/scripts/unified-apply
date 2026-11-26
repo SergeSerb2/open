@@ -12,7 +12,7 @@
 #      Engine/fork/patches/rust/0001-adblock-vendor.patch;
 #   3. copies the Vite build Unified/webui/dist/ -> src/open_unified/ui/webui/
 #      resources/ (builds it first when missing or with --build-webui);
-#   4. runs Unified/scripts/apply-chromium-hooks.py (hooks 0001-0009).
+#   4. runs Unified/scripts/apply-chromium-hooks.py (hooks 0001-0012).
 #
 # Idempotent: run it again after any change in Unified/ or Engine/fork.
 #
@@ -200,18 +200,30 @@ cp -R "${REPO_ROOT}/Engine/fork/src/open/adblock/." "${adblock_stage}/"
 python3 -I - "${adblock_stage}" <<'PY'
 import re, sys, os
 root = sys.argv[1]
-for rel in ('BUILD.gn', 'renderer/BUILD.gn', 'mojom/BUILD.gn'):
+# Who may depend on each target besides //cef: //open_unified everywhere,
+# and //chrome/renderer for the renderer agent (hook 0001 adds that real
+# dependency when open_unified_browser = true).
+EXTRA_VISIBILITY = {
+    'BUILD.gn': ['//open_unified/*'],
+    'renderer/BUILD.gn': ['//open_unified/*', '//chrome/renderer/*'],
+    'mojom/BUILD.gn': ['//open_unified/*'],
+}
+for rel, extra in EXTRA_VISIBILITY.items():
   path = os.path.join(root, rel)
   if not os.path.exists(path):
     continue
   text = open(path).read()
   new = text
-  if '//open_unified/*' not in new:
-    new = re.sub(r'visibility = \[ "//cef/\*" \]',
-                 'visibility = [\n    "//cef/*",\n    "//open_unified/*",\n  ]', new)
-    if '//open_unified/*' not in new:
-      new = re.sub(r'(\n(\s*)"//cef/\*",\n)', r'\1\2"//open_unified/*",\n',
-                   new)
+  for label in extra:
+    if label in new:
+      continue
+    single = re.sub(r'visibility = \[ "//cef/\*" \]',
+                    f'visibility = [\n    "//cef/*",\n    "{label}",\n  ]', new)
+    if single != new:
+      new = single
+      continue
+    new = re.sub(r'(\n(\s*)"//cef/\*",\n)', rf'\1\2"{label}",\n', new,
+                 count=1)
   if rel == 'BUILD.gn':
     new = new.replace('"open_adblock_selftest.cc",', '"open_adblock_selftest_stub.cc",')
     new = re.sub(r'\s*"open_adblock_profile_proof\.h",\n', '\n', new)
@@ -252,8 +264,18 @@ copy_tree "${adblock_stage}" "${SRC}/open/adblock" \
   --exclude 'open_adblock_api.cc' --exclude 'open_adblock_api_proof.cc' \
   --exclude 'open_adblock_profile_proof.cc' --exclude 'open_adblock_profile_proof.h' \
   --exclude 'open_adblock_selftest.cc' --exclude 'open_adblock_cache.h'
-if [[ "${CHECK}" == 0 && ! -f "${SRC}/open/BUILD.gn" ]]; then
-  cp "${REPO_ROOT}/Engine/fork/src/open/BUILD.gn" "${SRC}/open/BUILD.gn"
+# //open/BUILD.gn follows Engine/fork whenever it changes (not only on the
+# first run), so a target added or renamed there reaches the checkout.
+open_gn_src="${REPO_ROOT}/Engine/fork/src/open/BUILD.gn"
+open_gn_dst="${SRC}/open/BUILD.gn"
+if [[ -f "${open_gn_src}" ]] && ! cmp -s "${open_gn_src}" "${open_gn_dst}"; then
+  if [[ "${CHECK}" == 1 ]]; then
+    log "src/open/BUILD.gn: would update from Engine/fork"
+  else
+    mkdir -p "${SRC}/open"
+    cp "${open_gn_src}" "${open_gn_dst}"
+    log "src/open/BUILD.gn: updated from Engine/fork"
+  fi
 fi
 
 if [[ "${SKIP_RUST}" == 0 ]]; then

@@ -24,7 +24,7 @@ Usage:
   apply-chromium-hooks.py --pristine-root DIR --export-patches OUT    # no git
 
 --export-patches writes one clean unified diff per logical patch
-(0001-...patch .. 0009-...patch) computed in memory from the pristine files
+(0001-...patch .. 0012-...patch) computed in memory from the pristine files
 (`git show HEAD:<path>` in --src, or --pristine-root), plus `series`. The
 series applies in order with `git apply` on an unmodified checkout.
 
@@ -45,6 +45,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..'))
 ENGINE_PATCHES = os.path.join(REPO_ROOT, 'Engine', 'fork', 'patches', 'chromium')
 HOOKS_HEADER = 'open_unified/browser/open_chromium_hooks.h'
+BUILDFLAGS_HEADER = 'open_unified/buildflags.h'
+BUILDFLAGS_DEP = '//open_unified:buildflags'
+OPEN_GUARD = '#if BUILDFLAG(OPEN_UNIFIED_BROWSER)'
 CHROMIUM_VERSION = '156.0.8078.48'
 
 
@@ -228,8 +231,20 @@ def _strip_existing(text: str, op: Op) -> str:
   return block_regex(op.path, op.hook_id).sub('', text)
 
 
-def op_include(path, hook_id, header, nogncheck=True, condition=None):
-  """#include "header" after the last top-level #include."""
+def guarded(code: str) -> str:
+  """|code| compiled only in Open Unified builds (open_unified_browser =
+  true). Every hook call site and Open include is wrapped, so a checkout
+  with the hooks applied still builds stock Chromium (and component builds)
+  with open_unified_browser = false."""
+  return f'{OPEN_GUARD}\n{code.rstrip(chr(10))}\n#endif'
+
+
+def op_include(path, hook_id, header, nogncheck=True, condition=None,
+               guard=False):
+  """#include "header" after the last top-level #include. With |guard|, the
+  include is compiled only when BUILDFLAG(OPEN_UNIFIED_BROWSER) is set, and
+  open_unified/buildflags.h (a real GN dependency added by hook 0001) comes
+  first."""
 
   def fn(text, op):
     if re.search(rf'^#include "{re.escape(header)}"', text, re.M) and \
@@ -261,6 +276,8 @@ def op_include(path, hook_id, header, nogncheck=True, condition=None):
     line = f'#include "{header}"' + ('  // nogncheck' if nogncheck else '')
     if condition:
       line = f'#if {condition}\n{line}\n#endif'
+    if guard:
+      line = f'#include "{BUILDFLAGS_HEADER}"\n{guarded(line)}'
     if block_regex(op.path, op.hook_id).search(text):
       return _insert_block(text, op, 0, line, '')
     return _insert_block(base, op, min(best, len(base)), line, '')
@@ -364,6 +381,75 @@ def op_create(path, hook_id, content):
   return Op(path, hook_id, f'create {path}', fn, create=True)
 
 
+def gn_mask(text: str) -> str:
+  """|text| with GN comments and string literals blanked (same length), so
+  brace matching ignores "{{source}}" placeholders and commented code."""
+  out = list(text)
+  i, n = 0, len(text)
+  while i < n:
+    c = text[i]
+    if c == '#':
+      j = text.find('\n', i)
+      j = n if j < 0 else j
+      for k in range(i, j):
+        out[k] = ' '
+      i = j
+    elif c == '"':
+      j = i + 1
+      while j < n and text[j] != '"' and text[j] != '\n':
+        j += 2 if text[j] == '\\' else 1
+      for k in range(i, min(j + 1, n)):
+        out[k] = ' '
+      i = j + 1
+    else:
+      i += 1
+  return ''.join(out)
+
+
+def op_gn_target_end(path, hook_id, target, code, kind=r'\w+'):
+  """GN statements at the end of target |target| (e.g. `deps += [...]`;
+  the target must assign `deps` unconditionally)."""
+
+  def fn(text, op):
+    base = _strip_existing(text, op)
+    m = find_regex(base, rf'^[ \t]*{kind}\("{re.escape(target)}"\)\s*\{{',
+                   what=f'GN target {target}')
+    masked = gn_mask(base)
+    opening = masked.find('{', m.start())
+    closing = match_close(masked, opening, '{', '}')
+    decl_indent = re.match(r'[ \t]*', base[line_start(base, m.start()):]).group(0)
+    indent = decl_indent + '  '
+    body = '\n'.join(indent + l if l.strip() else l
+                     for l in code.rstrip('\n').split('\n'))
+    return _insert_block(base, op, line_start(base, closing), body, indent)
+
+  return Op(path, hook_id, f'end of GN target {target}', fn)
+
+
+def op_gn_buildflags_dep(path, hook_id, target, extra='', kind=r'\w+'):
+  """//open_unified:buildflags for a target that compiles a hooked file
+  (its sources include open_unified/buildflags.h, a generated header)."""
+  code = f'deps += [ "{BUILDFLAGS_DEP}" ]'
+  if extra:
+    code += '\n' + extra
+  return op_gn_target_end(path, hook_id, target, code, kind=kind)
+
+
+def op_gn_import(path, hook_id, gni):
+  """import("gni") after the last top-level import of a GN file."""
+
+  def fn(text, op):
+    base = _strip_existing(text, op)
+    if re.search(rf'^import\("{re.escape(gni)}"\)', base, re.M):
+      return text
+    imports = list(re.finditer(r'^import\("[^"]+"\)\n', base, re.M))
+    if not imports:
+      raise HookError('no import() in file')
+    return _insert_block(base, op, imports[-1].end(), f'import("{gni}")', '')
+
+  return Op(path, hook_id, f'import {gni}', fn)
+
+
 def op_patch_file(name, hook_id):
   """An unmodified Engine patch that is pure Chromium."""
   path = os.path.join(ENGINE_PATCHES, name)
@@ -399,9 +485,21 @@ def build_patches() -> List[Patch]:
   p = []
 
   # 0001 ------------------------------------------------------------------
+  # //open_unified links into //chrome:dependencies only when
+  # open_unified_browser = true. Every Chromium target that compiles a
+  # hooked file gets a real dependency on //open_unified:buildflags (its
+  # sources include the generated open_unified/buildflags.h), so a checkout
+  # with the hooks applied also builds with open_unified_browser = false and
+  # in component builds. //chrome/browser cannot depend on
+  # //open_unified:open_unified_browser (that target depends on
+  # //chrome/browser); the hook symbols resolve at link time through
+  # //chrome:dependencies.
+  ui_gn = 'chrome/browser/ui/BUILD.gn'
+  frame_gn = 'chrome/browser/ui/views/frame/BUILD.gn'
   p.append(Patch('0001', 'open-unified-build-integration',
                  'Link //open_unified into //chrome:dependencies, pack the '
-                 'open:// WebUI pak, reserve its GRIT resource ids', [
+                 'open:// WebUI pak, reserve its GRIT resource ids, and give '
+                 'every hooked Chromium target //open_unified:buildflags', [
       op_after_line('chrome/BUILD.gn', '0001-gni',
                     r'^import\("//v8/gni/v8\.gni"\)\n',
                     'import("//open_unified/open_unified.gni")'),
@@ -429,6 +527,39 @@ def build_patches() -> List[Patch]:
           '    "META": {"sizes": {"includes": [1000]}},\n'
           '    "includes": [12820],\n'
           '  },\n')),
+      # //chrome/browser: chrome_content_browser_client{,_receiver_bindings}.cc
+      # (0003, 0005), chrome_browser_main.cc (0009), app_controller_mac.mm
+      # (0011).
+      op_gn_buildflags_dep('chrome/browser/BUILD.gn', '0001-buildflags',
+                           'core', kind='source_set'),
+      # //chrome/browser/ui: views/frame/browser_view.cc (0002),
+      # browser_command_controller.cc (0012).
+      op_gn_buildflags_dep(ui_gn, '0001-buildflags', 'ui',
+                           kind='static_library'),
+      op_gn_buildflags_dep(ui_gn, '0001-buildflags-commands',
+                           'browser_command_controller_impl',
+                           kind='source_set'),
+      op_gn_buildflags_dep(frame_gn, '0001-buildflags-widget',
+                           'browser_widget_impl', kind='source_set'),
+      op_gn_buildflags_dep(frame_gn, '0001-buildflags-layout',
+                           'browser_view_layout_impl', kind='source_set'),
+      op_gn_buildflags_dep('chrome/browser/ui/webui/BUILD.gn',
+                           '0001-buildflags', 'configs', kind='source_set'),
+      op_gn_buildflags_dep('chrome/browser/resource_coordinator/BUILD.gn',
+                           '0001-buildflags', 'impl', kind='source_set'),
+      op_gn_buildflags_dep('chrome/browser/ui/startup/BUILD.gn',
+                           '0001-buildflags', 'impl', kind='source_set'),
+      op_gn_buildflags_dep('chrome/common/BUILD.gn', '0001-buildflags',
+                           'common_lib', kind='static_library'),
+      # //chrome/renderer: the ad-block renderer agent (0003) and its mojom
+      # bindings are real dependencies only in Open Unified builds.
+      op_gn_import('chrome/renderer/BUILD.gn', '0001-gni',
+                   '//open_unified/open_unified.gni'),
+      op_gn_buildflags_dep('chrome/renderer/BUILD.gn', '0001-buildflags',
+                           'renderer', kind='static_library', extra=(
+          'if (open_unified_browser) {\n'
+          '  deps += [ "//open/adblock/renderer" ]\n'
+          '}')),
   ]))
 
   # 0002 ------------------------------------------------------------------
@@ -437,28 +568,46 @@ def build_patches() -> List[Patch]:
   bvl = 'chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc'
   p.append(Patch('0002', 'open-browser-view-hook',
                  'OpenBrowserView in BrowserView/BrowserWidget: install, '
-                 'uninstall, frameless rounded widget', [
-      op_include(bv, '0002-include', HOOKS_HEADER),
+                 'uninstall, OS-aware widget params, layout and non-client '
+                 'hit testing', [
+      op_include(bv, '0002-include', HOOKS_HEADER, guard=True),
       op_function_end(bv, '0002-added-to-widget',
                       r'^void BrowserView::AddedToWidget\(\) \{',
-                      '  open_unified::hooks::OnBrowserViewAddedToWidget(this);'),
+                      guarded('  open_unified::hooks::OnBrowserViewAddedToWidget('
+                              'this);'), indent='  '),
       op_function_start(bv, '0002-destroying', r'^BrowserView::~BrowserView\(\)',
-                        '  open_unified::hooks::OnBrowserViewDestroying(this);'),
-      op_include(bw, '0002-include', HOOKS_HEADER),
+                        guarded('  open_unified::hooks::OnBrowserViewDestroying('
+                                'this);'), indent='  '),
+      # Every frame view (BrowserFrameViewWin, OpaqueBrowserFrameView and
+      # BrowserFrameViewLinux, BrowserFrameViewMac) asks its client view,
+      # BrowserView, for the hit code of client-area points: Open's draggable
+      # frame inset and toolbar backgrounds (HTCAPTION) and custom resize
+      # edges come from OpenBrowserView there.
+      op_function_start(
+          bv, '0002-hit-test',
+          r'^int BrowserView::NonClientHitTest\(const gfx::Point& \w+\)',
+          guarded('  if (std::optional<int> open_hit =\n'
+                  '          open_unified::hooks::NonClientHitTest(this, '
+                  '${point})) {\n'
+                  '    return *open_hit;\n'
+                  '  }'),
+          params={'point': r'const gfx::Point&\s+(\w+)'}, indent='  '),
+      op_include(bw, '0002-include', HOOKS_HEADER, guard=True),
       op_after_line(bw, '0002-widget-params',
                     r'^  params\.delegate = browser_view_;\n',
                     within=r'^void BrowserWidget::InitBrowserWidget\(\) \{',
-                    code='  open_unified::hooks::AdjustBrowserWidgetParams('
-                         'browser_view_, &params);'),
-      op_include(bvl, '0002-include', HOOKS_HEADER),
+                    code=guarded('  open_unified::hooks::AdjustBrowserWidgetParams('
+                                 'browser_view_, &params);'), indent='  '),
+      op_include(bvl, '0002-include', HOOKS_HEADER, guard=True),
       op_function_start(
           bvl, '0002-layout',
           r'^void BrowserViewLayoutImpl::Layout\(views::View\* host\)',
-          '  // OpenBrowserView covers the whole client area when installed.\n'
-          '  if (open_unified::hooks::LayoutOpenBrowserView(${host})) {\n'
-          '    return;\n'
-          '  }',
-          params={'host': r'views::View\*\s+(\w+)'}),
+          guarded('  // OpenBrowserView covers the whole client area when '
+                  'installed.\n'
+                  '  if (open_unified::hooks::LayoutOpenBrowserView(${host})) {\n'
+                  '    return;\n'
+                  '  }'),
+          params={'host': r'views::View\*\s+(\w+)'}, indent='  '),
   ]))
 
   # 0003 ------------------------------------------------------------------
@@ -468,13 +617,13 @@ def build_patches() -> List[Patch]:
                  '//open/adblock: URLLoaderFactory proxy, WebSocket and '
                  'WebTransport checks, cosmetics interface, renderer agent '
                  '(world 7), context-scoped renderer cache clear', [
-      op_include(CCBC, '0003-include', HOOKS_HEADER),
+      op_include(CCBC, '0003-include', HOOKS_HEADER, guard=True),
       op_function_start(
           CCBC, '0003-url-loader-factory',
           r'^void ChromeContentBrowserClient::WillCreateURLLoaderFactory\(',
-          '  open_unified::hooks::MaybeProxyURLLoaderFactoryForAdBlock(\n'
-          '      ${context}, ${frame}, ${process}, ${type}, ${initiator},\n'
-          '      ${isolation}, ${builder});',
+          guarded('  open_unified::hooks::MaybeProxyURLLoaderFactoryForAdBlock(\n'
+                  '      ${context}, ${frame}, ${process}, ${type}, ${initiator},\n'
+                  '      ${isolation}, ${builder});'),
           params={
               'context': r'content::BrowserContext\*\s+(\w+)',
               'frame': r'content::RenderFrameHost\*\s+(\w+)',
@@ -483,22 +632,22 @@ def build_patches() -> List[Patch]:
               'initiator': r'const url::Origin&\s+(\w+)',
               'isolation': r'const net::IsolationInfo&\s+(\w+)',
               'builder': r'network::URLLoaderFactoryBuilder&\s+(\w+)',
-          }),
+          }, indent='  '),
       op_function_start(
           CCBC, '0003-intercept-websocket',
           r'^bool ChromeContentBrowserClient::WillInterceptWebSocket\(',
-          '  if (open_unified::hooks::WillInterceptWebSocket(${frame})) {\n'
-          '    return true;\n'
-          '  }',
-          params={'frame': r'content::RenderFrameHost\*\s+(\w+)'}),
+          guarded('  if (open_unified::hooks::WillInterceptWebSocket(${frame})) {\n'
+                  '    return true;\n'
+                  '  }'),
+          params={'frame': r'content::RenderFrameHost\*\s+(\w+)'}, indent='  '),
       op_function_start(
           CCBC, '0003-create-websocket',
           r'^void ChromeContentBrowserClient::CreateWebSocket\(',
-          '  if (open_unified::hooks::InterceptCreateWebSocket(\n'
-          '          this, ${frame}, ${factory}, ${url}, ${site}, ${ua},\n'
-          '          ${client}, ${options})) {\n'
-          '    return;\n'
-          '  }',
+          guarded('  if (open_unified::hooks::InterceptCreateWebSocket(\n'
+                  '          this, ${frame}, ${factory}, ${url}, ${site}, ${ua},\n'
+                  '          ${client}, ${options})) {\n'
+                  '    return;\n'
+                  '  }'),
           params={
               'frame': r'content::RenderFrameHost\*\s+(\w+)',
               'factory': r'WebSocketFactory\s+(\w+)',
@@ -507,15 +656,15 @@ def build_patches() -> List[Patch]:
               'ua': r'const std::optional<std::string>&\s+(\w+)',
               'client': r'WebSocketHandshakeClient>\s+(\w+)',
               'options': r'WebSocketOptions\s+(\w+)\s*$',
-          }),
+          }, indent='  '),
       op_function_start(
           CCBC, '0003-web-transport',
           r'^void ChromeContentBrowserClient::WillCreateWebTransport\(',
-          '  if (open_unified::hooks::InterceptWillCreateWebTransport(\n'
-          '          this, ${process}, ${routing}, ${url}, ${initiator},\n'
-          '          ${client}, ${callback})) {\n'
-          '    return;\n'
-          '  }',
+          guarded('  if (open_unified::hooks::InterceptWillCreateWebTransport(\n'
+                  '          this, ${process}, ${routing}, ${url}, ${initiator},\n'
+                  '          ${client}, ${callback})) {\n'
+                  '    return;\n'
+                  '  }'),
           params={
               'process': r'int\s+(\w+),',
               'routing': r'int\s+\w+,\s*int\s+(\w+)',
@@ -523,25 +672,26 @@ def build_patches() -> List[Patch]:
               'initiator': r'const url::Origin&\s+(\w+)',
               'client': r'WebTransportHandshakeClient>\s+(\w+)',
               'callback': r'WillCreateWebTransportCallback\s+(\w+)',
-          }),
-      op_include(rb, '0003-include', HOOKS_HEADER),
+          }, indent='  '),
+      op_include(rb, '0003-include', HOOKS_HEADER, guard=True),
       op_function_start(
           rb, '0003-expose-interfaces',
           r'^void ChromeContentBrowserClient::ExposeInterfacesToRenderer\(',
-          '  open_unified::hooks::ExposeInterfacesToRenderer(${registry}, '
-          '${host});',
+          guarded('  open_unified::hooks::ExposeInterfacesToRenderer(${registry}, '
+                  '${host});'),
           params={
               'registry': r'service_manager::BinderRegistry\*\s+(\w+)',
               'host': r'content::RenderProcessHost\*\s+(\w+)',
-          }),
+          }, indent='  '),
       op_include(rc, '0003-include',
-                 'open/adblock/renderer/open_adblock_renderer_agent.h'),
+                 'open/adblock/renderer/open_adblock_renderer_agent.h',
+                 guard=True),
       op_function_start(
           rc, '0003-renderer-agent',
           r'^void ChromeContentRendererClient::RenderFrameCreated\(',
-          '  // Deletes itself with the frame (content::RenderFrameObserver).\n'
-          '  new open_engine::OpenAdBlockRendererAgent(${frame});',
-          params={'frame': r'content::RenderFrame\*\s+(\w+)'}),
+          guarded('  // Deletes itself with the frame (content::RenderFrameObserver).\n'
+                  '  new open_engine::OpenAdBlockRendererAgent(${frame});'),
+          params={'frame': r'content::RenderFrame\*\s+(\w+)'}, indent='  '),
       op_patch_file('0903-open-adblock-context-cache.patch', '0003-cache'),
   ]))
 
@@ -573,24 +723,26 @@ def build_patches() -> List[Patch]:
   p.append(Patch('0005', 'open-webui-scheme',
                  'open:// as a standard secure scheme, rewritten to '
                  'chrome://open-<host> WebUI; register the seven hosts', [
-      op_include(configs, '0005-include', HOOKS_HEADER),
+      op_include(configs, '0005-include', HOOKS_HEADER, guard=True),
       op_after_line(configs, '0005-configs',
                     r'^  auto& map = content::WebUIConfigMap::GetInstance\(\);'
                     r'\n', within=r'^void RegisterChromeWebUIConfigs\(\) \{',
-                    code='  open_unified::hooks::RegisterOpenWebUIConfigs();'),
+                    code=guarded('  open_unified::hooks::RegisterOpenWebUIConfigs();'),
+                    indent='  '),
       op_function_start(
           CCBC, '0005-url-handler',
           r'^void ChromeContentBrowserClient::BrowserURLHandlerCreated\(',
-          '  open_unified::hooks::AddOpenURLHandlers(${handler});',
-          params={'handler': r'BrowserURLHandler\*\s+(\w+)'}),
+          guarded('  open_unified::hooks::AddOpenURLHandlers(${handler});'),
+          params={'handler': r'BrowserURLHandler\*\s+(\w+)'}, indent='  '),
+      op_include(client, '0005-buildflags', BUILDFLAGS_HEADER, nogncheck=False),
       op_function_start(
           client, '0005-scheme',
           r'^void ChromeContentClient::AddAdditionalSchemes\(',
-          '  // open://settings and friends (shown as open://, served as\n'
-          '  // chrome://open-<host> WebUI by //open_unified).\n'
-          '  ${schemes}->standard_schemes.push_back("open");\n'
-          '  ${schemes}->secure_schemes.push_back("open");',
-          params={'schemes': r'Schemes\*\s+(\w+)'}),
+          guarded('  // open://settings and friends (shown as open://, served as\n'
+                  '  // chrome://open-<host> WebUI by //open_unified).\n'
+                  '  ${schemes}->standard_schemes.push_back("open");\n'
+                  '  ${schemes}->secure_schemes.push_back("open");'),
+          params={'schemes': r'Schemes\*\s+(\w+)'}, indent='  '),
   ]))
 
   # 0006 ------------------------------------------------------------------
@@ -598,15 +750,15 @@ def build_patches() -> List[Patch]:
   p.append(Patch('0006', 'open-tab-lifecycle',
                  "Chromium's discards (Memory Saver, memory pressure, "
                  "chrome.tabs.discard) ask Open's sleep policy first", [
-      op_include(tlu, '0006-include', HOOKS_HEADER),
+      op_include(tlu, '0006-include', HOOKS_HEADER, guard=True),
       op_after_block(tlu, '0006-may-discard',
                      r'^  if \(IsDiscardBlockedByFeature\(reason\)\) \{',
                      within=r'^bool TabLifecycleUnitSource::TabLifecycleUnit::'
                      r'Discard\(',
-                     code=('  if (!open_unified::hooks::MayChromeDiscardTab('
-                           'web_contents())) {\n'
-                           '    return false;\n'
-                           '  }')),
+                     code=guarded('  if (!open_unified::hooks::MayChromeDiscardTab('
+                                  'web_contents())) {\n'
+                                  '    return false;\n'
+                                  '  }'), indent='  '),
   ]))
 
   # 0007 ------------------------------------------------------------------
@@ -671,11 +823,110 @@ def build_patches() -> List[Patch]:
                  'OpenBrowserMainExtraParts: OpenBrowserService (state, '
                  'windows, sleep) and OpenAutomationServer start with the '
                  'browser', [
-      op_include(main, '0009-include', HOOKS_HEADER),
+      op_include(main, '0009-include', HOOKS_HEADER, guard=True),
       op_before_line(main, '0009-extra-parts', r'^  return main_parts;\n',
                      within=r'ChromeBrowserMainExtraPartsSegmentationPlatform',
-                     code=('  open_unified::hooks::AddBrowserMainExtraParts('
-                           'main_parts.get());')),
+                     code=guarded('  open_unified::hooks::AddBrowserMainExtraParts('
+                                  'main_parts.get());'), indent='  '),
+  ]))
+
+  # 0010 ------------------------------------------------------------------
+  # Chromium 156 keeps TabHelpers::AttachTabHelpers() to a friend list (as
+  # Link Preview's PreviewTab). Peek and Little Open pages are not tab-strip
+  # tabs but need the full set (JavaScript dialogs, permission prompts,
+  # autofill, find in page). The forward declaration and friend are
+  # unconditional on purpose: a friend declaration needs no definition, and
+  # tab_helpers.h is included far and wide, so it must not depend on the
+  # generated open_unified/buildflags.h.
+  helpers = 'chrome/browser/ui/tab_helpers.h'
+  p.append(Patch('0010', 'open-tab-helpers',
+                 'open_unified::hooks::AttachTabHelpers() may adopt Peek and '
+                 'Little Open pages with the full tab helper set', [
+      op_after_line(helpers, '0010-declaration', r'^\}  // namespace tabs\n',
+                    code=('\n'
+                          '// Open Unified (Peek, Little Open). Defined in\n'
+                          '// //open_unified when open_unified_browser = true.\n'
+                          'namespace open_unified::hooks {\n'
+                          'void AttachTabHelpers(content::WebContents* '
+                          'web_contents);\n'
+                          '}  // namespace open_unified::hooks'), indent=''),
+      op_after_line(helpers, '0010-friend', r'^  friend class PreviewTab;\n',
+                    code=('  // Open Unified: Peek and Little Open pages.\n'
+                          '  friend void open_unified::hooks::AttachTabHelpers(\n'
+                          '      content::WebContents* web_contents);'),
+                    indent='  '),
+  ]))
+
+  # 0011 ------------------------------------------------------------------
+  sbci = 'chrome/browser/ui/startup/startup_browser_creator_impl.cc'
+  appc = 'chrome/browser/app_controller_mac.mm'
+  p.append(Patch('0011', 'open-external-urls',
+                 'URLs the OS hands over (command line, second launch, macOS '
+                 'application:openURLs:) go through Open\'s Air Traffic '
+                 'Control instead of Chromium tabs', [
+      op_include(sbci, '0011-include', HOOKS_HEADER, guard=True),
+      op_after_line(
+          sbci, '0011-route-urls',
+          r'^  StartupTabs tabs = std::move\(result\.tabs\);\n',
+          within=r'^void StartupBrowserCreatorImpl::DetermineURLsAndLaunch\(',
+          code=guarded(
+              '  // Open\'s model is the session: URLs handed over by the OS go\n'
+              '  // through Air Traffic Control (a Space or Little Open). At\n'
+              '  // process startup Chromium still opens its startup window\n'
+              '  // (Open adopts it); a later launch opens nothing.\n'
+              '  if (result.launch_result == LaunchResult::kWithGivenUrls) {\n'
+              '    std::vector<GURL> open_urls;\n'
+              '    for (const StartupTab& tab : tabs) {\n'
+              '      open_urls.push_back(tab.url);\n'
+              '    }\n'
+              '    if (open_unified::hooks::RouteExternalUrls(profile_, '
+              'open_urls)) {\n'
+              '      if (process_startup == '
+              'chrome::startup::IsProcessStartup::kNo) {\n'
+              '        return;\n'
+              '      }\n'
+              '      tabs = StartupTabs({StartupTab('
+              'chrome::ChromeUINewTabURLAsGURL())});\n'
+              '      result.launch_result = LaunchResult::kNormally;\n'
+              '    }\n'
+              '  }'), indent='  '),
+      op_include(appc, '0011-include', HOOKS_HEADER, guard=True),
+      op_before_line(
+          appc, '0011-open-urls', r'^  if \(!startupTabs\.empty\(\)\) \{',
+          within=r'openURLs:\(NSArray<NSURL\*>\*\)urls \{',
+          code=guarded(
+              '  // Open Unified: Air Traffic Control places the URLs (queued\n'
+              '  // until Open starts when this runs during launch).\n'
+              '  {\n'
+              '    std::vector<GURL> open_urls;\n'
+              '    for (const StartupTab& tab : startupTabs) {\n'
+              '      open_urls.push_back(tab.url);\n'
+              '    }\n'
+              '    if (!open_urls.empty() &&\n'
+              '        open_unified::hooks::RouteExternalUrls(nullptr, '
+              'open_urls)) {\n'
+              '      return;\n'
+              '    }\n'
+              '  }'), indent='  '),
+  ]))
+
+  # 0012 ------------------------------------------------------------------
+  bcc = 'chrome/browser/ui/browser_command_controller.cc'
+  p.append(Patch('0012', 'open-find-commands',
+                 'IDC_FIND, IDC_FIND_NEXT and IDC_FIND_PREVIOUS open Open\'s '
+                 'find bar from every path (views accelerators, macOS menu '
+                 'key equivalents, chrome::ExecuteCommand)', [
+      op_include(bcc, '0012-include', HOOKS_HEADER, guard=True),
+      # HandleCommandWithDisposition() is the CommandUpdaterDelegate that
+      # every ExecuteCommand*() path reaches once the command is enabled.
+      op_function_start(
+          bcc, '0012-commands',
+          r'^void BrowserCommandController::HandleCommandWithDisposition\(',
+          guarded('  if (open_unified::hooks::HandleBrowserCommand(browser_.get(), '
+                  '${id})) {\n'
+                  '    return;\n'
+                  '  }'),
+          params={'id': r'int\s+(\w+)'}, indent='  '),
   ]))
   return p
 

@@ -20,6 +20,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/timer/timer.h"
 #include "base/types/expected.h"
 #include "base/values.h"
@@ -621,6 +622,7 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
   SyncEngine& operator=(const SyncEngine&) = delete;
 
   void SetDataAdapter(SyncDataAdapter* adapter) { data_adapter_ = adapter; }
+  void SetCredentialAccountKey(std::string account_key);
   void SetOnSnapshotChanged(SnapshotCallback cb) {
     on_snapshot_changed_ = std::move(cb);
   }
@@ -748,8 +750,61 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
     std::vector<SyncCollection> filter_collections;
   };
 
+  struct PushDiffResult {
+    bool ok = false;
+    bool had_conflicts = false;
+    int current_revision = 0;
+    int reset_revision = 0;
+    int accepted_count = 0;
+    std::optional<int> clean_cursor;
+    std::string error;
+  };
+
+  struct SyncPassContext {
+    SyncPassContext();
+    ~SyncPassContext();
+
+    int round = 0;
+    uint64_t generation = 0;
+    std::optional<FirstSyncStrategy> initial_strategy;
+    SyncCategorySettings categories;
+    std::set<SyncCollection> enabled;
+
+    std::shared_ptr<PullPassState> pull_state;
+    bool full_reset = false;
+
+    std::vector<SyncCategory> processed_backfill;
+    std::set<SyncCollection> backfill_collections;
+    std::vector<SyncRemoteRecord> backfill_records;
+
+    std::optional<SyncLocalBundle> pre_apply_local;
+    std::set<std::string> dirty_before_apply;
+    std::set<std::string> pushed_first;
+    std::optional<int> cursor_after_push;
+
+    std::vector<SyncRemoteRecord> remote;
+    std::vector<SyncRemoteRecord> changed;
+    std::vector<std::string> pass_warnings;
+  };
+
+  struct BlobDownloadResult {
+    BlobDownloadResult();
+    BlobDownloadResult(BlobDownloadResult&&) noexcept;
+    BlobDownloadResult& operator=(BlobDownloadResult&&) noexcept;
+    ~BlobDownloadResult();
+
+    bool ok = true;
+    std::string error;
+    std::map<std::string, std::vector<uint8_t>> blobs;
+    std::set<std::string> deferred_keys;
+    bool had_cap_skips = false;
+    std::vector<std::string> warnings;
+  };
+
   base::FilePath StateFilePath() const;
   base::FilePath BackupsDirPath() const;
+  std::string CredentialAccountKey() const;
+  scoped_refptr<base::SequencedTaskRunner> GetOrCreateIoTaskRunner() const;
   bool SaveStateToDisk() const;
   std::optional<SyncPersistedState> LoadStateFromDisk() const;
   void DeleteStateFromDisk() const;
@@ -761,46 +816,89 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
   void SetStatus(SyncStatusKind kind, std::string message = {});
   void ClearLocalSession(SyncStatusKind new_status, std::string message = {});
 
-  // Authenticated HTTP request wrapper with single 401 refresh + retry.
+  // Authenticated HTTP request wrappers with single 401 refresh + retry.
   void SendAuthenticatedJson(
       const std::string& method,
       const std::string& path_and_query,
       std::optional<base::DictValue> body,
+      base::OnceCallback<void(SyncHttpResponse)> callback);
+  void SendAuthenticatedBinary(
+      const std::string& method,
+      const std::string& path,
+      std::string content_type,
+      std::string accept_header,
+      std::vector<uint8_t> body,
+      size_t max_response_bytes,
       base::OnceCallback<void(SyncHttpResponse)> callback);
   void SendJson(const std::string& method,
                 const std::string& full_url,
                 std::optional<base::DictValue> body,
                 std::optional<std::string> bearer_token,
                 base::OnceCallback<void(SyncHttpResponse)> callback);
+  void SendRaw(const std::string& method,
+               const std::string& full_url,
+               std::string content_type,
+               std::string accept_header,
+               std::vector<uint8_t> body,
+               size_t max_response_bytes,
+               std::optional<std::string> bearer_token,
+               base::OnceCallback<void(SyncHttpResponse)> callback);
   void RefreshAccessToken(base::OnceCallback<void(bool ok)> callback);
 
-  // Sync pass stages (pull -> LWW push / conflict resolution -> apply -> push).
+  // Sync pass stages (pull -> backfill -> LWW push-before-pull -> conflict
+  // re-pull -> blob download -> apply -> echo suppression -> final push).
   void StartSyncPass(int round,
                      std::optional<FirstSyncStrategy> initial_strategy);
   void PullAllPages(
       std::shared_ptr<PullPassState> pull_state,
       base::OnceCallback<void(bool ok, std::string error)> on_done);
-  void OnPullCompletedForPass(int round,
-                              std::optional<FirstSyncStrategy> initial_strategy,
-                              std::shared_ptr<PullPassState> pull_state,
+  void OnInitialPullCompleted(std::shared_ptr<SyncPassContext> ctx,
                               bool ok,
                               std::string error);
-  void ApplyAndFinishPass(int round,
-                          std::optional<FirstSyncStrategy> initial_strategy,
-                          std::shared_ptr<PullPassState> pull_state,
-                          std::map<std::string, std::vector<uint8_t>> blobs);
-  void PushLocalDiff(
-      const SyncLocalBundle& local,
+  void OnBackfillPullCompleted(std::shared_ptr<SyncPassContext> ctx,
+                               std::shared_ptr<PullPassState> backfill_state,
+                               bool ok,
+                               std::string error);
+  void ContinueAfterPulls(std::shared_ptr<SyncPassContext> ctx);
+  void OnEarlyPushCompleted(std::shared_ptr<SyncPassContext> ctx,
+                            PushDiffResult result);
+  void OnConflictRepullCompleted(std::shared_ptr<SyncPassContext> ctx,
+                                 std::shared_ptr<PullPassState> repull_state,
+                                 bool ok,
+                                 std::string error);
+  void PrepareApplyRemote(std::shared_ptr<SyncPassContext> ctx);
+  struct BlobDownloadState;
+
+  void DownloadBlobsForRecords(
+      const std::vector<SyncRemoteRecord>& records,
+      uint64_t generation,
+      base::OnceCallback<void(BlobDownloadResult)> on_done);
+  void DownloadNextBlob(std::shared_ptr<BlobDownloadState> state);
+  void ApplyAndFinishPass(std::shared_ptr<SyncPassContext> ctx,
+                          BlobDownloadResult blob_result);
+  void PushLocalDiff(const SyncLocalBundle& local,
+                     SyncPushMode mode,
+                     std::optional<int> cursor_base,
+                     base::OnceCallback<void(PushDiffResult)> on_done);
+  void UploadBlobsAndPushBatches(
+      std::shared_ptr<std::vector<SyncLocalBlob>> blob_queue,
+      size_t blob_index,
+      uint64_t generation,
+      std::shared_ptr<std::vector<std::vector<PendingPushMutation>>> batches,
       SyncPushMode mode,
-      base::OnceCallback<void(bool ok, bool had_conflicts, std::string error)>
-          on_done);
+      std::optional<int> cursor_base,
+      base::OnceCallback<void(PushDiffResult)> on_done);
   void PushMutationBatches(
       std::shared_ptr<std::vector<std::vector<PendingPushMutation>>> batches,
       size_t batch_index,
       SyncPushMode mode,
+      std::optional<int> cursor_base,
+      std::optional<int> chain_cursor,
       bool any_conflicts,
-      base::OnceCallback<void(bool ok, bool had_conflicts, std::string error)>
-          on_done);
+      int last_revision,
+      int last_reset_revision,
+      int total_accepted,
+      base::OnceCallback<void(PushDiffResult)> on_done);
   void FinishSyncPass(bool ok,
                       const std::string& error_code,
                       const std::string& error_message);
@@ -816,6 +914,8 @@ class SyncEngine final : public SyncWebSocketClient::Delegate {
       const SyncHttpResponse& resp);
 
   base::FilePath data_root_;
+  std::string credential_account_key_;
+  mutable scoped_refptr<base::SequencedTaskRunner> io_task_runner_;
   std::unique_ptr<SyncHttpTransport> http_transport_;
   std::unique_ptr<SecretStore> secret_store_;
   std::unique_ptr<SyncWebSocketClient> ws_client_;

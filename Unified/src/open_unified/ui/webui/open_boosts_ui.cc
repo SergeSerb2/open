@@ -16,25 +16,6 @@
 
 namespace open_unified::webui {
 
-namespace {
-
-std::optional<Boost> FindCached(const ProfileID& profile_id,
-                                const std::string& boost_id) {
-  OpenBrowserService* service = OpenBrowserService::Get();
-  if (!service || !service->boost_controller()) {
-    return std::nullopt;
-  }
-  for (const Boost& boost :
-       service->boost_controller()->BoostsFor(profile_id)) {
-    if (boost.id == boost_id) {
-      return boost;
-    }
-  }
-  return std::nullopt;
-}
-
-}  // namespace
-
 OpenBoostsUI::OpenBoostsUI(OpenWebUIMessageHandler* handler)
     : OpenRpcDomain(handler) {}
 
@@ -81,6 +62,23 @@ void OpenBoostsUI::List(const base::DictValue& payload, Reply reply) {
                              enabled.is_bool() ? enabled.GetBool() : true));
           },
           std::move(reply)));
+}
+
+// static
+void OpenBoostsUI::ReplySaved(ProfileID profile,
+                              Reply reply,
+                              std::string error,
+                              std::optional<Boost> saved) {
+  if (OpenBrowserService* service = OpenBrowserService::Get();
+      service && service->boost_controller()) {
+    service->boost_controller()->ReloadBoosts(profile);
+  }
+  if (!saved) {
+    ReplyError(std::move(reply), error);
+    return;
+  }
+  ReplyOk(std::move(reply),
+          base::DictValue().Set("boost", json::BoostToValue(*saved)));
 }
 
 void OpenBoostsUI::SaveAndReply(Boost boost, Reply reply) {
@@ -149,15 +147,32 @@ void OpenBoostsUI::Delete(const base::DictValue& payload, Reply reply) {
 }
 
 void OpenBoostsUI::Toggle(const base::DictValue& payload, Reply reply) {
-  std::optional<Boost> boost =
-      FindCached(ProfileFromPayload(payload), json::GetString(payload, "id"));
+  const ProfileID profile = ProfileFromPayload(payload);
+  ProfileServices* ps = service()->ProfileServicesFor(profile);
+  const std::string id = json::GetString(payload, "id");
   std::optional<bool> enabled = payload.FindBool("enabled");
-  if (!boost || !enabled) {
+  if (!ps || id.empty() || !enabled) {
     ReplyError(std::move(reply), "no such boost");
     return;
   }
-  boost->enabled = *enabled;
-  SaveAndReply(std::move(*boost), std::move(reply));
+  // Read-modify-write on the store's own sequence: never a stale copy of
+  // the controller's cache (a concurrent edit or Zap would be lost).
+  RunOnStore(
+      ps->boosts,
+      base::BindOnce(
+          [](std::string id, bool enabled,
+             BoostStore* store) -> std::optional<Boost> {
+            std::optional<Boost> boost = store->GetBoost(id);
+            if (!boost) {
+              return std::nullopt;
+            }
+            boost->enabled = enabled;
+            boost->modified_at = base::Time::Now().InSecondsFSinceUnixEpoch();
+            return store->Save(std::move(*boost));
+          },
+          id, *enabled),
+      base::BindOnce(&OpenBoostsUI::ReplySaved, profile, std::move(reply),
+                     std::string("no such boost")));
 }
 
 void OpenBoostsUI::StartZap(const base::DictValue& payload, Reply reply) {
@@ -169,21 +184,37 @@ void OpenBoostsUI::StartZap(const base::DictValue& payload, Reply reply) {
 }
 
 void OpenBoostsUI::RemoveZap(const base::DictValue& payload, Reply reply) {
-  std::optional<Boost> boost = FindCached(
-      ProfileFromPayload(payload), json::GetString(payload, "boost_id"));
+  const ProfileID profile = ProfileFromPayload(payload);
+  ProfileServices* ps = service()->ProfileServicesFor(profile);
+  const std::string boost_id = json::GetString(payload, "boost_id");
   const std::string zap_id = json::GetString(payload, "zap_id");
-  if (!boost) {
+  if (!ps || boost_id.empty() || zap_id.empty()) {
     ReplyError(std::move(reply), "no such boost");
     return;
   }
-  const size_t before = boost->zapped_elements.size();
-  std::erase_if(boost->zapped_elements,
-                [&](const ZappedElement& zap) { return zap.id == zap_id; });
-  if (boost->zapped_elements.size() == before) {
-    ReplyError(std::move(reply), "no such zap");
-    return;
-  }
-  SaveAndReply(std::move(*boost), std::move(reply));
+  RunOnStore(
+      ps->boosts,
+      base::BindOnce(
+          [](std::string boost_id, std::string zap_id,
+             BoostStore* store) -> std::optional<Boost> {
+            std::optional<Boost> boost = store->GetBoost(boost_id);
+            if (!boost) {
+              return std::nullopt;
+            }
+            const size_t before = boost->zapped_elements.size();
+            std::erase_if(boost->zapped_elements,
+                          [&](const ZappedElement& zap) {
+                            return zap.id == zap_id;
+                          });
+            if (boost->zapped_elements.size() == before) {
+              return std::nullopt;
+            }
+            boost->modified_at = base::Time::Now().InSecondsFSinceUnixEpoch();
+            return store->Save(std::move(*boost));
+          },
+          boost_id, zap_id),
+      base::BindOnce(&OpenBoostsUI::ReplySaved, profile, std::move(reply),
+                     std::string("no such boost or zap")));
 }
 
 }  // namespace open_unified::webui

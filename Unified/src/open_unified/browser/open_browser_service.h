@@ -18,14 +18,17 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/sequence_checker.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequence_bound.h"
 #include "base/values.h"
+#include "chrome/browser/profiles/profile_observer.h"
 #include "open_unified/buildflags.h"
 #include "open_unified/core/model/browser_model.h"
 #include "open_unified/core/model/open_types.h"
+#include "url/gurl.h"
 
 class Profile;
 
@@ -103,10 +106,8 @@ struct ProfileServices {
   base::SequenceBound<BoostStore> boosts;
   base::SequenceBound<DocumentStore> documents;
 
-  // UI thread; network work runs on its own runner.
-  // Declared before |sync| so SyncEngine is destroyed before its adapter.
-  std::unique_ptr<SyncDataAdapter> sync_adapter;
-  std::unique_ptr<SyncEngine> sync;
+  // UI thread. Account & Sync is app-wide (OpenBrowserService::sync()):
+  // one Open Account syncs every Profile.
   std::unique_ptr<OpenExtensionBridge> extensions;
 
   // The KeyedService of |chrome_profile| (owned by its factory).
@@ -118,7 +119,8 @@ struct ProfileServices {
 // State/browser.json while blocking is still allowed), started in
 // PostBrowserStart(), destroyed in PostMainMessageLoopRun(); UI thread only.
 class OpenBrowserService : public BrowserModel::Observer,
-                           public BrowserModel::ArchiveSink {
+                           public BrowserModel::ArchiveSink,
+                           public ProfileObserver {
  public:
   class Observer : public base::CheckedObserver {
    public:
@@ -160,6 +162,18 @@ class OpenBrowserService : public BrowserModel::Observer,
   OpenWindowController* window_controller() { return window_controller_.get(); }
   // Extension bridge of the active Profile.
   OpenExtensionBridge* extension_bridge();
+  // The extension bridges of every Profile with services (observers such as
+  // OpenWindowController follow all of them, see OnProfileWillBeDestroyed).
+  std::vector<OpenExtensionBridge*> AllExtensionBridges();
+  // The one app-wide Account & Sync engine (state in <user data>/State/Sync,
+  // credentials under a secret-store key unique to that directory). Null
+  // before Start() and after Shutdown().
+  SyncEngine* sync() { return sync_.get(); }
+
+  // URLs the OS hands over (hook 0011: command line, a second launch, macOS
+  // application:openURLs:). Air Traffic Control places each one; before
+  // Start() they wait and are routed once the windows exist.
+  void RouteExternalUrls(const std::vector<GURL>& urls);
 
   ProfileServices* ProfileServicesFor(const ProfileID& id);
   ProfileServices* ProfileServicesForBrowserContext(
@@ -206,6 +220,12 @@ class OpenBrowserService : public BrowserModel::Observer,
   void OnArchiveTabs(const std::vector<ArchivedTabRecord>& records) override;
   void OnDiscardArchived(const std::vector<ItemID>& ids) override;
 
+  // ProfileObserver: a Chromium Profile going away (Profile deletion, or
+  // ProfileManager unloading it) takes its ProfileServices with it, so no
+  // raw_ptr<Profile> (ProfileServices::chrome_profile, the extension
+  // bridge's) outlives it.
+  void OnProfileWillBeDestroyed(::Profile* profile) override;
+
  private:
   void LoadOrCreateState();
   void StartProfiles();
@@ -213,7 +233,9 @@ class OpenBrowserService : public BrowserModel::Observer,
       const Profile& profile,
       ::Profile* chrome_profile);
   void MaybeStartAutomationServer();
+  void StartSync();
   void ConfigureSyncFromCommandLine();
+  void FlushPendingExternalUrls();
   base::FilePath ChromeProfileDir(const Profile& profile) const;
   base::FilePath OpenProfileDir(const Profile& profile) const;
   void OnNewChromeProfileReady(ProfileID id,
@@ -244,6 +266,19 @@ class OpenBrowserService : public BrowserModel::Observer,
   scoped_refptr<base::SequencedTaskRunner> file_runner_;
 
   std::map<ProfileID, std::unique_ptr<ProfileServices>> profiles_;
+  // Set while OnProfileWillBeDestroyed() tears down services: nothing may
+  // load that Profile again from inside the notification.
+  raw_ptr<::Profile> destroying_profile_ = nullptr;
+  base::ScopedMultiSourceObservation<::Profile, ProfileObserver>
+      profile_observations_{this};
+
+  // App-wide Account & Sync. The adapter is declared first so the engine,
+  // which holds a raw pointer to it, is destroyed first.
+  std::unique_ptr<SyncDataAdapter> sync_adapter_;
+  std::unique_ptr<SyncEngine> sync_;
+
+  // External URLs received before Start().
+  std::vector<GURL> pending_external_urls_;
 
   std::unique_ptr<OpenTabBridge> tab_bridge_;
   std::unique_ptr<OpenSleepController> sleep_controller_;

@@ -37,14 +37,16 @@ class OpenBrowserService;
 //   <- {"id": 2, "ok": false, "error": "no tab 1234"}
 //
 // Transports (both may run at once):
-// - AF_UNIX stream socket, mode 0600: --automation-socket=PATH, else
+// - AF_UNIX stream socket, mode 0600 (bound in a private 0700 staging
+//   directory, then renamed into place): --automation-socket=PATH, else
 //   $OPEN_AUTOMATION_SOCKET, else <user data>/automation.sock. Linux,
 //   macOS, and Windows 10 1803+ (afunix.h).
 // - Loopback TCP 127.0.0.1:<port>: --automation-port=PORT (0 = any free
 //   port; the bound port is written to <user data>/automation.port). Every
 //   request must carry "token" equal to <user data>/automation.token
-//   (random, mode 0600 where supported), since any local user can reach a
-//   loopback port.
+//   (random; created owner-only with O_EXCL|O_NOFOLLOW 0600 on POSIX and a
+//   protected owner-only DACL on Windows; deleted at shutdown), since any
+//   local user can reach a loopback port.
 //
 // Sockets are served on background platform threads (one per connection,
 // commands run one at a time per connection). Each command runs on the UI
@@ -87,6 +89,9 @@ class OpenAutomationServer {
 
   raw_ptr<OpenBrowserService> service_;
   std::map<std::string, Handler> handlers_;
+  // <user data>/automation.{token,port}, removed by the destructor.
+  base::FilePath token_path_;
+  base::FilePath port_path_;
   std::unique_ptr<Transport> unix_transport_;
   std::unique_ptr<Transport> tcp_transport_;
   base::WeakPtrFactory<OpenAutomationServer> weak_factory_{this};

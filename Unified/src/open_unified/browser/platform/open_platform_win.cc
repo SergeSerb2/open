@@ -25,6 +25,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/scoped_com_initializer.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/win/hwnd_util.h"
 
@@ -186,6 +187,7 @@ class WinCredentialManagerSecretStore final : public SecretStore {
     if (secret.size() > CRED_MAX_CREDENTIAL_BLOB_SIZE) {
       CredDeleteW(MakeCredTargetName(service, account).c_str(),
                   CRED_TYPE_GENERIC, 0);
+      used_fallback_ = true;
       return dpapi_fallback_.SaveSecret(service, account, secret);
     }
 
@@ -201,10 +203,15 @@ class WinCredentialManagerSecretStore final : public SecretStore {
     cred.UserName = user.data();
 
     if (CredWriteW(&cred, 0)) {
+      used_fallback_ = false;
       dpapi_fallback_.DeleteSecret(service, account);
       return true;
     }
     PLOG(WARNING) << "CredWriteW failed; falling back to DPAPI file";
+    // Delete any existing Credential Manager entry before writing the DPAPI
+    // fallback file so a stale token can never win on the next LoadSecret().
+    CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0);
+    used_fallback_ = true;
     return dpapi_fallback_.SaveSecret(service, account, secret);
   }
 
@@ -235,10 +242,11 @@ class WinCredentialManagerSecretStore final : public SecretStore {
     return cred_ok && file_ok;
   }
 
-  bool UsesFileBackend() const override { return false; }
+  bool UsesFileBackend() const override { return used_fallback_; }
 
  private:
   WinDpapiSecretStore dpapi_fallback_;
+  bool used_fallback_ = false;
 };
 
 // Hidden message-only window that receives WM_HOTKEY notifications.
@@ -379,6 +387,8 @@ class OpenPlatformWin final : public OpenPlatform {
   }
 
   bool SetDefaultBrowser() override {
+    // ShellExecuteW for ms-settings: requires COM STA initialization.
+    base::win::ScopedCOMInitializer com_initializer;
     // Windows 10/11 requires users to confirm default browser changes in Settings.
     HINSTANCE result = ShellExecuteW(
         nullptr, L"open", L"ms-settings:defaultapps", nullptr, nullptr,

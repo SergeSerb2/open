@@ -14,10 +14,15 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
 #include "components/find_in_page/find_result_observer.h"
 #include "components/find_in_page/find_tab_helper.h"
+#include "components/web_modal/modal_dialog_host.h"
+#include "components/web_modal/web_contents_modal_dialog_host.h"
+#include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
+#include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "open_unified/browser/open_extension_bridge.h"
 #include "open_unified/browser/open_tab_bridge.h"
@@ -32,6 +37,7 @@
 #include "open_unified/ui/views/open_split_container_view.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/event_observer.h"
+#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/view_observer.h"
 
 class BrowserView;
@@ -82,6 +88,19 @@ class OpenWindowController : public OpenViewController,
   // The coordinator of the main window (null before its window exists).
   OpenWindowUi* MainWindowUi();
   OpenWindowUi* WindowUiFor(const WindowID& window_id);
+  // The coordinator of one Chromium window (hook 0012: IDC_FIND* of that
+  // Browser).
+  OpenWindowUi* WindowUiForBrowserView(BrowserView* browser_view);
+
+  // Extension bridges of every Profile (OpenBrowserService adds each one
+  // when its ProfileServices exist and removes it before they go away), so
+  // a Profile switch or deletion never leaves an observer behind.
+  void ObserveExtensionBridge(OpenExtensionBridge* bridge);
+  void UnobserveExtensionBridge(OpenExtensionBridge* bridge);
+
+  // Track 4 observers: Peek and Command Bar visibility of a window.
+  void NotifyPeekChanged(const WindowID& window_id);
+  void NotifyCommandBarStateChanged(const WindowID& window_id);
 
   // Little Open (Arc's Little Arc): a floating window with its own command
   // bar (|url| empty) or a live page. |profile_id| empty: the active
@@ -141,11 +160,18 @@ class OpenWindowController : public OpenViewController,
   void OnExtensionActionsChanged() override;
 
   OpenBrowserService* service() { return service_; }
+  // The visible page of the main window (automation, Little Open). Window
+  // UIs use OpenWindowUi::ActiveWebContents() for their own window.
   content::WebContents* ActiveWebContents() const;
 
  private:
   void NotifyWindowStateChanged();
-  void NavigateActive(int direction);  // -1 back, +1 forward, 0 reload
+  // -1 back, +1 forward, 0 reload, on |window_id|'s own page.
+  void NavigateActive(const WindowID& window_id, int direction);
+  // The page |window_id| shows (its Browser's active tab), else the main
+  // window's.
+  content::WebContents* ActiveWebContentsFor(const WindowID& window_id) const;
+  const OpenWindowUi* WindowUiForConst(const WindowID& window_id) const;
 
   // Undo of a "Tab Archived" toast: takes the rows out of Archive.sqlite
   // and puts the tabs back where they were.
@@ -156,17 +182,28 @@ class OpenWindowController : public OpenViewController,
   std::map<raw_ptr<BrowserView>, std::unique_ptr<OpenWindowUi>> windows_;
   std::vector<std::unique_ptr<OpenLittleOpenController>> little_opens_;
   base::ObserverList<OpenViewObserver> view_observers_;
+  base::ScopedMultiSourceObservation<OpenExtensionBridge,
+                                     OpenExtensionBridge::Observer>
+      extension_observations_{this};
   base::WeakPtrFactory<OpenWindowController> weak_factory_{this};
 };
 
 // One Open window's Track 5 views and their delegates.
 //
-// Find bar, Toasts and the Ctrl+Tab switcher live in their own
-// secondary::OverlayWidgetHost child widgets (created on first use, so a
-// window that never finds or toasts pays nothing), above the page's native
-// view. Their anchors follow the web panel through an empty view in
-// OpenBrowserView's kFindBarAndToasts slot, which Track 4 lays out to the
-// panel's bounds.
+// Command Bar, Peek, Find bar, Toasts and the Ctrl+Tab switcher live in
+// their own secondary::OverlayWidgetHost child widgets (created on first
+// use, so a window that never finds or toasts pays nothing), stacked above
+// the page's native view: on Windows (HWND) and macOS (NSView) a views
+// layer in the browser widget cannot take clicks over a native page, a
+// child widget can. Command Bar and Peek cover the window's client area
+// (Alignment::kFill); Find bar and Toasts follow the web panel through an
+// empty view in OpenBrowserView's kFindBarAndToasts slot, which Track 4
+// lays out to the panel's bounds.
+//
+// Peek's page gets the full tab helper set (hook 0010) and this object as
+// its WebContentsDelegate: keys the page does not handle (Esc, Cmd/Ctrl+O)
+// reach the window's FocusManager, and JavaScript dialogs are tab-modal to
+// this window.
 class OpenWindowUi : public CommandBarDelegate,
                      public PeekDelegate,
                      public SiteControlDelegate,
@@ -176,7 +213,9 @@ class OpenWindowUi : public CommandBarDelegate,
                      public ui::AcceleratorTarget,
                      public views::ViewObserver,
                      public find_in_page::FindResultObserver,
-                     public ui::EventObserver {
+                     public ui::EventObserver,
+                     public content::WebContentsDelegate,
+                     public web_modal::WebContentsModalDialogManagerDelegate {
  public:
   OpenWindowUi(OpenWindowController* controller,
                BrowserView* browser_view,
@@ -188,6 +227,12 @@ class OpenWindowUi : public CommandBarDelegate,
   OpenWindowUi& operator=(const OpenWindowUi&) = delete;
 
   const WindowID& window_id() const { return window_id_; }
+  BrowserView* browser_view() const { return browser_view_; }
+
+  // This window's own page: its Browser's active tab (the focused pane in
+  // Split View), null for the empty state. Never another window's.
+  content::WebContents* ActiveWebContents() const;
+  std::optional<ItemID> ActiveTabId() const;
 
   // Command Bar (Cmd/Ctrl+T, Cmd/Ctrl+L, the + button).
   void ShowCommandBar(CommandBarMode mode,
@@ -238,13 +283,20 @@ class OpenWindowUi : public CommandBarDelegate,
   void OnTabActivated(const ItemID& tab_id);
   void OnModelChanged();
 
-  // Registers Open's window accelerators on the window's FocusManager at
-  // high priority (ahead of Chromium's table and of the page).
+  // Registers Open's window accelerators (every CommandRegistry window
+  // shortcut Open handles, user overrides included) on the window's
+  // FocusManager at high priority (ahead of Chromium's table and of the
+  // page).
   void RegisterAccelerators();
   void ActivateWindow();
   views::Widget* widget() const;
   // Runs a CommandRegistry action (command bar rows, Little Open).
   void RunCommand(const std::string& action_id) { RunAction(action_id); }
+  // Hook 0012: a Chromium find command (menu key equivalent,
+  // chrome::ExecuteCommand). False when this window cannot find (no page).
+  bool HandleFindCommand(CommandId command);
+  // The child widget hosting the Command Bar (automation key routing).
+  views::Widget* command_bar_widget() const;
 
   // Automation readback (docs/automation.md command-bar-state, peek-state,
   // site-controls state).
@@ -313,24 +365,45 @@ class OpenWindowUi : public CommandBarDelegate,
   // ui::EventObserver (key releases while the switcher is active):
   void OnEvent(const ui::Event& event) override;
 
+  // content::WebContentsDelegate (Peek's page):
+  bool HandleKeyboardEvent(content::WebContents* source,
+                           const input::NativeWebKeyboardEvent& event) override;
+  content::JavaScriptDialogManager* GetJavaScriptDialogManager(
+      content::WebContents* source) override;
+
+  // web_modal::WebContentsModalDialogManagerDelegate (Peek's page):
+  web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost(
+      content::WebContents* web_contents) override;
+  bool IsWebContentsVisible(content::WebContents* web_contents) override;
+
  private:
   secondary::Appearance CurrentAppearance() const;
+  // OpenPlatform::ApplyWindowEffects() for the window's current appearance
+  // (Mica on Windows, vibrancy on macOS, shadow and corners on Linux).
+  void ApplyWindowEffects();
   open_unified::SiteControlState BuildSiteControlState() const;
   void OpenUrlWithDisposition(const GURL& url,
                               CommandBarDisposition disposition);
   void RunAction(const std::string& action_id);
+  // Runs one Open command in this window; false when Open does not handle
+  // it here (Chromium's own command handling runs instead).
+  bool RunCommandId(CommandId command);
   void CopyUrl(const GURL& url);
   OpenBrowserService* service() const;
 
   // Overlay widgets (lazy) and their anchors in widget coordinates.
   gfx::Rect PanelRectInWidget() const;
   gfx::Rect WindowRectInWidget() const;
+  void EnsureCommandBar();
+  void EnsurePeek();
   void EnsureFindBar();
   void EnsureToasts();
   void EnsureTabSwitcher();
   void UpdateOverlayAnchors();
   find_in_page::FindTabHelper* FindHelper() const;
   void SetEscapeRegistered(bool registered);
+  // Esc is a window accelerator only while an Open overlay shows.
+  void UpdateEscapeRegistration();
   bool RunShortcut(CommandId command);
   std::vector<TabSwitcherItem> BuildSwitcherItems() const;
   void StopSwitcherMonitor();
@@ -341,7 +414,10 @@ class OpenWindowUi : public CommandBarDelegate,
   raw_ptr<OpenBrowserView> open_view_;
   WindowID window_id_;
 
+  // Command Bar and Peek (child widgets over the client area).
+  std::unique_ptr<secondary::OverlayWidgetHost> command_bar_host_;
   raw_ptr<OpenCommandBarView> command_bar_ = nullptr;
+  std::unique_ptr<secondary::OverlayWidgetHost> peek_host_;
   raw_ptr<OpenPeekOverlayView> peek_ = nullptr;
   raw_ptr<OpenSplitContainerView> split_ = nullptr;
   std::unique_ptr<OpenSiteControlBubble> site_controls_;
@@ -349,6 +425,7 @@ class OpenWindowUi : public CommandBarDelegate,
 
   std::unique_ptr<content::WebContents> peek_contents_;
   std::optional<ItemID> peek_source_;
+  views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
   bool split_active_ = false;
 
   // Panel tracker (kFindBarAndToasts slot): its bounds are the panel's.
@@ -388,9 +465,18 @@ class OpenWindowUi : public CommandBarDelegate,
 // mode (a live WebContents this object owns). "Open in <Space>" (pill,
 // Cmd/Ctrl+O, Space picker) turns the page into a Today tab of that Space and
 // closes the window. Owned by OpenWindowController; UI thread only.
-class OpenLittleOpenController : public LittleOpenDelegate,
-                                 public CommandBarDelegate,
-                                 public content::WebContentsObserver {
+//
+// The page gets the full tab helper set (hook 0010) and this object as its
+// WebContentsDelegate (unhandled keys such as Cmd/Ctrl+O reach the window's
+// FocusManager) and web-modal dialog host (JavaScript dialogs inside the
+// Little Open window).
+class OpenLittleOpenController
+    : public LittleOpenDelegate,
+      public CommandBarDelegate,
+      public content::WebContentsObserver,
+      public content::WebContentsDelegate,
+      public web_modal::WebContentsModalDialogManagerDelegate,
+      public web_modal::WebContentsModalDialogHost {
  public:
   OpenLittleOpenController(OpenWindowController* owner,
                            ProfileID profile_id,
@@ -436,6 +522,24 @@ class OpenLittleOpenController : public LittleOpenDelegate,
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
 
+  // content::WebContentsDelegate:
+  bool HandleKeyboardEvent(content::WebContents* source,
+                           const input::NativeWebKeyboardEvent& event) override;
+  content::JavaScriptDialogManager* GetJavaScriptDialogManager(
+      content::WebContents* source) override;
+
+  // web_modal::WebContentsModalDialogManagerDelegate:
+  web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost(
+      content::WebContents* web_contents) override;
+  bool IsWebContentsVisible(content::WebContents* web_contents) override;
+
+  // web_modal::WebContentsModalDialogHost:
+  gfx::NativeView GetHostView() const override;
+  gfx::Point GetDialogPosition(const gfx::Size& size) override;
+  gfx::Size GetMaximumDialogSize() override;
+  void AddObserver(web_modal::ModalDialogHostObserver* observer) override;
+  void RemoveObserver(web_modal::ModalDialogHostObserver* observer) override;
+
  private:
   OpenBrowserService* service() const;
   // The Space "Open in" targets: the routed one, else the main window's
@@ -454,6 +558,8 @@ class OpenLittleOpenController : public LittleOpenDelegate,
   std::unique_ptr<content::WebContents> contents_;
   // Page bounds kept while the bar edits the URL (host click).
   std::optional<gfx::Rect> page_bounds_;
+  views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
+  base::ObserverList<web_modal::ModalDialogHostObserver> modal_observers_;
   bool closing_ = false;
   base::WeakPtrFactory<OpenLittleOpenController> weak_factory_{this};
 };

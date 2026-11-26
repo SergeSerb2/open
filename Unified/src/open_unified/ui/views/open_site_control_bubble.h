@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "open_unified/ui/views/open_split_container_view.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -269,11 +270,19 @@ class OpenSiteControlBubble {
 
  private:
   void OnWidgetClosed(views::Widget::ClosedReason reason);
+  // Cancels the current bubble's pending close callback and releases its
+  // widget, then its delegate (the delegate must outlive the widget).
+  // `synchronous`: delete now (destructor); else delete on the next task, as
+  // the call can come from inside the old bubble's own event handling.
+  void DiscardBubble(bool synchronous);
 
   raw_ptr<SiteControlDelegate> delegate_;
   std::unique_ptr<views::BubbleDialogDelegate> bubble_delegate_;
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<OpenSiteControlView> contents_ = nullptr;
+  // Bound into each bubble's closed callback; invalidated when the bubble is
+  // replaced or this object dies, so a stale callback never runs.
+  base::WeakPtrFactory<OpenSiteControlBubble> weak_factory_{this};
 };
 
 }  // namespace open_unified

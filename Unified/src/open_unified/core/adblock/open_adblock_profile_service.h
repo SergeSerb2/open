@@ -5,6 +5,7 @@
 #ifndef OPEN_UNIFIED_CORE_ADBLOCK_OPEN_ADBLOCK_PROFILE_SERVICE_H_
 #define OPEN_UNIFIED_CORE_ADBLOCK_OPEN_ADBLOCK_PROFILE_SERVICE_H_
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -166,6 +167,15 @@ class OpenAdBlockProfileService : public KeyedService {
   void OnDiskStateLoaded(DiskState state);
   static DiskState ReadDiskStateOnBlockingSequence(base::FilePath adblock_dir);
   void InitializeFromParent(OpenAdBlockProfileService* parent);
+  void AddOffTheRecordChild(OpenAdBlockProfileService* child);
+  void RemoveOffTheRecordChild(OpenAdBlockProfileService* child);
+  void OnParentShutdown();
+  void OnParentEnabledChanged(bool enabled);
+  void OnParentEnabledListsChanged(const std::set<std::string>& enabled_lists);
+  void OnParentExcludedDomainAdded(const std::string& domain);
+  void OnParentExcludedDomainRemoved(const std::string& domain);
+  void OnParentExcludedDomainsReplaced(const std::set<std::string>& domains);
+  void OnParentGenerationPublished();
   void ApplyExclusionsToEngine();
   bool SaveExclusionsToDisk() const;
   bool SaveConfigToDisk() const;
@@ -194,6 +204,8 @@ class OpenAdBlockProfileService : public KeyedService {
   bool config_mutated_ = false;
   bool exclusions_mutated_ = false;
   bool bound_to_parent_ = false;
+  raw_ptr<OpenAdBlockProfileService> parent_service_ = nullptr;
+  std::vector<raw_ptr<OpenAdBlockProfileService>> otr_children_;
   std::set<std::string> enabled_list_ids_;
   std::set<std::string> excluded_domains_;
   StatusObserver status_observer_;
@@ -206,9 +218,19 @@ class OpenAdBlockProfileService : public KeyedService {
 class OpenAdBlockProfileServiceFactory
     : public BrowserContextKeyedServiceFactory {
  public:
+  using OriginalContextResolver =
+      base::RepeatingCallback<content::BrowserContext*(
+          content::BrowserContext*)>;
+
   static OpenAdBlockProfileService* GetForBrowserContext(
       content::BrowserContext* context);
   static OpenAdBlockProfileServiceFactory* GetInstance();
+
+  // Optional hook allowing the browser/Profile layer to resolve an OTR
+  // BrowserContext to its original regular BrowserContext directly.
+  static void SetOriginalContextResolver(OriginalContextResolver resolver);
+
+  void UnregisterService(OpenAdBlockProfileService* service);
 
   OpenAdBlockProfileServiceFactory(const OpenAdBlockProfileServiceFactory&) =
       delete;
@@ -226,6 +248,13 @@ class OpenAdBlockProfileServiceFactory
       content::BrowserContext* context) const override;
   std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
+
+  OriginalContextResolver original_context_resolver_;
+  mutable std::map<base::FilePath, raw_ptr<OpenAdBlockProfileService>>
+      regular_services_by_path_;
+  mutable std::map<base::FilePath,
+                   std::vector<raw_ptr<OpenAdBlockProfileService>>>
+      unbound_otr_by_path_;
 };
 
 }  // namespace open_unified

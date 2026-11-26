@@ -99,7 +99,7 @@ OpenSpringAnimator::OpenSpringAnimator(SpringToken spring,
       on_settled_(std::move(on_settled)) {}
 
 OpenSpringAnimator::~OpenSpringAnimator() {
-  Detach();
+  ReleaseCompositor();
 }
 
 void OpenSpringAnimator::SetCompositor(ui::Compositor* compositor) {
@@ -107,8 +107,12 @@ void OpenSpringAnimator::SetCompositor(ui::Compositor* compositor) {
     return;
   }
   const bool was_animating = animating_;
-  Detach();
+  ReleaseCompositor();
   compositor_ = compositor;
+  if (compositor_) {
+    compositor_->AddObserver(this);
+    watching_ = true;
+  }
   if (was_animating) {
     // Without a compositor the animation cannot continue; land on target.
     if (!compositor_) {
@@ -213,6 +217,15 @@ void OpenSpringAnimator::Detach() {
   observing_ = false;
 }
 
+void OpenSpringAnimator::ReleaseCompositor() {
+  Detach();
+  if (compositor_ && watching_) {
+    compositor_->RemoveObserver(this);
+  }
+  watching_ = false;
+  compositor_ = nullptr;
+}
+
 void OpenSpringAnimator::OnAnimationStep(base::TimeTicks timestamp) {
   if (!animating_) {
     Detach();
@@ -256,11 +269,12 @@ void OpenSpringAnimator::OnAnimationStep(base::TimeTicks timestamp) {
 }
 
 void OpenSpringAnimator::OnCompositingShuttingDown(ui::Compositor* compositor) {
-  if (compositor != compositor_) {
+  if (!compositor_ || compositor != compositor_) {
     return;
   }
-  observing_ = false;
-  compositor_ = nullptr;
+  // The compositor is going away: unregister from both observer lists now
+  // (removal during its notification loop is allowed) and clear the pointer.
+  ReleaseCompositor();
   if (animating_) {
     Finish();
   }

@@ -4,6 +4,60 @@ import { type NoteDocument, type NoteFormatRange, rpc } from '../shared/bridge';
 import { Badge, Modal, Toast } from '../shared/components';
 import { OpenDoorwayMark } from '../shared/icons';
 
+function escape(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeHref(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed || /[\u0000-\u001f\u007f]/.test(trimmed)) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      parsed.protocol === 'http:' ||
+      parsed.protocol === 'https:' ||
+      parsed.protocol === 'mailto:'
+    ) {
+      return parsed.href;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function sanitizeImgSrc(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed || /[\u0000-\u001f\u007f]/.test(trimmed)) return null;
+  if (trimmed.startsWith('//')) return null;
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed);
+  if (!hasScheme) {
+    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'data:' || parsed.protocol === 'blob:') {
+      return trimmed;
+    }
+    if (
+      typeof window !== 'undefined' &&
+      window.location &&
+      window.location.origin !== 'null' &&
+      parsed.origin === window.location.origin
+    ) {
+      return parsed.href;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 /**
  * Render NoteDocument (plain UTF-16 text + format ranges) to clean HTML for the rich editor.
  */
@@ -25,9 +79,6 @@ function noteDocToHtml(doc: NoteDocument): string {
     const inlineFormats = lineFormats.filter(
       (f) => f.type === 'bold' || f.type === 'italic' || f.type === 'underline' || f.type === 'strikethrough' || f.type === 'link',
     );
-
-    const escape = (s: string) =>
-      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     // Apply character-level inline wrapping using UTF-16 offsets
     let rendered = '';
@@ -51,7 +102,12 @@ function noteDocToHtml(doc: NoteDocument): string {
           else if (f.type === 'italic') chunk = `<em>${chunk}</em>`;
           else if (f.type === 'underline') chunk = `<u>${chunk}</u>`;
           else if (f.type === 'strikethrough') chunk = `<s>${chunk}</s>`;
-          else if (f.type === 'link' && f.url) chunk = `<a href="${escape(f.url)}">${chunk}</a>`;
+          else if (f.type === 'link' && f.url) {
+            const safeHref = sanitizeHref(f.url);
+            if (safeHref) {
+              chunk = `<a href="${escape(safeHref)}">${chunk}</a>`;
+            }
+          }
         }
         rendered += chunk;
         i = j;
@@ -64,7 +120,12 @@ function noteDocToHtml(doc: NoteDocument): string {
     else if (blockFmt?.type === 'bulletList') htmlBlocks.push(`<ul><li>${rendered}</li></ul>`);
     else if (blockFmt?.type === 'numberedList') htmlBlocks.push(`<ol><li>${rendered}</li></ol>`);
     else if (blockFmt?.type === 'image' && blockFmt.url) {
-      htmlBlocks.push(`<p><img src="${escape(blockFmt.url)}" alt="${escape(line || 'Image')}" /></p>`);
+      const safeSrc = sanitizeImgSrc(blockFmt.url);
+      if (safeSrc) {
+        htmlBlocks.push(`<p><img src="${escape(safeSrc)}" alt="${escape(line || 'Image')}" /></p>`);
+      } else {
+        htmlBlocks.push(`<p>${rendered}</p>`);
+      }
     } else {
       htmlBlocks.push(`<p>${rendered}</p>`);
     }
@@ -98,10 +159,12 @@ function serializeDomToNote(rootEl: HTMLElement): { text: string; formats: NoteF
 
     if (tag === 'img') {
       const alt = el.getAttribute('alt') || '[image]';
-      const src = el.getAttribute('src') || '';
+      const safeSrc = sanitizeImgSrc(el.getAttribute('src') || '');
       const loc = text.length;
       text += alt;
-      formats.push({ type: 'image', location: loc, length: alt.length, url: src });
+      if (safeSrc) {
+        formats.push({ type: 'image', location: loc, length: alt.length, url: safeSrc });
+      }
       return;
     }
 
@@ -110,7 +173,10 @@ function serializeDomToNote(rootEl: HTMLElement): { text: string; formats: NoteF
     else if (tag === 'em' || tag === 'i') next.push({ type: 'italic' });
     else if (tag === 'u') next.push({ type: 'underline' });
     else if (tag === 's' || tag === 'strike' || tag === 'del') next.push({ type: 'strikethrough' });
-    else if (tag === 'a') next.push({ type: 'link', url: el.getAttribute('href') || '' });
+    else if (tag === 'a') {
+      const safeHref = sanitizeHref(el.getAttribute('href') || '');
+      if (safeHref) next.push({ type: 'link', url: safeHref });
+    }
 
     for (const child of Array.from(el.childNodes)) {
       walkInline(child, next);
@@ -328,11 +394,14 @@ export function NoteApp(): JSX.Element {
               type="button"
               class="open-btn open-btn-primary"
               onClick={() => {
-                if (linkUrl.trim()) {
-                  execFormat('createLink', linkUrl.trim());
+                const safeHref = sanitizeHref(linkUrl);
+                if (safeHref) {
+                  execFormat('createLink', safeHref);
                   showToast('Inserted link.');
+                  setLinkModalOpen(false);
+                } else {
+                  showToast('Only http:, https:, and mailto: links are allowed.');
                 }
-                setLinkModalOpen(false);
               }}
             >
               Insert
@@ -361,12 +430,15 @@ export function NoteApp(): JSX.Element {
               type="button"
               class="open-btn open-btn-primary"
               onClick={() => {
-                if (imageUrl.trim()) {
-                  execFormat('insertImage', imageUrl.trim());
+                const safeSrc = sanitizeImgSrc(imageUrl);
+                if (safeSrc) {
+                  execFormat('insertImage', safeSrc);
                   showToast('Inserted image.');
+                  setImageModalOpen(false);
+                  setImageUrl('');
+                } else {
+                  showToast('Only data:, blob:, or local/same-origin image URLs are allowed.');
                 }
-                setImageModalOpen(false);
-                setImageUrl('');
               }}
             >
               Insert Image

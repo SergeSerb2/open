@@ -71,8 +71,13 @@ double ValueNoise(double u, double v, int cells, uint32_t salt) {
   const double fy = v - std::floor(v);
   const double sx = fx * fx * (3 - 2 * fx);
   const double sy = fy * fy * (3 - 2 * fy);
+  if (cells <= 0) {
+    return 0;
+  }
+  // Positive modulo: negative lattice coordinates wrap into 0..cells-1.
+  auto wrap = [cells](int x) { return ((x % cells) + cells) % cells; };
   auto at = [&](int x, int y) {
-    return HashRandom(x % cells, y % cells, salt) - 0.5;
+    return HashRandom(wrap(x), wrap(y), salt) - 0.5;
   };
   const double a = at(gx, gy), b = at(gx + 1, gy);
   const double c = at(gx, gy + 1), d = at(gx + 1, gy + 1);
@@ -687,7 +692,8 @@ ThemeEvaluator::ThemeEvaluator(const ThemeStyle& style,
     if (overlay_.size() == 2 && overlay_[0].second == 0) {
       overlay_[0].first = overlay_[1].first;
     }
-  } else {
+  } else if (style.corners.size() >= 4) {
+    // The corner fill reads corners [0..3]; fewer is not a corner theme.
     corners_ = style.corners;
   }
   base_param_ = MakeParam(tuning::kBaseAngle, tuning::kBaseLengthScale,
@@ -766,7 +772,7 @@ std::array<double, 3> ThemeEvaluator::ActiveColor(double u, double v) const {
     return color_math::P3ToSRGB(
         {color.r * a + u0, color.g * a + u0, color.b * a + u0});
   }
-  if (!corners_.empty()) {
+  if (corners_.size() >= 4) {
     const auto& c = corners_;
     auto lerp = [](double a, double b, double t) { return a + (b - a) * t; };
     auto ch = [&](double Rgba::*k) {
@@ -1023,7 +1029,7 @@ Tile Intrinsic(ThemeTexture t, double scale) {
     }
   }
 
-  const double count = static_cast<double>(marks.size());
+  const double count = std::max(1.0, static_cast<double>(marks.size()));
   double mean = 0;
   for (double m : marks) {
     mean += m;
@@ -1038,7 +1044,7 @@ Tile Intrinsic(ThemeTexture t, double scale) {
   double spread = 0;
   switch (t) {
     case ThemeTexture::kGrain:
-      spread = 1.25 * deviation * darkness / mean;
+      spread = mean > 1e-6 ? 1.25 * deviation * darkness / mean : 0.0;
       break;
     case ThemeTexture::kSand:
       spread = 0.167;
@@ -1058,7 +1064,8 @@ Tile Intrinsic(ThemeTexture t, double scale) {
     alpha_sum += alphas[i];
   }
   // Contrast tuning may clip the lowest grain values: renormalize the mean.
-  const double normalization = darkness / (alpha_sum / count);
+  const double normalization =
+      alpha_sum > 1e-6 ? darkness / (alpha_sum / count) : 1.0;
   tile.size = n;
   tile.alpha.resize(marks.size());
   double total = 0, squared = 0;

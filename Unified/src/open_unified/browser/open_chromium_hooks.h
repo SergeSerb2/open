@@ -2,9 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// The only Open header that patched Chromium files include (always with
-// `// nogncheck`: //chrome does not depend on //open_unified in GN; the
-// symbols resolve at link time through //chrome:dependencies, hook 0001).
+// The only Open header that patched Chromium files include, always as
+//
+//   #include "open_unified/buildflags.h"
+//   #if BUILDFLAG(OPEN_UNIFIED_BROWSER)
+//   #include "open_unified/browser/open_chromium_hooks.h"  // nogncheck
+//   #endif
+//
+// with every call site under the same BUILDFLAG, so a checkout with the
+// hooks applied also builds stock Chromium (open_unified_browser = false,
+// component builds). //chrome targets depend on //open_unified:buildflags
+// only (hook 0001); the hook symbols resolve at link time through
+// //chrome:dependencies.
 // Each function names the hook (Unified/patches/chromium/series) that calls
 // it. Keep this header small and free of Open model types, so a Chromium
 // rebuild after an Open change recompiles only the hooked files.
@@ -15,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "content/public/browser/content_browser_client.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -24,10 +34,15 @@
 #include "ui/views/widget/widget.h"
 
 class BrowserView;
+class BrowserWindowInterface;
 class ChromeBrowserMainParts;
 class ChromeContentBrowserClient;
 class GURL;
+class Profile;
 
+namespace gfx {
+class Point;
+}
 namespace content {
 class BrowserContext;
 class BrowserURLHandler;
@@ -55,10 +70,22 @@ namespace open_unified::hooks {
 void OnBrowserViewAddedToWidget(BrowserView* browser_view);
 // Start of BrowserView::~BrowserView().
 void OnBrowserViewDestroying(BrowserView* browser_view);
-// BrowserWidget::InitBrowserWidget(), after the delegate is set: Open's
-// frameless, translucent, rounded window (when OpenBrowserView wants it).
+// BrowserWidget::InitBrowserWidget(), after the delegate is set. Per OS:
+// Linux gets Open's frameless, translucent, drop-shadow window; macOS keeps
+// the titled full-size-content-view frame (native traffic lights); Windows
+// keeps the standard DWM frame (Aero Snap, resize borders, Mica through
+// OpenPlatform::ApplyWindowEffects()).
 void AdjustBrowserWidgetParams(BrowserView* browser_view,
                                views::Widget::InitParams* params);
+// Start of BrowserView::NonClientHitTest() (|point| in the frame view's
+// coordinates, as Chromium passes it): OpenBrowserView's code (HTCAPTION
+// over its draggable frame inset and toolbar backgrounds, custom resize
+// edges on Windows/Linux, HTCLIENT elsewhere), or nullopt when Open's view
+// is not installed or the point is outside it. Every platform frame view
+// (BrowserFrameViewWin, OpaqueBrowserFrameView, BrowserFrameViewLinux,
+// BrowserFrameViewMac) asks the client view for these points.
+std::optional<int> NonClientHitTest(BrowserView* browser_view,
+                                    const gfx::Point& point);
 // Start of BrowserViewLayoutImpl::Layout(): true when OpenBrowserView
 // covers |host| (a BrowserView); Open then lays out the whole client area
 // and Chromium's top container and contents container stay out of it.
@@ -135,6 +162,30 @@ bool MayChromeDiscardTab(content::WebContents* web_contents);
 
 // End of ChromeBrowserMainParts::Create(): adds OpenBrowserMainExtraParts.
 void AddBrowserMainExtraParts(ChromeBrowserMainParts* main_parts);
+
+// --- 0010: tab helpers -------------------------------------------------------
+
+// TabHelpers::AttachTabHelpers() for pages Open shows outside the tab strip
+// (Peek, Little Open): JavaScript dialogs, permission prompts, autofill,
+// find in page. tab_helpers.h declares this function a friend.
+void AttachTabHelpers(content::WebContents* web_contents);
+
+// --- 0011: external URLs -----------------------------------------------------
+
+// StartupBrowserCreatorImpl::DetermineURLsAndLaunch() (command-line URLs,
+// a second launch) and macOS -[AppController application:openURLs:]
+// (|profile| null). True when Open took the URLs: Air Traffic Control
+// places them (queued until OpenBrowserService::Start()); false for
+// incognito/guest launches and before Open exists (Chromium opens them).
+bool RouteExternalUrls(::Profile* profile, const std::vector<GURL>& urls);
+
+// --- 0012: browser commands --------------------------------------------------
+
+// Start of BrowserCommandController::HandleCommandWithDisposition(): true
+// when Open handled |command_id| for |browser|'s window (IDC_FIND,
+// IDC_FIND_NEXT, IDC_FIND_PREVIOUS open Open's find bar, including from
+// macOS menu key equivalents that bypass views accelerators).
+bool HandleBrowserCommand(BrowserWindowInterface* browser, int command_id);
 
 }  // namespace open_unified::hooks
 

@@ -333,6 +333,10 @@ bool OpenSpacePagerView::OnMouseWheel(const ui::MouseWheelEvent& event) {
   if (std::abs(wheel_accumulator_) < kWheelNotch) {
     return true;
   }
+  if (space_ids_.empty()) {
+    wheel_accumulator_ = 0;
+    return true;
+  }
   const int base_index = IndexOf(shown_space_id_);
   const int target = std::clamp(base_index + (wheel_accumulator_ > 0 ? -1 : 1),
                                 0, static_cast<int>(space_ids_.size()) - 1);
@@ -421,9 +425,11 @@ bool OpenSpacePagerView::OnSwipeEnd(bool cancelled) {
                 static_cast<double>(s.last_deltas.size());
   const double moved = (offset_ - s.base_index * w) / w;
   int target = s.base_index;
-  if (!cancelled && (std::abs(moved) > kSwitchDistance ||
-                     (std::abs(velocity) > kFlickVelocity &&
-                      std::abs(moved) > kFlickDistance))) {
+  // std::clamp below needs a non-empty list (hi = size - 1 >= lo = 0).
+  if (!cancelled && !space_ids_.empty() &&
+      (std::abs(moved) > kSwitchDistance ||
+       (std::abs(velocity) > kFlickVelocity &&
+        std::abs(moved) > kFlickDistance))) {
     target = std::clamp(s.base_index + (moved > 0 ? 1 : -1), 0,
                         static_cast<int>(space_ids_.size()) - 1);
   }

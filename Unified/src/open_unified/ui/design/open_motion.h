@@ -18,6 +18,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "ui/compositor/compositor_animation_observer.h"
+#include "ui/compositor/compositor_observer.h"
 #include "ui/gfx/geometry/cubic_bezier.h"
 
 namespace ui {
@@ -104,7 +105,11 @@ bool PrefersReducedMotion();
 // Animates one scalar. Each compositor frame it calls `on_step(value)`; the
 // owner applies it (usually a ui::Layer transform, so no relayout and no web
 // content resize happens per frame). `on_settled` runs once at rest.
-class OpenSpringAnimator : public ui::CompositorAnimationObserver {
+// While it holds a compositor, the animator also observes that compositor's
+// lifetime (ui::CompositorObserver), so the pointer is cleared when the
+// compositor shuts down even after an animation has settled.
+class OpenSpringAnimator : public ui::CompositorAnimationObserver,
+                           public ui::CompositorObserver {
  public:
   using StepCallback = base::RepeatingCallback<void(double value)>;
 
@@ -145,17 +150,23 @@ class OpenSpringAnimator : public ui::CompositorAnimationObserver {
 
   // ui::CompositorAnimationObserver:
   void OnAnimationStep(base::TimeTicks timestamp) override;
+  // ui::CompositorAnimationObserver and ui::CompositorObserver (one override
+  // serves both bases; the second call finds compositor_ already cleared).
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 
   void Begin();
   void Finish();
+  // Stops per-frame callbacks (keeps watching the compositor's lifetime).
   void Detach();
+  // Drops the compositor: stops callbacks and the lifetime watch.
+  void ReleaseCompositor();
 
   SpringToken spring_;
   StepCallback on_step_;
   base::RepeatingClosure on_settled_;
   raw_ptr<ui::Compositor> compositor_ = nullptr;
-  bool observing_ = false;
+  bool observing_ = false;  // Registered for animation steps.
+  bool watching_ = false;   // Registered as a CompositorObserver.
   bool animating_ = false;
   Mode mode_ = Mode::kSpring;
   double value_ = 0;

@@ -9,16 +9,22 @@
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "build/build_config.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/hit_test.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/view_utils.h"
+#include "url/gurl.h"
 #include "open/adblock/open_adblock_hooks.h"
 #include "open/adblock/open_adblock_socket_hooks.h"
 #include "open_unified/browser/open_browser_main_extra_parts.h"
@@ -26,6 +32,7 @@
 #include "open_unified/browser/open_sleep_controller.h"
 #include "open_unified/browser/open_window_controller.h"
 #include "open_unified/core/adblock/open_adblock_profile_service.h"
+#include "open_unified/core/commands/command_registry.h"
 #include "open_unified/ui/views/open_browser_view.h"
 #include "open_unified/ui/webui/open_webui_config.h"
 
@@ -104,12 +111,40 @@ void AdjustBrowserWidgetParams(BrowserView* browser_view,
       !OpenBrowserView::WantsFramelessWindow()) {
     return;
   }
-  // Open draws its own 10 pt themed frame inset and rounded corners
-  // (OpenBrowserView); the native frame and title bar are removed. macOS
-  // keeps its traffic lights through OpenPlatform::ApplyWindowEffects().
+#if BUILDFLAG(IS_MAC)
+  // macOS: keep the titled, full-size-content-view NSWindow Chromium makes,
+  // so the native traffic lights (placed by OpenBrowserView through
+  // OpenPlatform) and the system shadow, corners and window snapping stay.
+  params->remove_standard_frame = false;
+#elif BUILDFLAG(IS_WIN)
+  // Windows: keep the standard DWM frame. Removing it loses Aero Snap, the
+  // native resize borders and Mica (OpenPlatform::ApplyWindowEffects()).
+  // Open's chrome covers the client area; OpenBrowserView answers
+  // NonClientHitTest() for its draggable regions.
+  params->remove_standard_frame = false;
+#else
+  // Linux: Open draws its own 10 pt themed frame inset and rounded corners
+  // (OpenBrowserView) in a frameless translucent window with a drop shadow.
   params->remove_standard_frame = true;
   params->opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params->shadow_type = views::Widget::InitParams::ShadowType::kDrop;
+#endif
+}
+
+std::optional<int> NonClientHitTest(BrowserView* browser_view,
+                                    const gfx::Point& point) {
+  OpenBrowserView* open_view =
+      browser_view ? OpenBrowserView::FromBrowserView(browser_view) : nullptr;
+  if (!open_view || !browser_view->parent()) {
+    return std::nullopt;
+  }
+  gfx::Point local(point);
+  views::View::ConvertPointToTarget(browser_view->parent(), open_view, &local);
+  const int hit = open_view->NonClientHitTest(local);
+  if (hit == HTNOWHERE) {
+    return std::nullopt;
+  }
+  return hit;
 }
 
 // --- 0003 -------------------------------------------------------------------
@@ -259,6 +294,58 @@ bool MayChromeDiscardTab(content::WebContents* web_contents) {
 
 void AddBrowserMainExtraParts(ChromeBrowserMainParts* main_parts) {
   main_parts->AddParts(std::make_unique<OpenBrowserMainExtraParts>());
+}
+
+// --- 0010 -------------------------------------------------------------------
+
+void AttachTabHelpers(content::WebContents* web_contents) {
+  if (web_contents) {
+    TabHelpers::AttachTabHelpers(web_contents);
+  }
+}
+
+// --- 0011 -------------------------------------------------------------------
+
+bool RouteExternalUrls(::Profile* profile, const std::vector<GURL>& urls) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  OpenBrowserService* service = OpenBrowserService::Get();
+  if (!service || urls.empty()) {
+    return false;
+  }
+  // Incognito and guest launches keep Chromium's own windows.
+  if (profile && (profile->IsOffTheRecord() || profile->IsGuestSession())) {
+    return false;
+  }
+  service->RouteExternalUrls(urls);
+  return true;
+}
+
+// --- 0012 -------------------------------------------------------------------
+
+bool HandleBrowserCommand(BrowserWindowInterface* browser, int command_id) {
+  CommandId command;
+  switch (command_id) {
+    case IDC_FIND:
+      command = CommandId::kFind;
+      break;
+    case IDC_FIND_NEXT:
+      command = CommandId::kFindNext;
+      break;
+    case IDC_FIND_PREVIOUS:
+      command = CommandId::kFindPrevious;
+      break;
+    default:
+      return false;
+  }
+  OpenBrowserService* service = OpenBrowserService::Get();
+  OpenWindowController* windows =
+      service ? service->window_controller() : nullptr;
+  BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  OpenWindowUi* ui =
+      windows && browser_view ? windows->WindowUiForBrowserView(browser_view)
+                              : nullptr;
+  return ui && ui->HandleFindCommand(command);
 }
 
 }  // namespace open_unified::hooks

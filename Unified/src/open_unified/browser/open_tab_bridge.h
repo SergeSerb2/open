@@ -188,6 +188,15 @@ class OpenTabBridge : public BrowserModel::Observer,
     // Open Profile id -> Chromium Browser of this window.
     std::map<ProfileID, raw_ptr<BrowserWindowInterface>> by_profile;
   };
+  // Every normal Chromium window Open manages: the primary Browser of each
+  // (window, Profile) above, and further windows of a Profile that Chromium
+  // or an extension opened (chrome.windows.create, a dragged-out page).
+  // Their pages are sidebar tabs of |window|.
+  struct ManagedBrowser {
+    WindowID window;
+    ProfileID profile;
+    bool primary = false;
+  };
 
   BrowserWindowInterface* EnsureBrowser(const WindowID& window_id,
                          const ProfileID& profile_id);
@@ -199,6 +208,16 @@ class OpenTabBridge : public BrowserModel::Observer,
   void RunScheduledResync();
   void ResyncAll();
   void ResyncBrowser(BrowserWindowInterface* browser);
+  // ResyncBrowser() on a later task, if |browser| is still managed then
+  // (looked up again: never a dangling pointer).
+  void ResyncBrowserLater(BrowserWindowInterface* browser);
+  void TrackBrowser(BrowserWindowInterface* browser,
+                    const WindowID& window_id,
+                    const ProfileID& profile_id,
+                    bool primary);
+  // Tracking only (map, observers); no model change. Runs for every
+  // removal, including the bridge's own (|applying_|).
+  void ForgetContents(const ItemID& tab_id, content::WebContents* contents);
   // Ordered tab ids of every Space of |profile_id| (Spaces in model order).
   std::vector<ItemID> StripOrderFor(const ProfileID& profile_id) const;
   int TargetStripIndex(BrowserWindowInterface* browser,
@@ -230,6 +249,7 @@ class OpenTabBridge : public BrowserModel::Observer,
   bool resync_pending_ = false;
 
   std::map<WindowID, WindowBrowsers> windows_;
+  std::map<raw_ptr<BrowserWindowInterface>, ManagedBrowser> browsers_;
   // Loaded tabs: tab id -> WebContents (owned by its TabStripModel).
   std::map<ItemID, raw_ptr<content::WebContents>> contents_;
 
