@@ -351,8 +351,10 @@ class OpenTabTreeView::HeaderView : public views::View,
       return;
     }
     const gfx::FontList& font = typography::Get(OpenFont::kSpaceTitle);
+    // Hovered, the collapse chevron (22 pt plus its 2 pt gap) follows the
+    // title and must stay clear of the "..." button: reserve its width.
     const float right = hovered_ ? w - sl::kHeaderMoreTrailing -
-                                       sl::kHeaderMoreSize - 2
+                                       sl::kHeaderMoreSize - 2 - 24
                                  : w - 17;
     const int text_x = static_cast<int>(sl::kHeaderTitleX + sl::kHeaderTextInset);
     const int text_w = std::max(0, static_cast<int>(right) - text_x);

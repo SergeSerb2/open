@@ -272,10 +272,8 @@ class OpenBrowserView : public views::View,
   };
 
   enum class WindowControls {
-    kNativeMac,      // system traffic lights; Open reserves x 0..77
-    kCustomLeading,  // Windows / Linux: Open's close/minimize/zoom buttons
-                     // in the traffic-light slots
-    kNone,
+    kNativeMac,  // macOS system traffic lights; the sidebar reserves x 0..77
+    kNone,       // Windows / Linux: no window controls in the sidebar
   };
 
   // Native traffic-light placement for the macOS adapter: `origin` is the

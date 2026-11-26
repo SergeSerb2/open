@@ -115,7 +115,8 @@ class OpenPlatform {
   // Returns the platform-standard default user data directory:
   // - Windows: %LOCALAPPDATA%\Open
   // - Linux:   ~/.config/open (or $XDG_CONFIG_HOME/open)
-  // - macOS:   ~/Library/Application Support/Open
+  // - macOS:   ~/Library/Application Support/Open Unified (hook 0008; the
+  //            AppKit Open keeps .../Open)
   virtual base::FilePath GetDefaultUserDataDir() = 0;
 
   // Returns a human-readable device name suitable for Sync device registration.

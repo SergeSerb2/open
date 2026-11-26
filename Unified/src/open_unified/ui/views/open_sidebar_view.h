@@ -2,7 +2,9 @@
 //
 // The Open sidebar (port of OpenSidebar SidebarView, docs/design.md 5.1):
 //
-//   ToolbarView     y 0..46   window controls slot (x 0..77), sidebar toggle,
+//   ToolbarView     y 0..46   macOS: native traffic-light slot (x 0..77),
+//                             then the sidebar toggle at x 77; Windows and
+//                             Linux: no window controls, toggle at x 8.
 //                             Back, Forward, Reload (compact < 219 pt: Back,
 //                             Forward, More). Split View keeps only the toggle.
 //   UrlPillView     [8, 46, W - 16, 36]  host + trailing-visible fade, Copy
@@ -40,7 +42,9 @@ class OpenSidebarView : public views::View {
 
  public:
   enum class Presentation { kAnchored, kFloatingCard };
-  enum class WindowControlsSlot { kNativeReserved, kCustom, kNone };
+  // kNativeReserved: macOS keeps the system traffic lights in the leading
+  // 77 pt. kNone: no window controls in the sidebar (Windows, Linux).
+  enum class WindowControlsSlot { kNativeReserved, kNone };
 
   explicit OpenSidebarView(OpenSidebarContext* context);
   OpenSidebarView(const OpenSidebarView&) = delete;
@@ -86,7 +90,6 @@ class OpenSidebarView : public views::View {
  private:
   class ToolbarButton;
   class ToolbarView;
-  class WindowControlsView;
   class UrlPillView;
   class FavoritesView;
   class FavoriteTileView;

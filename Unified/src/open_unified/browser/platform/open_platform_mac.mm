@@ -5,10 +5,12 @@
 
 #import <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
-#import <CoreServices/CoreServices.h>
 #import <Security/Security.h>
+#import <SystemConfiguration/SystemConfiguration.h>
 
+#include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -19,6 +21,7 @@
 #include <vector>
 
 #include "base/apple/foundation_util.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
@@ -430,11 +433,27 @@ class OpenPlatformMac final : public OpenPlatform {
       if (!content_view) {
         return;
       }
-      static constexpr NSInteger kOpenVibrancyTag = 0x4F50454E;
-      NSVisualEffectView* vfx = [content_view viewWithTag:kOpenVibrancyTag];
+      // NSView's tag is read-only; the view is found by its identifier.
+      NSUserInterfaceItemIdentifier const kOpenVibrancyId =
+          @"org.openbrowser.unified.vibrancy";
+      NSVisualEffectView* vfx = nil;
+      for (NSView* subview in content_view.subviews) {
+        if ([subview.identifier isEqualToString:kOpenVibrancyId] &&
+            [subview isKindOfClass:[NSVisualEffectView class]]) {
+          vfx = static_cast<NSVisualEffectView*>(subview);
+          break;
+        }
+      }
+      // Behind-window vibrancy shows only through a non-opaque window and a
+      // transparent compositor. Chromium's browser NSWindow is opaque (hook
+      // 0002 keeps its standard frame), so add nothing there: the extra view
+      // would sit in the BridgedContentView with the compositor's layers.
+      if (!vfx && window.opaque) {
+        return;
+      }
       if (!vfx) {
         vfx = [[NSVisualEffectView alloc] initWithFrame:content_view.bounds];
-        vfx.tag = kOpenVibrancyTag;
+        vfx.identifier = kOpenVibrancyId;
         vfx.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
         vfx.blendingMode = NSVisualEffectBlendingModeBehindWindow;
         vfx.state = NSVisualEffectStateFollowsWindowActiveState;
@@ -453,23 +472,29 @@ class OpenPlatformMac final : public OpenPlatform {
           URLsForDirectory:NSApplicationSupportDirectory
                  inDomains:NSUserDomainMask];
       if (urls.count > 0) {
+        // Same directory as chrome_paths_mac.mm (hook 0008): the AppKit
+        // Open keeps ~/Library/Application Support/Open until Unified
+        // replaces it.
         NSURL* open_dir =
-            [urls.firstObject URLByAppendingPathComponent:@"Open"
+            [urls.firstObject URLByAppendingPathComponent:@"Open Unified"
                                               isDirectory:YES];
         return base::apple::NSStringToFilePath(open_dir.path);
       }
-      return base::FilePath("/tmp/Open");
+      return base::FilePath("/tmp/Open Unified");
     }
   }
 
   std::string GetDeviceName() override {
-    @autoreleasepool {
-      NSString* name = [[NSHost currentHost] localizedName];
-      if (name.length > 0) {
-        return base::SysNSStringToUTF8(name);
-      }
-      return "Mac";
+    // The user-visible computer name (System Settings > General > Sharing).
+    // Not NSHost: +currentHost resolves host names and can block for
+    // seconds (crbug.com/138570).
+    base::apple::ScopedCFTypeRef<CFStringRef> name(
+        SCDynamicStoreCopyComputerName(/*store=*/nullptr,
+                                       /*nameEncoding=*/nullptr));
+    if (name && CFStringGetLength(name.get()) > 0) {
+      return base::SysCFStringRefToUTF8(name.get());
     }
+    return "Mac";
   }
 
   std::string GetSyncPlatformName() override { return "macos"; }

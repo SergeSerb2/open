@@ -117,6 +117,13 @@ gfx::Rect OpenFindBarView::ComputeAnchor(const gfx::Rect& page_container,
                    std::max(0, page_container.height() - top - m::kInset));
 }
 
+// static
+int OpenFindBarView::ComputeBottom(const gfx::Rect& page_container,
+                                   bool has_content_toolbar) {
+  return ComputeAnchor(page_container, has_content_toolbar).y() +
+         find_bar_metrics::kHeight;
+}
+
 void OpenFindBarView::Activate(const std::u16string& seed_query) {
   if (!seed_query.empty() && seed_query != field_->GetText()) {
     field_->SetText(seed_query);
@@ -488,11 +495,18 @@ OpenToastStackView::OpenToastStackView() {
 OpenToastStackView::~OpenToastStackView() = default;
 
 // static
-gfx::Rect OpenToastStackView::ComputeAnchor(const gfx::Rect& content_panel) {
+gfx::Rect OpenToastStackView::ComputeAnchor(
+    const gfx::Rect& content_panel,
+    std::optional<int> find_bar_bottom) {
   namespace m = toast_metrics;
-  return gfx::Rect(content_panel.x(), content_panel.y() + m::kTopInset,
+  int top = content_panel.y() + m::kTopInset;
+  if (find_bar_bottom) {
+    top = std::max(top, *find_bar_bottom + m::kStackGap);
+  }
+  top = std::min(top, content_panel.bottom());
+  return gfx::Rect(content_panel.x(), top,
                    std::max(0, content_panel.width() - m::kTrailingInset),
-                   std::max(0, content_panel.height() - m::kTopInset));
+                   std::max(0, content_panel.bottom() - top));
 }
 
 void OpenToastStackView::Show(ToastSpec spec) {

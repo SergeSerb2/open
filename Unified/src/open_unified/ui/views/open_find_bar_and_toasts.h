@@ -106,6 +106,10 @@ class OpenFindBarView : public views::View, public views::TextfieldController {
   // container inset by 10 (top 50 with the content toolbar).
   static gfx::Rect ComputeAnchor(const gfx::Rect& page_container,
                                  bool has_content_toolbar);
+  // The bar's visible bottom edge (shadow margin excluded) for the same
+  // inputs, in |page_container|'s coordinates.
+  static int ComputeBottom(const gfx::Rect& page_container,
+                           bool has_content_toolbar);
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -215,8 +219,13 @@ class OpenToastStackView : public views::View {
   // goes, so Track 6 can show or hide the overlay widget.
   void SetVisibilityCallback(base::RepeatingCallback<void(bool)> callback);
 
-  // Anchor for OverlayWidgetHost::SetAnchor(..., kTopRight).
-  static gfx::Rect ComputeAnchor(const gfx::Rect& content_panel);
+  // Anchor for OverlayWidgetHost::SetAnchor(..., kTopRight). The Find bar
+  // shares the panel's top-right corner: while it shows, pass its bottom
+  // edge (OpenFindBarView::ComputeBottom(), same coordinates) and the stack
+  // starts kStackGap below it; with nullopt the stack uses its own top
+  // inset again.
+  static gfx::Rect ComputeAnchor(const gfx::Rect& content_panel,
+                                 std::optional<int> find_bar_bottom);
 
   // views::View:
   gfx::Size CalculatePreferredSize(

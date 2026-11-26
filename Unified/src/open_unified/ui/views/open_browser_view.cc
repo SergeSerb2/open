@@ -82,8 +82,10 @@ theme::ContentAppearance ToAppearance(bool dark) {
               : theme::ContentAppearance::kLight;
 }
 
+#if !BUILDFLAG(IS_MAC)
 // Resize band inside the edges of a frameless (Windows / Linux) window.
 constexpr int kFrameResizeBorder = 8;
+#endif
 // Bound the favicon decode cache.
 constexpr size_t kFaviconCacheLimit = 512;
 
@@ -738,15 +740,20 @@ void OpenBrowserView::Install(BrowserView* browser_view,
   auto owned = std::make_unique<OpenBrowserView>(controller, window_id);
   OpenBrowserView* view = owned.get();
   view->browser_view_ = browser_view;
-  // Open's sidebar replaces the tab strip, toolbar and bookmark bar.
-  if (TopContainerView* top = browser_view->top_container()) {
-    top->SetVisible(false);
+  // Open's sidebar replaces Chromium's tab strip (horizontal and vertical),
+  // toolbar, bookmark bar, side panels, and infobar container. Hide every
+  // existing BrowserView child except contents_container so no Chromium 156
+  // chrome paints above OpenBrowserView (which sits at child index 0).
+  view->browser_contents_container_ = browser_view->contents_container();
+  for (views::View* child : browser_view->children()) {
+    if (child != view->browser_contents_container_) {
+      child->SetVisible(false);
+    }
   }
   // Keep contents_container as a direct child of BrowserView (reparenting it
   // out/back fires OnViewAddedToWidget a second time on TabModalDialogHost).
   // Place OpenBrowserView behind it (theme, shadow, sidebar, split) and a
   // hit-test-transparent OpenOverlayHostView above it (reveal card, overlays).
-  view->browser_contents_container_ = browser_view->contents_container();
   browser_view->AddChildViewAt(std::move(owned), 0);
   view->overlay_host_ =
       browser_view->AddChildView(std::make_unique<OpenOverlayHostView>());
@@ -846,7 +853,7 @@ OpenBrowserView::OpenBrowserView(OpenViewController* controller,
 #if BUILDFLAG(IS_MAC)
       window_controls_(WindowControls::kNativeMac)
 #else
-      window_controls_(WindowControls::kCustomLeading)
+      window_controls_(WindowControls::kNone)
 #endif
 {
   if (const BrowserWindowState* state = controller_->GetWindowState(window_id_)) {
@@ -867,9 +874,9 @@ OpenBrowserView::OpenBrowserView(OpenViewController* controller,
   sidebar->layer()->SetFillsBoundsOpaquely(false);
   sidebar_ = AddChildView(std::move(sidebar));
   sidebar_->SetWindowControlsSlot(
-      window_controls_ == WindowControls::kCustomLeading
-          ? OpenSidebarView::WindowControlsSlot::kCustom
-          : OpenSidebarView::WindowControlsSlot::kNativeReserved);
+      window_controls_ == WindowControls::kNativeMac
+          ? OpenSidebarView::WindowControlsSlot::kNativeReserved
+          : OpenSidebarView::WindowControlsSlot::kNone);
   sidebar_->SetVisible(!sidebar_hidden_);
 
   resize_handle_ = AddChildView(std::make_unique<ResizeHandle>(this));
@@ -1558,20 +1565,15 @@ int OpenBrowserView::NonClientHitTest(const gfx::Point& point) const {
   if (!GetLocalBounds().Contains(point)) {
     return HTNOWHERE;
   }
-  const views::Widget* widget = GetWidget();
+#if !BUILDFLAG(IS_MAC)
   // Open removes the native frame (WantsFramelessWindow()), so on Windows and
-  // Linux this view supplies the resize edges; macOS keeps the system's
-  // resize edges unless Open draws its own window controls.
-#if BUILDFLAG(IS_MAC)
-  const bool draws_own_frame =
-      window_controls_ == WindowControls::kCustomLeading;
-#else
-  const bool draws_own_frame = WantsFramelessWindow();
-#endif
+  // Linux this view supplies the resize edges. macOS keeps the titled
+  // NSWindow and its system resize edges.
+  const views::Widget* widget = GetWidget();
   const bool can_resize =
       widget && !widget->IsMaximized() && !widget->IsFullscreen() &&
       (!widget->widget_delegate() || widget->widget_delegate()->CanResize());
-  if (draws_own_frame && can_resize) {
+  if (WantsFramelessWindow() && can_resize) {
     const bool left = point.x() < kFrameResizeBorder;
     const bool right = point.x() >= width() - kFrameResizeBorder;
     const bool top = point.y() < kFrameResizeBorder;
@@ -1585,6 +1587,7 @@ int OpenBrowserView::NonClientHitTest(const gfx::Point& point) const {
     if (top) return HTTOP;
     if (bottom) return HTBOTTOM;
   }
+#endif  // !BUILDFLAG(IS_MAC)
   views::View* target =
       const_cast<OpenBrowserView*>(this)->GetEventHandlerForPoint(point);
   if (!target || target == this) {
@@ -1603,11 +1606,9 @@ int OpenBrowserView::NonClientHitTest(const gfx::Point& point) const {
 void OpenBrowserView::SetWindowControls(WindowControls controls) {
   window_controls_ = controls;
   sidebar_->SetWindowControlsSlot(
-      controls == WindowControls::kCustomLeading
-          ? OpenSidebarView::WindowControlsSlot::kCustom
-          : controls == WindowControls::kNativeMac
-                ? OpenSidebarView::WindowControlsSlot::kNativeReserved
-                : OpenSidebarView::WindowControlsSlot::kNone);
+      controls == WindowControls::kNativeMac
+          ? OpenSidebarView::WindowControlsSlot::kNativeReserved
+          : OpenSidebarView::WindowControlsSlot::kNone);
 }
 
 void OpenBrowserView::SetTrafficLightsCallback(TrafficLightsCallback callback) {
@@ -1653,6 +1654,16 @@ void OpenBrowserView::LayoutOverlays() {
 }
 
 void OpenBrowserView::Layout(PassKey) {
+  // Keep any Chromium chrome views (such as vertical tab strip, bookmark bar,
+  // or side panels) hidden if Chromium re-shows them after Install().
+  if (browser_view_) {
+    for (views::View* child : browser_view_->children()) {
+      if (child != this && child != browser_contents_container_ &&
+          child != overlay_host_ && child->GetVisible()) {
+        child->SetVisible(false);
+      }
+    }
+  }
   theme_background_->SetBoundsRect(GetLocalBounds());
   const int w = static_cast<int>(std::lround(sidebar_width_));
   if (!sliding_) {

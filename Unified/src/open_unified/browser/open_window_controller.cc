@@ -2224,8 +2224,16 @@ void OpenWindowUi::UpdateOverlayAnchors() {
         Alignment::kTopRight);
   }
   if (toast_host_) {
-    toast_host_->SetAnchor(OpenToastStackView::ComputeAnchor(panel),
-                           Alignment::kTopRight);
+    // The Find bar and the toasts share the panel's top-right corner: while
+    // the bar shows, the stack moves below it (CloseFindBar() moves it back).
+    std::optional<int> find_bar_bottom;
+    if (find_bar_shown()) {
+      find_bar_bottom =
+          OpenFindBarView::ComputeBottom(panel, /*has_content_toolbar=*/false);
+    }
+    toast_host_->SetAnchor(
+        OpenToastStackView::ComputeAnchor(panel, find_bar_bottom),
+        Alignment::kTopRight);
   }
   if (switcher_host_) {
     switcher_host_->SetAnchor(WindowRectInWidget(), Alignment::kCenter);
@@ -2300,6 +2308,8 @@ void OpenWindowUi::ShowFindBar(std::optional<std::u16string> query) {
   find_bar_->ClearResult();
   UpdateOverlayAnchors();
   find_host_->Show();
+  // Now that the bar shows, move a visible toast stack below it.
+  UpdateOverlayAnchors();
   // Activate() reports a changed seed through OnFindQueryChanged(); an
   // unchanged one (the bar's last query) restarts the search here.
   const bool reports_change = !seed.empty() && seed != find_bar_->query();
@@ -2329,6 +2339,8 @@ void OpenWindowUi::CloseFindBar() {
   if (find_host_) {
     find_host_->Hide();
   }
+  // Toasts return to the panel's top inset.
+  UpdateOverlayAnchors();
   UpdateEscapeRegistration();
   if (was_shown) {
     FocusPage();
@@ -2388,6 +2400,7 @@ void OpenWindowUi::OnFindTabHelperDestroyed(
   if (find_host_) {
     find_host_->Hide();
   }
+  UpdateOverlayAnchors();
   UpdateEscapeRegistration();
 }
 

@@ -238,99 +238,6 @@ BEGIN_METADATA(OpenSidebarView, ToolbarButton)
 END_METADATA
 
 // ---------------------------------------------------------------------------
-// WindowControlsView: Open's close / minimize / zoom on Windows and Linux,
-// in the traffic-light slots (x 12 / 35 / 58, y 16, 12 pt circles).
-
-class OpenSidebarView::WindowControlsView : public views::View {
-  METADATA_HEADER(WindowControlsView, views::View)
-
- public:
-  explicit WindowControlsView(OpenSidebarContext* context)
-      : context_(context) {
-    SetNotifyEnterExitOnChild(true);
-    GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
-    GetViewAccessibility().SetName(u"Window controls");
-  }
-
-  // views::View:
-  void OnPaint(gfx::Canvas* canvas) override {
-    const OpenSpaceThemeState& s =
-        context_->ThemeStateFor(context_->FocusedSpaceId());
-    // Group hover shows the colors and glyphs; otherwise neutral circles.
-    static constexpr SkColor kColors[3] = {SkColorSetRGB(0xFF, 0x5F, 0x57),
-                                           SkColorSetRGB(0xFE, 0xBC, 0x2E),
-                                           SkColorSetRGB(0x28, 0xC8, 0x40)};
-    static constexpr glyphs::Glyph kGlyphs[3] = {
-        glyphs::Glyph::kWindowClose, glyphs::Glyph::kWindowMinimize,
-        glyphs::Glyph::kWindowZoom};
-    const bool active = context_->IsWindowActive();
-    for (int i = 0; i < 3; ++i) {
-      const m::Frame f = m::chrome::kTrafficLightFrames[i];
-      const gfx::PointF center(f.center_x(), f.center_y());
-      cc::PaintFlags flags;
-      flags.setAntiAlias(true);
-      flags.setColor(hovered_ && active
-                         ? kColors[i]
-                         : Sk(s.roles.toolbar_glyph_disabled, active ? 1.4f : 1.0f));
-      canvas->DrawCircle(center, m::chrome::kTrafficLightDiameter / 2, flags);
-      if (hovered_) {
-        glyphs::Draw(canvas, kGlyphs[i],
-                     gfx::RectF(f.x, f.y, f.w, f.h),
-                     SkColorSetARGB(0x99, 0, 0, 0));
-      }
-    }
-  }
-
-  void OnMouseEntered(const ui::MouseEvent& event) override {
-    hovered_ = true;
-    SchedulePaint();
-  }
-  void OnMouseExited(const ui::MouseEvent& event) override {
-    hovered_ = false;
-    SchedulePaint();
-  }
-  bool OnMousePressed(const ui::MouseEvent& event) override {
-    return event.IsOnlyLeftMouseButton() && HitIndex(event.location()) >= 0;
-  }
-  void OnMouseReleased(const ui::MouseEvent& event) override {
-    const int index = HitIndex(event.location());
-    views::Widget* widget = GetWidget();
-    if (index < 0 || !widget) {
-      return;
-    }
-    switch (index) {
-      case 0:
-        widget->Close();
-        break;
-      case 1:
-        widget->Minimize();
-        break;
-      case 2:
-        widget->IsMaximized() ? widget->Restore() : widget->Maximize();
-        break;
-    }
-  }
-
-  int HitIndex(const gfx::Point& p) const {
-    for (int i = 0; i < 3; ++i) {
-      const m::Frame f = m::chrome::kTrafficLightFrames[i];
-      if (gfx::RectF(f.x - 2, f.y - 2, f.w + 4, f.h + 4)
-              .Contains(gfx::PointF(p))) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
- private:
-  raw_ptr<OpenSidebarContext> context_;
-  bool hovered_ = false;
-};
-
-BEGIN_METADATA(OpenSidebarView, WindowControlsView)
-END_METADATA
-
-// ---------------------------------------------------------------------------
 // ToolbarView: y 0..46.
 
 class OpenSidebarView::ToolbarView : public views::View {
@@ -366,15 +273,10 @@ class OpenSidebarView::ToolbarView : public views::View {
   }
 
   void SetWindowControls(WindowControlsSlot slot) {
-    if (slot == WindowControlsSlot::kCustom && !controls_) {
-      controls_ = AddChildView(
-          std::make_unique<WindowControlsView>(sidebar_->context_));
-    } else if (slot != WindowControlsSlot::kCustom && controls_) {
-      views::View* v = controls_;
-      controls_ = nullptr;
-      RemoveChildViewT(v);
+    if (slot_ != slot) {
+      slot_ = slot;
+      InvalidateLayout();
     }
-    InvalidateLayout();
   }
 
   void Refresh() {
@@ -405,16 +307,20 @@ class OpenSidebarView::ToolbarView : public views::View {
     const float w = width();
     const bool split = sidebar_->split_view_active_;
     const bool compact = m::chrome::IsCompact(w);
-    if (controls_) {
-      controls_->SetBounds(0, 0, static_cast<int>(m::chrome::kSidebarToggleX),
-                           height());
-    }
+    const bool native_controls =
+        slot_ == WindowControlsSlot::kNativeReserved;
     const int b = static_cast<int>(m::chrome::kToolbarButtonSize);
     const int y = static_cast<int>(m::chrome::kToolbarButtonY);
-    // Split View keeps only the sidebar toggle (F0081, F0082).
-    toggle_->SetVisible(!compact || split);
-    toggle_->SetBounds(static_cast<int>(m::chrome::kSidebarToggleX), y, b, b);
+    // macOS: the system traffic lights (x 12..70) own the leading 77 pt, so
+    // the toggle starts at kSidebarToggleX. Windows and Linux have no window
+    // controls in the sidebar: the toggle's plate lines up with the URL
+    // pill's leading edge.
+    const int toggle_x = static_cast<int>(
+        native_controls ? m::chrome::kSidebarToggleX : m::url_field::kInsetX);
+    toggle_->SetBounds(toggle_x, y, b, b);
     if (split) {
+      // Split View keeps only the sidebar toggle (F0081, F0082).
+      toggle_->SetVisible(true);
       back_->SetVisible(false);
       forward_->SetVisible(false);
       reload_->SetVisible(false);
@@ -425,6 +331,12 @@ class OpenSidebarView::ToolbarView : public views::View {
       // Back, Forward, More: 28 x 28 at y 9, pitch 28 (completion 3.16).
       const int cb = static_cast<int>(m::compact_toolbar::kButtonSize);
       const int cy = static_cast<int>(m::compact_toolbar::kY);
+      // With the traffic lights in the leading slot the compact row has no
+      // room for the toggle (Arc). Without them it stays while it clears
+      // Back by the 2 pt nav gap.
+      toggle_->SetVisible(!native_controls &&
+                          toggle_x + b + 2 <=
+                              static_cast<int>(m::compact_toolbar::BackX(w)));
       back_->SetVisible(true);
       forward_->SetVisible(true);
       reload_->SetVisible(false);
@@ -436,6 +348,7 @@ class OpenSidebarView::ToolbarView : public views::View {
                        cb);
       return;
     }
+    toggle_->SetVisible(true);
     back_->SetVisible(true);
     forward_->SetVisible(true);
     reload_->SetVisible(true);
@@ -457,7 +370,7 @@ class OpenSidebarView::ToolbarView : public views::View {
   }
 
   raw_ptr<OpenSidebarView> sidebar_;
-  raw_ptr<WindowControlsView> controls_ = nullptr;
+  WindowControlsSlot slot_ = WindowControlsSlot::kNone;
   raw_ptr<ToolbarButton> toggle_ = nullptr;
   raw_ptr<ToolbarButton> back_ = nullptr;
   raw_ptr<ToolbarButton> forward_ = nullptr;
@@ -542,18 +455,26 @@ class OpenSidebarView::UrlPillView : public views::View {
     const int a = static_cast<int>(m::url_field::kAccessorySize);
     const int ay = static_cast<int>(m::url_field::kAccessoryY - m::url_field::kY);
     const bool page = !IsBlankPage(ActiveTab());
+    // Accessories stack leftward from the trailing edge, but never into the
+    // leading text: the host (or the magnifier and placeholder) keeps at
+    // least kMinTextWidth, and an extension button that does not fit hides.
+    const int min_left =
+        TextLeft(page) + kMinTextWidth +
+        static_cast<int>(m::url_field::kControlsTextGap);
     // Sidebar frames [W - 42, 49] and [W - 70, 49] in pill coordinates: the
     // pill is W - 16 wide at x 8, so Site Control sits at w + 8 - 12 - 30.
-    float x = w + m::url_field::kInsetX - m::url_field::kSiteControlsTrailing - a;
-    site_->SetVisible(controls_visible_ && page);
-    site_->SetBounds(static_cast<int>(x), ay, a, a);
-    x -= m::url_field::kAccessoryPitch;
-    copy_->SetVisible(controls_visible_ && page);
-    copy_->SetBounds(static_cast<int>(x), ay, a, a);
+    int x = static_cast<int>(w + m::url_field::kInsetX -
+                             m::url_field::kSiteControlsTrailing - a);
+    const int pitch = static_cast<int>(m::url_field::kAccessoryPitch);
+    site_->SetVisible(controls_visible_ && page && x >= min_left);
+    site_->SetBounds(x, ay, a, a);
+    x -= pitch;
+    copy_->SetVisible(controls_visible_ && page && x >= min_left);
+    copy_->SetBounds(x, ay, a, a);
     for (ToolbarButton* b : extensions_) {
-      x -= m::url_field::kAccessoryPitch;
-      b->SetVisible(controls_visible_);
-      b->SetBounds(static_cast<int>(x), ay, a, a);
+      x -= pitch;
+      b->SetVisible(controls_visible_ && x >= min_left);
+      b->SetBounds(x, ay, a, a);
     }
   }
 
@@ -572,27 +493,18 @@ class OpenSidebarView::UrlPillView : public views::View {
                               mag.y - m::url_field::kY, mag.w, mag.h),
                    Sk(Magnifier(s)));
       const gfx::FontList& font = typography::Get(OpenFont::kUrlPlaceholder);
-      const int x = static_cast<int>(m::url_field::kPlaceholderX -
-                                     m::url_field::kInsetX + 1);
+      const int x = TextLeft(/*page=*/false);
       const int top = typography::TextTopForBaseline(
           font, text_y_frame + m::url_field::kTextBaselineOffset);
       canvas->DrawStringRect(
           u"Search or Enter URL…", font, Sk(s.roles.placeholder),
-          gfx::Rect(x, top, std::max(0, width() - x - 12), font.GetHeight()));
+          gfx::Rect(x, top, std::max(0, TextRight() - x), font.GetHeight()));
       return;
     }
     const std::u16string host = DisplayHost(tab->url);
     const gfx::FontList& font = typography::Get(OpenFont::kUrlHost);
-    const int x0 =
-        static_cast<int>(m::url_field::kHostX - m::url_field::kInsetX + 1);
-    int right = width() - static_cast<int>(m::url_field::kTextTrailingInset);
-    for (const views::View* child : children()) {
-      if (child->GetVisible()) {
-        right = std::min(right, child->x() -
-                                    static_cast<int>(m::url_field::kControlsTextGap));
-      }
-    }
-    const int available = std::max(0, right - x0);
+    const int x0 = TextLeft(/*page=*/true);
+    const int available = std::max(0, TextRight() - x0);
     const int text_w = gfx::Canvas::GetStringWidth(host, font);
     const int top = typography::TextTopForBaseline(
         font, text_y_frame + m::url_field::kTextBaselineOffset);
@@ -646,6 +558,31 @@ class OpenSidebarView::UrlPillView : public views::View {
   }
 
  private:
+  // guess: the host keeps room for about six characters before pinned
+  // extension buttons start to hide.
+  static constexpr int kMinTextWidth = 48;
+
+  // Pill-local x where the text starts: the host at sidebar x 20, or the
+  // placeholder at sidebar x 41, right of the magnifier [14, 52, 24, 24].
+  static int TextLeft(bool page) {
+    return static_cast<int>((page ? m::url_field::kHostX
+                                  : m::url_field::kPlaceholderX) -
+                            m::url_field::kInsetX + 1);
+  }
+  // Pill-local x where the text must end: the trailing inset, or the gap
+  // before the leftmost visible accessory.
+  int TextRight() const {
+    int right = width() - static_cast<int>(m::url_field::kTextTrailingInset);
+    for (const views::View* child : children()) {
+      if (child->GetVisible()) {
+        right = std::min(
+            right,
+            child->x() - static_cast<int>(m::url_field::kControlsTextGap));
+      }
+    }
+    return right;
+  }
+
   const Tab* ActiveTab() const {
     return sidebar_->context_->controller()->GetActiveTab(
         sidebar_->context_->window_id());

@@ -105,12 +105,16 @@ source_set("open_unified_platform") {
       "user32.lib",
     ]
   } else if (is_mac) {
+    # Compiled with ARC (Chromium's default for .mm files).
     sources += [ "browser/platform/open_platform_mac.mm" ]
+    deps += [ "//ui/gfx" ]  # native_ui_types.h (NSWindow of a views::Widget)
     frameworks += [
-      "AppKit.framework",
-      "Carbon.framework",
+      "AppKit.framework",  # NSWindow, NSVisualEffectView, NSWorkspace
+      "Carbon.framework",  # RegisterEventHotKey (global hotkeys)
+      "CoreFoundation.framework",
       "Foundation.framework",
-      "Security.framework",
+      "Security.framework",  # SecItem* (Keychain)
+      "SystemConfiguration.framework",  # SCDynamicStoreCopyComputerName
     ]
   } else if (is_linux) {
     sources += [ "browser/platform/open_platform_linux.cc" ]
