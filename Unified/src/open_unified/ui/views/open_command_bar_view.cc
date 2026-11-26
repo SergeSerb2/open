@@ -322,6 +322,10 @@ std::u16string_view OpenCommandBarView::field_text() const {
   return field_->GetText();
 }
 
+bool OpenCommandBarView::HasCompositionText() const {
+  return field_ && field_->HasCompositionText();
+}
+
 void OpenCommandBarView::InsertText(const std::u16string& text) {
   if (!presented_ || !field_) {
     return;

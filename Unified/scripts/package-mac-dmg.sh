@@ -567,13 +567,13 @@ def bundle_main_executables(root: Path) -> set[Path]:
 
 
 def helper_role(bundle_name: str) -> str:
-    if bundle_name.endswith("(Renderer).app"):
+    if bundle_name.endswith(("(Renderer).app", " Renderer).app")):
         return "renderer"
-    if bundle_name.endswith("(GPU).app"):
+    if bundle_name.endswith(("(GPU).app", " GPU).app")):
         return "gpu"
-    if bundle_name.endswith("(Plugin).app"):
+    if bundle_name.endswith(("(Plugin).app", " Plugin).app")):
         return "plugin"
-    if bundle_name.endswith("(Alerts).app"):
+    if bundle_name.endswith(("(Alerts).app", " Alerts).app")):
         return "alerts"
     if "Helper" in bundle_name:
         return "generic"

@@ -160,6 +160,10 @@ std::u16string_view OpenFindBarView::query() const {
   return field_->GetText();
 }
 
+bool OpenFindBarView::HasCompositionText() const {
+  return field_ && field_->HasCompositionText();
+}
+
 void OpenFindBarView::SetAppearance(const secondary::Appearance& appearance) {
   appearance_ = appearance;
   const SkColor tint = appearance_.dark ? kInputTextDark : kInputTextLight;

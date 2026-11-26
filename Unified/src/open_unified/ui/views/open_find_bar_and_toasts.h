@@ -100,6 +100,7 @@ class OpenFindBarView : public views::View, public views::TextfieldController {
   void SetResult(int active_ordinal, int total);
   void ClearResult();
   std::u16string_view query() const;
+  bool HasCompositionText() const;
   void SetAppearance(const secondary::Appearance& appearance);
 
   // Anchor for OverlayWidgetHost::SetAnchor(..., kTopRight): the page

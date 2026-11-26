@@ -2700,11 +2700,8 @@ bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
     // The topmost Open overlay takes Esc: Command Bar, then Peek, then the
     // find bar.
     if (command_bar_shown()) {
-      views::FocusManager* focus_manager = browser_view_->GetFocusManager();
-      views::View* focused =
-          focus_manager ? focus_manager->GetFocusedView() : nullptr;
-      if (focused && command_bar_->Contains(focused)) {
-        // The bar's field handles Esc itself (IME composition first).
+      if (command_bar_->HasCompositionText()) {
+        // The input method owns Esc while composing text.
         return false;
       }
       command_bar_->Dismiss(CommandBarDismissReason::kEscape);
@@ -2715,6 +2712,9 @@ bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
       return true;
     }
     if (find_bar_shown()) {
+      if (find_bar_ && find_bar_->HasCompositionText()) {
+        return false;
+      }
       CloseFindBar();
       return true;
     }

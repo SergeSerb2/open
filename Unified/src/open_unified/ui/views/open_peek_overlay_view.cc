@@ -60,7 +60,8 @@ OpenPeekOverlayView::OpenPeekOverlayView(PeekDelegate* delegate)
   }
   SetAppearance(appearance_);
 
-  AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
+  // Esc is registered centrally by OpenWindowUi in overlay z-order (Command Bar
+  // -> Peek -> Find Bar) so Peek never steals Esc from a Command Bar above it.
   AddAccelerator(ui::Accelerator(ui::VKEY_O, secondary::kPrimaryModifier));
 }
 

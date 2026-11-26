@@ -247,6 +247,7 @@ class OpenCommandBarView : public views::View,
   void InsertText(const std::u16string& text);
   gfx::Rect card_bounds() const { return card_; }
   std::u16string_view field_text() const;
+  bool HasCompositionText() const;
   const std::u16string& typed_text() const { return typed_; }
   const std::u16string& completion() const { return completion_; }
   size_t selected_index() const { return selected_; }

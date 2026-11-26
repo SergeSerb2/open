@@ -88,6 +88,11 @@ host_os="$(uname -s)"
 if [[ "${TARGET}" == "mac-arm64" && "${host_os}" != "Darwin" ]]; then
   die "mac-arm64 builds need a macOS host (Xcode SDK)"
 fi
+if [[ "${host_os}" == "Darwin" && -x "${SRC}/third_party/cpython3/host/bin/python3" ]]; then
+  # Avoid Apple's /usr/bin/python3 xcrun shim failing inside rustc -> linker_driver.py
+  # when rustc_wrapper.py sets SDKROOT=sdk/xcode_links/MacOSX*.sdk.
+  export PATH="${SRC}/third_party/cpython3/host/bin:${PATH}"
+fi
 if [[ "${TARGET}" == "win-x64" && "${host_os}" == "Linux" ]]; then
   # Linux -> Windows cross build: the packaged MSVC + Windows SDK sysroot
   # (Track 1's unified-win-toolchain) must be configured.

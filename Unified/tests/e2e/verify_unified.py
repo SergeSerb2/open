@@ -1028,7 +1028,17 @@ def main(argv) -> int:
 
   out_dir = options.out or tempfile.mkdtemp(prefix="open-unified-e2e-")
   os.makedirs(out_dir, exist_ok=True)
-  user_data = options.user_data or tempfile.mkdtemp(prefix="open-unified-ud-")
+  if options.user_data:
+    user_data = options.user_data
+  else:
+    ud_parent = None
+    # macOS sun_path is 104 bytes; keep AF_UNIX socket paths short when $TMPDIR is deep.
+    if not options.port and os.name != "nt" and os.path.isdir("/tmp"):
+      sample = os.path.join(tempfile.gettempdir(), "open-unified-ud-XXXXXXXX",
+                            "automation.sock")
+      if len(sample.encode("utf-8")) >= 100:
+        ud_parent = "/tmp"
+    user_data = tempfile.mkdtemp(prefix="open-unified-ud-", dir=ud_parent)
   env = dict(os.environ)
   cleanups: List[Callable[[], None]] = []
   report = {"binary": binary, "platform": platform.platform(),
