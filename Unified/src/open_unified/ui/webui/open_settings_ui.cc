@@ -1451,6 +1451,8 @@ void OpenPreferences::ApplyEffects(const std::string& key,
                               BoolPref(key));
     }
   }
+  service->BroadcastEvent("open.preferencesChanged",
+                          base::Value(base::DictValue().Set("key", key)));
 }
 
 // static
@@ -1472,6 +1474,8 @@ void OpenPreferences::ApplyAllEffects() {
       ApplyEffects(key, {});
     }
   }
+  service->BroadcastEvent("open.preferencesChanged",
+                          base::Value(base::DictValue().Set("key", "")));
 }
 
 // ===========================================================================
