@@ -20,6 +20,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "open_unified/ui/design/open_glyphs.h"
+#include "open_unified/ui/design/open_typography.h"
 #include "open_unified/ui/views/open_tab_tree_view.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "third_party/skia/include/core/SkRRect.h"
@@ -38,6 +39,7 @@
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/outsets_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -180,8 +182,7 @@ bool IsDark(SkColor color) {
 }
 
 gfx::FontList FontOfSize(int size, gfx::Font::Weight weight) {
-  const gfx::FontList base;
-  return base.Derive(size - base.GetFontSize(), gfx::Font::NORMAL, weight);
+  return typography::Make(size, weight);
 }
 
 int TextWidth(std::u16string_view text, const gfx::FontList& font) {
@@ -563,6 +564,145 @@ void PaintGlyph(gfx::Canvas* canvas,
       Polyline(b, g,
                {{0.30f, 0.18f}, {0.82f, 0.18f}, {0.82f, 0.70f}});
       break;
+    case Glyph::kLockOpen:
+      RoundRectPath(b, g.R(0.22f, 0.46f, 0.78f, 0.88f), g.S(0.08f));
+      b.moveTo(g.P(0.33f, 0.46f));
+      b.lineTo(g.P(0.33f, 0.34f));
+      b.arcTo(g.R(0.33f, 0.14f, 0.69f, 0.50f), 180.f, 145.f, false);
+      CirclePath(filled, g.P(0.50f, 0.67f), g.S(0.06f));
+      break;
+    case Glyph::kInfo:
+      CirclePath(b, g.P(0.50f, 0.50f), g.S(0.38f));
+      CirclePath(filled, g.P(0.50f, 0.32f), g.S(0.055f));
+      Polyline(b, g, {{0.50f, 0.46f}, {0.50f, 0.70f}});
+      break;
+    case Glyph::kWarning:
+      Polyline(b, g, {{0.50f, 0.14f}, {0.88f, 0.84f}, {0.12f, 0.84f}},
+               /*close=*/true);
+      Polyline(b, g, {{0.50f, 0.38f}, {0.50f, 0.60f}});
+      CirclePath(filled, g.P(0.50f, 0.72f), g.S(0.05f));
+      break;
+    case Glyph::kError:
+      Polyline(b, g,
+               {{0.34f, 0.12f},
+                {0.66f, 0.12f},
+                {0.88f, 0.34f},
+                {0.88f, 0.66f},
+                {0.66f, 0.88f},
+                {0.34f, 0.88f},
+                {0.12f, 0.66f},
+                {0.12f, 0.34f}},
+               /*close=*/true);
+      Polyline(b, g, {{0.35f, 0.35f}, {0.65f, 0.65f}});
+      Polyline(b, g, {{0.65f, 0.35f}, {0.35f, 0.65f}});
+      break;
+    case Glyph::kOpenDoorway:
+      b.moveTo(g.P(0.20f, 0.86f));
+      b.lineTo(g.P(0.20f, 0.46f));
+      b.arcTo(g.R(0.20f, 0.14f, 0.80f, 0.74f), 180.f, 180.f, false);
+      b.lineTo(g.P(0.80f, 0.86f));
+      Polyline(b, g, {{0.12f, 0.86f}, {0.88f, 0.86f}});
+      CirclePath(filled, g.P(0.50f, 0.54f), g.S(0.14f));
+      break;
+    case Glyph::kMidi:
+      // Piano keys: rounded frame + key dividers + filled black keys.
+      RoundRectPath(b, g.R(0.12f, 0.22f, 0.88f, 0.78f), g.S(0.08f));
+      Polyline(b, g, {{0.37f, 0.22f}, {0.37f, 0.78f}});
+      Polyline(b, g, {{0.63f, 0.22f}, {0.63f, 0.78f}});
+      filled.addRect(g.R(0.31f, 0.22f, 0.43f, 0.54f));
+      filled.addRect(g.R(0.57f, 0.22f, 0.69f, 0.54f));
+      break;
+    case Glyph::kFonts:
+      // Typography "Aa" mark.
+      Polyline(b, g, {{0.14f, 0.78f}, {0.34f, 0.22f}, {0.54f, 0.78f}});
+      Polyline(b, g, {{0.21f, 0.60f}, {0.47f, 0.60f}});
+      CirclePath(b, g.P(0.74f, 0.64f), g.S(0.14f));
+      Polyline(b, g, {{0.88f, 0.50f}, {0.88f, 0.78f}});
+      break;
+    case Glyph::kIdle:
+      // Crescent moon + sleep "z" accent.
+      b.arcTo(g.R(0.16f, 0.22f, 0.74f, 0.82f), -45.f, 275.f, true);
+      b.quadTo(g.P(0.40f, 0.52f), g.P(0.65f, 0.30f));
+      Polyline(b, g,
+               {{0.68f, 0.20f}, {0.86f, 0.20f}, {0.68f, 0.38f}, {0.86f, 0.38f}});
+      break;
+    case Glyph::kSensors:
+      // Gyroscope: two crossed orbital rings + center dot.
+      b.addOval(g.R(0.14f, 0.32f, 0.86f, 0.68f));
+      b.addOval(g.R(0.32f, 0.14f, 0.68f, 0.86f));
+      CirclePath(filled, g.P(0.50f, 0.50f), g.S(0.08f));
+      break;
+    case Glyph::kJavaScript:
+      // Curly braces { }.
+      b.moveTo(g.P(0.40f, 0.18f));
+      b.quadTo(g.P(0.26f, 0.18f), g.P(0.26f, 0.32f));
+      b.lineTo(g.P(0.26f, 0.42f));
+      b.quadTo(g.P(0.26f, 0.50f), g.P(0.16f, 0.50f));
+      b.quadTo(g.P(0.26f, 0.50f), g.P(0.26f, 0.58f));
+      b.lineTo(g.P(0.26f, 0.68f));
+      b.quadTo(g.P(0.26f, 0.82f), g.P(0.40f, 0.82f));
+      b.moveTo(g.P(0.60f, 0.18f));
+      b.quadTo(g.P(0.74f, 0.18f), g.P(0.74f, 0.32f));
+      b.lineTo(g.P(0.74f, 0.42f));
+      b.quadTo(g.P(0.74f, 0.50f), g.P(0.84f, 0.50f));
+      b.quadTo(g.P(0.74f, 0.50f), g.P(0.74f, 0.58f));
+      b.lineTo(g.P(0.74f, 0.68f));
+      b.quadTo(g.P(0.74f, 0.82f), g.P(0.60f, 0.82f));
+      break;
+    case Glyph::kSound:
+      // Speaker cone + two sound wave arcs.
+      Polyline(b, g,
+               {{0.14f, 0.38f},
+                {0.32f, 0.38f},
+                {0.52f, 0.22f},
+                {0.52f, 0.78f},
+                {0.32f, 0.62f},
+                {0.14f, 0.62f}},
+               /*close=*/true);
+      b.addArc(g.R(0.48f, 0.32f, 0.72f, 0.68f), -45.f, 90.f);
+      b.addArc(g.R(0.48f, 0.20f, 0.86f, 0.80f), -45.f, 90.f);
+      break;
+    case Glyph::kHid:
+      // Compact keyboard / HID device.
+      RoundRectPath(b, g.R(0.10f, 0.26f, 0.90f, 0.74f), g.S(0.09f));
+      for (float kx : {0.26f, 0.42f, 0.58f, 0.74f}) {
+        CirclePath(filled, g.P(kx, 0.42f), g.S(0.04f));
+      }
+      Polyline(b, g, {{0.28f, 0.60f}, {0.72f, 0.60f}});
+      break;
+    case Glyph::kBluetooth:
+      // Classic Bluetooth rune.
+      Polyline(b, g,
+               {{0.30f, 0.32f},
+                {0.72f, 0.68f},
+                {0.50f, 0.86f},
+                {0.50f, 0.14f},
+                {0.72f, 0.32f},
+                {0.30f, 0.68f}});
+      break;
+    case Glyph::kHandTracking:
+      // Open hand silhouette (palm + fingers).
+      Polyline(b, g, {{0.30f, 0.54f}, {0.30f, 0.24f}});
+      Polyline(b, g, {{0.45f, 0.50f}, {0.45f, 0.16f}});
+      Polyline(b, g, {{0.60f, 0.50f}, {0.60f, 0.20f}});
+      Polyline(b, g, {{0.74f, 0.56f}, {0.74f, 0.30f}});
+      b.moveTo(g.P(0.22f, 0.52f));
+      b.lineTo(g.P(0.30f, 0.76f));
+      b.quadTo(g.P(0.52f, 0.90f), g.P(0.74f, 0.74f));
+      b.lineTo(g.P(0.74f, 0.56f));
+      break;
+    case Glyph::kPointerLock:
+      // Cursor arrow pointer.
+      Polyline(b, g,
+               {{0.24f, 0.16f},
+                {0.24f, 0.80f},
+                {0.42f, 0.62f},
+                {0.56f, 0.86f},
+                {0.66f, 0.80f},
+                {0.54f, 0.58f},
+                {0.78f, 0.58f}},
+               /*close=*/true);
+      break;
   }
   canvas->DrawPath(b.detach(), stroke);
   SkPath dots = filled.detach();
@@ -682,6 +822,11 @@ void GlyphButton::PaintButtonContents(gfx::Canvas* canvas) {
   PaintGlyph(canvas, glyph_, box, color);
 }
 
+ui::Cursor GlyphButton::GetCursor(const ui::MouseEvent& event) {
+  return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                      : views::Button::GetCursor(event);
+}
+
 BEGIN_METADATA(GlyphButton)
 END_METADATA
 
@@ -709,6 +854,11 @@ void PaintedButton::PaintButtonContents(gfx::Canvas* canvas) {
   const bool hovered = GetEnabled() && (GetState() == STATE_HOVERED ||
                                         GetState() == STATE_PRESSED);
   painter_.Run(canvas, GetLocalBounds(), hovered);
+}
+
+ui::Cursor PaintedButton::GetCursor(const ui::MouseEvent& event) {
+  return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                      : views::Button::GetCursor(event);
 }
 
 BEGIN_METADATA(PaintedButton)
@@ -955,8 +1105,10 @@ void OpenPaneChromeView::SetState(const State& state) {
   buttons_[kSiteControlControl]->SetEnabled(state_.site_controls_available);
   buttons_[kReloadControl]->SetGlyph(state_.is_loading ? Glyph::kStop
                                                        : Glyph::kReload);
-  buttons_[kReloadControl]->SetTooltipText(state_.is_loading ? u"Stop"
-                                                             : u"Reload");
+  const std::u16string reload_label =
+      state_.is_loading ? u"Stop loading" : u"Reload";
+  buttons_[kReloadControl]->SetTooltipText(reload_label);
+  buttons_[kReloadControl]->GetViewAccessibility().SetName(reload_label);
   ApplyColors();
   if (layout_changed) {
     InvalidateLayout();
@@ -1016,6 +1168,13 @@ void OpenPaneChromeView::OnPaint(gfx::Canvas* canvas) {
 
   if (host_fits_) {
     const SkColor ink = draws_on_dark_ ? SK_ColorWHITE : SK_ColorBLACK;
+    if (host_hovered_ && state_.focused) {
+      gfx::RectF plate(host_rect_);
+      plate.Outset(gfx::OutsetsF::VH(2.f, 4.f));
+      secondary::FillRoundRect(
+          canvas, plate, 5.f,
+          secondary::WithAlpha(ink, draws_on_dark_ ? 0.10f : 0.07f));
+    }
     secondary::DrawText(canvas, state_.host,
                         secondary::FontOfSize(kHostFontSize),
                         secondary::WithAlpha(ink, kHostLabelAlpha), host_rect_,
@@ -1101,11 +1260,42 @@ void OpenPaneChromeView::SetFocusRequestCallback(
   focus_callback_ = std::move(callback);
 }
 
+void OpenPaneChromeView::SetHostClickCallback(
+    base::RepeatingClosure callback) {
+  host_click_callback_ = std::move(callback);
+}
+
 void OpenPaneChromeView::SetDragSwapCallback(DragCallback callback) {
   drag_swap_callback_ = std::move(callback);
 }
 
+ui::Cursor OpenPaneChromeView::GetCursor(const ui::MouseEvent& event) {
+  if (host_fits_ && host_rect_.Contains(event.location())) {
+    return ui::Cursor(ui::mojom::CursorType::kHand);
+  }
+  return views::View::GetCursor(event);
+}
+
+void OpenPaneChromeView::OnMouseMoved(const ui::MouseEvent& event) {
+  const bool over_host = host_fits_ && host_rect_.Contains(event.location());
+  if (over_host != host_hovered_) {
+    host_hovered_ = over_host;
+    SchedulePaint();
+  }
+}
+
+void OpenPaneChromeView::OnMouseExited(const ui::MouseEvent& event) {
+  if (host_hovered_) {
+    host_hovered_ = false;
+    SchedulePaint();
+  }
+}
+
 bool OpenPaneChromeView::OnMousePressed(const ui::MouseEvent& event) {
+  const bool was_focused = state_.focused;
+  pressed_on_focused_host_ = event.IsOnlyLeftMouseButton() && was_focused &&
+                             host_fits_ &&
+                             host_rect_.Contains(event.location());
   // A click on the bar's empty area focuses its pane; dragging the bar across
   // another pane swaps them.
   if (focus_callback_) {
@@ -1127,6 +1317,7 @@ bool OpenPaneChromeView::OnMouseDragged(const ui::MouseEvent& event) {
   if (!drag_swap_active_ &&
       (std::abs(delta.x()) >= 12 || std::abs(delta.y()) >= 12)) {
     drag_swap_active_ = true;
+    pressed_on_focused_host_ = false;
   }
   if (drag_swap_active_) {
     drag_swap_callback_.Run(event.location(), /*finished=*/false);
@@ -1136,13 +1327,21 @@ bool OpenPaneChromeView::OnMouseDragged(const ui::MouseEvent& event) {
 }
 
 void OpenPaneChromeView::OnMouseReleased(const ui::MouseEvent& event) {
+  const bool was_dragging = drag_swap_active_;
+  const bool was_host_press = pressed_on_focused_host_;
+  pressed_on_focused_host_ = false;
   if (drag_swap_active_ && drag_swap_callback_) {
     drag_swap_active_ = false;
     drag_swap_callback_.Run(event.location(), /*finished=*/true);
   }
+  if (!was_dragging && was_host_press && host_fits_ &&
+      host_rect_.Contains(event.location()) && host_click_callback_) {
+    host_click_callback_.Run();
+  }
 }
 
 void OpenPaneChromeView::OnMouseCaptureLost() {
+  pressed_on_focused_host_ = false;
   if (drag_swap_active_ && drag_swap_callback_) {
     drag_swap_active_ = false;
     drag_swap_callback_.Run(drag_press_origin_, /*finished=*/true);
@@ -1658,6 +1857,8 @@ class SplitPaneView : public views::View,
                             base::Unretained(this))));
     chrome_->SetFocusRequestCallback(base::BindRepeating(
         &SplitPaneView::RequestFocusFromBar, base::Unretained(this)));
+    chrome_->SetHostClickCallback(base::BindRepeating(
+        &SplitPaneView::OnChromeHostClicked, base::Unretained(this)));
     chrome_->SetDragSwapCallback(base::BindRepeating(
         &SplitPaneView::OnChromeDragSwap, base::Unretained(this)));
     web_view_ = AddChildView(std::make_unique<views::WebView>());
@@ -2022,6 +2223,10 @@ class SplitPaneView : public views::View,
   }
 
   void RequestFocusFromBar() { container_->OnPaneFocused(spec_.tab_id); }
+
+  void OnChromeHostClicked() {
+    container_->OnPaneHostClicked(spec_.tab_id, chrome_);
+  }
 
   void RequestEmptyPaneCommandBar() {
     container_->OnEmptyPaneOpenCommandBar(spec_.tab_id);
@@ -2975,6 +3180,16 @@ void OpenSplitContainerView::OnPaneFocused(const ItemID& tab_id) {
   if (changed && delegate_) {
     delegate_->OnPaneFocusRequested(presentation_.split_id, tab_id);
   }
+}
+
+void OpenSplitContainerView::OnPaneHostClicked(const ItemID& tab_id,
+                                               views::View* anchor) {
+  if (!delegate_) {
+    return;
+  }
+  const size_t pane_index = FindPaneIndex(tab_id).value_or(0);
+  delegate_->OnPaneHostClicked(presentation_.split_id, tab_id, pane_index,
+                               anchor);
 }
 
 void OpenSplitContainerView::OnEmptyPaneOpenCommandBar(const ItemID& tab_id) {

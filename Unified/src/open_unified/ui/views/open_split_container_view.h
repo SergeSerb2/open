@@ -222,6 +222,22 @@ enum class Glyph {
   kStar,
   kDownload,
   kStack,
+  // Wave 3D unified glyphs (security, toasts, app menu, Site Control permissions):
+  kLockOpen,
+  kInfo,
+  kWarning,
+  kError,
+  kOpenDoorway,
+  kMidi,
+  kFonts,
+  kIdle,
+  kSensors,
+  kJavaScript,
+  kSound,
+  kHid,
+  kBluetooth,
+  kHandTracking,
+  kPointerLock,
 };
 // `stroke_width` 0 picks a width from the glyph size (about 1/11 of it,
 // clamped to 1.2..2 pt).
@@ -266,6 +282,7 @@ class GlyphButton : public views::Button {
 
   // views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override;
 
  private:
   Glyph glyph_;
@@ -302,6 +319,7 @@ class PaintedButton : public views::Button {
 
   // views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override;
 
  private:
   Painter painter_;
@@ -507,6 +525,11 @@ class OpenSplitContainerDelegate {
   virtual void OnPanesSwapped(const ItemID& split_id,
                               size_t index_a,
                               size_t index_b) {}
+  // The user clicked the focused pane's host label (edit URL / Command Bar).
+  virtual void OnPaneHostClicked(const std::optional<ItemID>& split_id,
+                                 const ItemID& tab_id,
+                                 size_t pane_index,
+                                 views::View* anchor) {}
   // Drag-to-split negotiation for sidebar tab or URL drags over the panel.
   virtual bool CanDropInSplit(const std::optional<ItemID>& dragged_tab_id,
                               const GURL& dragged_url,
@@ -578,6 +601,8 @@ class OpenPaneChromeView : public views::View,
   const State& state() const { return state_; }
   // Runs when the bar or any of its controls is clicked (focuses the pane).
   void SetFocusRequestCallback(base::RepeatingClosure callback);
+  // Runs when the user clicks the focused pane's host label.
+  void SetHostClickCallback(base::RepeatingClosure callback);
 
   // Drag-handle pane swap callbacks (coordinates in this chrome view).
   using DragCallback =
@@ -597,6 +622,9 @@ class OpenPaneChromeView : public views::View,
   void Layout(PassKey) override;
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override;
+  void OnMouseMoved(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -615,9 +643,12 @@ class OpenPaneChromeView : public views::View,
   Role role_;
   CommandCallback callback_;
   base::RepeatingClosure focus_callback_;
+  base::RepeatingClosure host_click_callback_;
   DragCallback drag_swap_callback_;
   gfx::Point drag_press_origin_;
   bool drag_swap_active_ = false;
+  bool pressed_on_focused_host_ = false;
+  bool host_hovered_ = false;
   State state_;
   std::vector<raw_ptr<secondary::GlyphButton>> buttons_;
   gfx::Rect host_rect_;
@@ -768,6 +799,7 @@ class OpenSplitContainerView : public views::View {
                      PaneCommand command,
                      views::View* anchor);
   void OnPaneFocused(const ItemID& tab_id);
+  void OnPaneHostClicked(const ItemID& tab_id, views::View* anchor);
   void OnEmptyPaneOpenCommandBar(const ItemID& tab_id);
   void OnPaneChromeDragSwap(const ItemID& source_tab_id,
                             const gfx::Point& point_in_container,

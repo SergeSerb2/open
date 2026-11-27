@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { Modal, SegmentedControl, Toast } from '../shared/components';
 import { OpenDoorwayMark, RedoIcon, TrashIcon, UndoIcon } from '../shared/icons';
 import { replacePageRoute } from '../shared/route';
+import { formatShortcut, isMacPlatform } from '../shared/shortcuts';
 import {
   captureLiveUrl,
   deleteDocumentAsset,
@@ -1353,10 +1354,10 @@ export function EaselApp(): JSX.Element {
           </div>
 
           <div class="easel-topbar-group">
-            <button type="button" class="easel-icon-btn" title="Undo (Cmd/Ctrl+Z)" disabled={undoStack.length === 0} onClick={handleUndo}>
+            <button type="button" class="easel-icon-btn" title={`Undo (${formatShortcut('Mod+Z')})`} disabled={undoStack.length === 0} onClick={handleUndo}>
               <UndoIcon size={14} />
             </button>
-            <button type="button" class="easel-icon-btn" title="Redo (Cmd/Ctrl+Shift+Z)" disabled={redoStack.length === 0} onClick={handleRedo}>
+            <button type="button" class="easel-icon-btn" title={`Redo (${formatShortcut('Mod+Shift+Z')})`} disabled={redoStack.length === 0} onClick={handleRedo}>
               <RedoIcon size={14} />
             </button>
 
@@ -1937,7 +1938,7 @@ export function EaselApp(): JSX.Element {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <strong style={{ textTransform: 'capitalize' }}>{primarySelected.type.replace('_', ' ')}</strong>
                   <div style={{ display: 'flex', gap: '4px' }}>
-                    <button type="button" class="easel-chip-btn" title="Duplicate (Cmd/Ctrl+D)" onClick={duplicateSelected}>
+                    <button type="button" class="easel-chip-btn" title={`Duplicate (${formatShortcut('Mod+D')})`} onClick={duplicateSelected}>
                       Dup
                     </button>
                     <button type="button" class="open-btn open-btn-danger" style={{ height: '26px', padding: '0 8px' }} onClick={deleteSelected}>
@@ -2117,7 +2118,7 @@ export function EaselApp(): JSX.Element {
               </div>
             ) : (
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', lineHeight: 1.55 }}>
-                Pick a tool from the dock or press its shortcut (<kbd>V</kbd>, <kbd>T</kbd>, <kbd>S</kbd>, <kbd>R</kbd>, <kbd>O</kbd>, <kbd>L</kbd>, <kbd>A</kbd>, <kbd>P</kbd>, <kbd>I</kbd>, <kbd>W</kbd>, <kbd>F</kbd>). Hold <kbd>Space</kbd> to pan, scroll to move, or <kbd>⌘/Ctrl+Scroll</kbd> to zoom. Paste or drop images anywhere.
+                Pick a tool from the dock or press its shortcut (<kbd>V</kbd>, <kbd>T</kbd>, <kbd>S</kbd>, <kbd>R</kbd>, <kbd>O</kbd>, <kbd>L</kbd>, <kbd>A</kbd>, <kbd>P</kbd>, <kbd>I</kbd>, <kbd>W</kbd>, <kbd>F</kbd>). Hold <kbd>Space</kbd> to pan, scroll to move, or <kbd>{isMacPlatform() ? '⌘+Scroll' : 'Ctrl+Scroll'}</kbd> to zoom. Paste or drop images anywhere.
               </div>
             )}
           </aside>

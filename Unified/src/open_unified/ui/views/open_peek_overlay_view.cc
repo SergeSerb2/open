@@ -20,10 +20,15 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "open_unified/ui/design/open_motion.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/skia/include/core/SkPathBuilder.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/window_open_disposition.h"
@@ -33,7 +38,9 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -52,6 +59,41 @@ namespace m = peek_metrics;
 
 constexpr int kMenuCommandAddFavorite = 1;
 constexpr int kMenuCommandSpaceBase = 100;
+
+SkPath RoundRectPath(const gfx::RectF& rect, float radius) {
+  SkPathBuilder builder;
+  builder.addRRect(
+      SkRRect::MakeRectXY(gfx::RectFToSkRect(rect), radius, radius));
+  return builder.detach();
+}
+
+class PeekHandGlyphButton : public GlyphButton {
+  METADATA_HEADER(PeekHandGlyphButton, GlyphButton)
+
+ public:
+  using GlyphButton::GlyphButton;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : GlyphButton::GetCursor(event);
+  }
+};
+
+BEGIN_METADATA(PeekHandGlyphButton)
+END_METADATA
+
+class PeekHandPaintedButton : public PaintedButton {
+  METADATA_HEADER(PeekHandPaintedButton, PaintedButton)
+
+ public:
+  using PaintedButton::PaintedButton;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : PaintedButton::GetCursor(event);
+  }
+};
+
+BEGIN_METADATA(PeekHandPaintedButton)
+END_METADATA
 
 }  // namespace
 
@@ -135,7 +177,7 @@ class OpenPeekOverlayView::StackEntryDelegate
     if (type == blink::WebInputEvent::Type::kRawKeyDown ||
         type == blink::WebInputEvent::Type::kKeyDown) {
       if (event.windows_key_code == ui::VKEY_ESCAPE) {
-        owner_->PopStack(PeekDismissReason::kEscape);
+        owner_->DismissSmooth(PeekDismissReason::kEscape);
         return true;
       }
       const bool primary =
@@ -190,6 +232,11 @@ class OpenPeekOverlayView::StackEntryDelegate
   void DidStopLoading() override {
     if (owner_) {
       owner_->OnEntryNavigated(web_contents());
+    }
+  }
+  void LoadProgressChanged(double progress) override {
+    if (owner_) {
+      owner_->OnEntryLoadProgress(web_contents(), progress);
     }
   }
   void DidFinishNavigation(content::NavigationHandle* handle) override {
@@ -253,7 +300,7 @@ OpenPeekOverlayView::OpenPeekOverlayView(PeekDelegate* delegate)
       {Glyph::kStar, "star", u"Open in Favorite or Space", 13.f},
   }};
   for (int i = 0; i < kButtonCount; ++i) {
-    auto button = std::make_unique<GlyphButton>(
+    auto button = std::make_unique<PeekHandGlyphButton>(
         base::BindRepeating(&OpenPeekOverlayView::PressButton,
                             base::Unretained(this), static_cast<Button>(i)),
         specs[i].glyph, specs[i].name);
@@ -265,7 +312,8 @@ OpenPeekOverlayView::OpenPeekOverlayView(PeekDelegate* delegate)
   // Compact Back / Forward / Stack depth controls below the main rail.
   auto make_nav = [this](Glyph glyph, const char* symbol, const char16_t* name,
                          views::Button::PressedCallback cb) {
-    auto button = std::make_unique<GlyphButton>(std::move(cb), glyph, name);
+    auto button =
+        std::make_unique<PeekHandGlyphButton>(std::move(cb), glyph, name);
     button->SetGlyphSize(12.f);
     button->SetSystemSymbol(symbol, 12.f);
     button->SetVisible(false);
@@ -279,7 +327,7 @@ OpenPeekOverlayView::OpenPeekOverlayView(PeekDelegate* delegate)
       make_nav(Glyph::kForward, "chevron.right", u"Go Forward",
                base::BindRepeating(&OpenPeekOverlayView::GoForward,
                                    base::Unretained(this)));
-  stack_badge_button_ = AddChildView(std::make_unique<PaintedButton>(
+  stack_badge_button_ = AddChildView(std::make_unique<PeekHandPaintedButton>(
       base::BindRepeating(
           [](OpenPeekOverlayView* self) {
             self->PopStack(PeekDismissReason::kCloseButton);
@@ -314,10 +362,17 @@ OpenPeekOverlayView::~OpenPeekOverlayView() {
 // static
 gfx::Rect OpenPeekOverlayView::ComputeCardBounds(
     const gfx::Rect& content_rect) {
-  const int width =
+  const int right_reserve = m::kRailWidth + m::kRailGap + m::kOuterMargin;
+  const int max_width =
+      std::max(0, content_rect.width() - m::kOuterMargin - right_reserve);
+  const int ideal_width =
       static_cast<int>(std::lround(content_rect.width() * m::kWidthFraction));
-  return gfx::Rect(content_rect.x() + (content_rect.width() - width) / 2,
-                   content_rect.y() + m::kVerticalInset, width,
+  const int width = std::min(ideal_width, max_width);
+  const int min_x = content_rect.x() + m::kOuterMargin;
+  const int max_x = std::max(min_x, content_rect.right() - right_reserve - width);
+  const int ideal_x = content_rect.x() + (content_rect.width() - width) / 2;
+  const int x = std::clamp(ideal_x, min_x, max_x);
+  return gfx::Rect(x, content_rect.y() + m::kVerticalInset, width,
                    std::max(0, content_rect.height() - 2 * m::kVerticalInset));
 }
 
@@ -503,6 +558,9 @@ void OpenPeekOverlayView::SetContentRect(const gfx::Rect& content_rect) {
 void OpenPeekOverlayView::SetAppearance(
     const secondary::Appearance& appearance) {
   appearance_ = appearance;
+  if (web_view_) {
+    web_view_->SetBackground(views::CreateSolidBackground(CardSurfaceColor()));
+  }
   for (auto& button : buttons_) {
     button->SetPlate(GlyphButton::Plate::kCircle, SK_ColorTRANSPARENT,
                      m::kButtonDiameter / 2.f);
@@ -621,6 +679,13 @@ void OpenPeekOverlayView::DismissSmooth(PeekDismissReason reason) {
   if (!showing_) {
     return;
   }
+  if (stack_.size() > 1 && reason != PeekDismissReason::kProgrammatic) {
+    PopStack(reason);
+    return;
+  }
+  if (pending_dismiss_reason_.has_value()) {
+    return;
+  }
   StartOpacityAnimation(layer() ? layer()->opacity() : 1.0, 0.0,
                         motion::kPeekDismiss, reason);
 }
@@ -635,6 +700,8 @@ void OpenPeekOverlayView::ShowTopEntry() {
   if (web_view_->web_contents() != contents) {
     web_view_->SetWebContents(contents);
   }
+  loading_ = contents && contents->IsLoading();
+  load_progress_ = loading_ ? 0.15 : 0.0;
   SetVisible(true);
   SyncNavButtons();
   InvalidateLayout();
@@ -667,9 +734,12 @@ void OpenPeekOverlayView::SyncNavButtons() {
 
 void OpenPeekOverlayView::Layout(PassKey) {
   card_ = ComputeCardBounds(content_rect_);
-  web_view_->SetBoundsRect(card_);
+  const int header_h = std::min(m::kHeaderHeight, card_.height());
+  web_view_->SetBoundsRect(
+      gfx::Rect(card_.x(), card_.y() + header_h, card_.width(),
+                std::max(0, card_.height() - header_h)));
   web_view_->holder()->SetNativeViewCornerRadii(
-      gfx::RoundedCornersF(m::kCardCornerRadius));
+      gfx::RoundedCornersF(0, 0, m::kCardCornerRadius, m::kCardCornerRadius));
 
   const int rail_x = card_.right() + m::kButtonGap;
   const int first_y = card_.y() + m::kButtonTop;
@@ -713,16 +783,91 @@ void OpenPeekOverlayView::Layout(PassKey) {
   }
 }
 
+SkColor OpenPeekOverlayView::CardSurfaceColor() const {
+  return appearance_.dark ? SkColorSetRGB(0x1E, 0x1F, 0x24)
+                          : SkColorSetRGB(0xFA, 0xFA, 0xFC);
+}
+
+std::u16string OpenPeekOverlayView::CurrentHostLabel() const {
+  const GURL url = CurrentUrlFor(
+      active_web_contents(), stack_.empty() ? GURL() : stack_.back().url);
+  if (!url.is_valid()) {
+    return std::u16string();
+  }
+  std::string host(url.host());
+  if (host.starts_with("www.")) {
+    host.erase(0, 4);
+  }
+  if (host.empty()) {
+    host = url.spec();
+  }
+  return base::UTF8ToUTF16(host);
+}
+
 void OpenPeekOverlayView::OnPaint(gfx::Canvas* canvas) {
   if (!showing_) {
     return;
   }
   canvas->FillRect(GetLocalBounds(), appearance_.peek_scrim);
-  // Card backing and shadow; the page paints over the backing.
+  // Theme-aware card backing and shadow; the page paints below the top header.
+  const SkColor card_fill = CardSurfaceColor();
   secondary::FillRoundRectWithShadow(
-      canvas, gfx::RectF(card_), m::kCardCornerRadius, SK_ColorBLACK,
+      canvas, gfx::RectF(card_), m::kCardCornerRadius, card_fill,
       secondary::WithAlpha(SK_ColorBLACK, m::kShadowAlpha), m::kShadowOffsetY,
       m::kShadowBlur);
+
+  // Compact top host bar and 2 DIP loading progress line inside the rounded
+  // top edge of the Peek card.
+  if (!card_.IsEmpty() && card_.height() >= m::kHeaderHeight) {
+    canvas->Save();
+    canvas->ClipPath(RoundRectPath(gfx::RectF(card_), m::kCardCornerRadius),
+                     /*do_anti_alias=*/true);
+
+    const SkColor separator = appearance_.dark
+                                  ? secondary::WithAlpha(SK_ColorWHITE, 0.08f)
+                                  : secondary::WithAlpha(SK_ColorBLACK, 0.08f);
+    canvas->FillRect(gfx::Rect(card_.x(), card_.y() + m::kHeaderHeight - 1,
+                               card_.width(), 1),
+                     separator);
+
+    const std::u16string host = CurrentHostLabel();
+    if (!host.empty()) {
+      const gfx::FontList font =
+          secondary::FontOfSize(11, gfx::Font::Weight::MEDIUM);
+      const int max_pill_w = std::max(0, card_.width() - 24);
+      const int text_w =
+          std::min(secondary::TextWidth(host, font), std::max(0, max_pill_w - 20));
+      const int pill_w = std::min(max_pill_w, text_w + 20);
+      if (pill_w > 24) {
+        const int pill_h = 20;
+        const gfx::Rect pill(card_.x() + (card_.width() - pill_w) / 2,
+                             card_.y() + (m::kHeaderHeight - pill_h) / 2,
+                             pill_w, pill_h);
+        const SkColor pill_fill =
+            appearance_.dark ? secondary::WithAlpha(SK_ColorWHITE, 0.07f)
+                             : secondary::WithAlpha(SK_ColorBLACK, 0.05f);
+        const SkColor pill_ink =
+            appearance_.dark ? secondary::WithAlpha(SK_ColorWHITE, 0.72f)
+                             : secondary::WithAlpha(SK_ColorBLACK, 0.65f);
+        secondary::FillRoundRect(canvas, gfx::RectF(pill), pill_h / 2.f,
+                                 pill_fill);
+        secondary::DrawText(canvas, host, font, pill_ink,
+                            gfx::Rect(pill.x() + 10, pill.y(), pill_w - 20,
+                                      pill.height()),
+                            gfx::Canvas::TEXT_ALIGN_CENTER);
+      }
+    }
+
+    if (loading_) {
+      const float frac =
+          static_cast<float>(std::clamp(load_progress_, 0.12, 1.0));
+      const int bar_w = std::max(24, static_cast<int>(std::lround(
+                                         card_.width() * frac)));
+      canvas->FillRect(gfx::Rect(card_.x(), card_.y(), bar_w, 2),
+                       appearance_.ActiveAccent());
+    }
+    canvas->Restore();
+  }
 
   // Floating vertical pill rail outside the card's right edge.
   if (!rail_bounds_.IsEmpty()) {
@@ -766,12 +911,20 @@ void OpenPeekOverlayView::PaintStackBadge(gfx::Canvas* canvas,
                       gfx::Canvas::TEXT_ALIGN_CENTER);
 }
 
+ui::Cursor OpenPeekOverlayView::GetCursor(const ui::MouseEvent& event) {
+  if (showing_ && (rail_bounds_.Contains(event.location()) ||
+                   nav_pill_bounds_.Contains(event.location()))) {
+    return ui::Cursor(ui::mojom::CursorType::kHand);
+  }
+  return views::View::GetCursor(event);
+}
+
 bool OpenPeekOverlayView::OnMousePressed(const ui::MouseEvent& event) {
   // Only the scrim reaches here: the page and buttons take their own clicks.
   if (showing_ && !card_.Contains(event.location()) &&
       !rail_bounds_.Contains(event.location()) &&
       !nav_pill_bounds_.Contains(event.location())) {
-    Dismiss(PeekDismissReason::kScrimClick);
+    DismissSmooth(PeekDismissReason::kScrimClick);
     return true;
   }
   return false;
@@ -782,7 +935,7 @@ bool OpenPeekOverlayView::OnKeyPressed(const ui::KeyEvent& event) {
     return false;
   }
   if (event.key_code() == ui::VKEY_ESCAPE) {
-    Dismiss(PeekDismissReason::kEscape);
+    DismissSmooth(PeekDismissReason::kEscape);
     return true;
   }
   return false;
@@ -794,7 +947,7 @@ bool OpenPeekOverlayView::AcceleratorPressed(
     return false;
   }
   if (accelerator.key_code() == ui::VKEY_ESCAPE) {
-    Dismiss(PeekDismissReason::kEscape);
+    DismissSmooth(PeekDismissReason::kEscape);
     return true;
   }
   if (accelerator.key_code() == ui::VKEY_O) {
@@ -855,7 +1008,7 @@ void OpenPeekOverlayView::PressButton(Button button) {
   }
   switch (button) {
     case kCloseButton:
-      Dismiss(PeekDismissReason::kCloseButton);
+      DismissSmooth(PeekDismissReason::kCloseButton);
       break;
     case kExpandButton:
       if (delegate_) {
@@ -944,7 +1097,23 @@ void OpenPeekOverlayView::OnEntryNavigated(content::WebContents* contents) {
     }
   }
   if (!stack_.empty() && stack_.back().raw_contents == contents) {
+    loading_ = contents && contents->IsLoading();
+    if (!loading_) {
+      load_progress_ = 0.0;
+    } else if (load_progress_ < 0.15) {
+      load_progress_ = 0.15;
+    }
     SyncNavButtons();
+    SchedulePaint();
+  }
+}
+
+void OpenPeekOverlayView::OnEntryLoadProgress(content::WebContents* contents,
+                                              double progress) {
+  if (!stack_.empty() && stack_.back().raw_contents == contents) {
+    loading_ = contents && contents->IsLoading();
+    load_progress_ = std::clamp(progress, 0.0, 1.0);
+    SchedulePaint();
   }
 }
 

@@ -16,6 +16,7 @@
 #include "ui/base/models/simple_combobox_model.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -572,6 +573,7 @@ void OpenTranslatePopoverView::Rebuild() {
             &OpenTranslatePopoverView::OnAlwaysTranslateCheckboxPressed,
             base::Unretained(this)));
     always_cb->SetChecked(state_.always_translate_source);
+    always_cb->SetEnabledTextColors(TextPrimary());
     always_translate_checkbox_ = AddChildView(std::move(always_cb));
   }
 
@@ -583,6 +585,7 @@ void OpenTranslatePopoverView::Rebuild() {
             &OpenTranslatePopoverView::OnNeverTranslateCheckboxPressed,
             base::Unretained(this)));
     never_cb->SetChecked(state_.never_translate_host);
+    never_cb->SetEnabledTextColors(TextPrimary());
     never_translate_checkbox_ = AddChildView(std::move(never_cb));
   }
 
@@ -856,6 +859,10 @@ void OpenTranslatePopover::ShowInternal(
       bubble_delegate_.get(),
       base::BindOnce(&OpenTranslatePopover::OnWidgetClosed,
                      weak_factory_.GetWeakPtr()));
+  widget_->SetColorModeOverride(
+      appearance.dark ? ui::ColorProviderKey::ColorMode::kDark
+                      : ui::ColorProviderKey::ColorMode::kLight);
+  widget_->ThemeChanged();
   widget_->Show();
 }
 

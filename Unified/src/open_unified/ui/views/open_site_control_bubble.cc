@@ -4,9 +4,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <string_view>
 #include <utility>
 
+#include "base/callback_list.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -34,6 +36,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/page.h"
@@ -50,6 +53,7 @@
 #include "open_unified/core/adblock/open_adblock_profile_service.h"
 #include "open_unified/core/model/open_types.h"
 #include "open_unified/ui/design/open_glyphs.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -179,6 +183,8 @@ enum class Sym : int {
   kKeyboardLock,
   kPointer,
   kNetwork,
+  kSoundMuted,
+  kMinus,
   kCount,
 };
 
@@ -194,7 +200,7 @@ constexpr std::array<SymSpec, static_cast<size_t>(Sym::kCount)> kSyms = {{
     {"camera", Glyph::kCapture},                     // kCapture
     {"text.viewfinder", Glyph::kNone},               // kCaptureFull (path)
     {"lock.fill", Glyph::kLock},                     // kLock
-    {"lock.open.fill", Glyph::kLock},                // kLockOpen
+    {"lock.open.fill", Glyph::kLockOpen},            // kLockOpen
     {"ellipsis", Glyph::kNone},                      // kMore (open_glyphs)
     {"plus", Glyph::kPlus},                          // kPlus
     {"chevron.right", Glyph::kChevronRight},         // kChevronRight
@@ -205,28 +211,30 @@ constexpr std::array<SymSpec, static_cast<size_t>(Sym::kCount)> kSyms = {{
     {"location.fill", Glyph::kLocation},             // kLocation
     {"bell.fill", Glyph::kBell},                     // kNotifications
     {"doc.on.clipboard.fill", Glyph::kCopy},         // kClipboard
-    {"pianokeys", Glyph::kGear},                     // kMidi
+    {"pianokeys", Glyph::kMidi},                     // kMidi
     {"rectangle.on.rectangle", Glyph::kSplit},       // kScreenCapture
     {"arrow.down.circle.fill", Glyph::kChevronDown}, // kDownloads
     {"externaldrive.fill", Glyph::kSquare},          // kStorage
     {"macwindow.on.rectangle", Glyph::kPopup},       // kWindows
-    {"textformat", Glyph::kGear},                    // kFonts
-    {"moon.zzz.fill", Glyph::kGear},                 // kIdle
-    {"gyroscope", Glyph::kGear},                     // kSensors
-    {"curlybraces", Glyph::kGear},                   // kJavaScript
+    {"textformat", Glyph::kFonts},                   // kFonts
+    {"moon.zzz.fill", Glyph::kIdle},                 // kIdle
+    {"gyroscope", Glyph::kSensors},                  // kSensors
+    {"curlybraces", Glyph::kJavaScript},             // kJavaScript
     {"photo.fill", Glyph::kSquare},                  // kImages
     {"macwindow.badge.plus", Glyph::kPopup},         // kPopups
     {"rectangle.slash.fill", Glyph::kShield},        // kAds
     {"arrow.triangle.2.circlepath", Glyph::kReload}, // kSync
-    {"speaker.wave.2.fill", Glyph::kGear},           // kSound
+    {"speaker.wave.2.fill", Glyph::kSound},          // kSound
     {"cable.connector", Glyph::kBolt},               // kUsb
-    {"keyboard.fill", Glyph::kGear},                 // kHid
+    {"keyboard.fill", Glyph::kHid},                  // kHid
     {"cable.connector.horizontal", Glyph::kBolt},    // kSerial
-    {"antenna.radiowaves.left.and.right", Glyph::kGear},  // kBluetooth
-    {"hand.raised.fill", Glyph::kGear},              // kHand
+    {"antenna.radiowaves.left.and.right", Glyph::kBluetooth},  // kBluetooth
+    {"hand.raised.fill", Glyph::kHandTracking},      // kHand
     {"lock.fill", Glyph::kLock},                     // kKeyboardLock
-    {"cursorarrow", Glyph::kGear},                   // kPointer
+    {"cursorarrow", Glyph::kPointerLock},            // kPointer
     {"network", Glyph::kGlobe},                      // kNetwork
+    {"speaker.slash.fill", Glyph::kNone},            // kSoundMuted (open_glyphs)
+    {"minus", Glyph::kMinus},                        // kMinus
 }};
 
 cc::PaintFlags StrokeFlags(SkColor color, float width) {
@@ -313,6 +321,9 @@ void PaintSym(gfx::Canvas* canvas,
       return;
     case Sym::kMore:
       glyphs::Draw(canvas, glyphs::Glyph::kMore, box, color);
+      return;
+    case Sym::kSoundMuted:
+      glyphs::Draw(canvas, glyphs::Glyph::kSpeakerMuted, box, color);
       return;
     default:
       secondary::PaintGlyph(canvas, spec.fallback, square, color);
@@ -1234,7 +1245,8 @@ void OpenSiteControlView::RefreshInUse() {
     }
     tile.in_use = InUse(tab_.get(), tile.type);
   }
-  visibility_changed = before.size() != VisibleTiles().size();
+  visibility_changed = before.size() != VisibleTiles().size() ||
+                       showing_audio_row_ != ShouldShowAudioRow();
   if (visibility_changed) {
     Rebuild();
     return;
@@ -1242,6 +1254,24 @@ void OpenSiteControlView::RefreshInUse() {
   for (auto& row : tile_rows_) {
     row->SchedulePaint();
   }
+  if (audio_mute_row_) {
+    const bool muted = tab_->IsAudioMuted();
+    audio_mute_row_->GetViewAccessibility().SetName(
+        muted ? u"Unmute Tab" : u"Mute Tab");
+    audio_mute_row_->GetViewAccessibility().SetCheckedState(
+        muted ? ax::mojom::CheckedState::kFalse
+              : ax::mojom::CheckedState::kTrue);
+    audio_mute_row_->GetViewAccessibility().SetDescription(
+        muted ? u"Muted" : u"Playing");
+    audio_mute_row_->SetTooltipText(
+        muted ? u"Unmute audio on this tab" : u"Mute audio on this tab");
+    audio_mute_row_->SchedulePaint();
+  }
+  UpdateZoomControls();
+}
+
+void OpenSiteControlView::RefreshZoom() {
+  UpdateZoomControls();
 }
 
 void OpenSiteControlView::RefreshFromTab() {
@@ -1319,6 +1349,11 @@ void OpenSiteControlView::BuildBody() {
   boost_circles_.clear();
   tile_rows_.clear();
   tile_row_indices_.clear();
+  audio_mute_row_ = nullptr;
+  zoom_out_button_ = nullptr;
+  zoom_reset_button_ = nullptr;
+  zoom_in_button_ = nullptr;
+  showing_audio_row_ = false;
   body_->RemoveAllChildViews();
   if (showing_certificate_) {
     BuildCertificatePage();
@@ -1509,6 +1544,88 @@ void OpenSiteControlView::BuildBody() {
       tile_rows_.push_back(
           static_cast<PaintedButton*>(AddBodyChild(std::move(row))));
       tile_row_indices_.push_back(index);
+      y += m::kRowIcon;
+    }
+    if (ShouldShowAudioRow()) {
+      showing_audio_row_ = true;
+      if (!visible.empty()) {
+        y += m::kRowPitch - m::kRowIcon;
+      }
+      const bool muted = tab_->IsAudioMuted();
+      auto audio_row = std::make_unique<PaintedButton>(
+          base::BindRepeating(&OpenSiteControlView::OnAudioMuteToggled,
+                              base::Unretained(this)),
+          base::BindRepeating(&OpenSiteControlView::PaintAudioMuteRow,
+                              base::Unretained(this)),
+          muted ? u"Unmute Tab" : u"Mute Tab");
+      audio_row->GetViewAccessibility().SetRole(ax::mojom::Role::kCheckBox);
+      audio_row->GetViewAccessibility().SetCheckedState(
+          muted ? ax::mojom::CheckedState::kFalse
+                : ax::mojom::CheckedState::kTrue);
+      audio_row->GetViewAccessibility().SetDescription(
+          muted ? u"Muted" : u"Playing");
+      audio_row->SetTooltipText(
+          muted ? u"Unmute audio on this tab" : u"Mute audio on this tab");
+      audio_row->SetBoundsRect(gfx::Rect(0, y, m::kWidth, m::kRowIcon));
+      audio_mute_row_ =
+          static_cast<PaintedButton*>(AddBodyChild(std::move(audio_row)));
+      y += m::kRowIcon;
+    }
+    if (tab_) {
+      if (!visible.empty() || showing_audio_row_) {
+        y += m::kRowPitch - m::kRowIcon;
+      }
+      auto zoom_label = std::make_unique<PaintedLabel>(
+          base::BindRepeating(&OpenSiteControlView::PaintZoomLabel,
+                              base::Unretained(this)),
+          u"Zoom");
+      zoom_label->SetBoundsRect(gfx::Rect(m::kPadding, y, 86, m::kRowIcon));
+      AddBodyChild(std::move(zoom_label));
+
+      constexpr int kZoomStepW = 26;
+      constexpr int kZoomResetW = 48;
+      constexpr int kZoomBtnH = 26;
+      constexpr int kZoomGap = 4;
+      const int btn_y = y + (m::kRowIcon - kZoomBtnH) / 2;
+      const int in_x = m::kWidth - m::kPadding - kZoomStepW;
+      const int reset_x = in_x - kZoomGap - kZoomResetW;
+      const int out_x = reset_x - kZoomGap - kZoomStepW;
+
+      auto zoom_out = std::make_unique<PaintedButton>(
+          base::BindRepeating(&OpenSiteControlView::OnZoomOut,
+                              base::Unretained(this)),
+          base::BindRepeating(&OpenSiteControlView::PaintZoomStepButton,
+                              base::Unretained(this), /*zoom_in=*/false),
+          u"Zoom Out");
+      zoom_out->SetTooltipText(u"Zoom Out");
+      zoom_out->SetBoundsRect(gfx::Rect(out_x, btn_y, kZoomStepW, kZoomBtnH));
+      zoom_out_button_ =
+          static_cast<PaintedButton*>(AddBodyChild(std::move(zoom_out)));
+
+      auto zoom_reset = std::make_unique<PaintedButton>(
+          base::BindRepeating(&OpenSiteControlView::OnZoomReset,
+                              base::Unretained(this)),
+          base::BindRepeating(&OpenSiteControlView::PaintZoomResetButton,
+                              base::Unretained(this)),
+          u"Reset Zoom");
+      zoom_reset->SetTooltipText(u"Reset zoom to 100%");
+      zoom_reset->SetBoundsRect(
+          gfx::Rect(reset_x, btn_y, kZoomResetW, kZoomBtnH));
+      zoom_reset_button_ =
+          static_cast<PaintedButton*>(AddBodyChild(std::move(zoom_reset)));
+
+      auto zoom_in = std::make_unique<PaintedButton>(
+          base::BindRepeating(&OpenSiteControlView::OnZoomIn,
+                              base::Unretained(this)),
+          base::BindRepeating(&OpenSiteControlView::PaintZoomStepButton,
+                              base::Unretained(this), /*zoom_in=*/true),
+          u"Zoom In");
+      zoom_in->SetTooltipText(u"Zoom In");
+      zoom_in->SetBoundsRect(gfx::Rect(in_x, btn_y, kZoomStepW, kZoomBtnH));
+      zoom_in_button_ =
+          static_cast<PaintedButton*>(AddBodyChild(std::move(zoom_in)));
+
+      UpdateZoomControls();
       y += m::kRowIcon;
     }
     if (state_.show_reload_banner) {
@@ -1923,6 +2040,130 @@ void OpenSiteControlView::OnSecurityPressed() {
                        view->Rebuild();
                      },
                      weak_factory_.GetWeakPtr()));
+}
+
+bool OpenSiteControlView::ShouldShowAudioRow() const {
+  return tab_ && (tab_->IsCurrentlyAudible() || tab_->IsAudioMuted());
+}
+
+void OpenSiteControlView::OnAudioMuteToggled() {
+  if (!tab_) {
+    return;
+  }
+  const bool next_muted = !tab_->IsAudioMuted();
+  tab_->SetAudioMuted(next_muted);
+  if (audio_mute_row_) {
+    audio_mute_row_->GetViewAccessibility().SetName(
+        next_muted ? u"Unmute Tab" : u"Mute Tab");
+    audio_mute_row_->GetViewAccessibility().SetCheckedState(
+        next_muted ? ax::mojom::CheckedState::kFalse
+                   : ax::mojom::CheckedState::kTrue);
+    audio_mute_row_->GetViewAccessibility().SetDescription(
+        next_muted ? u"Muted" : u"Playing");
+    audio_mute_row_->SetTooltipText(
+        next_muted ? u"Unmute audio on this tab" : u"Mute audio on this tab");
+    audio_mute_row_->SchedulePaint();
+  }
+  if (!ShouldShowAudioRow()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&OpenSiteControlView::Rebuild,
+                                  weak_factory_.GetWeakPtr()));
+  }
+}
+
+int OpenSiteControlView::CurrentZoomPercent() const {
+  if (!tab_ || !tab_->GetPrimaryMainFrame()) {
+    return 100;
+  }
+  const double level = content::HostZoomMap::GetZoomLevel(tab_.get());
+  const double factor = blink::ZoomLevelToZoomFactor(level);
+  return static_cast<int>(std::lround(factor * 100.0));
+}
+
+bool OpenSiteControlView::CanZoomIn() const {
+  if (!tab_ || !tab_->GetPrimaryMainFrame()) {
+    return false;
+  }
+  const double factor = blink::ZoomLevelToZoomFactor(
+      content::HostZoomMap::GetZoomLevel(tab_.get()));
+  const double max_factor = blink::kPresetBrowserZoomFactors.back();
+  return factor < max_factor && !blink::ZoomValuesEqual(factor, max_factor);
+}
+
+bool OpenSiteControlView::CanZoomOut() const {
+  if (!tab_ || !tab_->GetPrimaryMainFrame()) {
+    return false;
+  }
+  const double factor = blink::ZoomLevelToZoomFactor(
+      content::HostZoomMap::GetZoomLevel(tab_.get()));
+  const double min_factor = blink::kPresetBrowserZoomFactors.front();
+  return factor > min_factor && !blink::ZoomValuesEqual(factor, min_factor);
+}
+
+void OpenSiteControlView::OnZoomIn() {
+  if (!tab_ || !tab_->GetPrimaryMainFrame()) {
+    return;
+  }
+  const double factor = blink::ZoomLevelToZoomFactor(
+      content::HostZoomMap::GetZoomLevel(tab_.get()));
+  for (double preset : blink::kPresetBrowserZoomFactors) {
+    if (preset > factor && !blink::ZoomValuesEqual(preset, factor)) {
+      content::HostZoomMap::SetZoomLevel(tab_.get(),
+                                         blink::ZoomFactorToZoomLevel(preset));
+      UpdateZoomControls();
+      return;
+    }
+  }
+}
+
+void OpenSiteControlView::OnZoomOut() {
+  if (!tab_ || !tab_->GetPrimaryMainFrame()) {
+    return;
+  }
+  const double factor = blink::ZoomLevelToZoomFactor(
+      content::HostZoomMap::GetZoomLevel(tab_.get()));
+  for (auto it = blink::kPresetBrowserZoomFactors.rbegin();
+       it != blink::kPresetBrowserZoomFactors.rend(); ++it) {
+    if (*it < factor && !blink::ZoomValuesEqual(*it, factor)) {
+      content::HostZoomMap::SetZoomLevel(tab_.get(),
+                                         blink::ZoomFactorToZoomLevel(*it));
+      UpdateZoomControls();
+      return;
+    }
+  }
+}
+
+void OpenSiteControlView::OnZoomReset() {
+  if (!tab_ || !tab_->GetPrimaryMainFrame()) {
+    return;
+  }
+  content::HostZoomMap* map =
+      content::HostZoomMap::GetForWebContents(tab_.get());
+  const double default_level = map ? map->GetDefaultZoomLevel() : 0.0;
+  content::HostZoomMap::SetZoomLevel(tab_.get(), default_level);
+  UpdateZoomControls();
+}
+
+void OpenSiteControlView::UpdateZoomControls() {
+  if (!zoom_out_button_ && !zoom_reset_button_ && !zoom_in_button_) {
+    return;
+  }
+  const int percent = CurrentZoomPercent();
+  if (zoom_out_button_) {
+    zoom_out_button_->SetEnabled(CanZoomOut());
+    zoom_out_button_->SchedulePaint();
+  }
+  if (zoom_reset_button_) {
+    const std::u16string pct =
+        base::StrCat({base::NumberToString16(percent), u"%"});
+    zoom_reset_button_->GetViewAccessibility().SetName(
+        base::StrCat({u"Zoom ", pct, u", click to reset"}));
+    zoom_reset_button_->SchedulePaint();
+  }
+  if (zoom_in_button_) {
+    zoom_in_button_->SetEnabled(CanZoomIn());
+    zoom_in_button_->SchedulePaint();
+  }
 }
 
 void OpenSiteControlView::ClearSiteData(SiteDataKind kind) {
@@ -2420,6 +2661,97 @@ void OpenSiteControlView::PaintTileRow(size_t row_index,
   }
 }
 
+void OpenSiteControlView::PaintAudioMuteRow(gfx::Canvas* canvas,
+                                            const gfx::Rect& bounds,
+                                            bool hovered) {
+  if (!tab_) {
+    return;
+  }
+  const bool muted = tab_->IsAudioMuted();
+  const bool audible = tab_->IsCurrentlyAudible();
+  PaintRowCircle(canvas,
+                 gfx::Rect(bounds.x() + m::kPadding, bounds.y(), m::kRowIcon,
+                           m::kRowIcon),
+                 /*on=*/!muted,
+                 static_cast<int>(muted ? Sym::kSoundMuted : Sym::kSound),
+                 hovered);
+  const gfx::FontList title =
+      secondary::FontOfSize(kTitleFontSize, gfx::Font::Weight::SEMIBOLD);
+  const gfx::FontList subtitle = secondary::FontOfSize(kSubtitleFontSize);
+  const int text_x = bounds.x() + m::kRowTextX;
+  const std::u16string title_text = u"Tab Audio";
+  const bool show_dot = audible && !muted;
+  const int title_width = bounds.width() - m::kRowTextX - m::kRowTitleTrailing -
+                          (show_dot ? m::kInUseDot + 4 : 0);
+  DrawLine(canvas, title_text, title, Color(kRowTitleLight, kRowTitleDark),
+           text_x, bounds.y() + m::kRowTitleBaseline, title_width);
+  DrawLine(canvas, muted ? u"Muted" : u"Playing", subtitle,
+           Color(secondary::WithAlpha(kRowTitleLight, 0.6f), kRowSubtitleDark),
+           text_x, bounds.y() + m::kRowSubtitleBaseline,
+           bounds.width() - m::kRowTextX - m::kPadding);
+  if (show_dot) {
+    const int advance =
+        std::min(title_width, secondary::TextWidth(title_text, title));
+    secondary::FillRoundRect(
+        canvas,
+        gfx::RectF(text_x + advance + 4, bounds.y() + 5, m::kInUseDot,
+                   m::kInUseDot),
+        m::kInUseDot / 2.f, kInUseDot);
+  }
+}
+
+void OpenSiteControlView::PaintZoomLabel(gfx::Canvas* canvas,
+                                         const gfx::Rect& bounds,
+                                         bool hovered) {
+  secondary::DrawText(
+      canvas, u"Zoom",
+      secondary::FontOfSize(kTitleFontSize, gfx::Font::Weight::SEMIBOLD),
+      Color(kRowTitleLight, kRowTitleDark), bounds);
+}
+
+void OpenSiteControlView::PaintZoomStepButton(bool zoom_in,
+                                              gfx::Canvas* canvas,
+                                              const gfx::Rect& bounds,
+                                              bool hovered) {
+  const bool enabled = zoom_in ? CanZoomIn() : CanZoomOut();
+  const gfx::RectF pill(bounds);
+  secondary::FillRoundRect(
+      canvas, pill, m::kTileRadius,
+      Color(secondary::WithAlpha(SK_ColorBLACK,
+                                 hovered && enabled ? 0.11f : 0.06f),
+            secondary::WithAlpha(SK_ColorWHITE,
+                                 hovered && enabled ? 0.14f : 0.08f)));
+  SkColor ink = Color(kGlyphLight, secondary::WithAlpha(SK_ColorWHITE, 0.85f));
+  if (!enabled) {
+    ink = secondary::WithAlpha(ink, m::kDisabledAlpha);
+  }
+  const float g = 11.f;
+  PaintSym(canvas, zoom_in ? Sym::kPlus : Sym::kMinus,
+           gfx::RectF(pill.CenterPoint().x() - g / 2.f,
+                      pill.CenterPoint().y() - g / 2.f, g, g),
+           ink, g, glyphs::SymbolWeight::kSemibold);
+}
+
+void OpenSiteControlView::PaintZoomResetButton(gfx::Canvas* canvas,
+                                               const gfx::Rect& bounds,
+                                               bool hovered) {
+  const int percent = CurrentZoomPercent();
+  const bool non_default = percent != 100;
+  const gfx::RectF pill(bounds);
+  secondary::FillRoundRect(
+      canvas, pill, m::kTileRadius,
+      Color(secondary::WithAlpha(SK_ColorBLACK, hovered ? 0.11f : 0.06f),
+            secondary::WithAlpha(SK_ColorWHITE, hovered ? 0.14f : 0.08f)));
+  const SkColor ink =
+      non_default ? appearance_.ActiveAccent()
+                  : Color(kRowTitleLight, kRowTitleDark);
+  secondary::DrawText(
+      canvas, base::StrCat({base::NumberToString16(percent), u"%"}),
+      secondary::FontOfSize(12, non_default ? gfx::Font::Weight::SEMIBOLD
+                                            : gfx::Font::Weight::MEDIUM),
+      ink, bounds, gfx::Canvas::TEXT_ALIGN_CENTER);
+}
+
 void OpenSiteControlView::PaintBoostRow(size_t index,
                                         gfx::Canvas* canvas,
                                         const gfx::Rect& bounds,
@@ -2666,6 +2998,12 @@ class OpenSiteControlBubble::LiveObserver
     if (indicator_) {
       indicator_->AddObserver(this);
     }
+    if (content::HostZoomMap* zoom_map =
+            content::HostZoomMap::GetForWebContents(tab)) {
+      zoom_subscription_ = zoom_map->AddZoomLevelChangedCallback(
+          base::BindRepeating(&LiveObserver::OnZoomChanged,
+                              base::Unretained(this)));
+    }
   }
 
   ~LiveObserver() override {
@@ -2679,6 +3017,12 @@ class OpenSiteControlBubble::LiveObserver
     owner_->OnTabNavigated();
   }
   void DidChangeVisibleSecurityState() override {
+    owner_->OnLiveSourceChanged();
+  }
+  void OnAudioStateChanged(bool audible) override {
+    owner_->OnLiveSourceChanged();
+  }
+  void DidUpdateAudioMutingState(bool muted) override {
     owner_->OnLiveSourceChanged();
   }
   void OnCapabilityTypesChanged(
@@ -2728,11 +3072,16 @@ class OpenSiteControlBubble::LiveObserver
     }
   }
 
+  void OnZoomChanged(const content::HostZoomMap::ZoomLevelChange&) {
+    owner_->OnZoomLevelChanged();
+  }
+
   raw_ptr<OpenSiteControlBubble> owner_;
   scoped_refptr<MediaStreamCaptureIndicator> indicator_;
   base::ScopedObservation<OpenAdBlockProfileService,
                           OpenAdBlockProfileService::Observer>
       adblock_observation_{this};
+  base::CallbackListSubscription zoom_subscription_;
 };
 
 OpenSiteControlBubble::OpenSiteControlBubble(SiteControlDelegate* delegate)
@@ -2918,6 +3267,12 @@ void OpenSiteControlBubble::OnLiveSourceChanged() {
                        }
                      },
                      weak_factory_.GetWeakPtr()));
+}
+
+void OpenSiteControlBubble::OnZoomLevelChanged() {
+  if (contents_) {
+    contents_->RefreshZoom();
+  }
 }
 
 void OpenSiteControlBubble::OnBlockedCountChanged(int count) {

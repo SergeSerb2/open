@@ -7,9 +7,12 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/hash/hash.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -26,8 +29,14 @@
 #include "open_unified/ui/views/open_window_controls_view.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/clipboard/clipboard_url_info.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
@@ -35,13 +44,16 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/layer_nine_patch.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/events/event.h"
 #include "ui/events/event_observer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/menus/simple_menu_model.h"
@@ -234,10 +246,28 @@ class OpenBrowserView::ThemeBackgroundView : public views::View {
 
  public:
   ThemeBackgroundView() {
+    // Dedicated container layer from construction so Linux CSD rounded-corner
+    // clipping never dynamically creates a layer on OpenBrowserView over
+    // NativeViewHostAura.
+    SetPaintToLayer(ui::LAYER_NOT_DRAWN);
     SetCanProcessEventsWithinSubtree(false);
     current_ = AddChildView(std::make_unique<OpenThemeLayerView>());
     incoming_ = AddChildView(std::make_unique<OpenThemeLayerView>());
     incoming_->SetVisible(false);
+  }
+
+  void SetWindowCornerRadius(float radius) {
+    if (!layer()) {
+      return;
+    }
+    if (radius > 0.0f) {
+      layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(radius));
+      layer()->SetIsFastRoundedCorner(true);
+      layer()->SetMasksToBounds(true);
+    } else {
+      layer()->SetRoundedCornerRadius(gfx::RoundedCornersF());
+      layer()->SetMasksToBounds(false);
+    }
   }
 
   const theme::ThemeStyle& current_style() const { return current_->style(); }
@@ -494,9 +524,16 @@ class OpenBrowserView::PanelHostView : public views::View {
       return;
     }
     full_bleed_ = full_bleed;
-    layer()->SetRoundedCornerRadius(
-        full_bleed ? gfx::RoundedCornersF()
-                   : gfx::RoundedCornersF(m::panel::kCornerRadius));
+    UpdateCornerRadii();
+    SchedulePaint();
+  }
+
+  void SetTopCornersSquare(bool top_square) {
+    if (top_corners_square_ == top_square) {
+      return;
+    }
+    top_corners_square_ = top_square;
+    UpdateCornerRadii();
     SchedulePaint();
   }
 
@@ -560,7 +597,23 @@ class OpenBrowserView::PanelHostView : public views::View {
   }
 
  private:
+  void UpdateCornerRadii() {
+    if (!layer()) {
+      return;
+    }
+    if (full_bleed_) {
+      layer()->SetRoundedCornerRadius(gfx::RoundedCornersF());
+    } else if (top_corners_square_) {
+      const float r = m::panel::kCornerRadius;
+      layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(0, 0, r, r));
+    } else {
+      layer()->SetRoundedCornerRadius(
+          gfx::RoundedCornersF(m::panel::kCornerRadius));
+    }
+  }
+
   bool full_bleed_ = false;
+  bool top_corners_square_ = false;
   bool split_active_ = false;
   bool dark_content_ = false;
 };
@@ -686,6 +739,10 @@ class OpenBrowserView::HiddenSidebarToggleButton : public views::Button {
   }
 
   // views::Button:
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return ui::Cursor(ui::mojom::CursorType::kHand);
+  }
+
   void StateChanged(ButtonState old_state) override {
     views::Button::StateChanged(old_state);
     SchedulePaint();
@@ -726,6 +783,480 @@ class OpenBrowserView::HiddenSidebarToggleButton : public views::Button {
 };
 
 BEGIN_METADATA(OpenBrowserView, HiddenSidebarToggleButton)
+END_METADATA
+
+// ---------------------------------------------------------------------------
+// WindowRimView: subtle 1 DIP outer window rim for restored Linux CSD windows,
+// composited on its own non-opaque layer ABOVE theme_background_ and web content.
+
+class OpenBrowserView::WindowRimView : public views::View {
+  METADATA_HEADER(WindowRimView, views::View)
+
+ public:
+  WindowRimView() {
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+    SetCanProcessEventsWithinSubtree(false);
+    GetViewAccessibility().SetIsInvisible(true);
+    SetVisible(false);
+  }
+
+  void SetDarkContent(bool dark) {
+    if (dark_content_ != dark) {
+      dark_content_ = dark;
+      SchedulePaint();
+    }
+  }
+
+  void OnPaint(gfx::Canvas* canvas) override {
+    if (GetLocalBounds().IsEmpty()) {
+      return;
+    }
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(1.0f);
+    flags.setColor(dark_content_ ? SkColorSetARGB(31, 0xFF, 0xFF, 0xFF)
+                                 : SkColorSetARGB(36, 0x00, 0x00, 0x00));
+    gfx::RectF r(GetLocalBounds());
+    r.Inset(0.5f);
+    canvas->DrawRoundRect(
+        r, static_cast<float>(m::win_controls::kLinuxCornerRadius) - 0.5f,
+        flags);
+  }
+
+ private:
+  bool dark_content_ = true;
+};
+
+BEGIN_METADATA(OpenBrowserView, WindowRimView)
+END_METADATA
+
+// ---------------------------------------------------------------------------
+// BrowserSplitDropOverlayView: transparent drag-to-split overlay positioned
+// over the web panel inside overlay_host_ ONLY while dragging a sidebar tab.
+
+class OpenBrowserView::BrowserSplitDropOverlayView : public views::View {
+  METADATA_HEADER(BrowserSplitDropOverlayView, views::View)
+
+ public:
+  explicit BrowserSplitDropOverlayView(OpenBrowserView* owner)
+      : owner_(owner) {
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+    GetViewAccessibility().SetIsInvisible(true);
+    SetVisible(false);
+  }
+
+  void ResetPreview() {
+    dnd_tab_id_.reset();
+    dnd_url_ = GURL();
+    zone_.reset();
+    target_pane_index_.reset();
+    SchedulePaint();
+  }
+
+  // views::View:
+  bool GetDropFormats(
+      int* formats,
+      std::set<ui::ClipboardFormatType>* format_types) override {
+    *formats = ui::OSExchangeData::URL;
+    format_types->insert(sidebar_dnd::NodeFormat());
+    return true;
+  }
+
+  bool CanDrop(const ui::OSExchangeData& data) override {
+    return data.HasCustomFormat(sidebar_dnd::NodeFormat()) ||
+           data.HasURL(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
+  }
+
+  void OnDragEntered(const ui::DropTargetEvent& event) override {
+    dnd_tab_id_ = sidebar_dnd::ReadNode(event.data());
+    dnd_url_ = GURL();
+    if (!dnd_tab_id_) {
+      const std::vector<ui::ClipboardUrlInfo> urls =
+          event.data().GetURLs(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
+      if (!urls.empty()) {
+        dnd_url_ = urls.front().url;
+      }
+    }
+  }
+
+  int OnDragUpdated(const ui::DropTargetEvent& event) override {
+    if (!dnd_tab_id_ && !dnd_url_.is_valid()) {
+      OnDragEntered(event);
+    }
+    const SplitDropZone zone =
+        OpenSplitContainerView::ComputeDropZoneAt(GetLocalBounds(),
+                                                  event.location());
+    const std::vector<gfx::Rect> pane_bounds = ActivePaneBounds();
+    std::optional<size_t> target_pane;
+    if (zone == SplitDropZone::kReplacePane) {
+      target_pane = 0;
+      for (size_t i = 0; i < pane_bounds.size(); ++i) {
+        if (pane_bounds[i].Contains(event.location())) {
+          target_pane = i;
+          break;
+        }
+      }
+    }
+    const bool allowed =
+        owner_->delegate_ &&
+        owner_->delegate_->CanDropInSplit(dnd_tab_id_, dnd_url_, zone,
+                                          target_pane);
+    if (!allowed) {
+      if (zone_.has_value()) {
+        zone_.reset();
+        target_pane_index_.reset();
+        SchedulePaint();
+      }
+      return ui::DragDropTypes::DRAG_NONE;
+    }
+    if (zone_ != zone || target_pane_index_ != target_pane) {
+      zone_ = zone;
+      target_pane_index_ = target_pane;
+      SchedulePaint();
+    }
+    return dnd_tab_id_ ? ui::DragDropTypes::DRAG_MOVE
+                       : ui::DragDropTypes::DRAG_COPY |
+                             ui::DragDropTypes::DRAG_LINK;
+  }
+
+  void OnDragExited() override { ResetPreview(); }
+
+  views::View::DropCallback GetDropCallback(
+      const ui::DropTargetEvent& event) override {
+    const std::optional<SplitDropZone> zone = zone_;
+    const std::optional<size_t> target_pane = target_pane_index_;
+    std::optional<ItemID> tab_id = dnd_tab_id_;
+    GURL url = dnd_url_;
+    ResetPreview();
+    owner_->SetSplitDropOverlayActive(false);
+    if (!zone || !owner_->delegate_) {
+      return base::NullCallback();
+    }
+    return base::BindOnce(&BrowserSplitDropOverlayView::PerformDrop,
+                          weak_factory_.GetWeakPtr(), std::move(tab_id),
+                          std::move(url), *zone, target_pane);
+  }
+
+  void OnPaint(gfx::Canvas* canvas) override {
+    if (!zone_) {
+      return;
+    }
+    const gfx::Rect preview = OpenSplitContainerView::ComputeDropPreviewRect(
+        GetLocalBounds(), ActivePaneBounds(), *zone_, target_pane_index_);
+    gfx::RectF card(preview);
+    card.Inset(6.0f);
+    if (card.IsEmpty()) {
+      return;
+    }
+    const OpenSpaceThemeState& state = owner_->FocusedThemeState();
+    const SkColor accent = theme::ToSkColor(state.contrast_accent);
+    constexpr float kRadius = 10.0f;
+    secondary::FillRoundRect(canvas, card, kRadius,
+                             secondary::WithAlpha(accent, 0.16f));
+    secondary::StrokeRoundRect(canvas, card, kRadius,
+                               secondary::WithAlpha(accent, 0.72f), 2.0f);
+    std::u16string label;
+    switch (*zone_) {
+      case SplitDropZone::kLeft:
+        label = u"Split Left";
+        break;
+      case SplitDropZone::kRight:
+        label = u"Split Right";
+        break;
+      case SplitDropZone::kTop:
+        label = u"Split Top";
+        break;
+      case SplitDropZone::kBottom:
+        label = u"Split Bottom";
+        break;
+      case SplitDropZone::kReplacePane:
+        label = u"Open in Pane";
+        break;
+    }
+    const gfx::FontList& font =
+        typography::Make(13, gfx::Font::Weight::MEDIUM);
+    const int pill_w =
+        std::min(static_cast<int>(card.width()) - 24,
+                 gfx::Canvas::GetStringWidth(label, font) + 28);
+    constexpr int kPillH = 30;
+    if (pill_w >= 48 && card.height() >= kPillH + 16) {
+      const gfx::Rect pill(
+          static_cast<int>(card.x() + (card.width() - pill_w) * 0.5f),
+          static_cast<int>(card.y() + (card.height() - kPillH) * 0.5f), pill_w,
+          kPillH);
+      secondary::FillRoundRect(canvas, gfx::RectF(pill), kPillH * 0.5f,
+                               secondary::WithAlpha(accent, 0.90f));
+      secondary::DrawText(canvas, label, font, SK_ColorWHITE, pill,
+                          gfx::Canvas::TEXT_ALIGN_CENTER);
+    }
+  }
+
+ private:
+  std::vector<gfx::Rect> ActivePaneBounds() const {
+    if (owner_->split_view_active_ && owner_->split_container_) {
+      return owner_->split_container_->GetPaneBounds();
+    }
+    return {};
+  }
+
+  void PerformDrop(std::optional<ItemID> dragged_tab_id,
+                   GURL dragged_url,
+                   SplitDropZone zone,
+                   std::optional<size_t> target_pane_index,
+                   const ui::DropTargetEvent& event,
+                   ui::mojom::DragOperation& output_drag_op,
+                   std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+    const bool accepted =
+        owner_->delegate_ &&
+        owner_->delegate_->OnDropInSplit(dragged_tab_id, dragged_url, zone,
+                                         target_pane_index);
+    if (!accepted) {
+      output_drag_op = ui::mojom::DragOperation::kNone;
+      return;
+    }
+    output_drag_op = dragged_tab_id ? ui::mojom::DragOperation::kMove
+                                    : ui::mojom::DragOperation::kCopy;
+  }
+
+  raw_ptr<OpenBrowserView> owner_;
+  std::optional<ItemID> dnd_tab_id_;
+  GURL dnd_url_;
+  std::optional<SplitDropZone> zone_;
+  std::optional<size_t> target_pane_index_;
+  base::WeakPtrFactory<BrowserSplitDropOverlayView> weak_factory_{this};
+};
+
+BEGIN_METADATA(OpenBrowserView, BrowserSplitDropOverlayView)
+END_METADATA
+
+// ---------------------------------------------------------------------------
+// SinglePaneToolbarView: optional 36 DIP top toolbar for single-tab mode
+// (Back/Forward/Reload, clickable URL capsule, Copy URL, Site Control).
+
+class OpenBrowserView::SinglePaneToolbarView : public views::View {
+  METADATA_HEADER(SinglePaneToolbarView, views::View)
+
+ public:
+  explicit SinglePaneToolbarView(OpenBrowserView* owner) : owner_(owner) {
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+    SetVisible(false);
+    GetViewAccessibility().SetRole(ax::mojom::Role::kToolbar);
+    GetViewAccessibility().SetName(u"Page toolbar");
+
+    auto add_btn = [this](secondary::Glyph glyph, const char16_t* name,
+                          PaneCommand cmd, float size) {
+      auto btn = std::make_unique<secondary::GlyphButton>(
+          base::BindRepeating(&SinglePaneToolbarView::OnButtonPressed,
+                              base::Unretained(this), cmd),
+          glyph, name);
+      btn->SetGlyphSize(size);
+      btn->SetPlate(secondary::GlyphButton::Plate::kHoverRounded,
+                    SK_ColorTRANSPARENT, 6.0f);
+      return AddChildView(std::move(btn));
+    };
+    back_ = add_btn(secondary::Glyph::kBack, u"Go back", PaneCommand::kBack,
+                    14.0f);
+    forward_ = add_btn(secondary::Glyph::kForward, u"Go forward",
+                       PaneCommand::kForward, 14.0f);
+    reload_ = add_btn(secondary::Glyph::kReload, u"Reload",
+                      PaneCommand::kReload, 14.0f);
+    copy_ = add_btn(secondary::Glyph::kLink, u"Copy Current URL",
+                    PaneCommand::kCopyUrl, 13.0f);
+    site_ = add_btn(secondary::Glyph::kSiteControl, u"Site Control Center",
+                    PaneCommand::kSiteControl, 16.0f);
+    site_->SetDimsWhenDisabled(false);
+    ApplyColors();
+  }
+
+  void SetState(const SinglePaneToolbarState& state) {
+    if (state_ == state) {
+      return;
+    }
+    state_ = state;
+    back_->SetEnabled(state_.can_go_back);
+    forward_->SetEnabled(state_.can_go_forward);
+    site_->SetEnabled(state_.site_controls_available);
+    copy_->SetVisible(!state_.hides_copy);
+    reload_->SetGlyph(state_.is_loading ? secondary::Glyph::kStop
+                                        : secondary::Glyph::kReload);
+    const std::u16string reload_label =
+        state_.is_loading ? u"Stop loading" : u"Reload";
+    reload_->SetTooltipText(reload_label);
+    reload_->GetViewAccessibility().SetName(reload_label);
+    ApplyColors();
+    InvalidateLayout();
+    SchedulePaint();
+  }
+
+  views::View* site_control_anchor() const { return site_; }
+
+  // views::View:
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    if (capsule_rect_.Contains(event.location())) {
+      return ui::Cursor(ui::mojom::CursorType::kHand);
+    }
+    return views::View::GetCursor(event);
+  }
+
+  void OnMouseMoved(const ui::MouseEvent& event) override {
+    const bool over = capsule_rect_.Contains(event.location());
+    if (over != capsule_hovered_) {
+      capsule_hovered_ = over;
+      SchedulePaint();
+    }
+  }
+
+  void OnMouseExited(const ui::MouseEvent& event) override {
+    if (capsule_hovered_) {
+      capsule_hovered_ = false;
+      SchedulePaint();
+    }
+  }
+
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    return event.IsOnlyLeftMouseButton() &&
+           capsule_rect_.Contains(event.location());
+  }
+
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    if (event.IsOnlyLeftMouseButton() &&
+        capsule_rect_.Contains(event.location())) {
+      owner_->OnSinglePaneHostClicked(this);
+    }
+  }
+
+  void Layout(PassKey) override {
+    const int w = width();
+    const int h = height();
+    const int by = (h - 28) / 2;
+    back_->SetBounds(6, by, 30, 28);
+    forward_->SetBounds(38, by, 30, 28);
+    reload_->SetBounds(70, by, 30, 28);
+
+    int right = w - 6;
+    site_->SetBounds(right - 30, by, 30, 28);
+    right -= 34;
+    if (!state_.hides_copy) {
+      copy_->SetVisible(true);
+      copy_->SetBounds(right - 30, by, 30, 28);
+      right -= 34;
+    } else {
+      copy_->SetVisible(false);
+    }
+
+    const int left = 108;
+    const int avail = std::max(0, right - left);
+    const int cap_w = std::min(avail, 420);
+    const int cap_x = left + (avail - cap_w) / 2;
+    capsule_rect_ = cap_w >= 48 ? gfx::Rect(cap_x, 5, cap_w, h - 10)
+                                : gfx::Rect();
+  }
+
+  void OnPaint(gfx::Canvas* canvas) override {
+    cc::PaintFlags bg;
+    bg.setAntiAlias(true);
+    bg.setColor(state_.background);
+    const float r = m::panel::kCornerRadius;
+    const SkVector radii[4] = {{r, r}, {r, r}, {0, 0}, {0, 0}};
+    SkRRect rrect;
+    rrect.setRectRadii(gfx::RectFToSkRect(gfx::RectF(GetLocalBounds())), radii);
+    canvas->sk_canvas()->drawRRect(rrect, bg);
+
+    const bool dark = secondary::IsDark(state_.background);
+    const SkColor ink = dark ? SK_ColorWHITE : SK_ColorBLACK;
+
+    // Subtle 1px bottom hairline separating toolbar from page content.
+    canvas->FillRect(gfx::Rect(0, height() - 1, width(), 1),
+                     secondary::WithAlpha(ink, dark ? 0.10f : 0.08f));
+
+    if (!capsule_rect_.IsEmpty()) {
+      secondary::FillRoundRect(
+          canvas, gfx::RectF(capsule_rect_), 8.0f,
+          secondary::WithAlpha(ink, capsule_hovered_ ? (dark ? 0.12f : 0.08f)
+                                                     : (dark ? 0.07f : 0.045f)));
+      gfx::Rect text_rect = capsule_rect_;
+      text_rect.Inset(gfx::Insets::VH(0, 10));
+      const GURL gurl(state_.url);
+      const bool insecure = gurl.is_valid() && gurl.SchemeIs("http") &&
+                            gurl.host() != "localhost" &&
+                            gurl.host() != "127.0.0.1" &&
+                            gurl.host() != "[::1]";
+      if (insecure && text_rect.width() > 28) {
+        const SkColor warn = dark ? SkColorSetARGB(220, 0xFB, 0xBF, 0x24)
+                                  : SkColorSetARGB(230, 0xB4, 0x53, 0x09);
+        secondary::PaintGlyph(
+            canvas, secondary::Glyph::kLockOpen,
+            gfx::RectF(text_rect.x(),
+                       text_rect.y() + (text_rect.height() - 13.0f) * 0.5f,
+                       13.0f, 13.0f),
+            warn);
+        text_rect.Inset(gfx::Insets::TLBR(0, 18, 0, 0));
+      }
+      const std::u16string label =
+          state_.host.empty() ? u"Search or Enter URL…" : state_.host;
+      secondary::DrawText(canvas, label,
+                          typography::Make(13, gfx::Font::Weight::NORMAL),
+                          secondary::WithAlpha(ink, state_.host.empty() ? 0.45f : 0.78f),
+                          text_rect, gfx::Canvas::TEXT_ALIGN_CENTER);
+    }
+  }
+
+ private:
+  void ApplyColors() {
+    const bool dark = secondary::IsDark(state_.background);
+    const SkColor ink = dark ? SK_ColorWHITE : SK_ColorBLACK;
+    for (secondary::GlyphButton* btn :
+         {back_.get(), forward_.get(), reload_.get(), copy_.get(),
+          site_.get()}) {
+      btn->SetGlyphColor(secondary::WithAlpha(ink, 0.65f));
+      btn->SetHoverFill(secondary::WithAlpha(ink, dark ? 0.10f : 0.07f));
+    }
+  }
+
+  void OnButtonPressed(PaneCommand cmd) {
+    views::View* anchor = this;
+    if (cmd == PaneCommand::kReload && state_.is_loading) {
+      cmd = PaneCommand::kStop;
+    }
+    switch (cmd) {
+      case PaneCommand::kBack:
+        anchor = back_;
+        break;
+      case PaneCommand::kForward:
+        anchor = forward_;
+        break;
+      case PaneCommand::kReload:
+      case PaneCommand::kStop:
+        anchor = reload_;
+        break;
+      case PaneCommand::kCopyUrl:
+        anchor = copy_;
+        break;
+      case PaneCommand::kSiteControl:
+        anchor = site_;
+        break;
+      default:
+        break;
+    }
+    owner_->OnSinglePaneToolbarCommand(cmd, anchor);
+  }
+
+  raw_ptr<OpenBrowserView> owner_;
+  SinglePaneToolbarState state_;
+  raw_ptr<secondary::GlyphButton> back_ = nullptr;
+  raw_ptr<secondary::GlyphButton> forward_ = nullptr;
+  raw_ptr<secondary::GlyphButton> reload_ = nullptr;
+  raw_ptr<secondary::GlyphButton> copy_ = nullptr;
+  raw_ptr<secondary::GlyphButton> site_ = nullptr;
+  gfx::Rect capsule_rect_;
+  bool capsule_hovered_ = false;
+};
+
+BEGIN_METADATA(OpenBrowserView, SinglePaneToolbarView)
 END_METADATA
 
 // ---------------------------------------------------------------------------
@@ -950,6 +1481,11 @@ void OpenBrowserView::Install(BrowserView* browser_view,
   browser_view->AddChildViewAt(std::move(owned), 0);
   view->overlay_host_ =
       browser_view->AddChildView(std::make_unique<OpenOverlayHostView>());
+  if (view->split_drop_overlay_ &&
+      view->split_drop_overlay_->parent() == view) {
+    view->split_drop_overlay_ = view->overlay_host_->AddChildView(
+        view->RemoveChildViewT(view->split_drop_overlay_.get()));
+  }
   if (view->card_shadow_ && view->card_shadow_->parent() == view) {
     view->card_shadow_ = view->overlay_host_->AddChildView(
         view->RemoveChildViewT(view->card_shadow_.get()));
@@ -957,6 +1493,10 @@ void OpenBrowserView::Install(BrowserView* browser_view,
   if (view->reveal_card_ && view->reveal_card_->parent() == view) {
     view->reveal_card_ = view->overlay_host_->AddChildView(
         view->RemoveChildViewT(view->reveal_card_.get()));
+  }
+  if (view->window_rim_ && view->window_rim_->parent() == view) {
+    view->window_rim_ = view->overlay_host_->AddChildView(
+        view->RemoveChildViewT(view->window_rim_.get()));
   }
   const gfx::Rect bounds = browser_view->GetLocalBounds();
   view->SetBoundsRect(bounds);
@@ -980,8 +1520,10 @@ void OpenBrowserView::Uninstall(BrowserView* browser_view) {
   if (view->overlay_host_) {
     views::View* host = view->overlay_host_;
     view->overlay_host_ = nullptr;
+    view->split_drop_overlay_ = nullptr;
     view->card_shadow_ = nullptr;
     view->reveal_card_ = nullptr;
+    view->window_rim_ = nullptr;
     view->overlays_.clear();
     browser_view->RemoveChildViewT(host);
   }
@@ -1029,13 +1571,15 @@ views::NativeViewHost* OpenBrowserView::ActiveWebHolder() const {
 
 void OpenBrowserView::ApplyWebCornerRadii() {
   // Native web content is not clipped by the panel layer: apply the panel's
-  // 6 pt corners (square in tab fullscreen) through MultiContentsView so its
-  // background and contents containers stay rounded, and also lock the active
-  // NativeViewHost directly as fallback and across tab switches.
+  // 6 pt corners (square in tab fullscreen, or bottom-only when the 36 DIP
+  // single-pane top toolbar sits above the page) through MultiContentsView and
+  // the active NativeViewHost.
+  const float r = m::panel::kCornerRadius;
   const gfx::RoundedCornersF radii =
       tab_fullscreen_applied_
           ? gfx::RoundedCornersF()
-          : gfx::RoundedCornersF(m::panel::kCornerRadius);
+          : (ShowsSinglePaneToolbar() ? gfx::RoundedCornersF(0, 0, r, r)
+                                      : gfx::RoundedCornersF(r));
   if (auto* multi = views::AsViewClass<MultiContentsView>(
           browser_contents_container_.get())) {
     multi->SetShouldShowTopSeparator(false);
@@ -1084,6 +1628,8 @@ OpenBrowserView::OpenBrowserView(OpenViewController* controller,
       m::panel::kCornerRadius, m::panel::kShadowBlur / 2,
       m::panel::kShadowOpacity, m::panel::kShadowOffsetY));
   panel_host_ = AddChildView(std::make_unique<PanelHostView>());
+  single_pane_toolbar_ =
+      AddChildView(std::make_unique<SinglePaneToolbarView>(this));
 
   auto sidebar = std::make_unique<OpenSidebarView>(this);
   sidebar->SetPaintToLayer();
@@ -1103,12 +1649,15 @@ OpenBrowserView::OpenBrowserView(OpenViewController* controller,
                               base::Unretained(this))));
   hidden_sidebar_toggle_->SetVisible(false);
 
+  split_drop_overlay_ =
+      AddChildView(std::make_unique<BrowserSplitDropOverlayView>(this));
   card_shadow_ = AddChildView(std::make_unique<PanelShadowView>(
       m::window::kRevealCardRadius, m::window::kRevealCardShadowRadius,
       m::window::kRevealCardShadowOpacity, 0));
   card_shadow_->SetVisible(false);
   reveal_card_ = AddChildView(std::make_unique<RevealCardView>());
   reveal_card_->SetVisible(false);
+  window_rim_ = AddChildView(std::make_unique<WindowRimView>());
 
   RebuildWindowControls();
 
@@ -1222,7 +1771,137 @@ void OpenBrowserView::SetSplitViewActive(bool active) {
   }
   split_view_active_ = active;
   UpdatePanelChildren();
+  ApplyWebCornerRadii();
   sidebar_->OnSplitViewChanged(active);
+  InvalidateLayout();
+}
+
+void OpenBrowserView::SetSplitDropOverlayActive(bool active) {
+  const bool next = active && !tab_fullscreen_applied_;
+  if (split_drop_overlay_active_ == next) {
+    return;
+  }
+  split_drop_overlay_active_ = next;
+  if (split_drop_overlay_) {
+    if (!next) {
+      split_drop_overlay_->ResetPreview();
+    }
+    split_drop_overlay_->SetVisible(next);
+    if (next) {
+      LayoutOverlays();
+    }
+  }
+}
+
+bool OpenBrowserView::IsSplitDropOverlayActive() const {
+  return split_drop_overlay_active_;
+}
+
+void OpenBrowserView::SetSinglePaneToolbarVisible(bool visible) {
+  if (single_pane_toolbar_visible_ == visible) {
+    return;
+  }
+  single_pane_toolbar_visible_ = visible;
+  if (visible) {
+    SyncSinglePaneToolbarFromActiveTab();
+  }
+  ApplyWebCornerRadii();
+  InvalidateLayout();
+}
+
+void OpenBrowserView::UpdateSinglePaneToolbar(
+    const SinglePaneToolbarState& state) {
+  if (single_pane_toolbar_) {
+    single_pane_toolbar_->SetState(state);
+  }
+}
+
+views::View* OpenBrowserView::GetSinglePaneSiteControlAnchor() const {
+  return single_pane_toolbar_ ? single_pane_toolbar_->site_control_anchor()
+                              : nullptr;
+}
+
+bool OpenBrowserView::ShowsSinglePaneToolbar() const {
+  return single_pane_toolbar_visible_ && !split_view_active_ &&
+         !tab_fullscreen_applied_ && HasActiveTab();
+}
+
+void OpenBrowserView::SyncSinglePaneToolbarFromActiveTab() {
+  if (!single_pane_toolbar_) {
+    return;
+  }
+  SinglePaneToolbarState state;
+  const OpenSpaceThemeState& theme = FocusedThemeState();
+  const bool dark = theme.roles.content == theme::ContentAppearance::kDark;
+  state.background = dark ? SkColorSetRGB(0x1E, 0x20, 0x28) : SK_ColorWHITE;
+  if (const Tab* tab = controller_->GetActiveTab(window_id_)) {
+    state.can_go_back = tab->live_state.can_go_back;
+    state.can_go_forward = tab->live_state.can_go_forward;
+    state.is_loading = tab->live_state.is_loading;
+    state.url = tab->url;
+    const GURL gurl(tab->url);
+    if (gurl.is_valid()) {
+      std::string host(gurl.host());
+      if (host.starts_with("www.")) {
+        host.erase(0, 4);
+      }
+      state.host = base::UTF8ToUTF16(host.empty() ? gurl.spec() : host);
+      state.hides_copy = gurl.SchemeIs("open") && gurl.host() == "note";
+    } else {
+      state.host = base::UTF8ToUTF16(tab->url);
+    }
+    if (tab->live_state.page_background_color.has_value()) {
+      state.background =
+          secondary::ToSkColor(*tab->live_state.page_background_color);
+    }
+  }
+  single_pane_toolbar_->SetState(state);
+}
+
+void OpenBrowserView::OnSinglePaneToolbarCommand(PaneCommand command,
+                                                 views::View* anchor) {
+  if (delegate_) {
+    delegate_->OnSinglePaneToolbarCommand(command, anchor);
+    return;
+  }
+  switch (command) {
+    case PaneCommand::kBack:
+      Send(OpenIntent::Of(OpenIntentKind::kGoBack));
+      break;
+    case PaneCommand::kForward:
+      Send(OpenIntent::Of(OpenIntentKind::kGoForward));
+      break;
+    case PaneCommand::kReload:
+      Send(OpenIntent::Of(OpenIntentKind::kReload));
+      break;
+    case PaneCommand::kStop:
+      Send(OpenIntent::Of(OpenIntentKind::kStopLoading));
+      break;
+    case PaneCommand::kCopyUrl:
+      Send(OpenIntent::Of(OpenIntentKind::kCopyCurrentUrl));
+      break;
+    case PaneCommand::kSiteControl: {
+      OpenIntent intent = OpenIntent::Of(OpenIntentKind::kShowSiteControls);
+      if (anchor) {
+        intent.anchor_in_screen = anchor->GetBoundsInScreen();
+      }
+      Send(intent);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+void OpenBrowserView::OnSinglePaneHostClicked(views::View* anchor) {
+  if (delegate_) {
+    delegate_->OnSinglePaneHostClicked(anchor);
+    return;
+  }
+  Send(OpenIntent::CommandBar(
+      CommandBarSource::kUrlField,
+      anchor ? std::optional<gfx::Rect>(anchor->GetBoundsInScreen())
+             : std::nullopt));
 }
 
 bool OpenBrowserView::HasActiveTab() const {
@@ -1272,12 +1951,15 @@ views::View* OpenBrowserView::SetOverlay(OverlaySlot slot,
   }
   views::View* added = host->AddChildView(std::move(view));
   overlays_[slot] = added;
-  // Z order: Find/Toasts < Peek < Command Bar, all above the card.
+  // Z order: Find/Toasts < Peek < Command Bar < WindowRim, all above the card.
   for (OverlaySlot s : {OverlaySlot::kFindBarAndToasts, OverlaySlot::kPeek,
                         OverlaySlot::kCommandBar}) {
     if (auto it = overlays_.find(s); it != overlays_.end()) {
       host->ReorderChildView(it->second, host->children().size());
     }
+  }
+  if (window_rim_ && window_rim_->parent() == host) {
+    host->ReorderChildView(window_rim_.get(), host->children().size());
   }
   LayoutOverlays();
   return added;
@@ -1373,9 +2055,11 @@ void OpenBrowserView::RebuildWindowControls() {
     RemoveChildViewT(doomed);
   }
   // Keep caption controls above theme_background_/resize_handle_ and below
-  // card_shadow_/reveal_card_ (and overlay_host_).
+  // split_drop_overlay_/card_shadow_/reveal_card_ (and overlay_host_).
   size_t insert_index = children().size();
-  if (card_shadow_ && card_shadow_->parent() == this) {
+  if (split_drop_overlay_ && split_drop_overlay_->parent() == this) {
+    insert_index = GetIndexOf(split_drop_overlay_.get()).value_or(insert_index);
+  } else if (card_shadow_ && card_shadow_->parent() == this) {
     insert_index = GetIndexOf(card_shadow_.get()).value_or(insert_index);
   } else if (reveal_card_ && reveal_card_->parent() == this) {
     insert_index = GetIndexOf(reveal_card_.get()).value_or(insert_index);
@@ -1437,6 +2121,9 @@ void OpenBrowserView::SyncWindowControlsState() {
   }
   if (hidden_sidebar_toggle_) {
     hidden_sidebar_toggle_->SetThemeState(dark_content, window_active_, ic);
+  }
+  if (window_rim_) {
+    window_rim_->SetDarkContent(dark_content);
   }
 }
 
@@ -1673,6 +2360,16 @@ void OpenBrowserView::ReleaseMenuRevealLock() {
 }
 
 gfx::Rect OpenBrowserView::RevealCardBounds() const {
+#if !BUILDFLAG(IS_MAC)
+  if (HasCaptionStrip()) {
+    // Align RevealCardView at y = 0 on Win/Linux so its internal sidebar
+    // toolbar at y = 2 lines up vertically with HiddenSidebarToggleButton
+    // (y = 2) and OpenWindowControlsView (y = 0..32).
+    const int inset = static_cast<int>(m::window::kRevealCardInset);
+    return gfx::Rect(inset, 0, static_cast<int>(std::lround(sidebar_width_)),
+                     std::max(0, height() - inset));
+  }
+#endif
   const m::Frame f = m::window::RevealCardFrame(
       {static_cast<float>(width()), static_cast<float>(height())},
       sidebar_width_);
@@ -1680,6 +2377,19 @@ gfx::Rect OpenBrowserView::RevealCardBounds() const {
 }
 
 bool OpenBrowserView::PointInRevealZone(const gfx::Point& p) const {
+#if !BUILDFLAG(IS_MAC)
+  // Exclude HiddenSidebarToggleButton and the 32 DIP caption strip so hovering
+  // the explicit toggle button or Linux leading controls never collides with
+  // hover-reveal.
+  if (hidden_sidebar_toggle_ && hidden_sidebar_toggle_->GetVisible() &&
+      hidden_sidebar_toggle_->bounds().Contains(p)) {
+    return false;
+  }
+  if (HasCaptionStrip()) {
+    return p.x() >= 0 && p.x() < m::reveal::kInnerEdgeWidth &&
+           p.y() >= m::win_controls::kStripHeight && p.y() < height();
+  }
+#endif
   // Inner left edge (0 .. 0.6 u) and the top-left corner.
   const bool inner = p.x() >= 0 && p.x() < m::reveal::kInnerEdgeWidth &&
                      p.y() >= 0 && p.y() < height();
@@ -1991,6 +2701,52 @@ bool OpenBrowserView::AnimationsEnabled() const {
   return widget && widget_visible_ && !widget->IsMinimized();
 }
 
+void OpenBrowserView::OnAppMenuRequested(views::View* anchor) {
+  if (delegate_) {
+    delegate_->OnAppMenuRequested(anchor);
+  }
+}
+
+void OpenBrowserView::OnExtensionContextMenuRequested(
+    const std::string& extension_id,
+    views::View* anchor,
+    const gfx::Point& screen_pt) {
+  if (delegate_) {
+    delegate_->OnExtensionContextMenuRequested(extension_id, anchor, screen_pt);
+    return;
+  }
+  OpenMenuTarget target;
+  target.kind = OpenMenuTarget::Kind::kToolbarAction;
+  target.text = extension_id;
+  target.space_id = FocusedSpaceId();
+  ShowSidebarMenu(target, anchor, screen_pt, ui::mojom::MenuSourceType::kMouse);
+}
+
+void OpenBrowserView::OnSpaceReordered(const std::string& space_id,
+                                       size_t to_index) {
+  if (delegate_) {
+    delegate_->OnSpaceReordered(space_id, to_index);
+  }
+}
+
+void OpenBrowserView::OnResetPinnedTab(const ItemID& id, bool separate) {
+  if (delegate_) {
+    delegate_->OnResetPinnedTab(id, separate);
+    return;
+  }
+  if (!separate) {
+    Send(OpenIntent::ForNode(OpenIntentKind::kResetToPinnedUrl, id));
+  }
+}
+
+void OpenBrowserView::OnTabDragStateChanged(bool dragging,
+                                            const ItemID& tab_id) {
+  SetSplitDropOverlayActive(dragging);
+  if (delegate_) {
+    delegate_->OnTabDragStateChanged(dragging, tab_id);
+  }
+}
+
 // --- Intents, menus, favicons ---------------------------------------------------
 
 void OpenBrowserView::Send(const OpenIntent& intent) {
@@ -2165,45 +2921,27 @@ void OpenBrowserView::SetClipsWindowCorners(bool clips) {
     return;
   }
   clips_window_corners_ = clips;
-  if (clips) {
-    SetPaintToLayer();
-    layer()->SetFillsBoundsOpaquely(false);
+  // Never call SetPaintToLayer() dynamically on OpenBrowserView while
+  // browser_contents_container_ (NativeViewHostAura) is in the widget tree:
+  // clip theme_background_'s pre-existing layer instead and let
+  // ApplyWebCornerRadii() clip the web panel.
 #if BUILDFLAG(IS_LINUX)
-    const float radius = static_cast<float>(m::win_controls::kLinuxCornerRadius);
-#else
-    const float radius = m::window::kCornerRadius;
-#endif
-    layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(radius));
-    layer()->SetIsFastRoundedCorner(true);
-    layer()->SetMasksToBounds(true);
-  } else if (layer()) {
-    layer()->SetRoundedCornerRadius(gfx::RoundedCornersF());
-    layer()->SetMasksToBounds(false);
+  const float radius = static_cast<float>(m::win_controls::kLinuxCornerRadius);
+  if (window_rim_) {
+    window_rim_->SetVisible(clips);
   }
+#else
+  const float radius = m::window::kCornerRadius;
+#endif
+  if (theme_background_) {
+    theme_background_->SetWindowCornerRadius(clips ? radius : 0.0f);
+  }
+  ApplyWebCornerRadii();
   SchedulePaint();
 }
 
 void OpenBrowserView::PaintChildren(const views::PaintInfo& info) {
   views::View::PaintChildren(info);
-#if BUILDFLAG(IS_LINUX)
-  if (!clips_window_corners_ || GetLocalBounds().IsEmpty()) {
-    return;
-  }
-  ui::PaintRecorder recorder(info.context(), size());
-  const OpenSpaceThemeState& state = FocusedThemeState();
-  const bool dark = state.roles.content == theme::ContentAppearance::kDark;
-  cc::PaintFlags flags;
-  flags.setAntiAlias(true);
-  flags.setStyle(cc::PaintFlags::kStroke_Style);
-  flags.setStrokeWidth(1.0f);
-  // Subtle 1 DIP inner window rim when restored on Linux CSD.
-  flags.setColor(dark ? SkColorSetARGB(31, 0xFF, 0xFF, 0xFF)
-                      : SkColorSetARGB(36, 0x00, 0x00, 0x00));
-  gfx::RectF r(GetLocalBounds());
-  r.Inset(0.5f);
-  recorder.canvas()->DrawRoundRect(
-      r, static_cast<float>(m::win_controls::kLinuxCornerRadius) - 0.5f, flags);
-#endif
 }
 
 // --- Layout -----------------------------------------------------------------------------
@@ -2212,16 +2950,36 @@ void OpenBrowserView::LayoutPanel(const gfx::Rect& requested) {
   // A fullscreen page fills the window edge to edge.
   const gfx::Rect panel =
       tab_fullscreen_applied_ ? GetLocalBounds() : requested;
-  panel_host_->SetBoundsRect(panel);
+  const bool show_toolbar = ShowsSinglePaneToolbar();
+  const int toolbar_h =
+      show_toolbar ? static_cast<int>(m::content_toolbar::kSinglePaneHeight)
+                   : 0;
+  if (single_pane_toolbar_) {
+    single_pane_toolbar_->SetVisible(show_toolbar);
+    if (show_toolbar) {
+      single_pane_toolbar_->SetBounds(panel.x(), panel.y(), panel.width(),
+                                      toolbar_h);
+    }
+  }
+  const gfx::Rect content_rect(panel.x(), panel.y() + toolbar_h, panel.width(),
+                               std::max(0, panel.height() - toolbar_h));
+  panel_host_->SetTopCornersSquare(show_toolbar);
+  panel_host_->SetBoundsRect(content_rect);
   panel_shadow_->SetContentBounds(panel);
   if (browser_contents_container_) {
-    browser_contents_container_->SetBoundsRect(panel);
+    browser_contents_container_->SetBoundsRect(content_rect);
   }
 }
 
 void OpenBrowserView::LayoutOverlays() {
   if (overlay_host_) {
     overlay_host_->SetBoundsRect(bounds());
+  }
+  if (split_drop_overlay_) {
+    split_drop_overlay_->SetBoundsRect(panel_host_->bounds());
+  }
+  if (window_rim_) {
+    window_rim_->SetBoundsRect(GetLocalBounds());
   }
   for (const auto& [slot, view] : overlays_) {
     view->SetBoundsRect(slot == OverlaySlot::kFindBarAndToasts
@@ -2280,6 +3038,7 @@ void OpenBrowserView::Layout(PassKey) {
       }
     }
   }
+  int leading_controls_inset = 0;
   if (leading_window_controls_view_) {
     leading_window_controls_view_->SetVisible(show_caption_strip);
     if (show_caption_strip) {
@@ -2287,30 +3046,32 @@ void OpenBrowserView::Layout(PassKey) {
       leading_window_controls_view_->SetBounds(
           m::win_controls::kLinuxOuterMargin, 2, pref.width(),
           m::win_controls::kLinuxButtonSize);
+      leading_controls_inset = leading_window_controls_view_->bounds().right() + 8;
     }
   }
+  sidebar_->SetLeadingControlsInset(leading_controls_inset);
   if (hidden_sidebar_toggle_) {
     const bool show_toggle = show_caption_strip && sidebar_hidden_ && !sliding_;
     hidden_sidebar_toggle_->SetVisible(show_toggle);
     if (show_toggle) {
-      int toggle_x = 10;
-      if (leading_window_controls_view_ &&
-          leading_window_controls_view_->GetVisible()) {
-        toggle_x = leading_window_controls_view_->bounds().right() + 8;
-      }
-      hidden_sidebar_toggle_->SetBounds(toggle_x, 2, 32, 28);
+      const int toggle_x = leading_controls_inset > 0
+                               ? leading_controls_inset
+                               : static_cast<int>(m::chrome::kSidebarToggleX);
+      const int toggle_size = static_cast<int>(m::chrome::kToolbarButtonSize);
+      const int toggle_y = static_cast<int>(m::chrome::kToolbarButtonY);
+      hidden_sidebar_toggle_->SetBounds(toggle_x, toggle_y, toggle_size,
+                                        toggle_size);
     }
   }
   const int w = static_cast<int>(std::lround(sidebar_width_));
   if (!sliding_) {
     LayoutPanel(PanelBoundsFor(sidebar_hidden_, sidebar_width_));
   }
-  const int sidebar_top =
-      (show_caption_strip && leading_window_controls_view_)
-          ? m::win_controls::kStripHeight
-          : 0;
+  // Keep sidebar_top = 0 even when Linux leading window buttons are visible;
+  // OpenSidebarView shifts its toolbar row right by leading_controls_inset so
+  // its toolbar stays harmonized inside the 32 DIP caption strip.
   if (sidebar_->parent() == this) {
-    sidebar_->SetBounds(0, sidebar_top, w, std::max(0, height() - sidebar_top));
+    sidebar_->SetBounds(0, 0, w, height());
     if (!sliding_) {
       sidebar_->layer()->SetTransform(gfx::Transform());
       sidebar_->SetVisible(!sidebar_hidden_);
@@ -2460,6 +3221,7 @@ void OpenBrowserView::ApplyTabFullscreen(bool fullscreen) {
   const bool split = split_view_active_ && split_container_;
   panel_shadow_->SetVisible(!fullscreen && !split);
   if (fullscreen) {
+    SetSplitDropOverlayActive(false);
     // No card and no reveal while the page is fullscreen.
     reveal_dwell_timer_.Stop();
     reveal_exit_timer_.Stop();
@@ -2492,7 +3254,7 @@ void OpenBrowserView::ApplyTabFullscreen(bool fullscreen) {
 // --- Window material (macOS vibrancy / Windows 11 Mica) --------------------
 
 void OpenBrowserView::EnableTranslucentChrome() {
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC)
   if (translucent_chrome_enabled_ || !browser_view_) {
     return;
   }
@@ -2505,7 +3267,7 @@ void OpenBrowserView::EnableTranslucentChrome() {
   translucent_chrome_enabled_ = true;
   // The native browser frame paints an opaque background under the window;
   // give BrowserView a non-opaque layer and mark the frame view LAYER_NOT_DRAWN
-  // so macOS vibrancy / Windows 11 Mica shows cleanly under theme_background_.
+  // so macOS vibrancy shows cleanly under theme_background_.
   browser_view_->SetPaintToLayer();
   browser_view_->layer()->SetFillsBoundsOpaquely(false);
   frame->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
@@ -2547,12 +3309,19 @@ void OpenBrowserView::UpdateWindowMaterial() {
     return;
   }
   applied_material_ = spec;
+#if BUILDFLAG(IS_MAC)
   if (spec.vibrant) {
     // Before the window turns non-opaque: no frame-color flash.
     EnableTranslucentChrome();
   }
   const bool translucent = translucent_chrome_enabled_ &&
                            platform->UpdateWindowEffects(widget, spec);
+#else
+  // On Windows, UpdateWindowEffects sets immersive dark mode and returns false;
+  // do NOT call EnableTranslucentChrome() which creates unmanaged layers over
+  // NativeViewHostAura.
+  const bool translucent = platform->UpdateWindowEffects(widget, spec);
+#endif
   if (translucent != translucent_window_) {
     translucent_window_ = translucent;
     theme_background_->SetTranslucentWindow(translucent);
@@ -2624,6 +3393,12 @@ void OpenBrowserView::OnWindowStateChanged(const WindowID& window_id) {
 
 void OpenBrowserView::OnTabLiveStateChanged(const ItemID& tab_id) {
   sidebar_->OnTabLiveStateChanged(tab_id);
+  if (single_pane_toolbar_visible_) {
+    if (const Tab* active = controller_->GetActiveTab(window_id_);
+        active && active->id == tab_id) {
+      SyncSinglePaneToolbarFromActiveTab();
+    }
+  }
 }
 
 void OpenBrowserView::OnActiveTabChanged(const WindowID& window_id) {
@@ -2632,6 +3407,10 @@ void OpenBrowserView::OnActiveTabChanged(const WindowID& window_id) {
     ApplyWebCornerRadii();
     UpdatePanelChildren();
     sidebar_->OnActiveTabChanged();
+    if (single_pane_toolbar_visible_) {
+      SyncSinglePaneToolbarFromActiveTab();
+      InvalidateLayout();
+    }
   }
 }
 

@@ -241,61 +241,6 @@ std::optional<CommandId> MapChromiumCommandToOpen(int command_id) {
   }
 }
 
-// Fallback native Chromium IDC_* command for Open menu commands that Chromium
-// handles natively when OpenWindowUi::RunCommandId returns false.
-int FallbackChromiumCommandForOpen(CommandId cid) {
-  switch (cid) {
-    case CommandId::kNewWindow:
-      return IDC_NEW_WINDOW;
-    case CommandId::kNewIncognitoWindow:
-      return IDC_NEW_INCOGNITO_WINDOW;
-    case CommandId::kRestoreLastClosedTab:
-      return IDC_RESTORE_TAB;
-    case CommandId::kPrint:
-      return IDC_PRINT;
-    case CommandId::kSavePageAs:
-      return IDC_SAVE_PAGE;
-    case CommandId::kReload:
-      return IDC_RELOAD;
-    case CommandId::kForceReload:
-      return IDC_RELOAD_BYPASSING_CACHE;
-    case CommandId::kStopLoading:
-      return IDC_STOP;
-    case CommandId::kZoomIn:
-      return IDC_ZOOM_PLUS;
-    case CommandId::kZoomOut:
-      return IDC_ZOOM_MINUS;
-    case CommandId::kZoomActualSize:
-      return IDC_ZOOM_NORMAL;
-    case CommandId::kCast:
-      return IDC_ROUTE_MEDIA;
-    case CommandId::kDeveloperTools:
-      return IDC_DEV_TOOLS;
-    case CommandId::kJavaScriptConsole:
-      return IDC_DEV_TOOLS_CONSOLE;
-    case CommandId::kViewSource:
-      return IDC_VIEW_SOURCE;
-    case CommandId::kInspectElements:
-      return IDC_DEV_TOOLS_INSPECT;
-    case CommandId::kAllowJsAppleEvents:
-      return IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS;
-    case CommandId::kTaskManager:
-      return IDC_TASK_MANAGER_MAIN_MENU;
-    case CommandId::kManageExtensions:
-      return IDC_MANAGE_EXTENSIONS;
-    case CommandId::kImportFromBrowser:
-      return IDC_IMPORT_SETTINGS;
-    case CommandId::kDuplicateTab:
-      return IDC_DUPLICATE_TAB;
-    case CommandId::kGoBack:
-      return IDC_BACK;
-    case CommandId::kGoForward:
-      return IDC_FORWARD;
-    default:
-      return 0;
-  }
-}
-
 // Native AppKit responder selectors matching SystemCommandActions in
 // MenuBuilder.swift.
 struct NativeMenuAction {
@@ -929,6 +874,78 @@ int OpenCommandIdForMenuTag(std::string_view command_id) {
   return def ? MenuTagForCommandId(def->command_id) : 0;
 }
 
+int FallbackChromiumCommandForOpen(CommandId cid) {
+  switch (cid) {
+    case CommandId::kNewWindow:
+      return IDC_NEW_WINDOW;
+    case CommandId::kNewIncognitoWindow:
+      return IDC_NEW_INCOGNITO_WINDOW;
+    case CommandId::kRestoreLastClosedTab:
+      return IDC_RESTORE_TAB;
+    case CommandId::kPrint:
+      return IDC_PRINT;
+    case CommandId::kSavePageAs:
+      return IDC_SAVE_PAGE;
+    case CommandId::kReload:
+      return IDC_RELOAD;
+    case CommandId::kForceReload:
+      return IDC_RELOAD_BYPASSING_CACHE;
+    case CommandId::kStopLoading:
+      return IDC_STOP;
+    case CommandId::kZoomIn:
+      return IDC_ZOOM_PLUS;
+    case CommandId::kZoomOut:
+      return IDC_ZOOM_MINUS;
+    case CommandId::kZoomActualSize:
+      return IDC_ZOOM_NORMAL;
+    case CommandId::kCast:
+      return IDC_ROUTE_MEDIA;
+    case CommandId::kDeveloperTools:
+      return IDC_DEV_TOOLS;
+    case CommandId::kJavaScriptConsole:
+      return IDC_DEV_TOOLS_CONSOLE;
+    case CommandId::kViewSource:
+      return IDC_VIEW_SOURCE;
+    case CommandId::kInspectElements:
+    case CommandId::kNetworkInspector:
+      return IDC_DEV_TOOLS_INSPECT;
+    case CommandId::kAllowJsAppleEvents:
+      return IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS;
+    case CommandId::kTaskManager:
+      return IDC_TASK_MANAGER_MAIN_MENU;
+    case CommandId::kManageExtensions:
+      return IDC_MANAGE_EXTENSIONS;
+    case CommandId::kImportFromBrowser:
+      return IDC_IMPORT_SETTINGS;
+    case CommandId::kDuplicateTab:
+      return IDC_DUPLICATE_TAB;
+    case CommandId::kGoBack:
+      return IDC_BACK;
+    case CommandId::kGoForward:
+      return IDC_FORWARD;
+    default:
+      return 0;
+  }
+}
+
+bool ExecuteFallbackChromiumCommand(BrowserWindowInterface* browser,
+                                    CommandId id) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!browser) {
+    return false;
+  }
+  const int idc = FallbackChromiumCommandForOpen(id);
+  if (idc == 0) {
+    return false;
+  }
+  base::AutoReset<bool> passthrough(&g_command_passthrough, true);
+  if (!chrome::IsCommandEnabled(browser, idc)) {
+    return false;
+  }
+  chrome::ExecuteCommand(browser, idc);
+  return true;
+}
+
 bool HandleBrowserCommand(BrowserWindowInterface* browser, int command_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (g_command_passthrough) {
@@ -953,12 +970,7 @@ bool HandleBrowserCommand(BrowserWindowInterface* browser, int command_id) {
   // delegate to its native Chromium IDC_* twin when one exists (e.g. Save Page
   // As…, Print, Zoom, DevTools, View Source).
   if (IsOpenMenuCommand(command_id) && browser) {
-    if (int fallback_idc = FallbackChromiumCommandForOpen(*open_command);
-        fallback_idc != 0) {
-      base::AutoReset<bool> passthrough(&g_command_passthrough, true);
-      chrome::ExecuteCommand(browser, fallback_idc);
-      return true;
-    }
+    return ExecuteFallbackChromiumCommand(browser, *open_command);
   }
   return false;
 }
@@ -1463,11 +1475,8 @@ views::View* GetBubbleAnchorView(BrowserWindowInterface* browser) {
     return nullptr;
   }
   if (g_hook_delegate) {
-    if (views::View* anchor = g_hook_delegate->GetBubbleAnchorView(browser)) {
-      if (anchor->IsDrawn()) {
-        return anchor;
-      }
-    }
+    views::View* anchor = g_hook_delegate->GetBubbleAnchorView(browser);
+    return (anchor && anchor->IsDrawn()) ? anchor : nullptr;
   }
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   OpenBrowserView* open_view =
@@ -1475,14 +1484,24 @@ views::View* GetBubbleAnchorView(BrowserWindowInterface* browser) {
   if (!open_view || !open_view->IsDrawn()) {
     return nullptr;
   }
-  // Anchor inside the web panel (or OpenBrowserView if empty) so Chromium
-  // permission prompts, password save prompts, and extension dialogs stay
-  // inside Open's window instead of hidden top-left at (0,0).
-  if (views::View* panel = open_view->web_contents_host();
-      panel && panel->IsDrawn()) {
-    return panel;
+  if (open_view->sidebar_hidden()) {
+    if (open_view->single_pane_toolbar_visible()) {
+      if (views::View* sc = open_view->GetSinglePaneSiteControlAnchor();
+          sc && sc->IsDrawn()) {
+        return sc;
+      }
+    }
+    return nullptr;
   }
-  return open_view;
+  if (views::View* sc = open_view->GetSiteControlAnchorView();
+      sc && sc->IsDrawn()) {
+    return sc;
+  }
+  if (views::View* pill = open_view->GetUrlPillView();
+      pill && pill->IsDrawn()) {
+    return pill;
+  }
+  return nullptr;
 }
 
 std::optional<gfx::Rect> GetBubbleAnchorRect(BrowserWindowInterface* browser) {

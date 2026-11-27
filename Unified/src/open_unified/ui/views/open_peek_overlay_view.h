@@ -67,6 +67,10 @@ inline constexpr int kButtonGap = 13;
 inline constexpr int kButtonTop = 9;
 inline constexpr int kButtonPitch = 43;
 inline constexpr int kRailPadding = 5;
+inline constexpr int kRailWidth = 48;
+inline constexpr int kRailGap = kButtonGap;
+inline constexpr int kOuterMargin = 12;
+inline constexpr int kHeaderHeight = 28;
 inline constexpr int kNavPillGap = 10;
 inline constexpr int kCardCornerRadius = 6;
 inline constexpr size_t kMaxStackDepth = 5;
@@ -213,6 +217,7 @@ class OpenPeekOverlayView : public views::View,
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
   void Layout(PassKey) override;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
@@ -245,7 +250,10 @@ class OpenPeekOverlayView : public views::View,
   void SyncNavButtons();
   void ShowFavoriteOrSpaceMenu();
   void OnEntryNavigated(content::WebContents* contents);
+  void OnEntryLoadProgress(content::WebContents* contents, double progress);
   void OnEntryClosed(content::WebContents* contents);
+  SkColor CardSurfaceColor() const;
+  std::u16string CurrentHostLabel() const;
   content::WebContents* HandleChildOpenUrl(
       content::WebContents* source,
       const content::OpenURLParams& params,
@@ -285,6 +293,8 @@ class OpenPeekOverlayView : public views::View,
   gfx::Rect rail_bounds_;
   gfx::Rect nav_pill_bounds_;
   bool showing_ = false;
+  bool loading_ = false;
+  double load_progress_ = 0.0;
 
   std::unique_ptr<motion::OpenSpringAnimator> opacity_animator_;
   std::optional<PeekDismissReason> pending_dismiss_reason_;

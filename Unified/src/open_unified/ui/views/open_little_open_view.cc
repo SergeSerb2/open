@@ -19,10 +19,15 @@
 #include "open_unified/browser/platform/open_platform.h"
 #include "open_unified/ui/design/open_glyphs.h"
 #include "open_unified/ui/design/open_metrics.h"
+#include "open_unified/ui/views/open_window_controls_view.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/events/event.h"
@@ -307,6 +312,12 @@ class SpacePickerView : public views::View {
     SchedulePaint();
   }
 
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return RowAt(event.location()).has_value()
+               ? ui::Cursor(ui::mojom::CursorType::kHand)
+               : views::View::GetCursor(event);
+  }
+
   bool OnMouseWheel(const ui::MouseWheelEvent& event) override {
     if (spaces_.size() <= m::kPickerVisibleRows) {
       return true;
@@ -483,6 +494,12 @@ class ProfilePickerView : public views::View {
     SchedulePaint();
   }
 
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return RowAt(event.location()).has_value()
+               ? ui::Cursor(ui::mojom::CursorType::kHand)
+               : views::View::GetCursor(event);
+  }
+
  private:
   gfx::Rect RowRect(size_t visible_index) const {
     return gfx::Rect(m::kPickerInset,
@@ -523,6 +540,65 @@ class ProfilePickerView : public views::View {
 BEGIN_METADATA(ProfilePickerView)
 END_METADATA
 
+class LittleOpenHandGlyphButton : public GlyphButton {
+  METADATA_HEADER(LittleOpenHandGlyphButton, GlyphButton)
+
+ public:
+  using GlyphButton::GlyphButton;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : GlyphButton::GetCursor(event);
+  }
+};
+
+BEGIN_METADATA(LittleOpenHandGlyphButton)
+END_METADATA
+
+class LittleOpenHandPaintedButton : public PaintedButton {
+  METADATA_HEADER(LittleOpenHandPaintedButton, PaintedButton)
+
+ public:
+  using PaintedButton::PaintedButton;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : PaintedButton::GetCursor(event);
+  }
+};
+
+BEGIN_METADATA(LittleOpenHandPaintedButton)
+END_METADATA
+
+#if BUILDFLAG(IS_MAC)
+// macOS traffic-light button that notifies its siblings on hover state changes
+// so all three circles display their glyphs together (group-hover).
+class TrafficLightButton : public LittleOpenHandPaintedButton {
+  METADATA_HEADER(TrafficLightButton, LittleOpenHandPaintedButton)
+
+ public:
+  TrafficLightButton(PressedCallback callback,
+                     Painter painter,
+                     const std::u16string& accessible_name,
+                     base::RepeatingClosure on_hover_change)
+      : LittleOpenHandPaintedButton(std::move(callback),
+                                    std::move(painter),
+                                    accessible_name),
+        on_hover_change_(std::move(on_hover_change)) {}
+
+  void StateChanged(ButtonState old_state) override {
+    LittleOpenHandPaintedButton::StateChanged(old_state);
+    if (on_hover_change_) {
+      on_hover_change_.Run();
+    }
+  }
+
+ private:
+  base::RepeatingClosure on_hover_change_;
+};
+
+BEGIN_METADATA(TrafficLightButton)
+END_METADATA
+#endif
+
 }  // namespace
 
 // --- OpenLittleOpenView ------------------------------------------------------
@@ -531,23 +607,44 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
     : delegate_(delegate) {
   GetViewAccessibility().SetName(u"Little Open");
 
-  for (int i = 0; i < 3; ++i) {
 #if BUILDFLAG(IS_MAC)
-    static constexpr std::array<const char16_t*, 3> kNames = {
-        u"Close", u"Minimize", u"Zoom"};
-#else
-    static constexpr std::array<const char16_t*, 3> kNames = {
-        u"Minimize", u"Maximize", u"Close"};
-#endif
-    window_buttons_[i] = AddChildView(std::make_unique<PaintedButton>(
+  static constexpr std::array<const char16_t*, 3> kNames = {
+      u"Close", u"Minimize", u"Zoom"};
+  for (int i = 0; i < 3; ++i) {
+    window_buttons_[i] = AddChildView(std::make_unique<TrafficLightButton>(
         base::BindRepeating(&OpenLittleOpenView::PressWindowButton,
                             base::Unretained(this), i),
         base::BindRepeating(&OpenLittleOpenView::PaintWindowButton,
                             base::Unretained(this), i),
-        kNames[i]));
+        kNames[i],
+        base::BindRepeating(&OpenLittleOpenView::RepaintTrafficLights,
+                            base::Unretained(this))));
   }
+#elif BUILDFLAG(IS_WIN)
+  window_controls_view_ = AddChildView(std::make_unique<OpenWindowControlsView>(
+      OpenWindowControlsView::Mode::kWindowsFluent));
+#else
+  LinuxWindowButtons buttons;
+  if (OpenPlatform* platform = OpenPlatform::Get()) {
+    buttons = platform->GetLinuxWindowButtons();
+  } else {
+    buttons.trailing = {WindowControlButton::kMinimize,
+                        WindowControlButton::kMaximize,
+                        WindowControlButton::kClose};
+  }
+  if (!buttons.leading.empty()) {
+    leading_window_controls_view_ =
+        AddChildView(std::make_unique<OpenWindowControlsView>(
+            OpenWindowControlsView::Mode::kLinuxCsd, buttons.leading));
+  }
+  if (!buttons.trailing.empty()) {
+    window_controls_view_ =
+        AddChildView(std::make_unique<OpenWindowControlsView>(
+            OpenWindowControlsView::Mode::kLinuxCsd, buttons.trailing));
+  }
+#endif
 
-  profile_button_ = AddChildView(std::make_unique<PaintedButton>(
+  profile_button_ = AddChildView(std::make_unique<LittleOpenHandPaintedButton>(
       base::BindRepeating(
           [](OpenLittleOpenView* self) {
             if (!self->state_.profiles.empty()) {
@@ -561,7 +658,7 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
                           base::Unretained(this)),
       u"Profile"));
 
-  host_button_ = AddChildView(std::make_unique<PaintedButton>(
+  host_button_ = AddChildView(std::make_unique<LittleOpenHandPaintedButton>(
       base::BindRepeating(
           [](OpenLittleOpenView* self) {
             if (self->delegate_) {
@@ -573,7 +670,7 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
                           base::Unretained(this)),
       u"Edit URL"));
 
-  downloads_button_ = AddChildView(std::make_unique<PaintedButton>(
+  downloads_button_ = AddChildView(std::make_unique<LittleOpenHandPaintedButton>(
       base::BindRepeating(
           [](OpenLittleOpenView* self) {
             if (self->delegate_) {
@@ -588,8 +685,8 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
 
   auto make_glyph = [this](Glyph glyph, const char16_t* name,
                            views::Button::PressedCallback callback) {
-    auto button =
-        std::make_unique<GlyphButton>(std::move(callback), glyph, name);
+    auto button = std::make_unique<LittleOpenHandGlyphButton>(
+        std::move(callback), glyph, name);
     button->SetGlyphColor(m::kText);
     button->SetGlyphSize(14.f);
     button->SetPlate(GlyphButton::Plate::kHoverRounded, SK_ColorTRANSPARENT,
@@ -620,7 +717,7 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
                  base::BindRepeating(&OpenLittleOpenView::ShowSpacePicker,
                                      base::Unretained(this)));
 
-  pill_button_ = AddChildView(std::make_unique<PaintedButton>(
+  pill_button_ = AddChildView(std::make_unique<LittleOpenHandPaintedButton>(
       base::BindRepeating(
           [](OpenLittleOpenView* self) {
             if (self->state_.space_title) {
@@ -636,10 +733,12 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
   web_view_->SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
 
   AddAccelerator(ui::Accelerator(ui::VKEY_O, secondary::kPrimaryModifier));
+  SyncWindowControlsState();
   SetMode(Mode::kBar);
 }
 
 OpenLittleOpenView::~OpenLittleOpenView() {
+  widget_observation_.Reset();
   Observe(nullptr);
   web_view_->SetWebContents(nullptr);
   owned_contents_.reset();
@@ -662,7 +761,8 @@ gfx::Rect OpenLittleOpenView::PageBoundsFromBar(const gfx::Rect& bar_bounds,
       max_width);
   const int height = std::clamp(
       m::kPageSize.height(),
-      std::min(m::kMinimumPageSize.height() + m::kTitleBarHeight, max_height),
+      std::min(m::kMinimumPageSize.height() + m::EffectiveTitleBarHeight(),
+               max_height),
       max_height);
   int x = bar_bounds.right() - width;
   int y = bar_bounds.y();
@@ -676,9 +776,18 @@ gfx::Rect OpenLittleOpenView::PageBoundsFromBar(const gfx::Rect& bar_bounds,
 void OpenLittleOpenView::SetMode(Mode mode) {
   mode_ = mode;
   const bool page = mode_ == Mode::kPage;
+#if BUILDFLAG(IS_MAC)
   for (auto& button : window_buttons_) {
     button->SetVisible(page);
   }
+#else
+  if (leading_window_controls_view_) {
+    leading_window_controls_view_->SetVisible(page);
+  }
+  if (window_controls_view_) {
+    window_controls_view_->SetVisible(page);
+  }
+#endif
   profile_button_->SetVisible(page && state_.show_profile);
   host_button_->SetVisible(page);
   downloads_button_->SetVisible(page && (state_.show_downloads ||
@@ -755,10 +864,13 @@ void OpenLittleOpenView::SetWebContents(content::WebContents* contents) {
     web_view_->SetWebContents(contents);
   }
   Observe(contents);
+  page_loading_ = contents && contents->IsLoading();
+  load_progress_ = page_loading_ ? 0.15 : 0.0;
   promoted_to_main_ = false;
   web_view_->SetVisible(mode_ == Mode::kPage && contents);
   UpdateWindowTitle();
   InvalidateLayout();
+  SchedulePaint();
 }
 
 void OpenLittleOpenView::SetOwnedWebContents(
@@ -766,16 +878,21 @@ void OpenLittleOpenView::SetOwnedWebContents(
   web_view_->SetWebContents(nullptr);
   owned_contents_ = std::move(contents);
   Observe(owned_contents_.get());
+  page_loading_ = owned_contents_ && owned_contents_->IsLoading();
+  load_progress_ = page_loading_ ? 0.15 : 0.0;
   promoted_to_main_ = false;
   web_view_->SetWebContents(owned_contents_.get());
   web_view_->SetVisible(mode_ == Mode::kPage && owned_contents_ != nullptr);
   UpdateWindowTitle();
   InvalidateLayout();
+  SchedulePaint();
 }
 
 std::unique_ptr<content::WebContents>
 OpenLittleOpenView::ReleaseWebContents() {
   Observe(nullptr);
+  page_loading_ = false;
+  load_progress_ = 0.0;
   promoted_to_main_ = true;
   web_view_->SetWebContents(nullptr);
   web_view_->SetVisible(false);
@@ -784,6 +901,8 @@ OpenLittleOpenView::ReleaseWebContents() {
 
 content::WebContents* OpenLittleOpenView::DetachWebContents() {
   Observe(nullptr);
+  page_loading_ = false;
+  load_progress_ = 0.0;
   promoted_to_main_ = true;
   content::WebContents* contents = web_view_->web_contents();
   web_view_->SetWebContents(nullptr);
@@ -845,7 +964,7 @@ void OpenLittleOpenView::RebuildExtensionActionButtons() {
   extension_action_buttons_.reserve(count);
   for (size_t i = 0; i < count; ++i) {
     const LittleOpenExtensionAction& action = state_.extension_actions[i];
-    auto button = std::make_unique<PaintedButton>(
+    auto button = std::make_unique<LittleOpenHandPaintedButton>(
         base::BindRepeating(
             [](OpenLittleOpenView* self, size_t idx) {
               if (self->delegate_ &&
@@ -865,22 +984,30 @@ void OpenLittleOpenView::RebuildExtensionActionButtons() {
   }
 }
 
+int OpenLittleOpenView::TitleBarHeight() const {
+  return m::EffectiveTitleBarHeight();
+}
+
 int OpenLittleOpenView::NonClientHitTest(const gfx::Point& point) const {
   if (mode_ == Mode::kBar) {
     return point.y() < kBarDragStrip ? HTCAPTION : HTCLIENT;
   }
-  if (point.y() >= m::kTitleBarHeight) {
+  if (point.y() >= TitleBarHeight()) {
     return HTCLIENT;
   }
 #if !BUILDFLAG(IS_MAC)
-  // Return native Win32/Linux caption button hit-test codes for right-side
-  // Minimize / Maximize / Close controls (enables Windows 11 Snap Layouts).
-  static constexpr std::array<int, 3> kCaptionHitCodes = {
-      HTMINBUTTON, HTMAXBUTTON, HTCLOSE};
-  for (int i = 0; i < 3; ++i) {
-    if (window_buttons_[i] && window_buttons_[i]->GetVisible() &&
-        window_buttons_[i]->bounds().Contains(point)) {
-      return kCaptionHitCodes[i];
+  // Forward caption control hit-tests directly to OpenWindowControlsView so
+  // Windows 11 Snap Layouts (HTMINBUTTON/HTMAXBUTTON/HTCLOSE) and Linux CSD
+  // leading/trailing button clusters work natively.
+  for (const OpenWindowControlsView* controls :
+       {window_controls_view_.get(), leading_window_controls_view_.get()}) {
+    if (controls && controls->GetVisible()) {
+      gfx::Point local = point;
+      views::View::ConvertPointToTarget(this, controls, &local);
+      const int code = controls->HitTestCode(local);
+      if (code != HTNOWHERE) {
+        return code;
+      }
     }
   }
 #endif
@@ -935,7 +1062,54 @@ std::optional<gfx::Rect> OpenLittleOpenView::GetElementBounds(
 }
 
 void OpenLittleOpenView::AddedToWidget() {
+  widget_observation_.Reset();
+  if (views::Widget* widget = GetWidget()) {
+    widget_observation_.Observe(widget);
+    window_active_ = widget->ShouldPaintAsActive();
+  }
+  SyncWindowControlsState();
   UpdateWindowTitle();
+}
+
+void OpenLittleOpenView::OnWidgetActivationChanged(views::Widget* widget,
+                                                   bool active) {
+  window_active_ = active || (widget && widget->ShouldPaintAsActive());
+  SyncWindowControlsState();
+  RepaintTrafficLights();
+}
+
+void OpenLittleOpenView::OnWidgetShowStateChanged(views::Widget* widget) {
+  SyncWindowControlsState();
+}
+
+void OpenLittleOpenView::OnWidgetDestroying(views::Widget* widget) {
+  widget_observation_.Reset();
+}
+
+void OpenLittleOpenView::SyncWindowControlsState() {
+#if !BUILDFLAG(IS_MAC)
+  const bool maximized = GetWidget() && GetWidget()->IsMaximized();
+  const bool high_contrast =
+      OpenPlatform::Get() && OpenPlatform::Get()->IsIncreaseContrastEnabled();
+  for (OpenWindowControlsView* controls :
+       {window_controls_view_.get(), leading_window_controls_view_.get()}) {
+    if (controls) {
+      controls->SetThemeState(/*dark_content=*/true, window_active_,
+                              high_contrast);
+      controls->SetMaximized(maximized);
+    }
+  }
+#endif
+}
+
+void OpenLittleOpenView::RepaintTrafficLights() {
+#if BUILDFLAG(IS_MAC)
+  for (auto& button : window_buttons_) {
+    if (button) {
+      button->SchedulePaint();
+    }
+  }
+#endif
 }
 
 void OpenLittleOpenView::TitleWasSet(content::NavigationEntry* entry) {
@@ -945,6 +1119,26 @@ void OpenLittleOpenView::TitleWasSet(content::NavigationEntry* entry) {
 void OpenLittleOpenView::DidFinishNavigation(
     content::NavigationHandle* handle) {
   UpdateWindowTitle();
+}
+
+void OpenLittleOpenView::DidStartLoading() {
+  page_loading_ = true;
+  if (load_progress_ < 0.15) {
+    load_progress_ = 0.15;
+  }
+  SchedulePaint();
+}
+
+void OpenLittleOpenView::DidStopLoading() {
+  page_loading_ = false;
+  load_progress_ = 0.0;
+  SchedulePaint();
+}
+
+void OpenLittleOpenView::LoadProgressChanged(double progress) {
+  page_loading_ = web_contents() && web_contents()->IsLoading();
+  load_progress_ = std::clamp(progress, 0.0, 1.0);
+  SchedulePaint();
 }
 
 void OpenLittleOpenView::UpdateWindowTitle() {
@@ -969,86 +1163,139 @@ void OpenLittleOpenView::UpdateWindowTitle() {
   }
 }
 
-gfx::Rect OpenLittleOpenView::WindowButtonRect(int index) const {
 #if BUILDFLAG(IS_MAC)
+gfx::Rect OpenLittleOpenView::WindowButtonRect(int index) const {
   return gfx::Rect(m::kWindowButtonX[index], m::kWindowButtonY,
                    m::kWindowButtonSize, m::kWindowButtonSize);
-#else
-  const int bw = metrics::win_controls::kWinButtonW;
-  const int bh = metrics::win_controls::kWinButtonH;
-  return gfx::Rect(width() - (3 - index) * bw, 0, bw, bh);
+}
 #endif
+
+int OpenLittleOpenView::DesiredPillWidth() const {
+  const gfx::FontList regular = secondary::FontOfSize(m::kFontSize);
+  const gfx::FontList bold =
+      secondary::FontOfSize(m::kFontSize, gfx::Font::Weight::BOLD);
+  const std::u16string keycap = KeycapLabel();
+  const int keycap_w =
+      std::max(m::kKeycapWidth, secondary::TextWidth(keycap, regular) + 8);
+  const int dot_w = state_.space_title ? 14 : 0;
+  const int text_w =
+      secondary::TextWidth(u"Open in ", regular) +
+      secondary::TextWidth(state_.space_title.value_or(u"Space"), bold);
+  // Left padding (10) + color dot + label + gap (6) + keycap + inner pad (8) +
+  // divider/chevron section (30).
+  const int desired = 10 + dot_w + text_w + 6 + keycap_w + 8 + 30;
+  return std::clamp(desired, m::kPillMinWidth, m::kPillMaxWidth);
 }
 
 gfx::Rect OpenLittleOpenView::PillRect() const {
+  constexpr int kGapToPill = 8;
 #if BUILDFLAG(IS_MAC)
-  return m::Pill(width());
+  const int left_edge = 84;
+  const int right_edge = width() - 8;
+  const int pill_y = 8;
+  const int pill_h = 30;
+#elif BUILDFLAG(IS_WIN)
+  const int left_edge = 8;
+  const int controls_w = window_controls_view_
+                             ? window_controls_view_->GetPreferredSize().width()
+                             : metrics::win_controls::kWinClusterW;
+  const int right_edge = width() - controls_w - 8;
+  const int pill_y = 4;
+  const int pill_h = 32;
 #else
-  const int pill_right = width() - metrics::win_controls::kWinClusterW - 8;
-  return gfx::Rect(pill_right - 188, 8, 188, 30);
+  const int leading_w =
+      leading_window_controls_view_
+          ? leading_window_controls_view_->GetPreferredSize().width()
+          : 0;
+  const int trailing_w =
+      window_controls_view_ ? window_controls_view_->GetPreferredSize().width()
+                            : 0;
+  const int left_edge =
+      leading_w > 0 ? metrics::win_controls::kLinuxOuterMargin + leading_w + 8
+                    : 8;
+  const int right_edge =
+      trailing_w > 0
+          ? width() - metrics::win_controls::kLinuxOuterMargin - trailing_w - 8
+          : width() - 8;
+  const int pill_y = 4;
+  const int pill_h = 32;
 #endif
-}
-
-gfx::Rect OpenLittleOpenView::PillLabelRect() const {
-#if BUILDFLAG(IS_MAC)
-  return m::PillLabel(width());
-#else
-  const gfx::Rect pill = PillRect();
-  return gfx::Rect(pill.x() + 5, 15, 148, 17);
-#endif
+  const int total_avail = std::max(0, right_edge - left_edge);
+  const int desired = DesiredPillWidth();
+  const int max_pill_with_capsule =
+      std::max(0, total_avail - kGapToPill - m::kMinCapsuleWidth);
+  const int pill_w =
+      total_avail >= m::kMinCapsuleWidth + kGapToPill + 40
+          ? std::min(desired, max_pill_with_capsule)
+          : std::min(desired, std::max(0, total_avail / 2));
+  const int pill_x = std::max(left_edge, right_edge - pill_w);
+  return gfx::Rect(pill_x, pill_y, pill_w, pill_h);
 }
 
 gfx::Rect OpenLittleOpenView::DividerRect() const {
-#if BUILDFLAG(IS_MAC)
-  return m::Divider(width());
-#else
   const gfx::Rect pill = PillRect();
-  return gfx::Rect(pill.right() - 29, 14, 1, 18);
-#endif
+  const int divider_y = pill.y() + (pill.height() - 18) / 2;
+  return gfx::Rect(std::max(pill.x(), pill.right() - 29), divider_y, 1, 18);
+}
+
+gfx::Rect OpenLittleOpenView::PillLabelRect() const {
+  const gfx::Rect pill = PillRect();
+  const gfx::Rect divider = DividerRect();
+  const int label_y = pill.y() + (pill.height() - m::kHostHeight) / 2;
+  return gfx::Rect(pill.x() + 10, label_y,
+                   std::max(0, divider.x() - pill.x() - 18), m::kHostHeight);
 }
 
 gfx::Rect OpenLittleOpenView::ChevronRect() const {
-#if BUILDFLAG(IS_MAC)
-  return m::Chevron(width());
-#else
   const gfx::Rect pill = PillRect();
-  return gfx::Rect(pill.right() - 21, 15, 16, 16);
-#endif
+  const int chevron_y = pill.y() + (pill.height() - 16) / 2;
+  return gfx::Rect(std::max(pill.x(), pill.right() - 22), chevron_y, 16, 16);
 }
 
 gfx::Rect OpenLittleOpenView::CapsuleRect() const {
-#if BUILDFLAG(IS_MAC)
-  return m::Capsule(width());
-#else
   const gfx::Rect pill = PillRect();
-  constexpr int kLeadingX = 10;
   constexpr int kGapToPill = 8;
-  return gfx::Rect(kLeadingX, 8, std::max(0, pill.x() - kGapToPill - kLeadingX),
-                   31);
+#if BUILDFLAG(IS_MAC)
+  const int left_edge = 84;
+  const int capsule_y = 8;
+  const int capsule_h = 31;
+#elif BUILDFLAG(IS_WIN)
+  const int left_edge = 8;
+  const int capsule_y = 4;
+  const int capsule_h = 32;
+#else
+  const int leading_w =
+      leading_window_controls_view_
+          ? leading_window_controls_view_->GetPreferredSize().width()
+          : 0;
+  const int left_edge =
+      leading_w > 0 ? metrics::win_controls::kLinuxOuterMargin + leading_w + 8
+                    : 8;
+  const int capsule_y = 4;
+  const int capsule_h = 32;
 #endif
+  return gfx::Rect(left_edge, capsule_y,
+                   std::max(0, pill.x() - kGapToPill - left_edge), capsule_h);
 }
 
 gfx::Rect OpenLittleOpenView::CopyRect() const {
-#if BUILDFLAG(IS_MAC)
-  return m::Copy(width());
-#else
   const gfx::Rect capsule = CapsuleRect();
-  return gfx::Rect(capsule.right() - 24, 16, 16, 16);
-#endif
+  const int icon_y = capsule.y() + (capsule.height() - 16) / 2;
+  const int copy_x = std::max(capsule.x() + 4, capsule.right() - 24);
+  const int copy_w = std::min(16, std::max(0, capsule.right() - copy_x - 4));
+  return gfx::Rect(copy_x, icon_y, copy_w, 16);
 }
 
 gfx::Rect OpenLittleOpenView::ExtensionsRect() const {
-#if BUILDFLAG(IS_MAC)
-  return m::Extensions(width());
-#else
-  return gfx::Rect(CopyRect().x() - m::kAccessoryPitch, 16, 16, 16);
-#endif
+  const gfx::Rect copy = CopyRect();
+  return gfx::Rect(std::max(CapsuleRect().x() + 4, copy.x() - m::kAccessoryPitch),
+                   copy.y(), 16, 16);
 }
 
 gfx::Size OpenLittleOpenView::GetMinimumSize() const {
   return mode_ == Mode::kPage
              ? gfx::Size(m::kMinimumPageSize.width(),
-                         m::kMinimumPageSize.height() + m::kTitleBarHeight)
+                         m::kMinimumPageSize.height() + TitleBarHeight())
              : m::kBarSize;
 }
 
@@ -1071,9 +1318,9 @@ void OpenLittleOpenView::Layout(PassKey) {
     return;
   }
   LayoutTitleBar();
+  const int bar_h = TitleBarHeight();
   web_view_->SetBoundsRect(
-      gfx::Rect(0, m::kTitleBarHeight, bounds.width(),
-                std::max(0, bounds.height() - m::kTitleBarHeight)));
+      gfx::Rect(0, bar_h, bounds.width(), std::max(0, bounds.height() - bar_h)));
 #if BUILDFLAG(IS_WIN)
   // On Windows the widget is opaque and DWM (DWMWCP_ROUND) rounds the outer
   // corners cleanly, so keep web_view_ square to avoid dark corner wedges.
@@ -1096,24 +1343,52 @@ std::u16string OpenLittleOpenView::KeycapLabel() const {
 }
 
 void OpenLittleOpenView::LayoutTitleBar() {
+#if BUILDFLAG(IS_MAC)
   for (int i = 0; i < 3; ++i) {
     window_buttons_[i]->SetBoundsRect(WindowButtonRect(i));
   }
+#elif BUILDFLAG(IS_WIN)
+  const int bar_h = TitleBarHeight();
+  if (window_controls_view_) {
+    const gfx::Size pref = window_controls_view_->GetPreferredSize();
+    window_controls_view_->SetBoundsRect(
+        gfx::Rect(width() - pref.width(), 0, pref.width(), bar_h));
+  }
+#else
+  const int bar_h = TitleBarHeight();
+  if (leading_window_controls_view_) {
+    const gfx::Size pref = leading_window_controls_view_->GetPreferredSize();
+    leading_window_controls_view_->SetBoundsRect(gfx::Rect(
+        metrics::win_controls::kLinuxOuterMargin, 0, pref.width(), bar_h));
+  }
+  if (window_controls_view_) {
+    const gfx::Size pref = window_controls_view_->GetPreferredSize();
+    window_controls_view_->SetBoundsRect(gfx::Rect(
+        width() - metrics::win_controls::kLinuxOuterMargin - pref.width(), 0,
+        pref.width(), bar_h));
+  }
+#endif
+
+  const gfx::Rect capsule = CapsuleRect();
+  const int icon_y = capsule.y() + (capsule.height() - 16) / 2;
+  const int ext_action_y = capsule.y() + (capsule.height() - 20) / 2;
+  const int host_y = capsule.y() + (capsule.height() - m::kHostHeight) / 2;
+
   const gfx::Rect copy_rect = CopyRect();
   copy_button_->SetBoundsRect(copy_rect);
   chevron_button_->SetBoundsRect(ChevronRect());
   // The pill's clickable part ends at the divider; the chevron is its own.
   const gfx::Rect pill = PillRect();
   const gfx::Rect divider = DividerRect();
-  pill_button_->SetBoundsRect(
-      gfx::Rect(pill.x(), pill.y(), divider.x() - pill.x(), pill.height()));
+  pill_button_->SetBoundsRect(gfx::Rect(
+      pill.x(), pill.y(), std::max(0, divider.x() - pill.x()), pill.height()));
 
   // Lay out right-side accessories inside the capsule from right to left:
   // Copy URL <- Extensions overflow <- Extension Action strip <- Downloads.
   int next_x = copy_rect.x();
   if (state_.show_extensions) {
     next_x -= m::kAccessoryPitch;
-    extensions_button_->SetBoundsRect(gfx::Rect(next_x, 16, 16, 16));
+    extensions_button_->SetBoundsRect(gfx::Rect(next_x, icon_y, 16, 16));
   } else {
     extensions_button_->SetBoundsRect(ExtensionsRect());
   }
@@ -1121,19 +1396,18 @@ void OpenLittleOpenView::LayoutTitleBar() {
   for (size_t i = extension_action_buttons_.size(); i > 0; --i) {
     next_x -= m::kAccessoryPitch;
     extension_action_buttons_[i - 1]->SetBoundsRect(
-        gfx::Rect(next_x - 2, 14, 20, 20));
+        gfx::Rect(next_x - 2, ext_action_y, 20, 20));
   }
 
   const bool show_downloads = state_.show_downloads || state_.downloads_running;
   if (show_downloads) {
     next_x -= m::kAccessoryPitch;
-    downloads_button_->SetBoundsRect(gfx::Rect(next_x, 16, 16, 16));
+    downloads_button_->SetBoundsRect(gfx::Rect(next_x, icon_y, 16, 16));
   }
   downloads_button_->SetVisible(mode_ == Mode::kPage && show_downloads);
 
   // Profile chip, then the host centered between chip and accessories. On a
   // narrow page the chip hides before it can cover the host.
-  const gfx::Rect capsule = CapsuleRect();
   const int accessory_left = next_x;
   const int chip_x = capsule.x() + 13;
   const int available = std::max(0, accessory_left - m::kHostGap - chip_x);
@@ -1148,18 +1422,25 @@ void OpenLittleOpenView::LayoutTitleBar() {
   const bool chip_visible = profile_width > 0 && chip_width > 0;
   profile_button_->SetVisible(chip_visible);
   profile_button_->SetBoundsRect(
-      gfx::Rect(chip_x, m::kHostY, chip_width, m::kHostHeight));
+      gfx::Rect(chip_x, host_y, chip_width, m::kHostHeight));
 
   const int left = chip_visible ? chip_x + chip_width + m::kHostGap
                                 : capsule.x() + m::kHostGap;
   const int right = accessory_left - m::kHostGap;
   host_button_->SetBoundsRect(
-      gfx::Rect(left, m::kHostY, std::max(0, right - left), m::kHostHeight));
+      gfx::Rect(left, host_y, std::max(0, right - left), m::kHostHeight));
 }
 
 void OpenLittleOpenView::OnPaint(gfx::Canvas* canvas) {
   if (mode_ == Mode::kBar) {
-    return;  // The embedded bar paints its own 12 pt card.
+#if BUILDFLAG(IS_WIN)
+    // Match Windows 11 DWMWCP_ROUND (8 DIP) so opaque Bar Mode never shows dark
+    // corner wedges under the embedded command bar.
+    canvas->DrawColor(m::kTitleBarFill);
+    secondary::FillRoundRect(canvas, gfx::RectF(GetLocalBounds()), 8.f,
+                             m::kTitleBarFill);
+#endif
+    return;
   }
   // Window body (the page covers everything below the title bar).
 #if BUILDFLAG(IS_WIN)
@@ -1172,10 +1453,23 @@ void OpenLittleOpenView::OnPaint(gfx::Canvas* canvas) {
 #endif
   secondary::FillRoundRect(canvas, gfx::RectF(CapsuleRect()), m::kCapsuleRadius,
                            m::kCapsuleFill);
-  secondary::FillRoundRect(canvas, gfx::RectF(PillRect()), m::kPillRadius,
+  const gfx::Rect pill = PillRect();
+  secondary::FillRoundRect(canvas, gfx::RectF(pill), pill.height() / 2.f,
                            m::kPillFill);
   canvas->FillRect(DividerRect(), secondary::WithAlpha(
                                       SK_ColorWHITE, 0.8f * m::kDividerAlpha));
+
+  // Thin 2 DIP loading progress bar along the bottom edge of the top bar.
+  if (page_loading_) {
+    const float frac =
+        static_cast<float>(std::clamp(load_progress_, 0.12, 1.0));
+    const int bar_w =
+        std::max(24, static_cast<int>(std::lround(width() * frac)));
+    const SkColor bar_color = SkColorGetA(state_.target_space_color) > 0
+                                  ? state_.target_space_color
+                                  : SkColorSetRGB(0x6F, 0x66, 0xD9);
+    canvas->FillRect(gfx::Rect(0, TitleBarHeight() - 2, bar_w, 2), bar_color);
+  }
 }
 
 void OpenLittleOpenView::PaintPill(gfx::Canvas* canvas,
@@ -1185,24 +1479,43 @@ void OpenLittleOpenView::PaintPill(gfx::Canvas* canvas,
   const gfx::FontList bold =
       secondary::FontOfSize(m::kFontSize, gfx::Font::Weight::BOLD);
   if (hovered) {
-    secondary::FillRoundRect(canvas, gfx::RectF(bounds), m::kPillRadius,
-                             secondary::WithAlpha(SK_ColorWHITE, 0.08f));
+    // Round only the outer left corners so the straight inner edge against the
+    // vertical divider stays crisp and flush.
+    const float r = bounds.height() / 2.f;
+    const SkVector radii[4] = {{r, r}, {0.f, 0.f}, {0.f, 0.f}, {r, r}};
+    SkRRect rrect;
+    rrect.setRectRadii(gfx::RectToSkRect(bounds), radii);
+    SkPathBuilder path;
+    path.addRRect(rrect);
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    flags.setColor(secondary::WithAlpha(SK_ColorWHITE, 0.08f));
+    canvas->DrawPath(path.detach(), flags);
   }
   const std::u16string keycap = KeycapLabel();
   const int keycap_w =
       std::max(m::kKeycapWidth, secondary::TextWidth(keycap, regular) + 8);
-  const gfx::Rect label(bounds.x() + 5, bounds.y() + 7, 148, 17);
-  const gfx::Rect cap(label.right() - keycap_w, label.y(), keycap_w,
-                      label.height());
-  secondary::FillRoundRect(canvas, gfx::RectF(cap), m::kKeycapRadius,
-                           m::kCapsuleFill);
-  secondary::DrawText(canvas, keycap, regular, m::kText, cap,
-                      gfx::Canvas::TEXT_ALIGN_CENTER);
+  const int label_y = bounds.y() + (bounds.height() - m::kHostHeight) / 2;
+  const gfx::Rect label(bounds.x() + 10, label_y,
+                        std::max(0, bounds.width() - 18), m::kHostHeight);
+  const bool show_keycap = label.width() >= keycap_w + 24;
+  const gfx::Rect cap = show_keycap
+                            ? gfx::Rect(label.right() - keycap_w, label.y(),
+                                        keycap_w, label.height())
+                            : gfx::Rect(label.right(), label.y(), 0,
+                                        label.height());
+  if (show_keycap) {
+    secondary::FillRoundRect(canvas, gfx::RectF(cap), m::kKeycapRadius,
+                             m::kCapsuleFill);
+    secondary::DrawText(canvas, keycap, regular, m::kText, cap,
+                        gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
 
   // Leading Space color dot inside the pill (matches Space target swatch).
   int text_x = label.x();
-  if (state_.space_title) {
-    const gfx::RectF dot(label.x() + 2.f, label.y() + 4.5f, 8.f, 8.f);
+  if (state_.space_title && label.width() > 28) {
+    const gfx::RectF dot(label.x(), label.y() + 4.5f, 8.f, 8.f);
     secondary::FillRoundRect(canvas, dot, 4.f, state_.target_space_color);
     text_x += 14;
   }
@@ -1212,13 +1525,17 @@ void OpenLittleOpenView::PaintPill(gfx::Canvas* canvas,
                           : secondary::WithAlpha(SK_ColorWHITE, 0.35f);
   const std::u16string prefix = u"Open in ";
   const int prefix_w = secondary::TextWidth(prefix, regular);
-  const int room = std::max(0, cap.x() - 4 - text_x);
+  const int room =
+      std::max(0, (show_keycap ? cap.x() - 6 : label.right()) - text_x);
   secondary::DrawText(canvas, prefix, regular, ink,
                       gfx::Rect(text_x, label.y(), std::min(prefix_w, room),
                                 label.height()));
-  secondary::DrawText(canvas, state_.space_title.value_or(u"Space"), bold, ink,
-                      gfx::Rect(text_x + prefix_w, label.y(),
-                                std::max(0, room - prefix_w), label.height()));
+  if (room > prefix_w) {
+    secondary::DrawText(canvas, state_.space_title.value_or(u"Space"), bold,
+                        ink,
+                        gfx::Rect(text_x + prefix_w, label.y(),
+                                  room - prefix_w, label.height()));
+  }
 }
 
 void OpenLittleOpenView::PaintProfile(gfx::Canvas* canvas,
@@ -1338,18 +1655,32 @@ void OpenLittleOpenView::PaintExtensionAction(size_t index,
   }
 }
 
+#if BUILDFLAG(IS_MAC)
 void OpenLittleOpenView::PaintWindowButton(int index,
                                            gfx::Canvas* canvas,
                                            const gfx::Rect& bounds,
                                            bool hovered) {
-#if BUILDFLAG(IS_MAC)
   static constexpr std::array<SkColor, 3> kColors = {
       SkColorSetRGB(0xFF, 0x5F, 0x57), SkColorSetRGB(0xFE, 0xBC, 0x2E),
       SkColorSetRGB(0x28, 0xC8, 0x40)};
+  const bool group_hovered =
+      hovered ||
+      std::any_of(window_buttons_.begin(), window_buttons_.end(),
+                  [](const auto& b) {
+                    return b &&
+                           (b->GetState() == views::Button::STATE_HOVERED ||
+                            b->GetState() == views::Button::STATE_PRESSED);
+                  });
+  const bool active =
+      window_active_ && (!GetWidget() || GetWidget()->ShouldPaintAsActive());
+  const SkColor fill =
+      (active || group_hovered)
+          ? kColors[index]
+          : secondary::WithAlpha(SK_ColorWHITE, 0.24f);
   const gfx::RectF circle(bounds.CenterPoint().x() - 6.f,
                           bounds.CenterPoint().y() - 6.f, 12.f, 12.f);
-  secondary::FillRoundRect(canvas, circle, 6.f, kColors[index]);
-  if (hovered) {
+  secondary::FillRoundRect(canvas, circle, 6.f, fill);
+  if (group_hovered) {
     static constexpr std::array<Glyph, 3> kGlyphs = {
         Glyph::kClose, Glyph::kMinus, Glyph::kPlus};
     gfx::RectF glyph = circle;
@@ -1357,35 +1688,6 @@ void OpenLittleOpenView::PaintWindowButton(int index,
     secondary::PaintGlyph(canvas, kGlyphs[index], glyph,
                           secondary::WithAlpha(SK_ColorBLACK, 0.55f), 1.2f);
   }
-#else
-  const bool is_close = (index == 2);
-  const bool pressed =
-      window_buttons_[index] &&
-      window_buttons_[index]->GetState() == views::Button::STATE_PRESSED;
-  if (hovered || pressed) {
-    const SkColor fill =
-        is_close ? (pressed ? SkColorSetRGB(0xB2, 0x27, 0x19)
-                            : SkColorSetRGB(0xC4, 0x2B, 0x1C))
-                 : secondary::WithAlpha(SK_ColorWHITE, pressed ? 0.13f : 0.08f);
-    cc::PaintFlags fill_flags;
-    fill_flags.setAntiAlias(false);
-    fill_flags.setStyle(cc::PaintFlags::kFill_Style);
-    fill_flags.setColor(fill);
-    canvas->DrawRect(gfx::RectF(bounds), fill_flags);
-  }
-  const bool maximized = GetWidget() && GetWidget()->IsMaximized();
-  glyphs::Glyph glyph = glyphs::Glyph::kWindowClose;
-  if (index == 0) {
-    glyph = glyphs::Glyph::kWindowMinimize;
-  } else if (index == 1) {
-    glyph = maximized ? glyphs::Glyph::kWindowRestore
-                      : glyphs::Glyph::kWindowMaximize;
-  }
-  const SkColor glyph_color =
-      (is_close && (hovered || pressed)) ? SK_ColorWHITE : m::kText;
-  glyphs::DrawWindowControlGlyph(canvas, glyph, gfx::RectF(bounds), glyph_color,
-                                 /*linux_csd=*/BUILDFLAG(IS_LINUX));
-#endif
 }
 
 void OpenLittleOpenView::PressWindowButton(int index) {
@@ -1393,7 +1695,6 @@ void OpenLittleOpenView::PressWindowButton(int index) {
   if (!widget) {
     return;
   }
-#if BUILDFLAG(IS_MAC)
   switch (index) {
     case 0:
       widget->Close();
@@ -1409,24 +1710,8 @@ void OpenLittleOpenView::PressWindowButton(int index) {
       }
       break;
   }
-#else
-  switch (index) {
-    case 0:
-      widget->Minimize();
-      break;
-    case 1:
-      if (widget->IsMaximized()) {
-        widget->Restore();
-      } else {
-        widget->Maximize();
-      }
-      break;
-    default:
-      widget->Close();
-      break;
-  }
-#endif
 }
+#endif
 
 void OpenLittleOpenView::ShowSpacePicker() {
   if (state_.spaces.empty() || picker_widget_) {
@@ -1461,6 +1746,7 @@ void OpenLittleOpenView::ShowSpacePicker() {
                   break;
                 }
               }
+              self->InvalidateLayout();
               self->SchedulePaint();
               if (self->delegate_) {
                 self->delegate_->OnLittleOpenTargetSpaceChanged(id);

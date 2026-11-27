@@ -956,6 +956,9 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
   if (index != TabStripModel::kNoTab && index != strip->active_index()) {
     strip->ActivateTabAt(index);
   }
+  if (wc->GetController().NeedsReload()) {
+    wc->GetController().LoadIfNecessary();
+  }
   if (previous_active && *previous_active != to_activate) {
     if (OpenSleepController* sleep = service_->sleep_controller()) {
       sleep->OnTabHidden(*previous_active);
@@ -1098,6 +1101,9 @@ content::WebContents* OpenTabBridge::EnsureLoaded(
     const ItemID& tab_id,
     const WindowID& preferred_window_id) {
   if (auto it = contents_.find(tab_id); it != contents_.end()) {
+    if (it->second && it->second->GetController().NeedsReload()) {
+      it->second->GetController().LoadIfNecessary();
+    }
     return it->second;
   }
   const Tab* tab = service_->model().FindTab(tab_id);

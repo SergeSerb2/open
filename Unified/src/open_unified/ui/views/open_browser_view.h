@@ -39,12 +39,14 @@
 #include "open_unified/ui/design/open_motion.h"
 #include "open_unified/ui/design/open_theme_math.h"
 #include "open_unified/ui/views/open_tab_tree_view.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/class_property.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget_observer.h"
+#include "url/gurl.h"
 
 class BrowserView;  // //chrome/browser/ui/views/frame/browser_view.h
 
@@ -63,6 +65,8 @@ namespace open_unified {
 
 class OpenSidebarView;
 class OpenWindowControlsView;
+enum class PaneCommand;
+enum class SplitDropZone;
 
 // ---------------------------------------------------------------------------
 // Intents: everything the hot-path views ask the browser to do.
@@ -163,6 +167,10 @@ struct OpenToolbarActionInfo {
   std::string id;
   std::u16string tooltip;
   gfx::ImageSkia icon;
+  gfx::ImageSkia icon_with_badge;
+  std::u16string badge_text;
+  SkColor badge_background_color = SK_ColorTRANSPARENT;
+  SkColor badge_text_color = SK_ColorWHITE;
   bool has_badge = false;
 };
 
@@ -271,6 +279,56 @@ class OpenBrowserView : public views::View,
   METADATA_HEADER(OpenBrowserView, views::View)
 
  public:
+  // Optional Wave 3D delegate hooks (all default no-op for backward
+  // compatibility with callers that wire only OpenViewController).
+  class Delegate {
+   public:
+    virtual ~Delegate() = default;
+    // Win/Linux Open App Menu button pressed.
+    virtual void OnAppMenuRequested(views::View* anchor) {}
+    // Pinned extension button right-clicked in the URL pill.
+    virtual void OnExtensionContextMenuRequested(
+        const std::string& extension_id,
+        views::View* anchor,
+        const gfx::Point& screen_pt) {}
+    // Space drag-reordered in the bottom switcher strip.
+    virtual void OnSpaceReordered(const std::string& space_id,
+                                  size_t to_index) {}
+    // Pinned tab favicon reset button clicked (`separate` = Alt held).
+    virtual void OnResetPinnedTab(const ItemID& id, bool separate) {}
+    // Sidebar tab drag started (`dragging == true`) or ended/cancelled.
+    virtual void OnTabDragStateChanged(bool dragging, const ItemID& tab_id) {}
+    // Drag-to-split negotiation over the web panel drop overlay.
+    virtual bool CanDropInSplit(const std::optional<ItemID>& dragged_tab_id,
+                                const GURL& dragged_url,
+                                SplitDropZone zone,
+                                std::optional<size_t> target_pane_index) {
+      return false;
+    }
+    virtual bool OnDropInSplit(const std::optional<ItemID>& dragged_tab_id,
+                               const GURL& dragged_url,
+                               SplitDropZone zone,
+                               std::optional<size_t> target_pane_index) {
+      return false;
+    }
+    // Single-tab top toolbar command / clickable URL capsule.
+    virtual void OnSinglePaneToolbarCommand(PaneCommand command,
+                                            views::View* anchor) {}
+    virtual void OnSinglePaneHostClicked(views::View* anchor) {}
+  };
+
+  struct SinglePaneToolbarState {
+    bool can_go_back = false;
+    bool can_go_forward = false;
+    bool is_loading = false;
+    bool site_controls_available = true;
+    bool hides_copy = false;
+    std::u16string host;
+    std::string url;
+    SkColor background = SK_ColorWHITE;
+    bool operator==(const SinglePaneToolbarState&) const = default;
+  };
+
   // Track 5 composes into these slots.
   enum class OverlaySlot {
     kCommandBar,        // laid out over the whole window (Arc centers it)
@@ -331,6 +389,22 @@ class OpenBrowserView : public views::View,
   views::View* split_container() const { return split_container_; }
   void SetSplitViewActive(bool active);
   bool split_view_active() const { return split_view_active_; }
+
+  void SetDelegate(Delegate* delegate) { delegate_ = delegate; }
+  Delegate* delegate() const { return delegate_; }
+
+  // Drag-to-split overlay over the web panel (active during sidebar tab drag).
+  void SetSplitDropOverlayActive(bool active);
+  bool IsSplitDropOverlayActive() const;
+
+  // Optional 36 DIP single-tab top toolbar (hidden by default so default Arc
+  // layout is unchanged).
+  void SetSinglePaneToolbarVisible(bool visible);
+  bool single_pane_toolbar_visible() const {
+    return single_pane_toolbar_visible_;
+  }
+  void UpdateSinglePaneToolbar(const SinglePaneToolbarState& state);
+  views::View* GetSinglePaneSiteControlAnchor() const;
 
   // --- Overlay slots ---------------------------------------------------------------
   views::View* SetOverlay(OverlaySlot slot, std::unique_ptr<views::View> view);
@@ -397,6 +471,13 @@ class OpenBrowserView : public views::View,
   void CrossfadeTheme(const SpaceID& to, bool animated) override;
   ui::Compositor* AnimationCompositor() override;
   bool AnimationsEnabled() const override;
+  void OnAppMenuRequested(views::View* anchor) override;
+  void OnExtensionContextMenuRequested(const std::string& extension_id,
+                                       views::View* anchor,
+                                       const gfx::Point& screen_pt) override;
+  void OnSpaceReordered(const std::string& space_id, size_t to_index) override;
+  void OnResetPinnedTab(const ItemID& id, bool separate) override;
+  void OnTabDragStateChanged(bool dragging, const ItemID& tab_id) override;
 
   // --- OpenViewObserver -----------------------------------------------------------------
   void OnTreeChanged(const TreeChange& change) override;
@@ -437,12 +518,17 @@ class OpenBrowserView : public views::View,
   class PanelHostView;
   class ResizeHandle;
   class HiddenSidebarToggleButton;
+  class WindowRimView;
+  class BrowserSplitDropOverlayView;
+  class SinglePaneToolbarView;
   class RevealCardView;
   class RevealObserver;
   class PlusMenuDelegate;
   class BrowserViewTracker;
   friend class ResizeHandle;
   friend class RevealObserver;
+  friend class BrowserSplitDropOverlayView;
+  friend class SinglePaneToolbarView;
 
   enum class CardState { kOff, kShowing, kShown, kHiding };
 
@@ -501,7 +587,14 @@ class OpenBrowserView : public views::View,
   OpenSpaceThemeState MakeThemeState(const SpaceID& space_id) const;
   theme::ContentAppearance SystemAppearance() const;
 
+  // Single-pane top toolbar helper.
+  bool ShowsSinglePaneToolbar() const;
+  void SyncSinglePaneToolbarFromActiveTab();
+  void OnSinglePaneToolbarCommand(PaneCommand command, views::View* anchor);
+  void OnSinglePaneHostClicked(views::View* anchor);
+
   raw_ptr<OpenViewController> controller_;
+  raw_ptr<Delegate> delegate_ = nullptr;
   WindowID window_id_;
   // Set by Install(); the BrowserView this view covers.
   raw_ptr<BrowserView> browser_view_ = nullptr;
@@ -517,6 +610,9 @@ class OpenBrowserView : public views::View,
   raw_ptr<OpenWindowControlsView> window_controls_view_ = nullptr;
   raw_ptr<OpenWindowControlsView> leading_window_controls_view_ = nullptr;
   raw_ptr<HiddenSidebarToggleButton> hidden_sidebar_toggle_ = nullptr;
+  raw_ptr<WindowRimView> window_rim_ = nullptr;
+  raw_ptr<BrowserSplitDropOverlayView> split_drop_overlay_ = nullptr;
+  raw_ptr<SinglePaneToolbarView> single_pane_toolbar_ = nullptr;
   raw_ptr<RevealCardView> reveal_card_ = nullptr;
   raw_ptr<views::View> web_contents_host_ = nullptr;
   raw_ptr<views::View> overlay_host_ = nullptr;
@@ -532,6 +628,8 @@ class OpenBrowserView : public views::View,
   bool hidden_by_drag_ = false;
   bool resizing_ = false;
   bool split_view_active_ = false;
+  bool single_pane_toolbar_visible_ = false;
+  bool split_drop_overlay_active_ = false;
   // Cmd/Ctrl+S slide: offset 0 (shown) .. -width (hidden).
   std::unique_ptr<motion::OpenSpringAnimator> sidebar_slide_;
   double sidebar_offset_ = 0;
@@ -566,10 +664,12 @@ class OpenBrowserView : public views::View,
   bool tab_fullscreen_ = false;
   bool tab_fullscreen_applied_ = false;
 
-  // Window material (macOS vibrancy, Windows 11 Mica/Mica Alt).
+  // Window material (macOS vibrancy, Windows 11 immersive dark mode).
   bool translucent_window_ = false;
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC)
   bool translucent_chrome_enabled_ = false;
+#endif
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   std::optional<WindowMaterialSpec> applied_material_;
 #endif
 

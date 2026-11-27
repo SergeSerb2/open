@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
@@ -18,7 +19,10 @@
 #include "open_unified/ui/design/open_motion.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -28,6 +32,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/render_text.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -59,6 +64,77 @@ constexpr SkColor kFindSeparator = SkColorSetARGB(0x1A, 0x00, 0x00, 0x00);
 constexpr int kQueryFontSize = 13;
 constexpr int kCountFontSize = 12;
 
+// Theme-proof Textfield for OpenFindBarView: keeps query text, placeholder,
+// and selection colors legible even when the active Space theme differs from
+// the OS color scheme.
+class FindBarTextfield : public views::Textfield {
+  METADATA_HEADER(FindBarTextfield, views::Textfield)
+
+ public:
+  FindBarTextfield() = default;
+  ~FindBarTextfield() override = default;
+
+  void SetExplicitColors(SkColor text,
+                         SkColor placeholder,
+                         SkColor selection_text,
+                         SkColor selection_bg) {
+    has_explicit_colors_ = true;
+    text_color_ = text;
+    placeholder_color_ = placeholder;
+    selection_text_color_ = selection_text;
+    selection_bg_color_ = selection_bg;
+    ApplyExplicitColors();
+  }
+
+  // views::Textfield:
+  void OnThemeChanged() override {
+    views::Textfield::OnThemeChanged();
+    if (has_explicit_colors_) {
+      ApplyExplicitColors();
+    }
+  }
+
+  bool ShouldShowPlaceholderText() const override {
+    if (has_explicit_colors_) {
+      return false;  // Painted in OnPaint with our explicit placeholder color.
+    }
+    return views::Textfield::ShouldShowPlaceholderText();
+  }
+
+  void OnPaint(gfx::Canvas* canvas) override {
+    views::Textfield::OnPaint(canvas);
+    if (has_explicit_colors_ && GetText().empty() &&
+        !GetPlaceholderText().empty()) {
+      if (gfx::RenderText* rt = GetRenderText()) {
+        canvas->DrawStringRectWithFlags(
+            GetPlaceholderText(), GetFontList(), placeholder_color_,
+            rt->display_rect(),
+            placeholder_text_draw_flags() | gfx::Canvas::NO_SUBPIXEL_RENDERING);
+      }
+    }
+  }
+
+ private:
+  void ApplyExplicitColors() {
+    SetColor(text_color_);
+    if (gfx::RenderText* rt = GetRenderText()) {
+      rt->SetColor(text_color_);
+      rt->set_selection_color(selection_text_color_);
+      rt->set_selection_background_focused_color(selection_bg_color_);
+    }
+    SchedulePaint();
+  }
+
+  bool has_explicit_colors_ = false;
+  SkColor text_color_ = kInputTextLight;
+  SkColor placeholder_color_ = secondary::WithAlpha(kInputTextLight, 0.48f);
+  SkColor selection_text_color_ = kInputTextLight;
+  SkColor selection_bg_color_ = SK_ColorTRANSPARENT;
+};
+
+BEGIN_METADATA(FindBarTextfield)
+END_METADATA
+
 }  // namespace
 
 // ===========================================================================
@@ -72,12 +148,12 @@ OpenFindBarView::OpenFindBarView(FindBarDelegate* delegate)
   GetViewAccessibility().SetRole(ax::mojom::Role::kSearch);
   GetViewAccessibility().SetName(u"Find in page");
 
-  auto field = std::make_unique<views::Textfield>();
+  auto field = std::make_unique<FindBarTextfield>();
   field->set_controller(this);
   field->SetBorder(views::CreateEmptyBorder(gfx::Insets()));
   field->SetBackgroundEnabled(false);
   field->SetFontList(secondary::FontOfSize(kQueryFontSize));
-  field->SetPlaceholderText(u"Find in page...");
+  field->SetPlaceholderText(u"Find in page\u2026");
   field->GetViewAccessibility().SetName(u"Find in page");
   field_ = AddChildView(std::move(field));
 
@@ -320,9 +396,28 @@ bool OpenFindBarView::HasCompositionText() const {
   return field_ && field_->HasCompositionText();
 }
 
-void OpenFindBarView::SetAppearance(const secondary::Appearance& appearance) {
-  appearance_ = appearance;
+void OpenFindBarView::ApplyTheme() {
+  if (applying_theme_) {
+    return;
+  }
+  base::AutoReset<bool> guard(&applying_theme_, true);
+  if (views::Widget* widget = GetWidget()) {
+    const ui::ColorProviderKey::ColorMode target_mode =
+        appearance_.dark ? ui::ColorProviderKey::ColorMode::kDark
+                         : ui::ColorProviderKey::ColorMode::kLight;
+    if (widget->color_mode_override() != target_mode) {
+      widget->SetColorModeOverride(target_mode);
+      widget->ThemeChanged();
+    }
+  }
   const SkColor tint = appearance_.dark ? kInputTextDark : kInputTextLight;
+  if (field_) {
+    const SkColor placeholder = secondary::WithAlpha(tint, 0.48f);
+    const SkColor selection_bg = secondary::WithAlpha(
+        appearance_.ActiveAccent(), appearance_.dark ? 0.45f : 0.28f);
+    static_cast<FindBarTextfield*>(field_.get())
+        ->SetExplicitColors(tint, placeholder, tint, selection_bg);
+  }
   for (GlyphButton* button : {previous_.get(), next_.get(), close_.get()}) {
     button->SetGlyphColor(tint);
     button->SetHoverFill(secondary::WithAlpha(
@@ -331,7 +426,17 @@ void OpenFindBarView::SetAppearance(const secondary::Appearance& appearance) {
   if (case_toggle_) {
     case_toggle_->SchedulePaint();
   }
+}
+
+void OpenFindBarView::SetAppearance(const secondary::Appearance& appearance) {
+  appearance_ = appearance;
+  ApplyTheme();
   SchedulePaint();
+}
+
+void OpenFindBarView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  ApplyTheme();
 }
 
 gfx::Rect OpenFindBarView::inner_bounds() const {
@@ -410,6 +515,11 @@ void OpenFindBarView::OnPaint(gfx::Canvas* canvas) {
       canvas, gfx::RectF(inner), m::kCornerRadius,
       appearance_.dark ? kPopoverDark : kPopoverLight,
       appearance_.dark ? kPopoverShadowDark : kPopoverShadowLight, 3.f, 5.f);
+  secondary::StrokeRoundRect(
+      canvas, gfx::RectF(inner), m::kCornerRadius,
+      appearance_.dark ? SkColorSetA(SK_ColorWHITE, 0x24)
+                       : SkColorSetA(SK_ColorBLACK, 0x1A),
+      1.f);
   const SkColor tint = appearance_.dark ? kInputTextDark : kInputTextLight;
   const int icon_y = inner.y() + (inner.height() - m::kSearchIconBox) / 2;
   const gfx::Rect icon(inner.x() + m::kSearchIconX, icon_y, m::kSearchIconBox,
@@ -762,7 +872,7 @@ ToastSpec ToastSpec::ForKind(OpenToastKind kind,
       }
       break;
     case OpenToastKind::kTabsNotSaved:
-      set(u"Your tabs could not be saved", Glyph::kNone,
+      set(u"Your tabs could not be saved", Glyph::kWarning,
           "exclamationmark.triangle.fill");
       spec.subtitle = detail;
       break;
@@ -918,18 +1028,18 @@ ToastSpec ToastSpec::ForKind(OpenToastKind kind,
       SetTextButton(spec, u"Show", std::move(action));
       break;
     case OpenToastKind::kSyncFailed:
-      set(u"Sync Failed", Glyph::kNone, "exclamationmark.icloud");
+      set(u"Sync Failed", Glyph::kError, "exclamationmark.icloud");
       spec.subtitle = detail;
       break;
     // Generic.
     case OpenToastKind::kInfo:
-      set(detail, Glyph::kNone, "info.circle");
+      set(detail, Glyph::kInfo, "info.circle");
       break;
     case OpenToastKind::kWarning:
-      set(detail, Glyph::kNone, "exclamationmark.triangle.fill");
+      set(detail, Glyph::kWarning, "exclamationmark.triangle.fill");
       break;
     case OpenToastKind::kError:
-      set(detail, Glyph::kNone, "xmark.octagon.fill");
+      set(detail, Glyph::kError, "xmark.octagon.fill");
       break;
   }
   return spec;
@@ -1037,12 +1147,14 @@ class ToastView : public views::View {
   int id() const { return id_; }
   OpenToastKind kind() const { return spec_.kind; }
   const std::u16string& title() const { return spec_.title; }
+  const std::u16string& subtitle() const { return spec_.subtitle; }
+  const std::string& coalescing_key() const { return spec_.coalescing_key; }
   bool is_exiting() const { return exiting_; }
   bool needs_entrance() const { return needs_entrance_; }
   bool has_button() const { return button_ != nullptr; }
 
   // Lays the toast out for `spec` (a new toast or an update of this one).
-  void Apply(ToastSpec spec) {
+  void Apply(ToastSpec spec, bool restart_timer = false) {
     namespace m = toast_metrics;
     const bool was_sticky = applied_ && spec_.sticky;
     spec_ = std::move(spec);
@@ -1061,7 +1173,7 @@ class ToastView : public views::View {
           base::BindRepeating(&ToastView::PaintButton, base::Unretained(this)),
           name));
     }
-    if (!applied_ || was_sticky != spec_.sticky) {
+    if (!applied_ || was_sticky != spec_.sticky || restart_timer) {
       lifetime_ = spec_.lifetime.value_or(
           spec_.has_button() ? m::kLifetimeWithButton : m::kLifetime);
       RestartTimer(lifetime_);
@@ -1436,6 +1548,38 @@ int OpenToastStackView::Show(ToastSpec spec) {
   const bool was_empty = toasts_.empty();
   last_title_ = spec.title;
   last_kind_ = spec.kind;
+  if (!replaces_older_) {
+    // Coalesce rapid repeated toasts (such as closing several tabs in a row,
+    // repeated zoom steps, or identical non-action notifications) in place so
+    // the stack stays uncluttered.
+    for (size_t i = 0; i < toasts_.size(); ++i) {
+      toast_internal::ToastView* existing = toasts_[i].get();
+      if (existing->is_exiting()) {
+        continue;
+      }
+      const bool match_tab_archived =
+          spec.kind == OpenToastKind::kTabArchived &&
+          existing->kind() == OpenToastKind::kTabArchived;
+      const bool match_key = !spec.coalescing_key.empty() &&
+                             existing->coalescing_key() == spec.coalescing_key;
+      const bool match_same_non_action =
+          spec.kind != OpenToastKind::kCustom && !spec.has_button() &&
+          !existing->has_button() && existing->kind() == spec.kind &&
+          existing->title() == spec.title &&
+          existing->subtitle() == spec.subtitle;
+      if (match_tab_archived || match_key || match_same_non_action) {
+        existing->Apply(std::move(spec), /*restart_timer=*/true);
+        if (i != 0) {
+          toasts_.erase(toasts_.begin() + static_cast<ptrdiff_t>(i));
+          toasts_.insert(toasts_.begin(), existing);
+          ReorderChildView(existing, 0);
+        }
+        PreferredSizeChanged();
+        InvalidateLayout();
+        return existing->id();
+      }
+    }
+  }
   if (replaces_older_) {
     // Arc (PG-1.8): every older toast starts its exit at once.
     for (auto& older : toasts_) {
@@ -1926,11 +2070,64 @@ void OpenTabSwitcherView::OnPaint(gfx::Canvas* canvas) {
       canvas, gfx::RectF(inner), m::kCornerRadius,
       dark ? kPopoverDark : kPopoverLight,
       dark ? kPopoverShadowDark : kPopoverShadowLight, 8.f, 30.f);
+  secondary::StrokeRoundRect(
+      canvas, gfx::RectF(inner), m::kCornerRadius,
+      dark ? SkColorSetA(SK_ColorWHITE, 0x24)
+           : SkColorSetA(SK_ColorBLACK, 0x1A),
+      1.f);
   const size_t first = first_visible();
   const size_t count = std::min(items_.size() - first, m::kMaximumVisible);
   for (size_t i = 0; i < count; ++i) {
     PaintCard(canvas, items_[first + i], ItemRect(i), first + i == highlight_);
   }
+  // Subtle overflow indicators in the outer gutters when more tabs exist than
+  // the visible window slots.
+  const size_t hidden_left = first;
+  const size_t hidden_right = items_.size() - (first + count);
+  if (hidden_left > 0 || hidden_right > 0) {
+    const SkColor ink = secondary::WithAlpha(
+        dark ? kInputTextDark : kInputTextLight, 0.55f);
+    const gfx::FontList chevron_font =
+        secondary::FontOfSize(14, gfx::Font::Weight::MEDIUM);
+    const gfx::FontList count_font =
+        secondary::FontOfSize(9, gfx::Font::Weight::SEMIBOLD);
+    const int card_center_y = inner.y() + m::kInset + m::kCardHeight / 2;
+    const int gutter_w = std::max(0, m::kInset - 2);
+    if (hidden_left > 0) {
+      const int x = inner.x() + 1;
+      secondary::DrawText(canvas, u"\u2039", chevron_font, ink,
+                          gfx::Rect(x, card_center_y - 16, gutter_w, 16),
+                          gfx::Canvas::TEXT_ALIGN_CENTER);
+      secondary::DrawText(
+          canvas, u"+" + base::NumberToString16(hidden_left), count_font, ink,
+          gfx::Rect(x, card_center_y + 2, gutter_w, 12),
+          gfx::Canvas::TEXT_ALIGN_CENTER);
+    }
+    if (hidden_right > 0) {
+      const int x = inner.right() - m::kInset + 1;
+      secondary::DrawText(canvas, u"\u203a", chevron_font, ink,
+                          gfx::Rect(x, card_center_y - 16, gutter_w, 16),
+                          gfx::Canvas::TEXT_ALIGN_CENTER);
+      secondary::DrawText(
+          canvas, u"+" + base::NumberToString16(hidden_right), count_font, ink,
+          gfx::Rect(x, card_center_y + 2, gutter_w, 12),
+          gfx::Canvas::TEXT_ALIGN_CENTER);
+    }
+  }
+}
+
+ui::Cursor OpenTabSwitcherView::GetCursor(const ui::MouseEvent& event) {
+  if (shown_) {
+    const size_t first = first_visible();
+    const size_t count =
+        std::min(items_.size() - first, tab_switcher_metrics::kMaximumVisible);
+    for (size_t i = 0; i < count; ++i) {
+      if (ItemRect(i).Contains(event.location())) {
+        return ui::Cursor(ui::mojom::CursorType::kHand);
+      }
+    }
+  }
+  return views::View::GetCursor(event);
 }
 
 void OpenTabSwitcherView::PaintCard(gfx::Canvas* canvas,

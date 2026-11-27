@@ -387,6 +387,8 @@ class OpenCommandBarView : public views::View,
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
   void Layout(PassKey) override;
+  void OnThemeChanged() override;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseMoved(const ui::MouseEvent& event) override;
   bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
@@ -437,6 +439,7 @@ class OpenCommandBarView : public views::View,
   void ExitScope();
   std::optional<CommandBarScopeTarget> TabScopeTarget() const;
   void UpdatePlaceholder();
+  void ApplyTheme();
   void UpdateCard();
 
   // Painting.
@@ -503,6 +506,7 @@ class OpenCommandBarView : public views::View,
   std::optional<gfx::Point> last_mouse_;
 
   gfx::Rect card_;
+  bool applying_theme_ = false;
 
   base::WeakPtrFactory<OpenCommandBarView> weak_factory_{this};
 };

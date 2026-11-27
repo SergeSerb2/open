@@ -19,10 +19,12 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/timer/timer.h"
 #include "open_unified/core/model/open_types.h"
 #include "open_unified/ui/design/open_theme_math.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -91,6 +93,15 @@ class OpenSidebarContext {
   // Structural and Space animations run only in a visible window.
   virtual bool AnimationsEnabled() const = 0;
 
+  // Optional Wave 3D notifications (default no-op for backward compatibility).
+  virtual void OnAppMenuRequested(views::View* anchor) {}
+  virtual void OnExtensionContextMenuRequested(const std::string& extension_id,
+                                               views::View* anchor,
+                                               const gfx::Point& screen_pt) {}
+  virtual void OnSpaceReordered(const std::string& space_id, size_t to_index) {}
+  virtual void OnResetPinnedTab(const ItemID& id, bool separate) {}
+  virtual void OnTabDragStateChanged(bool dragging, const ItemID& tab_id) {}
+
  protected:
   virtual ~OpenSidebarContext() = default;
 };
@@ -103,12 +114,27 @@ void WriteNode(ui::OSExchangeData* data,
                const std::string& url,
                const std::u16string& title);
 std::optional<ItemID> ReadNode(const ui::OSExchangeData& data);
+
+const ui::ClipboardFormatType& SpaceFormat();
+void WriteSpace(ui::OSExchangeData* data, const SpaceID& space_id);
+std::optional<SpaceID> ReadSpace(const ui::OSExchangeData& data);
 }  // namespace sidebar_dnd
 
 class OpenTabTreeView : public views::View {
   METADATA_HEADER(OpenTabTreeView, views::View)
 
  public:
+  class Delegate {
+   public:
+    virtual ~Delegate() = default;
+    // Pinned tab favicon reset button clicked. `separate` is true when Alt is
+    // held ("Separate From Pinned Tab").
+    virtual void OnResetPinnedTab(const ItemID& id, bool separate) {}
+    // Fired when a sidebar tab drag starts (`dragging == true`) and ends or
+    // cancels (`dragging == false`).
+    virtual void OnTabDragStateChanged(bool dragging, const ItemID& tab_id) {}
+  };
+
   enum class RowKind { kSpacer, kNode, kDivider, kNewTab };
 
   // One displayed row. `parent`/`index` locate the node in the model.
@@ -130,6 +156,14 @@ class OpenTabTreeView : public views::View {
   ~OpenTabTreeView() override;
 
   const SpaceID& space_id() const { return space_id_; }
+  void SetDelegate(Delegate* delegate) { delegate_ = delegate; }
+  Delegate* delegate() const { return delegate_; }
+
+  // Multi-selection (Cmd/Ctrl-click and Shift-click). Returns multi-selected
+  // node IDs in tree order when active, otherwise the active selection (if any).
+  std::vector<ItemID> SelectedIds() const;
+  bool IsNodeMultiSelected(const ItemID& id) const;
+  void ClearMultiSelection();
 
   // --- Model notifications (routed by OpenSidebarView) -----------------------
   void ApplyTreeChange(const TreeChange& change);
@@ -173,6 +207,13 @@ class OpenTabTreeView : public views::View {
   void Reconcile(bool animate);
   RowView* FindRow(const ItemID& node_id) const;
   std::optional<ItemID> SelectedNodeId() const;
+  void ToggleMultiSelect(const ItemID& id);
+  void SelectRangeTo(const ItemID& id);
+  void NotifyResetPinnedTab(const ItemID& id, bool separate);
+  void NotifyTabDragStateChanged(bool dragging, const ItemID& tab_id);
+  void UpdateLoadingTimer();
+  void OnLoadingTick();
+  float loading_phase() const { return loading_phase_; }
 
   // Drop target support (ListView forwards).
   struct DropTarget {
@@ -186,6 +227,7 @@ class OpenTabTreeView : public views::View {
                                                   dragged) const;
 
   raw_ptr<OpenSidebarContext> context_;
+  raw_ptr<Delegate> delegate_ = nullptr;
   SpaceID space_id_;
   raw_ptr<HeaderView> header_ = nullptr;
   raw_ptr<views::ScrollView> scroll_view_ = nullptr;
@@ -194,6 +236,10 @@ class OpenTabTreeView : public views::View {
   std::map<std::string, raw_ptr<RowView>> row_views_;
   std::optional<ItemID> peek_source_;
   std::optional<ItemID> last_selected_;
+  std::set<ItemID> selected_ids_;
+  std::optional<ItemID> anchor_id_;
+  base::RepeatingTimer loading_timer_;
+  float loading_phase_ = 0.0f;
   bool new_tab_command_bar_open_ = false;
   int full_reload_count_ = 0;
 };

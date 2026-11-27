@@ -73,6 +73,10 @@ namespace views {
 class View;
 }
 
+namespace open_unified {
+enum class CommandId;
+}  // namespace open_unified
+
 namespace open_unified::hooks {
 
 // Stable command tag ranges owned by Open Unified (above Chromium's highest
@@ -363,6 +367,16 @@ int OpenCommandIdForMenuTag(std::string_view command_id);
 // when Open handled |command_id| for |browser|'s window (shadowed IDC_*
 // commands and Open custom menu tags).
 bool HandleBrowserCommand(BrowserWindowInterface* browser, int command_id);
+
+// Returns the native Chromium IDC_* command for an Open CommandId that
+// Chromium handles natively (Print, Save Page As, Zoom, DevTools, View Source,
+// Task Manager, Cast, etc.), or 0 if none.
+int FallbackChromiumCommandForOpen(CommandId id);
+
+// Executes the native Chromium IDC_* fallback command for |id| on |browser|
+// with re-entrancy passthrough enabled. Returns true when enabled and executed.
+bool ExecuteFallbackChromiumCommand(BrowserWindowInterface* browser,
+                                    CommandId id);
 
 // --- 0013: macOS main menu bar -----------------------------------------------
 

@@ -27,6 +27,7 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "open_unified/core/commands/command_registry.h"
 #include "open_unified/core/model/open_types.h"
 #include "open_unified/ui/views/open_browser_view.h"
 #include "ui/menus/simple_menu_model.h"
@@ -304,6 +305,24 @@ struct SidebarMenuContext {
 std::unique_ptr<ui::SimpleMenuModel> BuildSidebarMenuModel(
     const SidebarMenuContext& ctx,
     SidebarMenuActionCallback on_action);
+
+// State for the Windows/Linux Open Application Menu.
+struct AppMenuContext {
+  bool is_incognito = false;
+  bool sidebar_hidden = false;
+  bool toolbar_visible = false;
+  bool is_fullscreen = false;
+  bool has_active_tab = false;
+};
+
+using AppMenuCommandCallback =
+    base::RepeatingCallback<void(CommandId command)>;
+
+// Builds the Open Application Menu (Windows/Linux top-left Open button, Alt+F,
+// F10). The returned model owns its delegate, submenus, and `on_command`.
+std::unique_ptr<ui::SimpleMenuModel> BuildAppMenuModel(
+    const AppMenuContext& ctx,
+    AppMenuCommandCallback on_command);
 
 // The pane title in a split row's menu: the tab title cut to 30 characters
 // plus an ellipsis; "New Tab" for a pane that never got a page.

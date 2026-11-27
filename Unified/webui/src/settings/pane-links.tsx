@@ -112,7 +112,7 @@ export function LinksPane(): JSX.Element {
 
   const hotkey = String(ctx.prefs['links.littleOpenHotkey'] ?? '');
   const hotkeyOn = !!hotkey && !['off', 'none', 'disabled'].includes(hotkey.toLowerCase());
-  const defaultHotkey = String(ctx.defaults['links.littleOpenHotkey'] ?? 'Mod+Option+N');
+  const defaultHotkey = String(ctx.defaults['links.littleOpenHotkey'] ?? 'Mod+Alt+N');
   const appName = (id?: string) => (id ? apps.find((a) => a.id === id)?.name ?? id : '');
   const profileOfSpace = (id: string) => ctx.spaces.find((s) => s.id === id)?.profile_id;
 
@@ -421,9 +421,11 @@ export function LinksPane(): JSX.Element {
                 />
               </Field>
             </div>
-            <Field label="And comes from" hint={apps.length === 0 ? 'Source apps are known on macOS only.' : undefined}>
-              <Select ariaLabel="Source app" wide value={draft.source} options={sourceOptions} onChange={(v) => setDraft({ ...draft, source: v })} />
-            </Field>
+            {isMacPlatform() && (
+              <Field label="And comes from" hint={apps.length === 0 ? 'Source apps are known on macOS only.' : undefined}>
+                <Select ariaLabel="Source app" wide value={draft.source} options={sourceOptions} onChange={(v) => setDraft({ ...draft, source: v })} />
+              </Field>
+            )}
             <Field label="Open it in">
               <Select ariaLabel="Destination" wide value={draft.destination} options={destinationOptions.filter((o) => o.value !== 'most_recent_space')} onChange={(v) => setDraft({ ...draft, destination: v })} />
             </Field>

@@ -32,6 +32,8 @@
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/menu_separator_types.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
@@ -243,22 +245,40 @@ cc::PaintFlags FillFlags(SkColor color) {
   return flags;
 }
 
-SkPath Star(float cx, float cy, float outer, float inner, int points) {
-  SkPathBuilder b;
-  for (int i = 0; i < points * 2; ++i) {
-    const double a = -kPi / 2 + i * kPi / points;
-    const float r = (i % 2 == 0) ? outer : inner;
-    const float x = cx + r * static_cast<float>(std::cos(a));
-    const float y = cy + r * static_cast<float>(std::sin(a));
-    if (i == 0) {
-      b.moveTo(x, y);
-    } else {
-      b.lineTo(x, y);
-    }
+class HandEditorButton : public EditorButton {
+ public:
+  using EditorButton::EditorButton;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : EditorButton::GetCursor(event);
   }
-  b.close();
-  return b.detach();
-}
+};
+
+class HandPresetStripView : public PresetStripView {
+ public:
+  using PresetStripView::PresetStripView;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return ui::Cursor(ui::mojom::CursorType::kHand);
+  }
+};
+
+class HandSineSliderView : public SineSliderView {
+ public:
+  using SineSliderView::SineSliderView;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : SineSliderView::GetCursor(event);
+  }
+};
+
+class HandNoiseDialView : public NoiseDialView {
+ public:
+  using NoiseDialView::NoiseDialView;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : NoiseDialView::GetCursor(event);
+  }
+};
 
 // A four-point sparkle with concave sides.
 SkPath Sparkle(float cx, float cy, float r) {
@@ -425,253 +445,6 @@ SymbolChoice SymbolFor(EditorGlyph glyph) {
   return {"circle.dotted", W::kRegular};
 }
 
-// Open's own fallback art for the named Space icons on Windows and Linux
-// (macOS draws the real SF Symbol). Returns false for names without one.
-bool DrawNamedIconFallback(gfx::Canvas* canvas,
-                           std::string_view id,
-                           const gfx::RectF& box,
-                           SkColor color) {
-  const float s = std::min(box.width(), box.height()) * 0.62f;
-  const float cx = box.CenterPoint().x();
-  const float cy = box.CenterPoint().y();
-  const float w = std::max(1.3f, s * 0.11f);
-  const cc::PaintFlags stroke = StrokeFlags(color, w);
-  cc::PaintCanvas* sk = canvas->sk_canvas();
-  if (id == "star") {
-    canvas->DrawPath(Star(cx, cy + s * 0.04f, s * 0.52f, s * 0.22f, 5), stroke);
-  } else if (id == "heart") {
-    SkPathBuilder b;
-    b.moveTo(cx, cy + s * 0.42f)
-        .cubicTo(cx - s * 0.62f, cy - s * 0.02f, cx - s * 0.34f, cy - s * 0.58f,
-                 cx, cy - s * 0.22f)
-        .cubicTo(cx + s * 0.34f, cy - s * 0.58f, cx + s * 0.62f, cy - s * 0.02f,
-                 cx, cy + s * 0.42f)
-        .close();
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "flag") {
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.38f, cy + s * 0.50f).lineTo(cx - s * 0.38f, cy - s * 0.46f);
-    b.moveTo(cx - s * 0.38f, cy - s * 0.42f)
-        .lineTo(cx + s * 0.40f, cy - s * 0.42f)
-        .lineTo(cx + s * 0.22f, cy - s * 0.18f)
-        .lineTo(cx + s * 0.40f, cy + s * 0.06f)
-        .lineTo(cx - s * 0.38f, cy + s * 0.06f);
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "flash") {
-    SkPathBuilder b;
-    b.moveTo(cx + s * 0.10f, cy - s * 0.52f)
-        .lineTo(cx - s * 0.30f, cy + s * 0.06f)
-        .lineTo(cx, cy + s * 0.06f)
-        .lineTo(cx - s * 0.10f, cy + s * 0.52f)
-        .lineTo(cx + s * 0.30f, cy - s * 0.06f)
-        .lineTo(cx, cy - s * 0.06f)
-        .close();
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "triangle") {
-    SkPathBuilder b;
-    b.moveTo(cx, cy - s * 0.46f)
-        .lineTo(cx + s * 0.50f, cy + s * 0.40f)
-        .lineTo(cx - s * 0.50f, cy + s * 0.40f)
-        .close();
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "square") {
-    canvas->DrawRoundRect(
-        gfx::RectF(cx - s * 0.42f, cy - s * 0.42f, s * 0.84f, s * 0.84f),
-        s * 0.12f, stroke);
-  } else if (id == "ellipse") {
-    canvas->DrawCircle(gfx::PointF(cx, cy), s * 0.44f, stroke);
-  } else if (id == "moon") {
-    SkPathBuilder b;
-    b.arcTo(SkRect::MakeLTRB(cx - s * 0.44f, cy - s * 0.44f, cx + s * 0.44f,
-                             cy + s * 0.44f),
-            -60, 300, true);
-    b.quadTo(cx - s * 0.10f, cy - s * 0.10f, cx + s * 0.22f, cy - s * 0.38f);
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "sunny") {
-    canvas->DrawCircle(gfx::PointF(cx, cy), s * 0.20f, stroke);
-    for (int i = 0; i < 8; ++i) {
-      const double a = i * kPi / 4;
-      const float c = static_cast<float>(std::cos(a));
-      const float d = static_cast<float>(std::sin(a));
-      sk->drawLine(cx + c * s * 0.34f, cy + d * s * 0.34f, cx + c * s * 0.50f,
-                   cy + d * s * 0.50f, stroke);
-    }
-  } else if (id == "bookmark") {
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.32f, cy - s * 0.48f)
-        .lineTo(cx + s * 0.32f, cy - s * 0.48f)
-        .lineTo(cx + s * 0.32f, cy + s * 0.48f)
-        .lineTo(cx, cy + s * 0.24f)
-        .lineTo(cx - s * 0.32f, cy + s * 0.48f)
-        .close();
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "folder") {
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.50f, cy + s * 0.38f)
-        .lineTo(cx - s * 0.50f, cy - s * 0.38f)
-        .lineTo(cx - s * 0.12f, cy - s * 0.38f)
-        .lineTo(cx, cy - s * 0.24f)
-        .lineTo(cx + s * 0.50f, cy - s * 0.24f)
-        .lineTo(cx + s * 0.50f, cy + s * 0.38f)
-        .close();
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "grid" || id == "apps") {
-    const int n = id == "grid" ? 2 : 3;
-    const float cell = s * (n == 2 ? 0.40f : 0.26f);
-    const float gap = s * (n == 2 ? 0.16f : 0.11f);
-    const float total = n * cell + (n - 1) * gap;
-    for (int r = 0; r < n; ++r) {
-      for (int c = 0; c < n; ++c) {
-        canvas->DrawRoundRect(
-            gfx::RectF(cx - total / 2 + c * (cell + gap),
-                       cy - total / 2 + r * (cell + gap), cell, cell),
-            cell * 0.22f, stroke);
-      }
-    }
-  } else if (id == "calendar") {
-    canvas->DrawRoundRect(
-        gfx::RectF(cx - s * 0.46f, cy - s * 0.38f, s * 0.92f, s * 0.82f),
-        s * 0.12f, stroke);
-    sk->drawLine(cx - s * 0.46f, cy - s * 0.12f, cx + s * 0.46f, cy - s * 0.12f,
-                 stroke);
-    sk->drawLine(cx - s * 0.22f, cy - s * 0.52f, cx - s * 0.22f, cy - s * 0.30f,
-                 stroke);
-    sk->drawLine(cx + s * 0.22f, cy - s * 0.52f, cx + s * 0.22f, cy - s * 0.30f,
-                 stroke);
-  } else if (id == "mail") {
-    canvas->DrawRoundRect(
-        gfx::RectF(cx - s * 0.50f, cy - s * 0.34f, s, s * 0.68f), s * 0.08f,
-        stroke);
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.46f, cy - s * 0.28f)
-        .lineTo(cx, cy + s * 0.06f)
-        .lineTo(cx + s * 0.46f, cy - s * 0.28f);
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "checkbox") {
-    canvas->DrawRoundRect(
-        gfx::RectF(cx - s * 0.42f, cy - s * 0.42f, s * 0.84f, s * 0.84f),
-        s * 0.12f, stroke);
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.20f, cy)
-        .lineTo(cx - s * 0.04f, cy + s * 0.16f)
-        .lineTo(cx + s * 0.22f, cy - s * 0.18f);
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "document" || id == "copy") {
-    if (id == "copy") {
-      canvas->DrawRoundRect(
-          gfx::RectF(cx - s * 0.26f, cy - s * 0.50f, s * 0.70f, s * 0.80f),
-          s * 0.08f, stroke);
-    }
-    canvas->DrawRoundRect(
-        gfx::RectF(cx - s * (id == "copy" ? 0.44f : 0.36f),
-                   cy - s * (id == "copy" ? 0.30f : 0.48f), s * 0.70f,
-                   s * (id == "copy" ? 0.80f : 0.96f)),
-        s * 0.08f, stroke);
-  } else if (id == "cloud" || id == "cloudOutline") {
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.30f, cy + s * 0.30f)
-        .cubicTo(cx - s * 0.62f, cy + s * 0.30f, cx - s * 0.62f, cy - s * 0.12f,
-                 cx - s * 0.30f, cy - s * 0.10f)
-        .cubicTo(cx - s * 0.24f, cy - s * 0.48f, cx + s * 0.22f, cy - s * 0.48f,
-                 cx + s * 0.26f, cy - s * 0.14f)
-        .cubicTo(cx + s * 0.60f, cy - s * 0.16f, cx + s * 0.60f, cy + s * 0.30f,
-                 cx + s * 0.30f, cy + s * 0.30f)
-        .close();
-    if (id == "cloud") {
-      canvas->DrawPath(b.detach(), FillFlags(color));
-    } else {
-      canvas->DrawPath(b.detach(), stroke);
-    }
-  } else if (id == "search") {
-    canvas->DrawCircle(gfx::PointF(cx - s * 0.08f, cy - s * 0.08f), s * 0.32f,
-                       stroke);
-    sk->drawLine(cx + s * 0.16f, cy + s * 0.16f, cx + s * 0.46f, cy + s * 0.46f,
-                 stroke);
-  } else if (id == "code" || id == "github") {
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.20f, cy - s * 0.30f)
-        .lineTo(cx - s * 0.50f, cy)
-        .lineTo(cx - s * 0.20f, cy + s * 0.30f);
-    b.moveTo(cx + s * 0.20f, cy - s * 0.30f)
-        .lineTo(cx + s * 0.50f, cy)
-        .lineTo(cx + s * 0.20f, cy + s * 0.30f);
-    b.moveTo(cx + s * 0.08f, cy - s * 0.40f).lineTo(cx - s * 0.08f, cy + s * 0.40f);
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "linear") {
-    for (int i = -1; i <= 1; ++i) {
-      sk->drawLine(cx - s * 0.44f, cy + i * s * 0.30f, cx + s * 0.44f,
-                   cy + i * s * 0.30f, stroke);
-    }
-  } else if (id == "notifications") {
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.40f, cy + s * 0.26f)
-        .lineTo(cx - s * 0.30f, cy + s * 0.10f)
-        .lineTo(cx - s * 0.30f, cy - s * 0.12f)
-        .cubicTo(cx - s * 0.30f, cy - s * 0.52f, cx + s * 0.30f, cy - s * 0.52f,
-                 cx + s * 0.30f, cy - s * 0.12f)
-        .lineTo(cx + s * 0.30f, cy + s * 0.10f)
-        .lineTo(cx + s * 0.40f, cy + s * 0.26f)
-        .close();
-    canvas->DrawPath(b.detach(), stroke);
-    sk->drawLine(cx - s * 0.10f, cy + s * 0.44f, cx + s * 0.10f, cy + s * 0.44f,
-                 stroke);
-  } else if (id == "leaf") {
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.44f, cy + s * 0.44f)
-        .cubicTo(cx - s * 0.50f, cy - s * 0.30f, cx + s * 0.10f, cy - s * 0.46f,
-                 cx + s * 0.46f, cy - s * 0.46f)
-        .cubicTo(cx + s * 0.46f, cy + s * 0.10f, cx + s * 0.20f, cy + s * 0.50f,
-                 cx - s * 0.44f, cy + s * 0.44f);
-    b.moveTo(cx - s * 0.44f, cy + s * 0.44f).lineTo(cx + s * 0.12f, cy - s * 0.12f);
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "people") {
-    canvas->DrawCircle(gfx::PointF(cx - s * 0.16f, cy - s * 0.18f), s * 0.16f,
-                       stroke);
-    canvas->DrawCircle(gfx::PointF(cx + s * 0.22f, cy - s * 0.22f), s * 0.13f,
-                       stroke);
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.48f, cy + s * 0.42f)
-        .cubicTo(cx - s * 0.46f, cy + s * 0.04f, cx + s * 0.14f, cy + s * 0.04f,
-                 cx + s * 0.16f, cy + s * 0.42f);
-    b.moveTo(cx + s * 0.22f, cy + s * 0.02f)
-        .cubicTo(cx + s * 0.40f, cy + s * 0.02f, cx + s * 0.50f, cy + s * 0.18f,
-                 cx + s * 0.50f, cy + s * 0.34f);
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "terminal") {
-    canvas->DrawRoundRect(
-        gfx::RectF(cx - s * 0.50f, cy - s * 0.40f, s, s * 0.80f), s * 0.10f,
-        stroke);
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.30f, cy - s * 0.14f)
-        .lineTo(cx - s * 0.12f, cy)
-        .lineTo(cx - s * 0.30f, cy + s * 0.14f);
-    canvas->DrawPath(b.detach(), stroke);
-    sk->drawLine(cx, cy + s * 0.16f, cx + s * 0.26f, cy + s * 0.16f, stroke);
-  } else if (id == "musicalNote") {
-    canvas->DrawCircle(gfx::PointF(cx - s * 0.18f, cy + s * 0.32f), s * 0.16f,
-                       FillFlags(color));
-    SkPathBuilder b;
-    b.moveTo(cx - s * 0.03f, cy + s * 0.32f)
-        .lineTo(cx - s * 0.03f, cy - s * 0.46f)
-        .lineTo(cx + s * 0.34f, cy - s * 0.30f);
-    canvas->DrawPath(b.detach(), stroke);
-  } else if (id == "gift") {
-    canvas->DrawRoundRect(
-        gfx::RectF(cx - s * 0.44f, cy - s * 0.16f, s * 0.88f, s * 0.62f),
-        s * 0.06f, stroke);
-    sk->drawLine(cx - s * 0.50f, cy - s * 0.16f, cx + s * 0.50f, cy - s * 0.16f,
-                 stroke);
-    sk->drawLine(cx, cy - s * 0.16f, cx, cy + s * 0.46f, stroke);
-    canvas->DrawCircle(gfx::PointF(cx - s * 0.14f, cy - s * 0.32f), s * 0.13f,
-                       stroke);
-    canvas->DrawCircle(gfx::PointF(cx + s * 0.14f, cy - s * 0.32f), s * 0.13f,
-                       stroke);
-  } else {
-    return false;
-  }
-  return true;
-}
-
 }  // namespace
 
 // --- Shared drawing ---------------------------------------------------------
@@ -718,8 +491,7 @@ void PaintSpaceIcon(gfx::Canvas* canvas,
                                  glyphs::SymbolWeight::kMedium, box, tint)) {
       return;
     }
-    if (icon->kind == SpaceIconKind::kNamed &&
-        DrawNamedIconFallback(canvas, icon->value, box, tint)) {
+    if (glyphs::DrawNamedSpaceIcon(canvas, icon->value, box, tint)) {
       return;
     }
     const SpaceIcon value = *icon;
@@ -1573,7 +1345,7 @@ AppearanceModeBar::AppearanceModeBar(
   constexpr std::array<const char16_t*, 3> names = {u"Automatic", u"Light",
                                                     u"Dark"};
   for (size_t i = 0; i < names.size(); ++i) {
-    auto button = std::make_unique<EditorButton>(
+    auto button = std::make_unique<HandEditorButton>(
         base::BindRepeating(
             [](AppearanceModeBar* bar, ThemeAppearance mode) {
               if (bar->on_select_) {
@@ -1621,7 +1393,7 @@ PresetStripView::PresetStripView(Callbacks callbacks)
   GetViewAccessibility().SetName(u"Color presets");
   page_animation_.SetSlideDuration(base::Milliseconds(m::kPresetPageMs));
   page_animation_.SetTweenType(gfx::Tween::EASE_OUT_3);
-  previous_ = AddChildView(std::make_unique<EditorButton>(
+  previous_ = AddChildView(std::make_unique<HandEditorButton>(
       base::BindRepeating(
           [](PresetStripView* strip) {
             if (strip->callbacks_.on_page) {
@@ -1631,7 +1403,7 @@ PresetStripView::PresetStripView(Callbacks callbacks)
           base::Unretained(this)),
       EditorGlyph::kChevronLeft, 16, u"Previous color presets"));
   previous_->SetGlyphOffset(1);
-  next_ = AddChildView(std::make_unique<EditorButton>(
+  next_ = AddChildView(std::make_unique<HandEditorButton>(
       base::BindRepeating(
           [](PresetStripView* strip) {
             if (strip->callbacks_.on_page) {
@@ -3033,6 +2805,18 @@ std::u16string Trimmed(std::u16string_view text) {
   return std::u16string(base::TrimWhitespace(text, base::TRIM_ALL));
 }
 
+class HandIconPickerView : public OpenSpaceIconPickerView {
+ public:
+  using OpenSpaceIconPickerView::OpenSpaceIconPickerView;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    if (event.location().x() >= 8 && event.location().x() < width() - 8 &&
+        event.location().y() >= 8 && event.location().y() < height() - 4) {
+      return ui::Cursor(ui::mojom::CursorType::kHand);
+    }
+    return OpenSpaceIconPickerView::GetCursor(event);
+  }
+};
+
 }  // namespace
 
 OpenSpaceThemeEditorView::OpenSpaceThemeEditorView(
@@ -3106,7 +2890,7 @@ OpenSpaceThemeEditorView::OpenSpaceThemeEditorView(
             v->Run(Kind::kDiscrete, v->state_.SetAppearance(mode));
           },
           base::Unretained(this))));
-  remove_ = theme_page_->AddChildView(std::make_unique<EditorButton>(
+  remove_ = theme_page_->AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(
           [](OpenSpaceThemeEditorView* v) {
             v->EndActiveGesture();
@@ -3115,7 +2899,7 @@ OpenSpaceThemeEditorView::OpenSpaceThemeEditorView(
           base::Unretained(this)),
       EditorGlyph::kMinus, 16, u"Remove color"));
   remove_->SetGlyphOffset(1);
-  add_ = theme_page_->AddChildView(std::make_unique<EditorButton>(
+  add_ = theme_page_->AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(
           [](OpenSpaceThemeEditorView* v) {
             v->EndActiveGesture();
@@ -3137,10 +2921,11 @@ OpenSpaceThemeEditorView::OpenSpaceThemeEditorView(
         v->Render();
       },
       base::Unretained(this));
-  presets_ =
-      theme_page_->AddChildView(std::make_unique<PresetStripView>(std::move(strip)));
+  presets_ = theme_page_->AddChildView(
+      std::make_unique<space_editor::HandPresetStripView>(std::move(strip)));
 
-  intensity_ = theme_page_->AddChildView(std::make_unique<SineSliderView>(
+  intensity_ = theme_page_->AddChildView(
+      std::make_unique<space_editor::HandSineSliderView>(
       base::BindRepeating(
           [](OpenSpaceThemeEditorView* v, double value, bool final) {
             if (!final && !v->state_.gesture_in_progress()) {
@@ -3166,8 +2951,8 @@ OpenSpaceThemeEditorView::OpenSpaceThemeEditorView(
         v->Run(Kind::kDiscrete, v->state_.CycleTexture());
       },
       base::Unretained(this));
-  noise_ =
-      theme_page_->AddChildView(std::make_unique<NoiseDialView>(std::move(noise)));
+  noise_ = theme_page_->AddChildView(
+      std::make_unique<space_editor::HandNoiseDialView>(std::move(noise)));
 
   // --- Space page: name, icon, Profile. ---
   space_page_ = AddChildView(std::make_unique<views::View>());
@@ -3181,7 +2966,7 @@ OpenSpaceThemeEditorView::OpenSpaceThemeEditorView(
   name_field_ = space_page_->AddChildView(std::move(name));
   views::FocusRing::Remove(name_field_);
   icon_picker_ = space_page_->AddChildView(
-      std::make_unique<OpenSpaceIconPickerView>(
+      std::make_unique<HandIconPickerView>(
           params_.icon,
           base::BindRepeating(
               [](OpenSpaceThemeEditorView* v,
@@ -3194,7 +2979,8 @@ OpenSpaceThemeEditorView::OpenSpaceThemeEditorView(
                 v->SchedulePaint();
               },
               base::Unretained(this))));
-  profile_button_ = space_page_->AddChildView(std::make_unique<EditorButton>(
+  profile_button_ =
+      space_page_->AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceThemeEditorView::ShowProfileMenu,
                           base::Unretained(this)),
       u"Profile"));
@@ -3202,27 +2988,27 @@ OpenSpaceThemeEditorView::OpenSpaceThemeEditorView(
   profile_button_->SetFontSize(13, false);
 
   // --- Footer (Open addition). ---
-  theme_tab_ = AddChildView(std::make_unique<EditorButton>(
+  theme_tab_ = AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceThemeEditorView::SelectPage,
                           base::Unretained(this), Page::kTheme),
       u"Theme"));
-  space_tab_ = AddChildView(std::make_unique<EditorButton>(
+  space_tab_ = AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceThemeEditorView::SelectPage,
                           base::Unretained(this), Page::kSpace),
       u"Space"));
   for (EditorButton* tab : {theme_tab_.get(), space_tab_.get()}) {
     tab->GetViewAccessibility().SetRole(ax::mojom::Role::kTab);
   }
-  undo_button_ = AddChildView(std::make_unique<EditorButton>(
+  undo_button_ = AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceThemeEditorView::Undo,
                           base::Unretained(this)),
       EditorGlyph::kUndo, 14, u"Undo"));
-  reset_button_ = AddChildView(std::make_unique<EditorButton>(
+  reset_button_ = AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceThemeEditorView::ResetToInitial,
                           base::Unretained(this)),
       u"Reset"));
   reset_button_->SetTooltipText(u"Restore the theme this Space had");
-  done_button_ = AddChildView(std::make_unique<EditorButton>(
+  done_button_ = AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(
           [](OpenSpaceThemeEditorView* v) {
             if (v->GetWidget()) {
@@ -3714,14 +3500,14 @@ OpenSpaceCreationView::OpenSpaceCreationView(OpenSpaceCreationParams params,
   name_field_ = AddChildView(std::move(name));
   views::FocusRing::Remove(name_field_);
 
-  icon_button_ = AddChildView(std::make_unique<EditorButton>(
+  icon_button_ = AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceCreationView::ToggleIconPicker,
                           base::Unretained(this)),
       std::u16string()));
   icon_button_->GetViewAccessibility().SetName(u"Change Space Icon");
   icon_button_->SetTooltipText(u"Change Space Icon");
 
-  icon_picker_ = AddChildView(std::make_unique<OpenSpaceIconPickerView>(
+  icon_picker_ = AddChildView(std::make_unique<HandIconPickerView>(
       icon_, base::BindRepeating(
                  [](OpenSpaceCreationView* v,
                     const std::optional<SpaceIcon>& icon) {
@@ -3759,10 +3545,12 @@ OpenSpaceCreationView::OpenSpaceCreationView(OpenSpaceCreationParams params,
         v->SchedulePaint();
       },
       base::Unretained(this));
-  swatches_ = AddChildView(std::make_unique<PresetStripView>(std::move(strip)));
+  swatches_ = AddChildView(
+      std::make_unique<space_editor::HandPresetStripView>(std::move(strip)));
   swatches_->SetCompact(true);
 
-  profile_button_ = AddChildView(std::make_unique<EditorButton>(
+  profile_button_ =
+      AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceCreationView::ShowProfileMenu,
                           base::Unretained(this)),
       u"Profile"));
@@ -3775,12 +3563,14 @@ OpenSpaceCreationView::OpenSpaceCreationView(OpenSpaceCreationParams params,
   views::FocusRing::Remove(profile_name_field_);
   profile_name_field_->SetVisible(false);
 
-  create_button_ = AddChildView(std::make_unique<EditorButton>(
+  create_button_ =
+      AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceCreationView::Submit,
                           base::Unretained(this)),
       u"Create Space"));
   create_button_->SetFontSize(13, true);
-  cancel_button_ = AddChildView(std::make_unique<EditorButton>(
+  cancel_button_ =
+      AddChildView(std::make_unique<space_editor::HandEditorButton>(
       base::BindRepeating(&OpenSpaceCreationView::Cancel,
                           base::Unretained(this)),
       u"Cancel"));

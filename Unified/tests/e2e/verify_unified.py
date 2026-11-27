@@ -1520,8 +1520,26 @@ def main(argv) -> int:
     user_data = options.user_data
   else:
     ud_parent = None
+    if is_wsl_windows_target(binary):
+      # Native Windows chrome.exe cannot reliably lock a user-data-dir on
+      # \\wsl.localhost\...\tmp; stage the temp profile in Windows %TEMP%.
+      for probe in (
+          ["/mnt/c/Windows/System32/cmd.exe", "/c", "echo", "%TEMP%"],
+          ["cmd.exe", "/c", "echo", "%TEMP%"],
+      ):
+        try:
+          win_temp = subprocess.check_output(
+              probe, text=True, stdin=subprocess.DEVNULL,
+              stderr=subprocess.DEVNULL).strip()
+          if win_temp and "%" not in win_temp:
+            wsl_temp = from_browser_path(win_temp, binary)
+            if os.path.isdir(wsl_temp):
+              ud_parent = wsl_temp
+              break
+        except (OSError, subprocess.CalledProcessError):
+          pass
     # macOS sun_path is 104 bytes; keep AF_UNIX socket paths short when $TMPDIR is deep.
-    if not use_port and os.name != "nt" and os.path.isdir("/tmp"):
+    if ud_parent is None and not use_port and os.name != "nt" and os.path.isdir("/tmp"):
       sample = os.path.join(tempfile.gettempdir(), "open-unified-ud-XXXXXXXX",
                             "automation.sock")
       if len(sample.encode("utf-8")) >= 100:

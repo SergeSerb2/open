@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <cstdint>
 
+#include "build/build_config.h"
+
 namespace open_unified::metrics {
 
 // A constexpr frame in points. Views code converts it with
@@ -50,10 +52,22 @@ namespace chrome {
 inline constexpr Frame kTrafficLightFrames[3] = {
     {12, 16, 16, 16}, {35, 16, 16, 16}, {58, 16, 16, 16}};
 inline constexpr float kTrafficLightDiameter = 12;
+#if BUILDFLAG(IS_MAC)
+inline constexpr float kTrafficLightsClearance = 76;
 inline constexpr float kToolbarButtonSize = 32;
 inline constexpr float kToolbarButtonY = 7;
 inline constexpr float kSidebarToggleX = 77;
 inline constexpr float kNavButtonPitch = 34;
+#else
+// Windows & Linux harmonized 32 DIP top caption strip: 28 x 28 buttons at y 2
+// (vertical center y 16, matching OpenWindowControlsView and
+// HiddenSidebarToggleButton with zero jump on toggle).
+inline constexpr float kTrafficLightsClearance = 0;
+inline constexpr float kToolbarButtonSize = 28;
+inline constexpr float kToolbarButtonY = 2;
+inline constexpr float kSidebarToggleX = 8;
+inline constexpr float kNavButtonPitch = 30;
+#endif
 inline constexpr float kReloadTrailingInset = 6;
 inline constexpr float kButtonPlateRadius = 6;
 inline constexpr SizeF kSidebarToggleGlyph{19, 15};
@@ -76,12 +90,17 @@ constexpr float BackX(float sidebar_width) {
 }
 }  // namespace chrome
 
-// Compact sidebar toolbar (Back, Forward, More; 28 x 28 at y 9, pitch 28).
+// Compact sidebar toolbar (Back, Forward, More; 28 x 28 at y 9 on macOS,
+// y 2 on Windows/Linux inside the 32 DIP strip, pitch 28).
 namespace compact_toolbar {
 // guess inside the measured 207..228 band.
 inline constexpr float kSwitchWidth = 219;
 inline constexpr float kButtonSize = 28;
+#if BUILDFLAG(IS_MAC)
 inline constexpr float kY = 9;
+#else
+inline constexpr float kY = 2;
+#endif
 inline constexpr float kPitch = 28;
 inline constexpr float kTrailingInset = 6;
 constexpr float MoreX(float w) { return w - kTrailingInset - kButtonSize; }
@@ -112,22 +131,27 @@ inline constexpr int kLinuxCornerRadius = 12;
 // ---------------------------------------------------------------------------
 // Command / URL field (the "URL pill").
 namespace url_field {
+#if BUILDFLAG(IS_MAC)
 inline constexpr float kY = 46;
+#else
+// Windows & Linux: flush with panel.y = 32 (win_controls::kStripHeight).
+inline constexpr float kY = 32;
+#endif
 inline constexpr float kHeight = 36;
 inline constexpr float kInsetX = 8;  // == space_list::kRowFillInsetX
 inline constexpr float kControlsTextGap = 8;
 // A long host keeps its end visible; its leading 34 pt fade to clear.
 inline constexpr float kLongHostFade = 34;
 inline constexpr float kCornerRadius = 10;
-inline constexpr Frame kMagnifierFrame{14, 52, 24, 24};
+inline constexpr Frame kMagnifierFrame{14, kY + 6, 24, 24};
 inline constexpr float kPlaceholderX = 41;
 inline constexpr float kHostX = 20;
-inline constexpr float kTextY = 55;
+inline constexpr float kTextY = kY + 9;
 inline constexpr float kTextTrailingInset = 12;
 inline constexpr float kTextBaselineOffset = 14;
-// Copy URL [W - 70, 49, 30, 30], Site Control Center [W - 42, 49, 30, 30].
+// Copy URL [W - 70, kY + 3, 30, 30], Site Control Center [W - 42, kY + 3, 30, 30].
 inline constexpr float kAccessorySize = 30;
-inline constexpr float kAccessoryY = 49;
+inline constexpr float kAccessoryY = kY + 3;
 inline constexpr float kSiteControlsTrailing = 12;
 inline constexpr float kAccessoryPitch = 28;
 constexpr Frame Pill(float sidebar_width) {
@@ -146,7 +170,9 @@ constexpr Frame CopyUrl(float w) {
 // ---------------------------------------------------------------------------
 // Favorites grid ("Top Apps").
 namespace favorites {
-inline constexpr float kSectionTop = 82;
+// Immediately below URL pill: 82 on macOS (46 + 36), 68 on Windows/Linux
+// (32 + 36), so tiles / Spaces start at 76 DIP on Win/Linux after kInset (8).
+inline constexpr float kSectionTop = url_field::kY + url_field::kHeight;
 inline constexpr float kInset = 8;
 inline constexpr float kTileHeight = 47;
 inline constexpr float kColumnGap = 8;
@@ -497,6 +523,7 @@ inline constexpr float kInUseDot = 6;
 // Content toolbar (single-pane PaneChromeView equivalent).
 namespace content_toolbar {
 inline constexpr float kHeight = split::kBarHeight;
+inline constexpr float kSinglePaneHeight = 36;
 }  // namespace content_toolbar
 
 }  // namespace open_unified::metrics

@@ -402,6 +402,85 @@ int EstimateArcSidebarTabCount(const base::FilePath& arc_root) {
   return CountJsonKey(raw, "\"savedURL\"");
 }
 
+base::FilePath ResolveArcUserDataDir(const base::FilePath& arc_data_dir) {
+  base::FilePath nested = arc_data_dir.AppendASCII("User Data");
+  if (base::DirectoryExists(nested)) {
+    return nested;
+  }
+  return arc_data_dir;
+}
+
+bool IsValidChromiumExtensionId(std::string_view id) {
+  if (id.size() != 32) {
+    return false;
+  }
+  for (char c : id) {
+    if (c < 'a' || c > 'p') {
+      return false;
+    }
+  }
+  return true;
+}
+
+void CollectWebStoreExtensionIdsFromPrefsFile(
+    const base::FilePath& prefs_path,
+    std::set<std::string>* out_ids) {
+  std::string raw;
+  if (!base::ReadFileToStringWithMaxSize(prefs_path, &raw,
+                                         kMaxProbeJsonBytes)) {
+    return;
+  }
+  auto dict = base::JSONReader::ReadDict(raw, base::JSON_PARSE_RFC);
+  if (!dict) {
+    return;
+  }
+  const base::DictValue* extensions = dict->FindDict("extensions");
+  const base::DictValue* settings =
+      extensions ? extensions->FindDict("settings") : nullptr;
+  if (!settings) {
+    return;
+  }
+  for (const auto [ext_id, value] : *settings) {
+    if (!IsValidChromiumExtensionId(ext_id)) {
+      continue;
+    }
+    const base::DictValue* entry = value.GetIfDict();
+    if (!entry) {
+      continue;
+    }
+    // Skip component / external-component built-in extensions.
+    const std::optional<int> location = entry->FindInt("location");
+    if (location && (*location == 5 || *location == 10)) {
+      continue;
+    }
+    // Skip explicitly disabled/uninstalled entries when state is present.
+    if (const std::optional<int> state = entry->FindInt("state");
+        state && *state != 1) {
+      continue;
+    }
+    const base::DictValue* manifest = entry->FindDict("manifest");
+    if (manifest && manifest->FindDict("theme") != nullptr) {
+      continue;
+    }
+    bool from_cws = entry->FindBool("from_webstore").value_or(false);
+    if (!from_cws && manifest) {
+      if (const std::string* update_url = manifest->FindString("update_url")) {
+        std::string lower_url = base::ToLowerASCII(*update_url);
+        if (lower_url.find("clients2.google.com/service/update2/crx") !=
+            std::string::npos) {
+          from_cws = true;
+        }
+      }
+    }
+    if (from_cws) {
+      out_ids->insert(ext_id);
+      if (out_ids->size() >= 256) {
+        return;
+      }
+    }
+  }
+}
+
 int EstimateOpenLegacyTabCount(const base::FilePath& legacy_root) {
   std::string raw;
   if (!base::ReadFileToStringWithMaxSize(
@@ -527,6 +606,7 @@ std::vector<DetectedBrowserProfile> ProbeChromiumProfiles(
     p.is_default = (dir_name == "Default");
     p.bookmark_count = EstimateChromiumBookmarkCount(full);
     p.history_count = EstimateChromiumHistoryCount(full);
+    p.extension_ids = BrowserImporter::ReadChromiumExtensionIds(full);
     out.push_back(std::move(p));
   }
   return out;
@@ -2375,7 +2455,7 @@ std::vector<DetectedBrowser> BrowserImporter::ProbeInstalledBrowsers() {
     std::string id;
     std::string name;
     BrowserFamily family;
-    base::FilePath root;
+    std::vector<base::FilePath> roots;
   };
   std::vector<Candidate> candidates;
   auto env = base::Environment::Create();
@@ -2385,151 +2465,307 @@ std::vector<DetectedBrowser> BrowserImporter::ProbeInstalledBrowsers() {
   std::string roaming_app_data = env->GetVar("APPDATA").value_or("");
   if (!local_app_data.empty()) {
     base::FilePath lad = base::FilePath::FromUTF8Unsafe(local_app_data);
+    // Probe all Arc for Windows locations; prefer the most recently modified
+    // StorableSidebar.json when multiple exist, breaking ties in listed order.
+    const base::FilePath arc_pkg_root =
+        lad.AppendASCII("Packages")
+            .AppendASCII("TheBrowserCompany.Arc_ttt1ap7aakyb4")
+            .AppendASCII("LocalCache")
+            .AppendASCII("Local")
+            .AppendASCII("Arc");
+    const base::FilePath arc_local_root = lad.AppendASCII("Arc");
+    const std::array<base::FilePath, 4> arc_dirs = {
+        arc_pkg_root,
+        arc_pkg_root.AppendASCII("User Data"),
+        arc_local_root.AppendASCII("User Data"),
+        arc_local_root,
+    };
+    base::FilePath best_arc_root;
+    base::Time best_mtime;
+    bool has_best_mtime = false;
+    for (const base::FilePath& dir : arc_dirs) {
+      const base::FilePath sidebar = dir.AppendASCII("StorableSidebar.json");
+      if (!base::PathExists(sidebar)) {
+        continue;
+      }
+      base::File::Info info;
+      const bool got_info = base::GetFileInfo(sidebar, &info);
+      if (best_arc_root.empty()) {
+        best_arc_root = dir;
+        if (got_info) {
+          best_mtime = info.last_modified;
+          has_best_mtime = true;
+        }
+      } else if (got_info &&
+                 (!has_best_mtime || info.last_modified > best_mtime)) {
+        best_arc_root = dir;
+        best_mtime = info.last_modified;
+        has_best_mtime = true;
+      }
+    }
+    if (!best_arc_root.empty()) {
+      candidates.push_back(
+          {"arc", "Arc", BrowserFamily::kArc, {best_arc_root}});
+    }
     candidates.push_back(
-        {"arc", "Arc", BrowserFamily::kArc,
-         lad.AppendASCII("Packages")
-             .AppendASCII("TheBrowserCompany.Arc_ttt1ap7aakyb4")
-             .AppendASCII("LocalCache")
-             .AppendASCII("Local")
-             .AppendASCII("Arc")});
+        {"chrome",
+         "Google Chrome",
+         BrowserFamily::kChromium,
+         {lad.AppendASCII("Google").AppendASCII("Chrome").AppendASCII(
+             "User Data")}});
     candidates.push_back(
-        {"chrome", "Google Chrome", BrowserFamily::kChromium,
-         lad.AppendASCII("Google").AppendASCII("Chrome").AppendASCII(
-             "User Data")});
+        {"edge",
+         "Microsoft Edge",
+         BrowserFamily::kChromium,
+         {lad.AppendASCII("Microsoft").AppendASCII("Edge").AppendASCII(
+             "User Data")}});
     candidates.push_back(
-        {"edge", "Microsoft Edge", BrowserFamily::kChromium,
-         lad.AppendASCII("Microsoft").AppendASCII("Edge").AppendASCII(
-             "User Data")});
+        {"brave",
+         "Brave",
+         BrowserFamily::kChromium,
+         {lad.AppendASCII("BraveSoftware")
+              .AppendASCII("Brave-Browser")
+              .AppendASCII("User Data")}});
     candidates.push_back(
-        {"brave", "Brave", BrowserFamily::kChromium,
-         lad.AppendASCII("BraveSoftware")
-             .AppendASCII("Brave-Browser")
-             .AppendASCII("User Data")});
+        {"vivaldi",
+         "Vivaldi",
+         BrowserFamily::kChromium,
+         {lad.AppendASCII("Vivaldi").AppendASCII("User Data")}});
     candidates.push_back(
-        {"vivaldi", "Vivaldi", BrowserFamily::kChromium,
-         lad.AppendASCII("Vivaldi").AppendASCII("User Data")});
-    candidates.push_back(
-        {"chromium", "Chromium", BrowserFamily::kChromium,
-         lad.AppendASCII("Chromium").AppendASCII("User Data")});
+        {"chromium",
+         "Chromium",
+         BrowserFamily::kChromium,
+         {lad.AppendASCII("Chromium").AppendASCII("User Data")}});
   }
   if (!roaming_app_data.empty()) {
     base::FilePath rad = base::FilePath::FromUTF8Unsafe(roaming_app_data);
-    candidates.push_back({"firefox", "Firefox", BrowserFamily::kFirefox,
-                          rad.AppendASCII("Mozilla").AppendASCII("Firefox")});
+    candidates.push_back(
+        {"firefox",
+         "Firefox",
+         BrowserFamily::kFirefox,
+         {rad.AppendASCII("Mozilla").AppendASCII("Firefox")}});
   }
 #elif BUILDFLAG(IS_MAC)
   std::string home = env->GetVar("HOME").value_or("");
   if (!home.empty()) {
     base::FilePath lib = base::FilePath(home).AppendASCII("Library");
     base::FilePath app_sup = lib.AppendASCII("Application Support");
-    candidates.push_back({"open-legacy", "Open (Legacy)",
+    candidates.push_back({"open-legacy",
+                          "Open (Legacy)",
                           BrowserFamily::kOpenLegacy,
-                          app_sup.AppendASCII("Open")});
+                          {app_sup.AppendASCII("Open")}});
     candidates.push_back(
-        {"arc", "Arc", BrowserFamily::kArc, app_sup.AppendASCII("Arc")});
-    candidates.push_back({"safari", "Safari", BrowserFamily::kSafari,
-                          lib.AppendASCII("Safari")});
+        {"arc", "Arc", BrowserFamily::kArc, {app_sup.AppendASCII("Arc")}});
+    candidates.push_back({"safari",
+                          "Safari",
+                          BrowserFamily::kSafari,
+                          {lib.AppendASCII("Safari")}});
     candidates.push_back(
-        {"chrome", "Google Chrome", BrowserFamily::kChromium,
-         app_sup.AppendASCII("Google").AppendASCII("Chrome")});
-    candidates.push_back({"edge", "Microsoft Edge", BrowserFamily::kChromium,
-                          app_sup.AppendASCII("Microsoft Edge")});
+        {"chrome",
+         "Google Chrome",
+         BrowserFamily::kChromium,
+         {app_sup.AppendASCII("Google").AppendASCII("Chrome")}});
+    candidates.push_back({"edge",
+                          "Microsoft Edge",
+                          BrowserFamily::kChromium,
+                          {app_sup.AppendASCII("Microsoft Edge")}});
     candidates.push_back(
-        {"brave", "Brave", BrowserFamily::kChromium,
-         app_sup.AppendASCII("BraveSoftware").AppendASCII("Brave-Browser")});
-    candidates.push_back({"vivaldi", "Vivaldi", BrowserFamily::kChromium,
-                          app_sup.AppendASCII("Vivaldi")});
-    candidates.push_back({"chromium", "Chromium", BrowserFamily::kChromium,
-                          app_sup.AppendASCII("Chromium")});
-    candidates.push_back({"firefox", "Firefox", BrowserFamily::kFirefox,
-                          app_sup.AppendASCII("Firefox")});
+        {"brave",
+         "Brave",
+         BrowserFamily::kChromium,
+         {app_sup.AppendASCII("BraveSoftware").AppendASCII("Brave-Browser")}});
+    candidates.push_back({"vivaldi",
+                          "Vivaldi",
+                          BrowserFamily::kChromium,
+                          {app_sup.AppendASCII("Vivaldi")}});
+    candidates.push_back({"chromium",
+                          "Chromium",
+                          BrowserFamily::kChromium,
+                          {app_sup.AppendASCII("Chromium")}});
+    candidates.push_back({"firefox",
+                          "Firefox",
+                          BrowserFamily::kFirefox,
+                          {app_sup.AppendASCII("Firefox")}});
   }
 #else  // Linux / POSIX
   std::string home = env->GetVar("HOME").value_or("");
   std::string xdg_config = env->GetVar("XDG_CONFIG_HOME").value_or("");
+  base::FilePath home_path = !home.empty() ? base::FilePath(home) : base::FilePath();
   base::FilePath config_root =
       !xdg_config.empty()
           ? base::FilePath(xdg_config)
-          : (!home.empty() ? base::FilePath(home).AppendASCII(".config")
-                           : base::FilePath());
-  if (!config_root.empty()) {
-    candidates.push_back({"chrome", "Google Chrome", BrowserFamily::kChromium,
-                          config_root.AppendASCII("google-chrome")});
-    candidates.push_back({"chromium", "Chromium", BrowserFamily::kChromium,
-                          config_root.AppendASCII("chromium")});
-    candidates.push_back(
-        {"brave", "Brave", BrowserFamily::kChromium,
-         config_root.AppendASCII("BraveSoftware").AppendASCII("Brave-Browser")});
-    candidates.push_back({"edge", "Microsoft Edge", BrowserFamily::kChromium,
-                          config_root.AppendASCII("microsoft-edge")});
-    candidates.push_back({"vivaldi", "Vivaldi", BrowserFamily::kChromium,
-                          config_root.AppendASCII("vivaldi")});
+          : (!home_path.empty() ? home_path.AppendASCII(".config")
+                                : base::FilePath());
+  {
+    std::vector<base::FilePath> chrome_roots;
+    if (!config_root.empty()) {
+      chrome_roots.push_back(config_root.AppendASCII("google-chrome"));
+    }
+    if (!home_path.empty()) {
+      chrome_roots.push_back(home_path.AppendASCII(".var")
+                                 .AppendASCII("app")
+                                 .AppendASCII("com.google.Chrome")
+                                 .AppendASCII("config")
+                                 .AppendASCII("google-chrome"));
+    }
+    if (!chrome_roots.empty()) {
+      candidates.push_back({"chrome", "Google Chrome", BrowserFamily::kChromium,
+                            std::move(chrome_roots)});
+    }
   }
-  if (!home.empty()) {
-    candidates.push_back({"firefox", "Firefox", BrowserFamily::kFirefox,
-                          base::FilePath(home)
-                              .AppendASCII(".mozilla")
-                              .AppendASCII("firefox")});
+  {
+    std::vector<base::FilePath> chromium_roots;
+    if (!config_root.empty()) {
+      chromium_roots.push_back(config_root.AppendASCII("chromium"));
+    }
+    if (!home_path.empty()) {
+      chromium_roots.push_back(home_path.AppendASCII("snap")
+                                   .AppendASCII("chromium")
+                                   .AppendASCII("common")
+                                   .AppendASCII("chromium"));
+      chromium_roots.push_back(home_path.AppendASCII(".var")
+                                   .AppendASCII("app")
+                                   .AppendASCII("org.chromium.Chromium")
+                                   .AppendASCII("config")
+                                   .AppendASCII("chromium"));
+    }
+    if (!chromium_roots.empty()) {
+      candidates.push_back({"chromium", "Chromium", BrowserFamily::kChromium,
+                            std::move(chromium_roots)});
+    }
+  }
+  {
+    std::vector<base::FilePath> brave_roots;
+    if (!config_root.empty()) {
+      brave_roots.push_back(config_root.AppendASCII("BraveSoftware")
+                                .AppendASCII("Brave-Browser"));
+    }
+    if (!home_path.empty()) {
+      brave_roots.push_back(home_path.AppendASCII("snap")
+                                .AppendASCII("brave")
+                                .AppendASCII("current")
+                                .AppendASCII(".config")
+                                .AppendASCII("BraveSoftware")
+                                .AppendASCII("Brave-Browser"));
+      brave_roots.push_back(home_path.AppendASCII(".var")
+                                .AppendASCII("app")
+                                .AppendASCII("com.brave.Browser")
+                                .AppendASCII("config")
+                                .AppendASCII("BraveSoftware")
+                                .AppendASCII("Brave-Browser"));
+    }
+    if (!brave_roots.empty()) {
+      candidates.push_back(
+          {"brave", "Brave", BrowserFamily::kChromium, std::move(brave_roots)});
+    }
+  }
+  {
+    std::vector<base::FilePath> edge_roots;
+    if (!config_root.empty()) {
+      edge_roots.push_back(config_root.AppendASCII("microsoft-edge"));
+    }
+    if (!home_path.empty()) {
+      edge_roots.push_back(home_path.AppendASCII(".var")
+                               .AppendASCII("app")
+                               .AppendASCII("com.microsoft.Edge")
+                               .AppendASCII("config")
+                               .AppendASCII("microsoft-edge"));
+    }
+    if (!edge_roots.empty()) {
+      candidates.push_back({"edge", "Microsoft Edge", BrowserFamily::kChromium,
+                            std::move(edge_roots)});
+    }
+  }
+  if (!config_root.empty()) {
+    candidates.push_back({"vivaldi",
+                          "Vivaldi",
+                          BrowserFamily::kChromium,
+                          {config_root.AppendASCII("vivaldi")}});
+  }
+  if (!home_path.empty()) {
+    candidates.push_back(
+        {"firefox",
+         "Firefox",
+         BrowserFamily::kFirefox,
+         {home_path.AppendASCII(".mozilla").AppendASCII("firefox"),
+          home_path.AppendASCII("snap")
+              .AppendASCII("firefox")
+              .AppendASCII("common")
+              .AppendASCII(".mozilla")
+              .AppendASCII("firefox"),
+          home_path.AppendASCII(".var")
+              .AppendASCII("app")
+              .AppendASCII("org.mozilla.firefox")
+              .AppendASCII(".mozilla")
+              .AppendASCII("firefox")}});
   }
 #endif
 
   std::vector<DetectedBrowser> result;
   for (const auto& c : candidates) {
-    if (!base::DirectoryExists(c.root)) continue;
     DetectedBrowser browser;
     browser.id = c.id;
     browser.name = c.name;
     browser.family = c.family;
-    browser.data_root = c.root;
-    if (c.family == BrowserFamily::kChromium) {
-      browser.profiles = ProbeChromiumProfiles(c.root);
-    } else if (c.family == BrowserFamily::kFirefox) {
-      browser.profiles = ProbeFirefoxProfiles(c.root);
-    } else if (c.family == BrowserFamily::kArc) {
-      if (base::PathExists(c.root.AppendASCII("StorableSidebar.json"))) {
-        DetectedBrowserProfile p;
-        p.id = "Arc";
-        p.name = "Arc";
-        p.directory = c.root;
-        p.is_default = true;
-        p.bookmark_count = EstimateArcSidebarTabCount(c.root);
-        p.history_count = EstimateChromiumHistoryCount(
-            c.root.AppendASCII("User Data").AppendASCII("Default"));
-        browser.profiles.push_back(std::move(p));
-      }
-    } else if (c.family == BrowserFamily::kOpenLegacy) {
-      if (base::PathExists(
-              c.root.AppendASCII("State").AppendASCII("browser.json"))) {
-        DetectedBrowserProfile p;
-        p.id = "OpenLegacy";
-        p.name = "Open (Legacy)";
-        p.directory = c.root;
-        p.is_default = true;
-        p.bookmark_count = EstimateOpenLegacyTabCount(c.root);
-        p.history_count = EstimateOpenLegacyHistoryCount(c.root);
-        browser.profiles.push_back(std::move(p));
-      }
-    } else if (c.family == BrowserFamily::kSafari) {
-      SafariAccessStatus access = CheckSafariAccess(c.root);
-      if (access != SafariAccessStatus::kNotFound) {
-        DetectedBrowserProfile p;
-        p.id = "Safari";
-        p.name = "Safari";
-        p.directory = c.root;
-        p.is_default = true;
-        if (access == SafariAccessStatus::kPermissionDenied) {
-          p.access_denied = true;
-          p.access_error = "Full Disk Access required to read Safari data";
-        } else {
-          std::vector<ImportedBookmarkNode> roots;
-          ImportBookmarksReport report;
-          if (ReadSafariBookmarks(c.root, &roots, &report)) {
-            p.bookmark_count = static_cast<int>(
-                std::min<size_t>(report.urls, kMaxReportedProbeCount));
-          }
-          p.history_count = EstimateSafariHistoryCount(c.root);
+    for (const base::FilePath& root : c.roots) {
+      if (!base::DirectoryExists(root)) continue;
+      browser.data_root = root;
+      browser.profiles.clear();
+      if (c.family == BrowserFamily::kChromium) {
+        browser.profiles = ProbeChromiumProfiles(root);
+      } else if (c.family == BrowserFamily::kFirefox) {
+        browser.profiles = ProbeFirefoxProfiles(root);
+      } else if (c.family == BrowserFamily::kArc) {
+        if (base::PathExists(root.AppendASCII("StorableSidebar.json"))) {
+          const base::FilePath arc_default_profile =
+              ResolveArcUserDataDir(root).AppendASCII("Default");
+          DetectedBrowserProfile p;
+          p.id = "Arc";
+          p.name = "Arc";
+          p.directory = root;
+          p.is_default = true;
+          p.bookmark_count = EstimateArcSidebarTabCount(root);
+          p.history_count = EstimateChromiumHistoryCount(arc_default_profile);
+          p.extension_ids = ReadChromiumExtensionIds(arc_default_profile);
+          browser.profiles.push_back(std::move(p));
         }
-        browser.profiles.push_back(std::move(p));
+      } else if (c.family == BrowserFamily::kOpenLegacy) {
+        if (base::PathExists(
+                root.AppendASCII("State").AppendASCII("browser.json"))) {
+          DetectedBrowserProfile p;
+          p.id = "OpenLegacy";
+          p.name = "Open (Legacy)";
+          p.directory = root;
+          p.is_default = true;
+          p.bookmark_count = EstimateOpenLegacyTabCount(root);
+          p.history_count = EstimateOpenLegacyHistoryCount(root);
+          browser.profiles.push_back(std::move(p));
+        }
+      } else if (c.family == BrowserFamily::kSafari) {
+        SafariAccessStatus access = CheckSafariAccess(root);
+        if (access != SafariAccessStatus::kNotFound) {
+          DetectedBrowserProfile p;
+          p.id = "Safari";
+          p.name = "Safari";
+          p.directory = root;
+          p.is_default = true;
+          if (access == SafariAccessStatus::kPermissionDenied) {
+            p.access_denied = true;
+            p.access_error = "Full Disk Access required to read Safari data";
+          } else {
+            std::vector<ImportedBookmarkNode> roots;
+            ImportBookmarksReport report;
+            if (ReadSafariBookmarks(root, &roots, &report)) {
+              p.bookmark_count = static_cast<int>(
+                  std::min<size_t>(report.urls, kMaxReportedProbeCount));
+            }
+            p.history_count = EstimateSafariHistoryCount(root);
+          }
+          browser.profiles.push_back(std::move(p));
+        }
+      }
+      if (!browser.profiles.empty()) {
+        break;
       }
     }
     if (!browser.profiles.empty()) {
@@ -2588,8 +2824,21 @@ Folder BrowserImporter::BuildImportedBookmarksFolder(
 }
 
 // ============================================================================
-// Chromium Bookmarks & History
+// Chromium Extensions, Bookmarks & History
 // ============================================================================
+
+// static
+std::vector<std::string> BrowserImporter::ReadChromiumExtensionIds(
+    const base::FilePath& profile_dir) {
+  std::set<std::string> ids;
+  CollectWebStoreExtensionIdsFromPrefsFile(
+      profile_dir.AppendASCII("Secure Preferences"), &ids);
+  if (ids.size() < 256) {
+    CollectWebStoreExtensionIdsFromPrefsFile(
+        profile_dir.AppendASCII("Preferences"), &ids);
+  }
+  return std::vector<std::string>(ids.begin(), ids.end());
+}
 
 // static
 bool BrowserImporter::ReadChromiumBookmarks(
@@ -3917,7 +4166,7 @@ ArcSidebarImportResult BrowserImporter::ImportArcDirectory(
 
   // Optional Arc History (User Data/<profile_dir>/History).
   if (options.include_history && options.max_history_entries > 0) {
-    const base::FilePath user_data = arc_data_dir.AppendASCII("User Data");
+    const base::FilePath user_data = ResolveArcUserDataDir(arc_data_dir);
     std::set<std::string> visited_dirs;
     auto read_profile_hist = [&](const std::string& dir_name) {
       if (!visited_dirs.insert(dir_name).second) return;

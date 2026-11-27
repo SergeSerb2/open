@@ -962,6 +962,44 @@ std::string SystemInfoText(const std::string& open_version) {
   return text;
 }
 
+// Normalizes legacy macOS-specific "Option" modifier tokens to the canonical
+// cross-platform "Alt" token (e.g. "Mod+Option+N" -> "Mod+Alt+N").
+std::string NormalizeHotkeyPref(std::string_view raw) {
+  std::string trimmed(base::TrimWhitespaceASCII(raw, base::TRIM_ALL));
+  if (trimmed.empty() || trimmed.find('+') == std::string::npos) {
+    return trimmed;
+  }
+  const bool ends_with_plus =
+      trimmed.size() >= 2 && trimmed.ends_with("++");
+  const std::string_view body =
+      ends_with_plus ? std::string_view(trimmed).substr(0, trimmed.size() - 1)
+                     : std::string_view(trimmed);
+  std::vector<std::string> parts;
+  size_t start = 0;
+  while (start <= body.size()) {
+    const size_t sep = body.find('+', start);
+    const std::string_view part =
+        sep == std::string_view::npos ? body.substr(start)
+                                      : body.substr(start, sep - start);
+    std::string token(base::TrimWhitespaceASCII(part, base::TRIM_ALL));
+    if (!token.empty()) {
+      const std::string lower = base::ToLowerASCII(token);
+      if (lower == "option" || lower == "opt") {
+        token = "Alt";
+      }
+      parts.push_back(std::move(token));
+    }
+    if (sep == std::string_view::npos) {
+      break;
+    }
+    start = sep + 1;
+  }
+  if (ends_with_plus) {
+    parts.push_back("+");
+  }
+  return base::JoinString(parts, "+");
+}
+
 }  // namespace
 
 // ===========================================================================
@@ -1013,7 +1051,7 @@ const base::DictValue& OpenPreferences::Defaults() {
           .Set("previews.recents", true)
           .Set("previews.calendar", true)
           .Set("previews.gmail", true)
-          .Set("links.littleOpenHotkey", "Mod+Option+N")
+          .Set("links.littleOpenHotkey", "Mod+Alt+N")
           .Set("links.optionCommandClick", true)
           .Set("links.externalLinksLittleOpen", true)
           .Set("links.peekShiftClick", true)
@@ -1075,7 +1113,12 @@ void OpenPreferences::WhenLoaded(base::OnceClosure done) {
                 const base::Value* def = Defaults().Find(key);
                 if (def && def->type() == value.type() &&
                     !FindProfileKey(key)) {
-                  self->stored_.Set(key, value.Clone());
+                  if (key == "links.littleOpenHotkey" && value.is_string()) {
+                    self->stored_.Set(key,
+                                      NormalizeHotkeyPref(value.GetString()));
+                  } else {
+                    self->stored_.Set(key, value.Clone());
+                  }
                 }
               }
             }
@@ -1185,7 +1228,11 @@ bool OpenPreferences::Set(const std::string& key,
     ApplyEffects(key, targets);
     return true;
   }
-  stored_.Set(key, value.Clone());
+  if (key == "links.littleOpenHotkey" && value.is_string()) {
+    stored_.Set(key, NormalizeHotkeyPref(value.GetString()));
+  } else {
+    stored_.Set(key, value.Clone());
+  }
   if (!loaded_) {
     dirty_keys_.insert(key);
     WhenLoaded(base::DoNothing());

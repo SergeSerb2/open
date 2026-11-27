@@ -58,6 +58,12 @@ enum class Glyph {
   kWindowZoom,
   kPuzzle,       // extension without icon
   kEyeglasses,   // Incognito header mark (SF eyeglasses on macOS)
+  kLockOpen,     // insecure HTTP padlock (unlocked shackle)
+  kInfo,         // info badge (toasts)
+  kWarning,      // warning triangle (toasts)
+  kError,        // error octagon/cross (toasts)
+  kOpenDoorway,  // Open doorway-and-sun app menu mark (Win/Linux)
+  kReturnArrow,  // Pinned-tab reset ("Back to Pinned URL")
 };
 
 // The measured ink box of a glyph, in points.
@@ -84,6 +90,14 @@ std::optional<SymbolSpec> SystemSymbolFor(Glyph glyph);
 // The SF Symbol for a named Space icon identifier (NamedSpaceIcons.swift),
 // "circle.dotted" for unknown names.
 std::string_view NamedSpaceIconSymbol(std::string_view name);
+
+// Draws Open's crisp vector art for any named Space icon identifier (or its
+// corresponding SF Symbol name) on platforms without SF Symbols. Returns false
+// only for genuinely unknown names.
+bool DrawNamedSpaceIcon(gfx::Canvas* canvas,
+                        std::string_view name,
+                        const gfx::RectF& box,
+                        SkColor color);
 
 // A template image (black ink with alpha) of the system symbol `name`,
 // rasterized for every supported scale and cached. Null when the platform

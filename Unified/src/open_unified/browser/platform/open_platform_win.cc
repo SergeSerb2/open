@@ -4,11 +4,16 @@
 #include "open_unified/browser/platform/open_platform.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
+#include <cwchar>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -17,10 +22,22 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_com_initializer.h"
+#include "base/win/scoped_gdi_object.h"
 #include "base/win/windows_version.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkPath.h"
+#include "third_party/skia/include/core/SkPathBuilder.h"
+#include "third_party/skia/include/core/SkRRect.h"
+#include "third_party/skia/include/core/SkRect.h"
+#include "third_party/skia/include/effects/SkGradient.h"
 #include "ui/base/win/shell.h"
+#include "ui/gfx/win/icon_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/win/hwnd_util.h"
@@ -28,8 +45,8 @@
 #include <windows.h>
 
 #include <dwmapi.h>
-#include <shlobj.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <wincred.h>
 #include <wincrypt.h>
 
@@ -60,6 +77,285 @@ constexpr DWORD kDwmsbtNone = 1;
 constexpr DWORD kDwmwaSystemBackdropType = DWMWA_SYSTEMBACKDROP_TYPE;
 constexpr DWORD kDwmsbtNone = DWMSBT_NONE;
 #endif
+
+constexpr wchar_t kHotkeyWindowClassName[] = L"OpenUnifiedHotkeyWindow";
+
+std::wstring GetCurrentExecutablePath() {
+  std::wstring buf(MAX_PATH, L'\0');
+  for (;;) {
+    DWORD len =
+        GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));
+    if (len == 0) {
+      return {};
+    }
+    if (len < buf.size()) {
+      buf.resize(len);
+      return buf;
+    }
+    if (buf.size() >= 32768) {
+      return {};
+    }
+    buf.resize(buf.size() * 2, L'\0');
+  }
+}
+
+bool WriteRegistrySz(HKEY root,
+                     const wchar_t* subkey,
+                     const wchar_t* value_name,
+                     const std::wstring& value) {
+  HKEY key = nullptr;
+  LONG create_status = RegCreateKeyExW(
+      root, subkey, 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr,
+      &key, nullptr);
+  if (create_status != ERROR_SUCCESS || !key) {
+    LOG(WARNING) << "RegCreateKeyExW failed (" << create_status << ")";
+    return false;
+  }
+  const DWORD byte_len =
+      static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t));
+  LONG set_status = RegSetValueExW(
+      key, value_name, 0, REG_SZ,
+      reinterpret_cast<const BYTE*>(value.c_str()), byte_len);
+  RegCloseKey(key);
+  if (set_status != ERROR_SUCCESS) {
+    LOG(WARNING) << "RegSetValueExW failed (" << set_status << ")";
+    return false;
+  }
+  return true;
+}
+
+bool EnsureUrlProtocolRegistration() {
+  const std::wstring exe_path = GetCurrentExecutablePath();
+  if (exe_path.empty()) {
+    PLOG(WARNING) << "GetModuleFileNameW failed during default browser "
+                     "registration";
+    return false;
+  }
+
+  const std::wstring icon_ref = exe_path + L",0";
+  const std::wstring open_cmd = L"\"" + exe_path + L"\" -- \"%1\"";
+  const std::wstring launch_cmd = L"\"" + exe_path + L"\"";
+
+  bool ok = true;
+  ok &= WriteRegistrySz(HKEY_CURRENT_USER, L"Software\\Classes\\OpenHTML",
+                        nullptr, L"Open HTML Document");
+  ok &= WriteRegistrySz(HKEY_CURRENT_USER, L"Software\\Classes\\OpenHTML",
+                        L"FriendlyTypeName", L"Open HTML Document");
+  ok &= WriteRegistrySz(HKEY_CURRENT_USER,
+                        L"Software\\Classes\\OpenHTML\\DefaultIcon", nullptr,
+                        icon_ref);
+  ok &= WriteRegistrySz(HKEY_CURRENT_USER,
+                        L"Software\\Classes\\OpenHTML\\shell\\open\\command",
+                        nullptr, open_cmd);
+
+  ok &= WriteRegistrySz(HKEY_CURRENT_USER,
+                        L"Software\\Clients\\StartMenuInternet\\Open", nullptr,
+                        L"Open");
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\DefaultIcon", nullptr,
+      icon_ref);
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\shell\\open\\command",
+      nullptr, launch_cmd);
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\Capabilities",
+      L"ApplicationName", L"Open");
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\Capabilities",
+      L"ApplicationDescription", L"Open Web Browser");
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\Capabilities",
+      L"ApplicationIcon", icon_ref);
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\Capabilities\\"
+      L"URLAssociations",
+      L"http", L"OpenHTML");
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\Capabilities\\"
+      L"URLAssociations",
+      L"https", L"OpenHTML");
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\Capabilities\\"
+      L"FileAssociations",
+      L".htm", L"OpenHTML");
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER,
+      L"Software\\Clients\\StartMenuInternet\\Open\\Capabilities\\"
+      L"FileAssociations",
+      L".html", L"OpenHTML");
+
+  ok &= WriteRegistrySz(
+      HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"Open",
+      L"Software\\Clients\\StartMenuInternet\\Open\\Capabilities");
+
+  if (ok) {
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+  }
+  return ok;
+}
+
+struct AppIconPalette {
+  std::string_view id;
+  SkColor stops[3];
+  float positions[3];
+  size_t count;
+};
+
+constexpr std::array<AppIconPalette, 6> kAppIconPalettes = {{
+    {"open-indigo",
+     {SkColorSetRGB(0x3B, 0x3F, 0xD8), SkColorSetRGB(0x64, 0x57, 0xF0),
+      SkColorSetRGB(0xF2, 0xA3, 0x5E)},
+     {0.0f, 0.55f, 1.0f},
+     3},
+    {"open-obsidian",
+     {SkColorSetRGB(0x17, 0x17, 0x1F), SkColorSetRGB(0x34, 0x36, 0x4A), 0},
+     {0.0f, 1.0f, 1.0f},
+     2},
+    {"open-sunburst",
+     {SkColorSetRGB(0xF7, 0xB4, 0x55), SkColorSetRGB(0xEF, 0x5D, 0x3B), 0},
+     {0.0f, 1.0f, 1.0f},
+     2},
+    {"open-sage",
+     {SkColorSetRGB(0x3F, 0xB6, 0x8B), SkColorSetRGB(0x14, 0x6B, 0x52), 0},
+     {0.0f, 1.0f, 1.0f},
+     2},
+    {"open-slate",
+     {SkColorSetRGB(0x83, 0x90, 0xA6), SkColorSetRGB(0x3A, 0x44, 0x56), 0},
+     {0.0f, 1.0f, 1.0f},
+     2},
+    {"open-dawn",
+     {SkColorSetRGB(0xF0, 0x8D, 0xB4), SkColorSetRGB(0x8C, 0x63, 0xE6), 0},
+     {0.0f, 1.0f, 1.0f},
+     2},
+}};
+
+const AppIconPalette* FindAppIconPalette(std::string_view icon_id) {
+  std::string_view target = icon_id.empty() ? "open-indigo" : icon_id;
+  for (const AppIconPalette& palette : kAppIconPalettes) {
+    if (palette.id == target) {
+      return &palette;
+    }
+  }
+  return nullptr;
+}
+
+SkBitmap RenderAppIconBitmap(const AppIconPalette& palette, int size) {
+  SkBitmap bitmap;
+  if (size <= 0 || !bitmap.tryAllocN32Pixels(size, size)) {
+    return bitmap;
+  }
+  bitmap.eraseColor(SK_ColorTRANSPARENT);
+
+  SkCanvas canvas(bitmap);
+  const float s = static_cast<float>(size);
+  const float radius = s * 0.22f;
+
+  // 140deg CSS linear gradient direction: (sin(140deg), -cos(140deg)).
+  constexpr float kDx = 0.6427876f;
+  constexpr float kDy = 0.7660444f;
+  const float half_len = s * 0.5f * (kDx + kDy);
+  const SkPoint pts[2] = {
+      SkPoint::Make(s * 0.5f - kDx * half_len, s * 0.5f - kDy * half_len),
+      SkPoint::Make(s * 0.5f + kDx * half_len, s * 0.5f + kDy * half_len),
+  };
+
+  std::vector<SkColor4f> colors;
+  std::vector<float> pos;
+  colors.reserve(palette.count);
+  pos.reserve(palette.count);
+  for (size_t i = 0; i < palette.count; ++i) {
+    colors.push_back(SkColor4f::FromColor(palette.stops[i]));
+    pos.push_back(palette.positions[i]);
+  }
+
+  SkPaint bg_paint;
+  bg_paint.setAntiAlias(true);
+  SkGradient grad(SkGradient::Colors(colors, pos, SkTileMode::kClamp),
+                  SkGradient::Interpolation{});
+  bg_paint.setShader(SkShaders::LinearGradient(pts, grad));
+  canvas.drawRRect(SkRRect::MakeRectXY(SkRect::MakeIWH(size, size), radius,
+                                       radius),
+                   bg_paint);
+
+  // Open doorway-and-sun mark scaled from the 40x40 Settings artwork.
+  const float scale = s / 40.0f;
+  SkPathBuilder doorway;
+  doorway.moveTo(12.0f * scale, 33.0f * scale);
+  doorway.lineTo(12.0f * scale, 18.5f * scale);
+  doorway.cubicTo(12.0f * scale, 13.8f * scale, 15.6f * scale, 10.0f * scale,
+                  20.0f * scale, 10.0f * scale);
+  doorway.cubicTo(24.4f * scale, 10.0f * scale, 28.0f * scale, 13.8f * scale,
+                  28.0f * scale, 18.5f * scale);
+  doorway.lineTo(28.0f * scale, 33.0f * scale);
+  doorway.close();
+  const SkPath doorway_path = doorway.detach();
+
+  SkPaint doorway_fill;
+  doorway_fill.setAntiAlias(true);
+  doorway_fill.setStyle(SkPaint::kFill_Style);
+  doorway_fill.setColor(SkColorSetARGB(46, 255, 255, 255));
+  canvas.drawPath(doorway_path, doorway_fill);
+
+  SkPaint doorway_stroke;
+  doorway_stroke.setAntiAlias(true);
+  doorway_stroke.setStyle(SkPaint::kStroke_Style);
+  doorway_stroke.setStrokeWidth(std::max(1.25f, 2.0f * scale));
+  doorway_stroke.setStrokeJoin(SkPaint::kRound_Join);
+  doorway_stroke.setStrokeCap(SkPaint::kRound_Cap);
+  doorway_stroke.setColor(SK_ColorWHITE);
+  canvas.drawPath(doorway_path, doorway_stroke);
+
+  SkPaint sun_paint;
+  sun_paint.setAntiAlias(true);
+  sun_paint.setStyle(SkPaint::kFill_Style);
+  sun_paint.setColor(SkColorSetRGB(0xFF, 0xE9, 0xB8));
+  canvas.drawCircle(20.0f * scale, 23.0f * scale, 3.6f * scale, sun_paint);
+
+  bitmap.setImmutable();
+  return bitmap;
+}
+
+struct ApplyIconEnumContext {
+  DWORD process_id = 0;
+  HICON big_icon = nullptr;
+  HICON small_icon = nullptr;
+};
+
+BOOL CALLBACK ApplyIconToProcessWindowProc(HWND hwnd, LPARAM lparam) {
+  auto* ctx = reinterpret_cast<ApplyIconEnumContext*>(lparam);
+  if (!ctx || !IsWindow(hwnd)) {
+    return TRUE;
+  }
+  DWORD pid = 0;
+  GetWindowThreadProcessId(hwnd, &pid);
+  if (pid != ctx->process_id) {
+    return TRUE;
+  }
+  // Skip tool windows and our hidden hotkey dispatcher class.
+  const LONG_PTR ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+  if (ex_style & WS_EX_TOOLWINDOW) {
+    return TRUE;
+  }
+  wchar_t class_name[64]{};
+  if (GetClassNameW(hwnd, class_name,
+                    static_cast<int>(std::size(class_name))) > 0 &&
+      wcscmp(class_name, kHotkeyWindowClassName) == 0) {
+    return TRUE;
+  }
+  SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+               reinterpret_cast<LPARAM>(ctx->big_icon));
+  SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+               reinterpret_cast<LPARAM>(ctx->small_icon));
+  return TRUE;
+}
 
 std::wstring MakeCredTargetName(std::string_view service,
                                 std::string_view account) {
@@ -273,7 +569,7 @@ class WinHotkeyDispatcher {
       hwnd_ = nullptr;
     }
     if (class_registered_) {
-      UnregisterClassW(kClassName, GetModuleHandleW(nullptr));
+      UnregisterClassW(kHotkeyWindowClassName, GetModuleHandleW(nullptr));
       class_registered_ = false;
     }
   }
@@ -309,8 +605,6 @@ class WinHotkeyDispatcher {
   }
 
  private:
-  static constexpr wchar_t kClassName[] = L"OpenUnifiedHotkeyWindow";
-
   struct Entry {
     std::string id;
     OpenPlatform::HotkeyCallback callback;
@@ -326,14 +620,14 @@ class WinHotkeyDispatcher {
       wc.cbSize = sizeof(wc);
       wc.lpfnWndProc = &WinHotkeyDispatcher::WndProc;
       wc.hInstance = instance;
-      wc.lpszClassName = kClassName;
+      wc.lpszClassName = kHotkeyWindowClassName;
       if (RegisterClassExW(&wc) ||
           GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
         class_registered_ = true;
       }
     }
-    hwnd_ = CreateWindowExW(0, kClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
-                            nullptr, instance, this);
+    hwnd_ = CreateWindowExW(0, kHotkeyWindowClassName, L"", 0, 0, 0, 0, 0,
+                            HWND_MESSAGE, nullptr, instance, this);
     if (hwnd_) {
       SetWindowLongPtrW(hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     }
@@ -396,9 +690,23 @@ class WinHotkeyDispatcher {
 class OpenPlatformWin final : public OpenPlatform {
  public:
   OpenPlatformWin() = default;
-  ~OpenPlatformWin() override = default;
+  ~OpenPlatformWin() override { Shutdown(); }
 
-  void Shutdown() override { hotkeys_.Shutdown(); }
+  void Shutdown() override {
+    hotkeys_.Shutdown();
+    base::win::ScopedGDIObject<HICON> old_big;
+    base::win::ScopedGDIObject<HICON> old_small;
+    {
+      std::lock_guard<std::mutex> lock(icon_mu_);
+      old_big = std::move(current_big_icon_);
+      old_small = std::move(current_small_icon_);
+    }
+    if (old_big.is_valid() || old_small.is_valid()) {
+      ApplyIconEnumContext ctx{GetCurrentProcessId(), nullptr, nullptr};
+      EnumWindows(&ApplyIconToProcessWindowProc,
+                  reinterpret_cast<LPARAM>(&ctx));
+    }
+  }
 
   std::unique_ptr<SecretStore> CreateSecretStore(
       const base::FilePath& data_dir,
@@ -410,6 +718,11 @@ class OpenPlatformWin final : public OpenPlatform {
   }
 
   bool SetDefaultBrowser() override {
+    // Register Open's ProgID, StartMenuInternet entry, and Capabilities in
+    // HKCU before launching Default Apps so Windows lists Open as a selectable
+    // HTTP/HTTPS handler.
+    EnsureUrlProtocolRegistration();
+
     // ShellExecuteW for ms-settings: requires COM STA initialization.
     base::win::ScopedCOMInitializer com_initializer;
     // Windows 10/11 requires users to confirm default browser changes in Settings.
@@ -490,6 +803,23 @@ class OpenPlatformWin final : public OpenPlatform {
                          SWP_NOZORDER | SWP_NOACTIVATE);
       }
     }
+
+    // Apply the active custom app icon to newly created top-level windows.
+    HICON big_icon = nullptr;
+    HICON small_icon = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(icon_mu_);
+      big_icon = current_big_icon_.get();
+      small_icon = current_small_icon_.get();
+    }
+    if (big_icon) {
+      SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+                   reinterpret_cast<LPARAM>(big_icon));
+    }
+    if (small_icon) {
+      SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                   reinterpret_cast<LPARAM>(small_icon));
+    }
   }
 
   bool UpdateWindowEffects(views::Widget* widget,
@@ -548,6 +878,112 @@ class OpenPlatformWin final : public OpenPlatform {
     return static_cast<int>(std::floor(static_cast<float>(px) / scale));
   }
 
+  bool SetAppIcon(const std::string& icon_id) override {
+    const AppIconPalette* palette = FindAppIconPalette(icon_id);
+    if (!palette) {
+      return false;
+    }
+
+    const int big_size = std::max(32, GetSystemMetrics(SM_CXICON));
+    const int small_size = std::max(16, GetSystemMetrics(SM_CXSMICON));
+    base::win::ScopedGDIObject<HICON> new_big;
+    base::win::ScopedGDIObject<HICON> new_small;
+
+    if (icon_id.empty() || icon_id == "open-indigo") {
+      // Prefer the executable's embedded icon resource for the default icon.
+      HMODULE module = GetModuleHandleW(nullptr);
+      new_big.reset(static_cast<HICON>(LoadImageW(
+          module, MAKEINTRESOURCEW(101), IMAGE_ICON, big_size, big_size,
+          LR_DEFAULTCOLOR)));
+      new_small.reset(static_cast<HICON>(LoadImageW(
+          module, MAKEINTRESOURCEW(101), IMAGE_ICON, small_size, small_size,
+          LR_DEFAULTCOLOR)));
+      if (!new_big.is_valid() || !new_small.is_valid()) {
+        const std::wstring exe_path = GetCurrentExecutablePath();
+        if (!exe_path.empty()) {
+          HICON extracted_big = nullptr;
+          HICON extracted_small = nullptr;
+          if (ExtractIconExW(exe_path.c_str(), 0, &extracted_big,
+                             &extracted_small, 1) > 0) {
+            if (!new_big.is_valid() && extracted_big) {
+              new_big.reset(extracted_big);
+            } else if (extracted_big) {
+              DestroyIcon(extracted_big);
+            }
+            if (!new_small.is_valid() && extracted_small) {
+              new_small.reset(extracted_small);
+            } else if (extracted_small) {
+              DestroyIcon(extracted_small);
+            }
+          }
+        }
+      }
+    }
+
+    if (!new_big.is_valid()) {
+      SkBitmap big_bmp = RenderAppIconBitmap(*palette, big_size);
+      if (!big_bmp.isNull()) {
+        new_big = IconUtil::CreateHICONFromSkBitmap(big_bmp);
+      }
+    }
+    if (!new_small.is_valid()) {
+      SkBitmap small_bmp = RenderAppIconBitmap(*palette, small_size);
+      if (!small_bmp.isNull()) {
+        new_small = IconUtil::CreateHICONFromSkBitmap(small_bmp);
+      }
+    }
+    if (!new_big.is_valid() && !new_small.is_valid()) {
+      return false;
+    }
+
+    HICON big_raw = new_big.get();
+    HICON small_raw = new_small.get();
+    // Retain old handles until every top-level window has switched to the new
+    // icons so no window ever holds a destroyed HICON.
+    base::win::ScopedGDIObject<HICON> old_big;
+    base::win::ScopedGDIObject<HICON> old_small;
+    {
+      std::lock_guard<std::mutex> lock(icon_mu_);
+      old_big = std::move(current_big_icon_);
+      old_small = std::move(current_small_icon_);
+      current_big_icon_ = std::move(new_big);
+      current_small_icon_ = std::move(new_small);
+    }
+
+    ApplyIconEnumContext ctx{GetCurrentProcessId(), big_raw, small_raw};
+    EnumWindows(&ApplyIconToProcessWindowProc, reinterpret_cast<LPARAM>(&ctx));
+    return true;
+  }
+
+  std::string ResolveExternalUrlSourceApp() override {
+    HWND fg = GetForegroundWindow();
+    if (!fg) {
+      return {};
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    if (pid == 0 || pid == GetCurrentProcessId()) {
+      return {};
+    }
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+      return {};
+    }
+    std::wstring image_path(1024, L'\0');
+    DWORD length = static_cast<DWORD>(image_path.size());
+    BOOL ok =
+        QueryFullProcessImageNameW(process, 0, image_path.data(), &length);
+    CloseHandle(process);
+    if (!ok || length == 0) {
+      return {};
+    }
+    image_path.resize(length);
+    base::FilePath exe_path(image_path);
+    std::string basename = base::WideToUTF8(exe_path.BaseName().value());
+    return base::ToLowerASCII(basename);
+  }
+
   base::FilePath GetDefaultUserDataDir() override {
     PWSTR local_app_data = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr,
@@ -587,13 +1023,16 @@ class OpenPlatformWin final : public OpenPlatform {
 
  private:
   WinHotkeyDispatcher hotkeys_;
+  std::mutex icon_mu_;
+  base::win::ScopedGDIObject<HICON> current_big_icon_;
+  base::win::ScopedGDIObject<HICON> current_small_icon_;
 };
 
 }  // namespace
 
 // --- OpenPlatform base defaults (OpenPlatformWin overrides
-// UpdateWindowEffects and IsIncreaseContrastEnabled; Windows has no movable
-// traffic lights or per-app URL source). ------------------------------------
+// UpdateWindowEffects, IsIncreaseContrastEnabled, SetAppIcon, and
+// ResolveExternalUrlSourceApp; Windows has no movable traffic lights). ------
 
 bool OpenPlatform::UpdateWindowEffects(views::Widget*,
                                        const WindowMaterialSpec&) {

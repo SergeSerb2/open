@@ -181,6 +181,21 @@ case "${TARGET}" in
       [[ -e "${out_abs}/${f}" ]] && cp -a "${out_abs}/${f}" "${STAGE}/"
     done
     cp -a "${out_abs}/locales" "${STAGE}/" 2>/dev/null || true
+    if [[ -d "${out_abs}/adblock_resources" ]]; then
+      rm -rf "${STAGE}/adblock_resources"
+      cp -a "${out_abs}/adblock_resources" "${STAGE}/adblock_resources"
+    else
+      log "WARNING: ${out_abs}/adblock_resources is missing — staged build will lack bundled AdBlock lists (easylist.txt, easyprivacy.txt, resources.json)" >&2
+    fi
+    if [[ -f "${UNIFIED_DIR}/assets/linux/open-browser.desktop" ]]; then
+      cp -a "${UNIFIED_DIR}/assets/linux/open-browser.desktop" "${STAGE}/open-browser.desktop"
+    else
+      log "WARNING: ${UNIFIED_DIR}/assets/linux/open-browser.desktop is missing" >&2
+    fi
+    if compgen -G "${UNIFIED_DIR}/assets/icons/linux/product_logo_*.png" >/dev/null; then
+      mkdir -p "${STAGE}/icons"
+      cp -a "${UNIFIED_DIR}/assets/icons/linux"/product_logo_*.png "${STAGE}/icons/"
+    fi
     mv -f "${STAGE}/chrome" "${STAGE}/open"
     ;;
   win-x64)
@@ -190,6 +205,12 @@ case "${TARGET}" in
        vulkan-1.dll d3dcompiler_47.dll dxcompiler.dll dxil.dll "${STAGE}/" \
        2>/dev/null || true)
     cp -a "${out_abs}/locales" "${STAGE}/" 2>/dev/null || true
+    if [[ -d "${out_abs}/adblock_resources" ]]; then
+      rm -rf "${STAGE}/adblock_resources"
+      cp -a "${out_abs}/adblock_resources" "${STAGE}/adblock_resources"
+    else
+      log "WARNING: ${out_abs}/adblock_resources is missing — staged build will lack bundled AdBlock lists (easylist.txt, easyprivacy.txt, resources.json)" >&2
+    fi
     # chrome.exe loads chrome.dll next to it; the exe name is free.
     mv -f "${STAGE}/chrome.exe" "${STAGE}/open.exe"
     # Missing-DLL guard (PLAN.md Milestone 1): every import must be staged

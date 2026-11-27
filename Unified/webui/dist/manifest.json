@@ -54,20 +54,21 @@
     ]
   },
   "easel.html": {
-    "file": "assets/easel-CMEBfwIl.js",
+    "file": "assets/easel-CKbD6c97.js",
     "name": "easel",
     "src": "easel.html",
     "isEntry": true,
     "imports": [
       "_chunk-components-BBsgK3aD.js",
-      "_chunk-route-CjOd8HVF.js"
+      "_chunk-route-CjOd8HVF.js",
+      "_chunk-shortcuts-Bzfr7vi6.js"
     ],
     "css": [
       "assets/easel-C_YNgGkH.css"
     ]
   },
   "library.html": {
-    "file": "assets/library-B-MadgLh.js",
+    "file": "assets/library-Dislykxf.js",
     "name": "library",
     "src": "library.html",
     "isEntry": true,
@@ -77,17 +78,18 @@
       "_chunk-shortcuts-Bzfr7vi6.js"
     ],
     "css": [
-      "assets/library-BOXzbHiT.css"
+      "assets/library-B3ls8F5k.css"
     ]
   },
   "note.html": {
-    "file": "assets/note-DS9ukayw.js",
+    "file": "assets/note-BaX_OJx0.js",
     "name": "note",
     "src": "note.html",
     "isEntry": true,
     "imports": [
       "_chunk-components-BBsgK3aD.js",
-      "_chunk-route-CjOd8HVF.js"
+      "_chunk-route-CjOd8HVF.js",
+      "_chunk-shortcuts-Bzfr7vi6.js"
     ],
     "css": [
       "assets/note-D4ScAJUF.css"
@@ -108,7 +110,7 @@
     ]
   },
   "settings.html": {
-    "file": "assets/settings-PawdWUP3.js",
+    "file": "assets/settings-DXU433LI.js",
     "name": "settings",
     "src": "settings.html",
     "isEntry": true,

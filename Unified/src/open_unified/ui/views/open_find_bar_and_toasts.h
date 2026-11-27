@@ -161,6 +161,7 @@ class OpenFindBarView : public views::View,
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
   void OnPaint(gfx::Canvas* canvas) override;
+  void OnThemeChanged() override;
 
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
@@ -176,6 +177,7 @@ class OpenFindBarView : public views::View,
   };
 
   void Close();
+  void ApplyTheme();
   void UpdateButtons();
   gfx::Rect inner_bounds() const;
   find_in_page::FindTabHelper* target_helper() const;
@@ -191,6 +193,7 @@ class OpenFindBarView : public views::View,
       find_observation_{this};
   bool case_sensitive_ = false;
   bool shows_case_toggle_ = false;
+  bool applying_theme_ = false;
   raw_ptr<secondary::PaintedButton> case_toggle_ = nullptr;
   raw_ptr<views::Textfield> field_ = nullptr;
   raw_ptr<secondary::GlyphButton> previous_ = nullptr;
@@ -240,7 +243,7 @@ inline constexpr int kSymbolSize = 14;
 inline constexpr int kSymbolToTitle = 6;
 inline constexpr int kMinWidth = 60;
 inline constexpr int kMaxWidth = 380;
-inline constexpr size_t kMaxVisible = 4;
+inline constexpr size_t kMaxVisible = 3;
 inline constexpr int kStackGap = 8;  // guess: Arc stacks separate windows.
 inline constexpr int kFontSize = 14;
 inline constexpr int kShadowMargin = 18;
@@ -582,6 +585,7 @@ class OpenTabSwitcherView : public views::View {
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void OnPaint(gfx::Canvas* canvas) override;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;

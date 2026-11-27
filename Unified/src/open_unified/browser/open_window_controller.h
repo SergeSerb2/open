@@ -64,6 +64,7 @@ class WebContents;
 
 namespace views {
 class EventMonitor;
+class MenuRunner;
 class WebView;
 class Widget;
 }  // namespace views
@@ -204,6 +205,8 @@ class OpenWindowController : public OpenViewController,
                             const WindowID& window_id) override;
   // OpenExtensionBridge::Observer:
   void OnExtensionActionsChanged() override;
+  void OnExtensionPopupVisibilityChanged(const std::string& extension_id,
+                                         bool showing) override;
   // OpenBrowserService::Observer:
   void OnOpenEvent(const std::string& event_name,
                    const base::Value& payload) override;
@@ -311,6 +314,8 @@ class OpenWindowController : public OpenViewController,
   std::unique_ptr<StandaloneWebWindow> settings_window_;
   std::unique_ptr<StandaloneWebWindow> first_run_window_;
   std::map<SpaceID, Space> theme_preview_spaces_;
+  std::map<SpaceID, bool> space_header_shown_by_space_;
+  std::map<std::string, bool> library_media_source_enabled_;
   base::ObserverList<OpenViewObserver> view_observers_;
   base::ScopedMultiSourceObservation<OpenExtensionBridge,
                                      OpenExtensionBridge::Observer>
@@ -324,7 +329,8 @@ class OpenWindowController : public OpenViewController,
 // Ctrl+Tab switcher live in their own secondary::OverlayWidgetHost child
 // widgets (created on first use, so a window that never opens them pays
 // nothing), stacked above the page's native view.
-class OpenWindowUi : public CommandBarDelegate,
+class OpenWindowUi : public OpenBrowserView::Delegate,
+                     public CommandBarDelegate,
                      public PeekDelegate,
                      public SiteControlDelegate,
                      public OpenSplitContainerDelegate,
@@ -400,6 +406,11 @@ class OpenWindowUi : public CommandBarDelegate,
   void ToggleToolbarMorePopover(
       std::optional<gfx::Rect> anchor_in_screen = std::nullopt);
   void ToggleDownloadsPopover(views::View* anchor = nullptr);
+  // Windows/Linux Open Application Menu (top-left Open button, Alt+F, F10).
+  void ShowAppMenu(views::View* anchor = nullptr);
+  void SetExtensionPopupOpen(bool open);
+  bool is_alt_down() const { return alt_down_; }
+  void SyncSinglePaneToolbar();
 
   // Page translate popover anchored to the URL pill / Site Control anchor.
   void ShowTranslatePagePopover(views::View* anchor = nullptr);
@@ -497,6 +508,18 @@ class OpenWindowUi : public CommandBarDelegate,
   void OnSiteControlAdBlockToggled(bool enabled) override;
   void OnSiteControlClosed() override;
 
+  // OpenBrowserView::Delegate:
+  void OnAppMenuRequested(views::View* anchor) override;
+  void OnExtensionContextMenuRequested(const std::string& extension_id,
+                                       views::View* anchor,
+                                       const gfx::Point& screen_pt) override;
+  void OnSpaceReordered(const std::string& space_id, size_t to_index) override;
+  void OnResetPinnedTab(const ItemID& id, bool separate) override;
+  void OnTabDragStateChanged(bool dragging, const ItemID& tab_id) override;
+  void OnSinglePaneToolbarCommand(PaneCommand command,
+                                  views::View* anchor) override;
+  void OnSinglePaneHostClicked(views::View* anchor) override;
+
   // OpenSplitContainerDelegate:
   void OnSplitFractionsCommitted(const ItemID& split_id,
                                  const std::vector<double>& fractions) override;
@@ -511,6 +534,10 @@ class OpenWindowUi : public CommandBarDelegate,
   void OnPanesSwapped(const ItemID& split_id,
                       size_t index_a,
                       size_t index_b) override;
+  void OnPaneHostClicked(const std::optional<ItemID>& split_id,
+                         const ItemID& tab_id,
+                         size_t pane_index,
+                         views::View* anchor) override;
   bool CanDropInSplit(const std::optional<ItemID>& dragged_tab_id,
                       const GURL& dragged_url,
                       SplitDropZone zone,
@@ -560,7 +587,11 @@ class OpenWindowUi : public CommandBarDelegate,
   bool IsWebContentsVisible(content::WebContents* web_contents) override;
 
  private:
+  class ModifierEventObserver;
+
   void ApplyWindowEffects();
+  void UpdateSidebarPopoverState();
+  void OnAppMenuClosed();
   open_unified::SiteControlState BuildSiteControlState() const;
   SiteControlCallbacks BuildSiteControlCallbacks();
   ExtensionHostWindow MakeExtensionHostWindow() const;
@@ -625,12 +656,19 @@ class OpenWindowUi : public CommandBarDelegate,
   raw_ptr<views::WebView> library_web_view_ = nullptr;
   std::string library_section_;
 
-  // Boost editor, Space editor, and Sidebar popovers.
+  // Boost editor, Space editor, Sidebar popovers, and App Menu.
   std::unique_ptr<OpenBoostEditorSession> boost_editor_;
   OpenSpaceEditorPopover space_editor_popover_;
   OpenPlusPopover plus_popover_;
   OpenToolbarMorePopover more_popover_;
   std::unique_ptr<OpenDownloadsPopover> downloads_popover_;
+  std::unique_ptr<ui::SimpleMenuModel> app_menu_model_;
+  std::unique_ptr<views::MenuRunner> app_menu_runner_;
+  std::unique_ptr<ModifierEventObserver> modifier_observer_;
+  std::unique_ptr<views::EventMonitor> modifier_monitor_;
+  bool extension_picker_open_ = false;
+  bool extension_popup_open_ = false;
+  bool alt_down_ = false;
 
   raw_ptr<OpenSplitContainerView> split_ = nullptr;
   std::unique_ptr<OpenSiteControlBubble> site_controls_;

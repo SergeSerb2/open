@@ -5,7 +5,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Modal, ProfilePill, Toggle } from '../shared/components';
 import { InfoIcon, WarningIcon } from '../shared/icons';
-import { shortcutFromKeyboardEvent, shortcutKeycaps } from '../shared/shortcuts';
+import { isMacPlatform, shortcutFromKeyboardEvent, shortcutKeycaps } from '../shared/shortcuts';
 import { useSettings } from './context';
 import { SECTION_BY_ID, type SectionId } from './sections';
 
@@ -359,7 +359,9 @@ export function KeyRecorder({
       }
       const keys = shortcutFromKeyboardEvent(e);
       if (!keys) {
-        const mods = [e.metaKey && '⌘', e.ctrlKey && '⌃', e.altKey && '⌥', e.shiftKey && '⇧'].filter(Boolean).join('');
+        const mods = isMacPlatform()
+          ? [e.ctrlKey && '⌃', e.altKey && '⌥', e.shiftKey && '⇧', e.metaKey && '⌘'].filter(Boolean).join('')
+          : [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean).join('+');
         setHeld(mods);
         return;
       }

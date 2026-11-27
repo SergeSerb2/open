@@ -6,15 +6,21 @@
 #include <iterator>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "open_unified/ui/design/open_glyphs.h"
+#include "third_party/skia/include/core/SkPathBuilder.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
@@ -22,11 +28,13 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/range/range.h"
+#include "ui/gfx/render_text.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/widget/widget.h"
 
 namespace open_unified {
 
@@ -271,6 +279,157 @@ const CardLayout& LayoutFor(bool inline_card) {
   return inline_card ? kInlineLayout : kNewTabLayout;
 }
 
+SkPath RoundRectPath(const gfx::RectF& rect, float radius) {
+  SkPathBuilder builder;
+  builder.addRRect(
+      SkRRect::MakeRectXY(gfx::RectFToSkRect(rect), radius, radius));
+  return builder.detach();
+}
+
+bool IsMacModifierGlyph(char16_t ch) {
+  return ch == u'\u2303' ||  // ⌃
+         ch == u'\u2325' ||  // ⌥
+         ch == u'\u21E7' ||  // ⇧
+         ch == u'\u2318';    // ⌘
+}
+
+// Splits a shortcut display string into individual keycap tokens:
+// - macOS glyphs ("⇧⌘C", "⌘+") -> {"⇧", "⌘", "C"}, {"⌘", "+"}
+// - "+"-delimited ("Ctrl+Shift+Y", "Cmd+Shift+C", "Ctrl++") -> individual caps
+std::vector<std::u16string> SplitShortcutKeycaps(std::u16string_view raw) {
+  std::u16string trimmed(base::TrimWhitespace(raw, base::TRIM_ALL));
+  if (trimmed.empty()) {
+    return {};
+  }
+
+  std::vector<std::u16string> caps;
+  // Leading macOS modifier glyphs become one keycap each.
+  size_t pos = 0;
+  while (pos < trimmed.size() && IsMacModifierGlyph(trimmed[pos])) {
+    caps.emplace_back(1, trimmed[pos]);
+    ++pos;
+  }
+  if (pos > 0) {
+    std::u16string rest(base::TrimWhitespace(
+        std::u16string_view(trimmed).substr(pos), base::TRIM_ALL));
+    if (!rest.empty()) {
+      caps.push_back(std::move(rest));
+    }
+    return caps;
+  }
+
+  // Delimited form ("Ctrl+Shift+Y", "Cmd+Shift+C", "Ctrl++").
+  if (trimmed.find(u'+') != std::u16string::npos && trimmed.size() > 1) {
+    const bool ends_with_plus =
+        trimmed.size() >= 2 && trimmed.ends_with(u"++");
+    const std::u16string_view body =
+        ends_with_plus ? std::u16string_view(trimmed).substr(
+                             0, trimmed.size() - 1)
+                       : std::u16string_view(trimmed);
+    size_t start = 0;
+    while (start <= body.size()) {
+      const size_t sep = body.find(u'+', start);
+      const std::u16string_view part =
+          sep == std::u16string_view::npos
+              ? body.substr(start)
+              : body.substr(start, sep - start);
+      std::u16string token(base::TrimWhitespace(part, base::TRIM_ALL));
+      if (!token.empty()) {
+        caps.push_back(std::move(token));
+      }
+      if (sep == std::u16string_view::npos) {
+        break;
+      }
+      start = sep + 1;
+    }
+    if (ends_with_plus) {
+      caps.push_back(u"+");
+    }
+    if (!caps.empty()) {
+      return caps;
+    }
+  }
+
+  caps.push_back(std::move(trimmed));
+  return caps;
+}
+
+// Textfield subclass that re-applies Space/card-explicit text and selection
+// colors whenever Chromium Views propagates an OS theme change, preventing
+// unreadable text when the Space theme differs from the OS theme.
+class CommandBarTextfield : public views::Textfield {
+  METADATA_HEADER(CommandBarTextfield, views::Textfield)
+
+ public:
+  CommandBarTextfield() = default;
+  ~CommandBarTextfield() override = default;
+
+  void SetExplicitColors(SkColor text,
+                         SkColor selection_text,
+                         SkColor selection_bg) {
+    has_explicit_colors_ = true;
+    text_color_ = text;
+    selection_text_color_ = selection_text;
+    selection_bg_color_ = selection_bg;
+    ApplyExplicitColors();
+  }
+
+  // views::Textfield:
+  void OnThemeChanged() override {
+    views::Textfield::OnThemeChanged();
+    if (has_explicit_colors_) {
+      ApplyExplicitColors();
+    }
+  }
+
+ private:
+  void ApplyExplicitColors() {
+    SetColor(text_color_);
+    if (gfx::RenderText* rt = GetRenderText()) {
+      rt->SetColor(text_color_);
+      rt->set_selection_color(selection_text_color_);
+      rt->set_selection_background_focused_color(selection_bg_color_);
+    }
+    SchedulePaint();
+  }
+
+  bool has_explicit_colors_ = false;
+  SkColor text_color_ = kTextLight;
+  SkColor selection_text_color_ = kTextLight;
+  SkColor selection_bg_color_ = SK_ColorTRANSPARENT;
+};
+
+BEGIN_METADATA(CommandBarTextfield)
+END_METADATA
+
+class HandGlyphButton : public secondary::GlyphButton {
+  METADATA_HEADER(HandGlyphButton, secondary::GlyphButton)
+
+ public:
+  using secondary::GlyphButton::GlyphButton;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : secondary::GlyphButton::GetCursor(event);
+  }
+};
+
+BEGIN_METADATA(HandGlyphButton)
+END_METADATA
+
+class HandPaintedButton : public secondary::PaintedButton {
+  METADATA_HEADER(HandPaintedButton, secondary::PaintedButton)
+
+ public:
+  using secondary::PaintedButton::PaintedButton;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : secondary::PaintedButton::GetCursor(event);
+  }
+};
+
+BEGIN_METADATA(HandPaintedButton)
+END_METADATA
+
 }  // namespace
 
 bool CommandBarScopeTarget::is_extension() const {
@@ -329,7 +488,8 @@ std::vector<CommandBarRow> CommandBarRowsFromSuggestions(
       }
     }
     if (!suggestion.shortcut_display.empty()) {
-      row.keycaps.push_back(base::UTF8ToUTF16(suggestion.shortcut_display));
+      row.keycaps =
+          SplitShortcutKeycaps(base::UTF8ToUTF16(suggestion.shortcut_display));
     }
     row.fallback_glyph = DefaultGlyphFor(row);
     rows.push_back(std::move(row));
@@ -343,14 +503,14 @@ OpenCommandBarView::OpenCommandBarView(CommandBarDelegate* delegate)
   GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
   GetViewAccessibility().SetName(u"Command Bar");
 
-  auto field = std::make_unique<views::Textfield>();
+  auto field = std::make_unique<CommandBarTextfield>();
   field->set_controller(this);
   field->SetBorder(views::CreateEmptyBorder(gfx::Insets()));
   field->SetBackgroundEnabled(false);
   field->GetViewAccessibility().SetName(u"Search or Enter URL");
   field_ = AddChildView(std::move(field));
 
-  auto close = std::make_unique<secondary::GlyphButton>(
+  auto close = std::make_unique<HandGlyphButton>(
       base::BindRepeating(&OpenCommandBarView::Dismiss, base::Unretained(this),
                           CommandBarDismissReason::kCloseButton),
       Glyph::kClose, u"Close");
@@ -363,7 +523,7 @@ OpenCommandBarView::OpenCommandBarView(CommandBarDelegate* delegate)
   auto make_painted = [this](views::Button::PressedCallback callback,
                              secondary::PaintedButton::Painter painter,
                              const std::u16string& name) {
-    auto button = std::make_unique<secondary::PaintedButton>(
+    auto button = std::make_unique<HandPaintedButton>(
         std::move(callback), std::move(painter), name);
     button->SetVisible(false);
     return AddChildView(std::move(button));
@@ -526,6 +686,7 @@ void OpenCommandBarView::Present(const CommandBarRequest& request) {
   }
 
   // One frame: no animation on present (commandbar.md §5).
+  ApplyTheme();
   SetVisible(true);
   InvalidateLayout();
   SchedulePaint();
@@ -858,7 +1019,44 @@ void OpenCommandBarView::EnterScope(const CommandBarScopeTarget& target) {
 void OpenCommandBarView::SetAppearance(
     const secondary::Appearance& appearance) {
   appearance_ = appearance;
+  ApplyTheme();
   SchedulePaint();
+}
+
+void OpenCommandBarView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  ApplyTheme();
+}
+
+void OpenCommandBarView::ApplyTheme() {
+  if (applying_theme_) {
+    return;
+  }
+  base::AutoReset<bool> guard(&applying_theme_, true);
+  if (views::Widget* widget = GetWidget()) {
+    const ui::ColorProviderKey::ColorMode target_mode =
+        appearance_.dark ? ui::ColorProviderKey::ColorMode::kDark
+                         : ui::ColorProviderKey::ColorMode::kLight;
+    if (widget->color_mode_override() != target_mode) {
+      widget->SetColorModeOverride(target_mode);
+      widget->ThemeChanged();
+    }
+  }
+  if (field_) {
+    const SkColor text = text_color();
+    const SkColor selection_bg =
+        secondary::WithAlpha(selection_fill(), appearance_.dark ? 0.45f : 0.28f);
+    static_cast<CommandBarTextfield*>(field_.get())
+        ->SetExplicitColors(text, text, selection_bg);
+  }
+  if (close_button_) {
+    close_button_->SetGlyphColor(secondary_text_color());
+    close_button_->SetPlate(
+        secondary::GlyphButton::Plate::kCircle,
+        secondary::WithAlpha(appearance_.dark ? SK_ColorWHITE : SK_ColorBLACK,
+                             appearance_.dark ? 0.08f : 0.05f),
+        13.f);
+  }
 }
 
 std::u16string_view OpenCommandBarView::field_text() const {
@@ -1217,6 +1415,7 @@ void OpenCommandBarView::EnterScopeInternal(
   user_moved_selection_ = false;
   SetFieldText(std::u16string(), 0, 0);
   UpdatePlaceholder();
+  ApplyTheme();
   InvalidateLayout();
   if (std::optional<std::string> extension = target.extension_id();
       extension && delegate_) {
@@ -1253,6 +1452,7 @@ void OpenCommandBarView::ExitScope() {
   user_moved_selection_ = false;
   SetFieldText(typed_, typed_.size(), typed_.size());
   UpdatePlaceholder();
+  ApplyTheme();
   InvalidateLayout();
   RunQuery();
 }
@@ -1502,11 +1702,22 @@ void OpenCommandBarView::OnPaint(gfx::Canvas* canvas) {
                      secondary::WithAlpha(SK_ColorBLACK, kScrimAlpha));
   }
   const gfx::RectF card(card_);
+#if BUILDFLAG(IS_WIN)
+  const float card_radius =
+      little_open ? 8.f : static_cast<float>(m::kCornerRadius);
+#else
+  const float card_radius = static_cast<float>(m::kCornerRadius);
+#endif
   if (little_open) {
-    secondary::FillRoundRect(canvas, card, m::kCornerRadius, body_color());
+#if BUILDFLAG(IS_WIN)
+    // Match Windows 11 DWMWCP_ROUND (8 DIP) and fill the opaque widget
+    // edge-to-edge so no dark corner wedges appear.
+    canvas->DrawColor(body_color());
+#endif
+    secondary::FillRoundRect(canvas, card, card_radius, body_color());
   } else {
     secondary::FillRoundRectWithShadow(
-        canvas, card, m::kCornerRadius, body_color(),
+        canvas, card, card_radius, body_color(),
         secondary::WithAlpha(SK_ColorBLACK, kShadowAlpha), kShadowOffsetY,
         kShadowBlur);
     // Dark inline editor: a light hairline so the card reads as raised over
@@ -1514,12 +1725,12 @@ void OpenCommandBarView::OnPaint(gfx::Canvas* canvas) {
     const SkColor hairline = is_inline() && appearance_.dark
                                  ? secondary::WithAlpha(SK_ColorWHITE, 0.16f)
                                  : secondary::WithAlpha(SK_ColorBLACK, 0.22f);
-    secondary::StrokeRoundRect(canvas, card, m::kCornerRadius, hairline,
+    secondary::StrokeRoundRect(canvas, card, card_radius, hairline,
                                kHairlineWidth);
   }
 
   canvas->Save();
-  canvas->ClipRect(card_);
+  canvas->ClipPath(RoundRectPath(card, card_radius), /*do_anti_alias=*/true);
   PaintInputRow(canvas);
   PaintRows(canvas);
   canvas->Restore();
@@ -1711,6 +1922,36 @@ void OpenCommandBarView::PaintRows(gfx::Canvas* canvas) {
     PaintRow(canvas, results_.rows[first + i], RowRect(i),
              first + i == selected_);
   }
+  // Subtle scroll indicator on the right edge whenever more rows exist below.
+  if (results_.rows.size() > m::kMaxVisibleRows && count > 0) {
+    const gfx::Rect first_row = RowRect(0);
+    const gfx::Rect last_row = RowRect(count - 1);
+    const gfx::Rect band = FooterRect();
+    const int track_top = first_row.y() + 2;
+    int track_bottom = last_row.bottom() - 2;
+    if (!band.IsEmpty()) {
+      track_bottom = std::min(track_bottom, band.y() - 4);
+    }
+    const int track_h = track_bottom - track_top;
+    if (track_h > 12) {
+      const float ratio = static_cast<float>(count) /
+                          static_cast<float>(results_.rows.size());
+      const float thumb_h =
+          std::clamp(track_h * ratio, 18.f, static_cast<float>(track_h));
+      const size_t max_scroll = results_.rows.size() - m::kMaxVisibleRows;
+      const float frac =
+          max_scroll > 0
+              ? std::clamp(static_cast<float>(scroll_) /
+                               static_cast<float>(max_scroll),
+                           0.f, 1.f)
+              : 0.f;
+      const float thumb_y = track_top + frac * (track_h - thumb_h);
+      const gfx::RectF thumb(card_.right() - 5.f, thumb_y, 3.f, thumb_h);
+      secondary::FillRoundRect(
+          canvas, thumb, 1.5f,
+          secondary::WithAlpha(text_color(), appearance_.dark ? 0.28f : 0.22f));
+    }
+  }
 }
 
 void OpenCommandBarView::PaintRow(gfx::Canvas* canvas,
@@ -1825,6 +2066,17 @@ void OpenCommandBarView::PaintRow(gfx::Canvas* canvas,
 }
 
 // --- Mouse -------------------------------------------------------------------
+
+ui::Cursor OpenCommandBarView::GetCursor(const ui::MouseEvent& event) {
+  if (!presented_) {
+    return views::View::GetCursor(event);
+  }
+  const gfx::Point& loc = event.location();
+  if (RowAt(loc).has_value() || (!ChipRect().IsEmpty() && ChipRect().Contains(loc))) {
+    return ui::Cursor(ui::mojom::CursorType::kHand);
+  }
+  return views::View::GetCursor(event);
+}
 
 bool OpenCommandBarView::OnMousePressed(const ui::MouseEvent& event) {
   if (!presented_) {

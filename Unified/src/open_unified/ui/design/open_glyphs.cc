@@ -115,7 +115,8 @@ void DrawSpeakerBody(gfx::Canvas* canvas, const cc::PaintFlags& flags) {
 }
 
 // Draws crisp original Skia vector paths (14 x 14 design box, scaled to fit
-// `box`) for common named Space icons on platforms without SF Symbols.
+// `box`) for EVERY named Space icon in NamedSpaceIconSymbol on platforms
+// without SF Symbols, so zero Space icons silently fall back to kPlanet.
 bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
                               std::string_view raw_name,
                               std::string_view symbol_name,
@@ -135,18 +136,63 @@ bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
     kBriefcase,
     kHome,
     kStar,
+    kBookmark,
     kHeart,
+    kFlag,
     kBolt,
-    kFlame,
+    kTriangle,
+    kMedical,
+    kBell,
+    kBulb,
+    kShapes,
+    kGrid,
+    kApps,
+    kLayers,
+    kServer,
+    kAlbums,
+    kCopy,
+    kFolder,
+    kTray,
+    kCalendar,
+    kMail,
+    kCheckbox,
+    kDocument,
     kBook,
-    kCode,
+    kChat,
+    kPeople,
+    kTerminal,
+    kHammer,
+    kSquare,
+    kCircle,
+    kMoon,
+    kSun,
+    kGlobe,
+    kLeaf,
+    kCloudFill,
+    kCloudOutline,
+    kGift,
+    kRestaurant,
+    kBarbell,
+    kAirplane,
     kMusic,
+    kPalette,
+    kVideo,
+    kBandage,
+    kCode,
+    kBaseball,
+    kFlame,
+    kPizza,
+    kSkull,
+    kReceipt,
+    kThumbsUp,
+    kTrain,
+    kLinear,
+    kFigma,
+    kSearch,
     kGamepad,
     kCamera,
-    kLeaf,
-    kGlobe,
-    kFolder,
     kRocket,
+    kEyeglasses,
   };
 
   SpaceVector kind = SpaceVector::kNone;
@@ -156,35 +202,131 @@ bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
     kind = SpaceVector::kHome;
   } else if (matches({"star", "star.fill"})) {
     kind = SpaceVector::kStar;
+  } else if (matches({"bookmark", "bookmark.fill"})) {
+    kind = SpaceVector::kBookmark;
   } else if (matches({"heart", "heart.fill"})) {
     kind = SpaceVector::kHeart;
+  } else if (matches({"flag", "flag.fill"})) {
+    kind = SpaceVector::kFlag;
   } else if (matches({"bolt", "bolt.fill", "flash"})) {
     kind = SpaceVector::kBolt;
-  } else if (matches({"flame", "flame.fill", "bonfire"})) {
-    kind = SpaceVector::kFlame;
+  } else if (matches({"triangle", "triangle.fill"})) {
+    kind = SpaceVector::kTriangle;
+  } else if (matches({"medical", "cross.case", "cross.case.fill"})) {
+    kind = SpaceVector::kMedical;
+  } else if (matches({"notifications", "bell", "bell.fill"})) {
+    kind = SpaceVector::kBell;
+  } else if (matches({"bulb", "lightbulb", "lightbulb.fill"})) {
+    kind = SpaceVector::kBulb;
+  } else if (matches({"shapes", "square.on.circle"})) {
+    kind = SpaceVector::kShapes;
+  } else if (matches({"grid", "square.grid.2x2"})) {
+    kind = SpaceVector::kGrid;
+  } else if (matches({"apps", "square.grid.3x3"})) {
+    kind = SpaceVector::kApps;
+  } else if (matches({"layers", "square.3.layers.3d"})) {
+    kind = SpaceVector::kLayers;
+  } else if (matches({"server", "server.rack"})) {
+    kind = SpaceVector::kServer;
+  } else if (matches({"albums", "square.stack"})) {
+    kind = SpaceVector::kAlbums;
+  } else if (matches({"copy", "doc.on.doc"})) {
+    kind = SpaceVector::kCopy;
+  } else if (matches({"folder", "folder.fill"})) {
+    kind = SpaceVector::kFolder;
+  } else if (matches({"fileTrayFull", "tray.full", "tray.full.fill"})) {
+    kind = SpaceVector::kTray;
+  } else if (matches({"calendar"})) {
+    kind = SpaceVector::kCalendar;
+  } else if (matches({"mail", "envelope", "envelope.fill"})) {
+    kind = SpaceVector::kMail;
+  } else if (matches({"checkbox", "checkmark.square", "checkmark.square.fill"})) {
+    kind = SpaceVector::kCheckbox;
+  } else if (matches({"document", "doc", "doc.fill"})) {
+    kind = SpaceVector::kDocument;
   } else if (matches({"book", "book.fill", "book.closed"})) {
     kind = SpaceVector::kBook;
+  } else if (matches({"chatBubbleEllipses", "ellipsis.bubble"})) {
+    kind = SpaceVector::kChat;
+  } else if (matches({"people", "person.2", "person.2.fill"})) {
+    kind = SpaceVector::kPeople;
+  } else if (matches({"terminal", "terminal.fill"})) {
+    kind = SpaceVector::kTerminal;
+  } else if (matches({"construction", "hammer", "hammer.fill"})) {
+    kind = SpaceVector::kHammer;
+  } else if (matches({"square", "square.fill"})) {
+    kind = SpaceVector::kSquare;
+  } else if (matches({"ellipse", "circle", "circle.fill"})) {
+    kind = SpaceVector::kCircle;
+  } else if (matches({"moon", "moon.fill"})) {
+    kind = SpaceVector::kMoon;
+  } else if (matches({"sunny", "sun.max", "sun.max.fill"})) {
+    kind = SpaceVector::kSun;
+  } else if (matches({"planet", "globe", "globe.americas"})) {
+    kind = SpaceVector::kGlobe;
+  } else if (matches({"leaf", "leaf.fill"})) {
+    kind = SpaceVector::kLeaf;
+  } else if (matches({"cloud", "cloud.fill"})) {
+    kind = SpaceVector::kCloudFill;
+  } else if (matches({"cloudOutline"})) {
+    kind = SpaceVector::kCloudOutline;
+  } else if (matches({"gift", "gift.fill"})) {
+    kind = SpaceVector::kGift;
+  } else if (matches({"restaurant", "fork.knife"})) {
+    kind = SpaceVector::kRestaurant;
+  } else if (matches({"barbell", "dumbbell", "dumbbell.fill"})) {
+    kind = SpaceVector::kBarbell;
+  } else if (matches({"airplane"})) {
+    kind = SpaceVector::kAirplane;
+  } else if (matches({"music", "musicalNote", "music.note"})) {
+    kind = SpaceVector::kMusic;
+  } else if (matches({"colorPallete", "colorPalette", "paintpalette",
+                      "paintpalette.fill"})) {
+    kind = SpaceVector::kPalette;
+  } else if (matches({"video", "video.fill"})) {
+    kind = SpaceVector::kVideo;
+  } else if (matches({"bandage", "bandage.fill"})) {
+    kind = SpaceVector::kBandage;
   } else if (matches(
                  {"code", "github", "chevron.left.forwardslash.chevron.right"})) {
     kind = SpaceVector::kCode;
-  } else if (matches({"music", "musicalNote", "music.note"})) {
-    kind = SpaceVector::kMusic;
+  } else if (matches({"baseball", "baseball.fill"})) {
+    kind = SpaceVector::kBaseball;
+  } else if (matches({"flame", "flame.fill", "bonfire"})) {
+    kind = SpaceVector::kFlame;
+  } else if (matches({"pizza", "fork.knife.circle"})) {
+    kind = SpaceVector::kPizza;
+  } else if (matches({"skull", "exclamationmark.triangle"})) {
+    kind = SpaceVector::kSkull;
+  } else if (matches({"receipt"})) {
+    kind = SpaceVector::kReceipt;
+  } else if (matches({"thumbsUp", "hand.thumbsup", "hand.thumbsup.fill"})) {
+    kind = SpaceVector::kThumbsUp;
+  } else if (matches({"train", "tram", "tram.fill"})) {
+    kind = SpaceVector::kTrain;
+  } else if (matches({"linear", "line.3.horizontal"})) {
+    kind = SpaceVector::kLinear;
+  } else if (matches({"figma", "square.stack.3d.up"})) {
+    kind = SpaceVector::kFigma;
+  } else if (matches({"search", "magnifyingglass"})) {
+    kind = SpaceVector::kSearch;
   } else if (matches({"gamepad", "gamecontroller", "gamecontroller.fill"})) {
     kind = SpaceVector::kGamepad;
   } else if (matches({"camera", "camera.fill"})) {
     kind = SpaceVector::kCamera;
-  } else if (matches({"leaf", "leaf.fill"})) {
-    kind = SpaceVector::kLeaf;
-  } else if (matches({"globe", "globe.americas"})) {
-    kind = SpaceVector::kGlobe;
-  } else if (matches({"folder", "folder.fill"})) {
-    kind = SpaceVector::kFolder;
   } else if (matches({"rocket", "paperplane", "paperplane.fill"})) {
     kind = SpaceVector::kRocket;
+  } else if (matches({"eyeglasses"})) {
+    kind = SpaceVector::kEyeglasses;
   }
 
   if (kind == SpaceVector::kNone) {
     return false;
+  }
+
+  if (kind == SpaceVector::kEyeglasses) {
+    Draw(canvas, Glyph::kEyeglasses, box, color);
+    return true;
   }
 
   const float target =
@@ -245,6 +387,16 @@ bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
       canvas->DrawPath(b.detach(), pen);
       break;
     }
+    case SpaceVector::kBookmark: {
+      Polyline(canvas,
+               {{3.0f, 1.4f},
+                {11.0f, 1.4f},
+                {11.0f, 12.6f},
+                {7.0f, 9.6f},
+                {3.0f, 12.6f}},
+               pen, /*close=*/true);
+      break;
+    }
     case SpaceVector::kHeart: {
       SkPathBuilder b;
       b.moveTo(7.0f, 12.3f);
@@ -258,6 +410,17 @@ bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
       canvas->DrawPath(b.detach(), pen);
       break;
     }
+    case SpaceVector::kFlag: {
+      Line(canvas, 2.6f, 1.4f, 2.6f, 12.8f, pen);
+      Polyline(canvas,
+               {{2.6f, 2.0f},
+                {11.6f, 2.0f},
+                {9.5f, 4.8f},
+                {11.6f, 7.6f},
+                {2.6f, 7.6f}},
+               pen);
+      break;
+    }
     case SpaceVector::kBolt: {
       Polyline(canvas,
                {{8.1f, 1.0f},
@@ -269,79 +432,90 @@ bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
                pen, /*close=*/true);
       break;
     }
-    case SpaceVector::kFlame: {
-      SkPathBuilder outer;
-      outer.moveTo(7.4f, 1.2f);
-      outer.cubicTo(10.8f, 4.1f, 12.0f, 6.7f, 11.5f, 9.2f);
-      outer.cubicTo(11.0f, 11.4f, 9.2f, 12.7f, 7.0f, 12.7f);
-      outer.cubicTo(4.6f, 12.7f, 2.7f, 11.1f, 2.5f, 8.8f);
-      outer.cubicTo(2.3f, 6.9f, 3.3f, 5.2f, 4.5f, 4.0f);
-      outer.cubicTo(4.4f, 5.2f, 4.9f, 5.9f, 5.6f, 6.2f);
-      outer.cubicTo(5.6f, 4.3f, 6.3f, 2.6f, 7.4f, 1.2f);
-      outer.close();
-      canvas->DrawPath(outer.detach(), pen);
+    case SpaceVector::kTriangle: {
+      Polyline(canvas, {{7.0f, 1.6f}, {12.6f, 11.8f}, {1.4f, 11.8f}}, pen,
+               /*close=*/true);
       break;
     }
-    case SpaceVector::kBook: {
-      SkPathBuilder left;
-      left.moveTo(7.0f, 3.2f);
-      left.quadTo(4.4f, 2.0f, 1.4f, 2.6f);
-      left.lineTo(1.4f, 11.4f);
-      left.quadTo(4.4f, 10.8f, 7.0f, 12.0f);
-      canvas->DrawPath(left.detach(), pen);
-      SkPathBuilder right;
-      right.moveTo(7.0f, 3.2f);
-      right.quadTo(9.6f, 2.0f, 12.6f, 2.6f);
-      right.lineTo(12.6f, 11.4f);
-      right.quadTo(9.6f, 10.8f, 7.0f, 12.0f);
-      canvas->DrawPath(right.detach(), pen);
-      Line(canvas, 7.0f, 3.2f, 7.0f, 12.0f, fine);
+    case SpaceVector::kMedical: {
+      canvas->sk_canvas()->drawRRect(RRect(1.2f, 3.6f, 11.6f, 8.8f, 1.8f), pen);
+      Polyline(canvas, {{4.8f, 3.6f}, {4.8f, 1.8f}, {9.2f, 1.8f}, {9.2f, 3.6f}},
+               fine);
+      Line(canvas, 7.0f, 5.7f, 7.0f, 10.3f, pen);
+      Line(canvas, 4.7f, 8.0f, 9.3f, 8.0f, pen);
       break;
     }
-    case SpaceVector::kCode: {
-      Polyline(canvas, {{4.2f, 3.8f}, {1.2f, 7.0f}, {4.2f, 10.2f}}, pen);
-      Polyline(canvas, {{9.8f, 3.8f}, {12.8f, 7.0f}, {9.8f, 10.2f}}, pen);
-      Line(canvas, 8.2f, 2.5f, 5.8f, 11.5f, fine);
+    case SpaceVector::kBell: {
+      SkPathBuilder b;
+      b.moveTo(2.4f, 10.0f);
+      b.lineTo(3.6f, 8.2f);
+      b.lineTo(3.6f, 5.8f);
+      b.cubicTo(3.6f, 1.8f, 10.4f, 1.8f, 10.4f, 5.8f);
+      b.lineTo(10.4f, 8.2f);
+      b.lineTo(11.6f, 10.0f);
+      b.close();
+      canvas->DrawPath(b.detach(), pen);
+      Line(canvas, 5.5f, 12.2f, 8.5f, 12.2f, pen);
       break;
     }
-    case SpaceVector::kMusic: {
-      Line(canvas, 5.2f, 10.3f, 5.2f, 3.2f, pen);
-      Line(canvas, 11.4f, 9.1f, 11.4f, 1.9f, pen);
-      Line(canvas, 5.2f, 3.2f, 11.4f, 1.9f, Stroke(color, 1.7f));
-      Circle(canvas, 3.7f, 10.6f, 1.8f, fill);
-      Circle(canvas, 9.9f, 9.4f, 1.8f, fill);
-      break;
-    }
-    case SpaceVector::kGamepad: {
-      canvas->sk_canvas()->drawRRect(RRect(1.0f, 3.4f, 12.0f, 7.2f, 3.4f), pen);
-      Line(canvas, 3.2f, 7.0f, 6.0f, 7.0f, fine);
-      Line(canvas, 4.6f, 5.6f, 4.6f, 8.4f, fine);
-      Circle(canvas, 9.2f, 7.7f, 0.9f, fill);
-      Circle(canvas, 10.8f, 6.2f, 0.9f, fill);
-      break;
-    }
-    case SpaceVector::kCamera: {
-      canvas->sk_canvas()->drawRRect(RRect(1.0f, 3.6f, 12.0f, 8.6f, 1.8f), pen);
-      Polyline(canvas, {{4.3f, 3.6f}, {5.2f, 1.9f}, {8.8f, 1.9f}, {9.7f, 3.6f}},
+    case SpaceVector::kBulb: {
+      Arc(canvas, 7.0f, 5.4f, 3.9f, 132.0f, 276.0f, pen);
+      Polyline(canvas, {{4.5f, 8.4f}, {5.1f, 10.4f}, {8.9f, 10.4f}, {9.5f, 8.4f}},
                pen);
-      Circle(canvas, 7.0f, 7.9f, 2.2f, fine);
+      Line(canvas, 5.4f, 12.2f, 8.6f, 12.2f, fine);
       break;
     }
-    case SpaceVector::kLeaf: {
-      SkPathBuilder leaf;
-      leaf.moveTo(11.9f, 2.1f);
-      leaf.cubicTo(6.2f, 1.8f, 2.4f, 5.2f, 2.6f, 11.2f);
-      leaf.cubicTo(8.5f, 11.5f, 12.2f, 7.8f, 11.9f, 2.1f);
-      leaf.close();
-      canvas->DrawPath(leaf.detach(), pen);
-      Line(canvas, 2.2f, 11.8f, 8.8f, 5.2f, fine);
+    case SpaceVector::kShapes: {
+      canvas->sk_canvas()->drawRRect(RRect(1.4f, 1.4f, 6.8f, 6.8f, 1.2f), pen);
+      Circle(canvas, 9.2f, 9.2f, 3.4f, pen);
       break;
     }
-    case SpaceVector::kGlobe: {
-      Circle(canvas, 7.0f, 7.0f, 5.6f, pen);
-      canvas->sk_canvas()->drawOval(SkRect::MakeXYWH(4.3f, 1.4f, 5.4f, 11.2f),
-                                    fine);
-      Line(canvas, 1.6f, 7.0f, 12.4f, 7.0f, fine);
+    case SpaceVector::kGrid: {
+      for (int r = 0; r < 2; ++r) {
+        for (int c = 0; c < 2; ++c) {
+          canvas->sk_canvas()->drawRRect(
+              RRect(1.4f + c * 6.2f, 1.4f + r * 6.2f, 5.0f, 5.0f, 1.2f), fine);
+        }
+      }
+      break;
+    }
+    case SpaceVector::kApps: {
+      for (int r = 0; r < 3; ++r) {
+        for (int c = 0; c < 3; ++c) {
+          canvas->sk_canvas()->drawRRect(
+              RRect(1.3f + c * 4.1f, 1.3f + r * 4.1f, 3.0f, 3.0f, 0.8f), fine);
+        }
+      }
+      break;
+    }
+    case SpaceVector::kLayers: {
+      Polyline(canvas, {{7.0f, 1.5f}, {12.6f, 4.4f}, {7.0f, 7.3f}, {1.4f, 4.4f}},
+               pen, /*close=*/true);
+      Polyline(canvas, {{1.4f, 7.2f}, {7.0f, 10.1f}, {12.6f, 7.2f}}, fine);
+      Polyline(canvas, {{1.4f, 9.8f}, {7.0f, 12.7f}, {12.6f, 9.8f}}, fine);
+      break;
+    }
+    case SpaceVector::kServer: {
+      canvas->sk_canvas()->drawRRect(RRect(1.4f, 1.8f, 11.2f, 4.4f, 1.2f), pen);
+      canvas->sk_canvas()->drawRRect(RRect(1.4f, 7.8f, 11.2f, 4.4f, 1.2f), pen);
+      Circle(canvas, 3.8f, 4.0f, 0.85f, fill);
+      Circle(canvas, 3.8f, 10.0f, 0.85f, fill);
+      Line(canvas, 6.2f, 4.0f, 10.4f, 4.0f, fine);
+      Line(canvas, 6.2f, 10.0f, 10.4f, 10.0f, fine);
+      break;
+    }
+    case SpaceVector::kAlbums: {
+      canvas->sk_canvas()->drawRRect(RRect(2.0f, 4.6f, 10.0f, 7.8f, 1.5f), pen);
+      Line(canvas, 3.6f, 2.8f, 10.4f, 2.8f, fine);
+      Line(canvas, 4.8f, 1.3f, 9.2f, 1.3f, fine);
+      break;
+    }
+    case SpaceVector::kCopy: {
+      canvas->sk_canvas()->drawRRect(RRect(4.4f, 4.4f, 8.2f, 8.4f, 1.4f), pen);
+      Polyline(canvas,
+               {{2.8f, 9.6f}, {1.4f, 9.6f}, {1.4f, 1.4f}, {9.6f, 1.4f},
+                {9.6f, 2.8f}},
+               pen);
       break;
     }
     case SpaceVector::kFolder: {
@@ -360,6 +534,357 @@ bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
       canvas->DrawPath(b.detach(), pen);
       break;
     }
+    case SpaceVector::kTray: {
+      Polyline(canvas,
+               {{2.6f, 2.6f},
+                {11.4f, 2.6f},
+                {12.8f, 7.6f},
+                {12.8f, 11.8f},
+                {1.2f, 11.8f},
+                {1.2f, 7.6f}},
+               pen, /*close=*/true);
+      Polyline(canvas,
+               {{1.4f, 7.6f}, {4.8f, 7.6f}, {5.6f, 9.2f}, {8.4f, 9.2f},
+                {9.2f, 7.6f}, {12.6f, 7.6f}},
+               fine);
+      Line(canvas, 4.4f, 5.1f, 9.6f, 5.1f, fine);
+      break;
+    }
+    case SpaceVector::kCalendar: {
+      canvas->sk_canvas()->drawRRect(RRect(1.4f, 2.8f, 11.2f, 9.8f, 1.6f), pen);
+      Line(canvas, 1.6f, 5.8f, 12.4f, 5.8f, fine);
+      Line(canvas, 4.4f, 1.2f, 4.4f, 3.8f, pen);
+      Line(canvas, 9.6f, 1.2f, 9.6f, 3.8f, pen);
+      break;
+    }
+    case SpaceVector::kMail: {
+      canvas->sk_canvas()->drawRRect(RRect(1.2f, 2.8f, 11.6f, 8.4f, 1.4f), pen);
+      Polyline(canvas, {{1.8f, 3.4f}, {7.0f, 7.6f}, {12.2f, 3.4f}}, fine);
+      break;
+    }
+    case SpaceVector::kCheckbox: {
+      canvas->sk_canvas()->drawRRect(RRect(1.6f, 1.6f, 10.8f, 10.8f, 2.0f), pen);
+      Polyline(canvas, {{4.2f, 7.2f}, {6.2f, 9.2f}, {10.0f, 4.8f}}, pen);
+      break;
+    }
+    case SpaceVector::kDocument: {
+      Polyline(canvas,
+               {{2.8f, 1.4f},
+                {8.4f, 1.4f},
+                {11.2f, 4.2f},
+                {11.2f, 12.6f},
+                {2.8f, 12.6f}},
+               pen, /*close=*/true);
+      Polyline(canvas, {{8.2f, 1.5f}, {8.2f, 4.4f}, {11.1f, 4.4f}}, fine);
+      Line(canvas, 4.8f, 7.4f, 9.2f, 7.4f, fine);
+      Line(canvas, 4.8f, 9.8f, 8.2f, 9.8f, fine);
+      break;
+    }
+    case SpaceVector::kBook: {
+      SkPathBuilder left;
+      left.moveTo(7.0f, 3.2f);
+      left.quadTo(4.4f, 2.0f, 1.4f, 2.6f);
+      left.lineTo(1.4f, 11.4f);
+      left.quadTo(4.4f, 10.8f, 7.0f, 12.0f);
+      canvas->DrawPath(left.detach(), pen);
+      SkPathBuilder right;
+      right.moveTo(7.0f, 3.2f);
+      right.quadTo(9.6f, 2.0f, 12.6f, 2.6f);
+      right.lineTo(12.6f, 11.4f);
+      right.quadTo(9.6f, 10.8f, 7.0f, 12.0f);
+      canvas->DrawPath(right.detach(), pen);
+      Line(canvas, 7.0f, 3.2f, 7.0f, 12.0f, fine);
+      break;
+    }
+    case SpaceVector::kChat: {
+      SkPathBuilder b;
+      b.moveTo(7.0f, 1.8f);
+      b.cubicTo(10.6f, 1.8f, 12.8f, 4.0f, 12.8f, 6.6f);
+      b.cubicTo(12.8f, 9.2f, 10.6f, 11.2f, 7.0f, 11.2f);
+      b.lineTo(4.8f, 11.2f);
+      b.lineTo(2.0f, 12.6f);
+      b.lineTo(2.8f, 10.0f);
+      b.cubicTo(1.7f, 9.1f, 1.2f, 7.9f, 1.2f, 6.6f);
+      b.cubicTo(1.2f, 4.0f, 3.4f, 1.8f, 7.0f, 1.8f);
+      b.close();
+      canvas->DrawPath(b.detach(), pen);
+      for (float cx : {4.6f, 7.0f, 9.4f}) {
+        Circle(canvas, cx, 6.6f, 0.85f, fill);
+      }
+      break;
+    }
+    case SpaceVector::kPeople: {
+      Circle(canvas, 5.2f, 4.6f, 2.0f, pen);
+      Circle(canvas, 9.6f, 5.0f, 1.6f, fine);
+      SkPathBuilder b;
+      b.moveTo(1.4f, 12.2f);
+      b.cubicTo(1.6f, 8.6f, 8.8f, 8.6f, 9.0f, 12.2f);
+      b.moveTo(9.4f, 8.6f);
+      b.cubicTo(11.4f, 8.6f, 12.6f, 10.0f, 12.6f, 12.0f);
+      canvas->DrawPath(b.detach(), pen);
+      break;
+    }
+    case SpaceVector::kTerminal: {
+      canvas->sk_canvas()->drawRRect(RRect(1.2f, 2.2f, 11.6f, 9.6f, 1.6f), pen);
+      Polyline(canvas, {{3.4f, 5.0f}, {5.8f, 7.0f}, {3.4f, 9.0f}}, pen);
+      Line(canvas, 7.0f, 9.2f, 10.4f, 9.2f, pen);
+      break;
+    }
+    case SpaceVector::kHammer: {
+      Line(canvas, 2.0f, 12.0f, 8.6f, 5.4f, Stroke(color, 1.7f));
+      Polyline(canvas,
+               {{6.2f, 3.0f},
+                {8.4f, 1.4f},
+                {12.4f, 5.4f},
+                {10.6f, 7.2f},
+                {8.8f, 5.4f}},
+               pen, /*close=*/true);
+      break;
+    }
+    case SpaceVector::kSquare: {
+      canvas->sk_canvas()->drawRRect(RRect(1.8f, 1.8f, 10.4f, 10.4f, 1.8f), pen);
+      break;
+    }
+    case SpaceVector::kCircle: {
+      Circle(canvas, 7.0f, 7.0f, 5.4f, pen);
+      break;
+    }
+    case SpaceVector::kMoon: {
+      SkPathBuilder b;
+      b.arcTo(SkRect::MakeLTRB(1.8f, 1.8f, 12.2f, 12.2f), -60.0f, 295.0f, true);
+      b.quadTo(5.6f, 5.8f, 9.6f, 2.5f);
+      canvas->DrawPath(b.detach(), pen);
+      break;
+    }
+    case SpaceVector::kSun: {
+      Circle(canvas, 7.0f, 7.0f, 2.6f, pen);
+      constexpr float kPi = 3.14159265f;
+      for (int i = 0; i < 8; ++i) {
+        const float a = i * kPi * 0.25f;
+        const float c = std::cos(a);
+        const float s = std::sin(a);
+        Line(canvas, 7.0f + c * 4.3f, 7.0f + s * 4.3f, 7.0f + c * 6.0f,
+             7.0f + s * 6.0f, fine);
+      }
+      break;
+    }
+    case SpaceVector::kGlobe: {
+      Circle(canvas, 7.0f, 7.0f, 5.6f, pen);
+      canvas->sk_canvas()->drawOval(SkRect::MakeXYWH(4.3f, 1.4f, 5.4f, 11.2f),
+                                    fine);
+      Line(canvas, 1.6f, 7.0f, 12.4f, 7.0f, fine);
+      break;
+    }
+    case SpaceVector::kLeaf: {
+      SkPathBuilder leaf;
+      leaf.moveTo(11.9f, 2.1f);
+      leaf.cubicTo(6.2f, 1.8f, 2.4f, 5.2f, 2.6f, 11.2f);
+      leaf.cubicTo(8.5f, 11.5f, 12.2f, 7.8f, 11.9f, 2.1f);
+      leaf.close();
+      canvas->DrawPath(leaf.detach(), pen);
+      Line(canvas, 2.2f, 11.8f, 8.8f, 5.2f, fine);
+      break;
+    }
+    case SpaceVector::kCloudFill:
+    case SpaceVector::kCloudOutline: {
+      SkPathBuilder b;
+      b.moveTo(3.6f, 10.6f);
+      b.cubicTo(0.8f, 10.6f, 0.8f, 6.2f, 3.8f, 6.2f);
+      b.cubicTo(4.2f, 2.6f, 9.2f, 2.4f, 9.8f, 5.8f);
+      b.cubicTo(13.0f, 5.8f, 13.0f, 10.6f, 10.2f, 10.6f);
+      b.close();
+      canvas->DrawPath(b.detach(),
+                       kind == SpaceVector::kCloudFill ? fill : pen);
+      break;
+    }
+    case SpaceVector::kGift: {
+      canvas->sk_canvas()->drawRRect(RRect(1.8f, 5.4f, 10.4f, 7.2f, 1.2f), pen);
+      Line(canvas, 1.2f, 5.4f, 12.8f, 5.4f, pen);
+      Line(canvas, 7.0f, 5.4f, 7.0f, 12.6f, fine);
+      Circle(canvas, 5.2f, 3.4f, 1.6f, fine);
+      Circle(canvas, 8.8f, 3.4f, 1.6f, fine);
+      break;
+    }
+    case SpaceVector::kRestaurant: {
+      // Fork (left) and knife (right).
+      Line(canvas, 4.4f, 1.6f, 4.4f, 12.6f, fine);
+      Polyline(canvas, {{2.8f, 1.6f}, {2.8f, 5.2f}, {6.0f, 5.2f}, {6.0f, 1.6f}},
+               fine);
+      Line(canvas, 10.0f, 1.6f, 10.0f, 12.6f, pen);
+      SkPathBuilder blade;
+      blade.moveTo(10.0f, 1.6f);
+      blade.cubicTo(7.8f, 2.4f, 7.8f, 6.4f, 10.0f, 7.2f);
+      canvas->DrawPath(blade.detach(), fine);
+      break;
+    }
+    case SpaceVector::kBarbell: {
+      Line(canvas, 3.4f, 7.0f, 10.6f, 7.0f, pen);
+      canvas->sk_canvas()->drawRRect(RRect(1.2f, 4.4f, 2.2f, 5.2f, 0.7f), pen);
+      canvas->sk_canvas()->drawRRect(RRect(10.6f, 4.4f, 2.2f, 5.2f, 0.7f), pen);
+      Line(canvas, 4.4f, 3.4f, 4.4f, 10.6f, pen);
+      Line(canvas, 9.6f, 3.4f, 9.6f, 10.6f, pen);
+      break;
+    }
+    case SpaceVector::kAirplane: {
+      Line(canvas, 7.0f, 1.4f, 7.0f, 12.6f, pen);
+      Polyline(canvas, {{1.4f, 7.4f}, {7.0f, 4.6f}, {12.6f, 7.4f}}, pen);
+      Line(canvas, 4.4f, 11.4f, 9.6f, 11.4f, fine);
+      break;
+    }
+    case SpaceVector::kMusic: {
+      Line(canvas, 5.2f, 10.3f, 5.2f, 3.2f, pen);
+      Line(canvas, 11.4f, 9.1f, 11.4f, 1.9f, pen);
+      Line(canvas, 5.2f, 3.2f, 11.4f, 1.9f, Stroke(color, 1.7f));
+      Circle(canvas, 3.7f, 10.6f, 1.8f, fill);
+      Circle(canvas, 9.9f, 9.4f, 1.8f, fill);
+      break;
+    }
+    case SpaceVector::kPalette: {
+      SkPathBuilder b;
+      b.arcTo(SkRect::MakeLTRB(1.4f, 1.6f, 12.6f, 12.4f), 30.0f, 300.0f, true);
+      b.quadTo(9.2f, 8.6f, 9.6f, 10.4f);
+      b.close();
+      canvas->DrawPath(b.detach(), pen);
+      Circle(canvas, 4.6f, 5.4f, 0.9f, fill);
+      Circle(canvas, 7.0f, 4.0f, 0.9f, fill);
+      Circle(canvas, 9.6f, 5.4f, 0.9f, fill);
+      Circle(canvas, 4.8f, 8.4f, 0.9f, fill);
+      break;
+    }
+    case SpaceVector::kVideo: {
+      canvas->sk_canvas()->drawRRect(RRect(1.0f, 3.2f, 8.0f, 7.6f, 1.5f), pen);
+      Polyline(canvas,
+               {{9.0f, 5.4f}, {13.0f, 3.4f}, {13.0f, 10.6f}, {9.0f, 8.6f}}, pen,
+               /*close=*/true);
+      break;
+    }
+    case SpaceVector::kBandage: {
+      canvas->sk_canvas()->save();
+      canvas->sk_canvas()->translate(7.0f, 7.0f);
+      canvas->sk_canvas()->rotate(-45.0f);
+      canvas->sk_canvas()->drawRRect(RRect(-6.0f, -2.6f, 12.0f, 5.2f, 2.4f), pen);
+      Line(canvas, -2.0f, -2.5f, -2.0f, 2.5f, fine);
+      Line(canvas, 2.0f, -2.5f, 2.0f, 2.5f, fine);
+      Circle(canvas, 0.0f, -0.8f, 0.55f, fill);
+      Circle(canvas, 0.0f, 0.8f, 0.55f, fill);
+      canvas->sk_canvas()->restore();
+      break;
+    }
+    case SpaceVector::kCode: {
+      Polyline(canvas, {{4.2f, 3.8f}, {1.2f, 7.0f}, {4.2f, 10.2f}}, pen);
+      Polyline(canvas, {{9.8f, 3.8f}, {12.8f, 7.0f}, {9.8f, 10.2f}}, pen);
+      Line(canvas, 8.2f, 2.5f, 5.8f, 11.5f, fine);
+      break;
+    }
+    case SpaceVector::kBaseball: {
+      Circle(canvas, 7.0f, 7.0f, 5.5f, pen);
+      Arc(canvas, 1.5f, 7.0f, 4.2f, -45.0f, 90.0f, fine);
+      Arc(canvas, 12.5f, 7.0f, 4.2f, 135.0f, 90.0f, fine);
+      break;
+    }
+    case SpaceVector::kFlame: {
+      SkPathBuilder outer;
+      outer.moveTo(7.4f, 1.2f);
+      outer.cubicTo(10.8f, 4.1f, 12.0f, 6.7f, 11.5f, 9.2f);
+      outer.cubicTo(11.0f, 11.4f, 9.2f, 12.7f, 7.0f, 12.7f);
+      outer.cubicTo(4.6f, 12.7f, 2.7f, 11.1f, 2.5f, 8.8f);
+      outer.cubicTo(2.3f, 6.9f, 3.3f, 5.2f, 4.5f, 4.0f);
+      outer.cubicTo(4.4f, 5.2f, 4.9f, 5.9f, 5.6f, 6.2f);
+      outer.cubicTo(5.6f, 4.3f, 6.3f, 2.6f, 7.4f, 1.2f);
+      outer.close();
+      canvas->DrawPath(outer.detach(), pen);
+      break;
+    }
+    case SpaceVector::kPizza: {
+      SkPathBuilder slice;
+      slice.moveTo(7.0f, 12.6f);
+      slice.lineTo(1.8f, 3.4f);
+      slice.quadTo(7.0f, 1.0f, 12.2f, 3.4f);
+      slice.close();
+      canvas->DrawPath(slice.detach(), pen);
+      Circle(canvas, 6.0f, 5.6f, 0.9f, fill);
+      Circle(canvas, 8.4f, 6.8f, 0.9f, fill);
+      Circle(canvas, 7.0f, 9.0f, 0.85f, fill);
+      break;
+    }
+    case SpaceVector::kSkull: {
+      Polyline(canvas, {{7.0f, 1.5f}, {12.6f, 12.0f}, {1.4f, 12.0f}}, pen,
+               /*close=*/true);
+      Line(canvas, 7.0f, 5.2f, 7.0f, 8.4f, fine);
+      Circle(canvas, 7.0f, 10.3f, 0.8f, fill);
+      break;
+    }
+    case SpaceVector::kReceipt: {
+      Polyline(canvas,
+               {{2.8f, 1.6f},
+                {11.2f, 1.6f},
+                {11.2f, 12.4f},
+                {9.2f, 11.0f},
+                {7.0f, 12.4f},
+                {4.8f, 11.0f},
+                {2.8f, 12.4f}},
+               pen, /*close=*/true);
+      Line(canvas, 4.8f, 4.8f, 9.2f, 4.8f, fine);
+      Line(canvas, 4.8f, 7.4f, 9.2f, 7.4f, fine);
+      break;
+    }
+    case SpaceVector::kThumbsUp: {
+      Polyline(canvas, {{1.8f, 6.2f}, {4.4f, 6.2f}, {4.4f, 12.2f}, {1.8f, 12.2f}},
+               pen, /*close=*/true);
+      SkPathBuilder hand;
+      hand.moveTo(4.4f, 6.4f);
+      hand.lineTo(6.8f, 2.0f);
+      hand.quadTo(8.4f, 2.0f, 8.2f, 4.2f);
+      hand.lineTo(7.8f, 5.8f);
+      hand.lineTo(11.0f, 5.8f);
+      hand.quadTo(12.4f, 5.8f, 12.2f, 7.4f);
+      hand.lineTo(11.4f, 10.8f);
+      hand.quadTo(11.1f, 12.2f, 9.6f, 12.2f);
+      hand.lineTo(4.4f, 12.2f);
+      canvas->DrawPath(hand.detach(), pen);
+      break;
+    }
+    case SpaceVector::kTrain: {
+      canvas->sk_canvas()->drawRRect(RRect(2.6f, 1.6f, 8.8f, 8.6f, 2.0f), pen);
+      Line(canvas, 2.8f, 6.2f, 11.2f, 6.2f, fine);
+      Circle(canvas, 4.8f, 8.2f, 0.8f, fill);
+      Circle(canvas, 9.2f, 8.2f, 0.8f, fill);
+      Line(canvas, 4.2f, 10.4f, 2.8f, 12.6f, fine);
+      Line(canvas, 9.8f, 10.4f, 11.2f, 12.6f, fine);
+      break;
+    }
+    case SpaceVector::kLinear: {
+      Line(canvas, 1.6f, 3.4f, 12.4f, 3.4f, pen);
+      Line(canvas, 1.6f, 7.0f, 12.4f, 7.0f, pen);
+      Line(canvas, 1.6f, 10.6f, 12.4f, 10.6f, pen);
+      break;
+    }
+    case SpaceVector::kFigma: {
+      Polyline(canvas, {{7.0f, 1.6f}, {12.4f, 4.6f}, {7.0f, 7.6f}, {1.6f, 4.6f}},
+               pen, /*close=*/true);
+      Polyline(canvas, {{1.6f, 9.2f}, {7.0f, 12.2f}, {12.4f, 9.2f}}, pen);
+      break;
+    }
+    case SpaceVector::kSearch: {
+      Circle(canvas, 6.0f, 6.0f, 4.2f, pen);
+      Line(canvas, 9.1f, 9.1f, 12.4f, 12.4f, pen);
+      break;
+    }
+    case SpaceVector::kGamepad: {
+      canvas->sk_canvas()->drawRRect(RRect(1.0f, 3.4f, 12.0f, 7.2f, 3.4f), pen);
+      Line(canvas, 3.2f, 7.0f, 6.0f, 7.0f, fine);
+      Line(canvas, 4.6f, 5.6f, 4.6f, 8.4f, fine);
+      Circle(canvas, 9.2f, 7.7f, 0.9f, fill);
+      Circle(canvas, 10.8f, 6.2f, 0.9f, fill);
+      break;
+    }
+    case SpaceVector::kCamera: {
+      canvas->sk_canvas()->drawRRect(RRect(1.0f, 3.6f, 12.0f, 8.6f, 1.8f), pen);
+      Polyline(canvas, {{4.3f, 3.6f}, {5.2f, 1.9f}, {8.8f, 1.9f}, {9.7f, 3.6f}},
+               pen);
+      Circle(canvas, 7.0f, 7.9f, 2.2f, fine);
+      break;
+    }
     case SpaceVector::kRocket: {
       SkPathBuilder body;
       body.moveTo(12.2f, 1.8f);
@@ -375,6 +900,7 @@ bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
       Circle(canvas, 8.8f, 5.2f, 1.0f, fill);
       break;
     }
+    case SpaceVector::kEyeglasses:
     case SpaceVector::kNone:
       return false;
   }
@@ -427,6 +953,16 @@ std::optional<SymbolSpec> SystemSymbolFor(Glyph glyph) {
       return SymbolSpec{"puzzlepiece.extension", 16, W::kRegular};
     case Glyph::kEyeglasses:
       return SymbolSpec{"eyeglasses", 14, W::kMedium};
+    case Glyph::kLockOpen:
+      return SymbolSpec{"lock.open.fill", 12, W::kMedium};
+    case Glyph::kInfo:
+      return SymbolSpec{"info.circle", 14, W::kMedium};
+    case Glyph::kWarning:
+      return SymbolSpec{"exclamationmark.triangle.fill", 14, W::kMedium};
+    case Glyph::kError:
+      return SymbolSpec{"xmark.octagon.fill", 14, W::kMedium};
+    case Glyph::kReturnArrow:
+      return SymbolSpec{"arrow.uturn.backward", 12, W::kSemibold};
     // Open's own vectors (CustomIcon): no system symbol.
     case Glyph::kLibrary:
     case Glyph::kFolderClosed:
@@ -437,6 +973,7 @@ std::optional<SymbolSpec> SystemSymbolFor(Glyph glyph) {
     case Glyph::kWindowMaximize:
     case Glyph::kWindowRestore:
     case Glyph::kWindowZoom:
+    case Glyph::kOpenDoorway:
       return std::nullopt;
   }
   return std::nullopt;
@@ -516,6 +1053,14 @@ std::string_view NamedSpaceIconSymbol(std::string_view name) {
     }
   }
   return "circle.dotted";
+}
+
+bool DrawNamedSpaceIcon(gfx::Canvas* canvas,
+                        std::string_view name,
+                        const gfx::RectF& box,
+                        SkColor color) {
+  return DrawNamedSpaceIconVector(canvas, name, NamedSpaceIconSymbol(name), box,
+                                  color);
 }
 
 #if !BUILDFLAG(IS_MAC)
@@ -604,6 +1149,16 @@ gfx::SizeF InkSize(Glyph glyph) {
       return {14, 14};
     case Glyph::kEyeglasses:
       return {18, 8};
+    case Glyph::kLockOpen:
+      return {12, 14};
+    case Glyph::kInfo:
+    case Glyph::kWarning:
+    case Glyph::kError:
+      return {14, 14};
+    case Glyph::kOpenDoorway:
+      return {16, 16};
+    case Glyph::kReturnArrow:
+      return {12, 12};
   }
   return {12, 12};
 }
@@ -926,6 +1481,80 @@ void Draw(gfx::Canvas* canvas,
       Circle(canvas, 11.6f, 8.0f, 1.8f, pen);
       break;
     }
+    case Glyph::kLockOpen: {
+      // Unlocked padlock (12 x 14): rounded body + open shackle raised right.
+      const cc::PaintFlags pen = Stroke(color, 1.35f);
+      canvas->sk_canvas()->drawRRect(RRect(1.6f, 6.4f, 8.8f, 6.6f, 1.6f), pen);
+      SkPathBuilder shackle;
+      shackle.moveTo(3.4f, 6.4f);
+      shackle.lineTo(3.4f, 4.0f);
+      shackle.arcTo(SkRect::MakeLTRB(3.4f, 1.2f, 8.8f, 6.6f), 180.0f, 150.0f,
+                    false);
+      canvas->DrawPath(shackle.detach(), pen);
+      Circle(canvas, 6.0f, 9.7f, 0.9f, Fill(color));
+      break;
+    }
+    case Glyph::kInfo: {
+      const cc::PaintFlags pen = Stroke(color, 1.4f);
+      Circle(canvas, 7.0f, 7.0f, 5.8f, pen);
+      Circle(canvas, 7.0f, 4.3f, 0.85f, Fill(color));
+      Line(canvas, 7.0f, 6.5f, 7.0f, 10.2f, pen);
+      break;
+    }
+    case Glyph::kWarning: {
+      const cc::PaintFlags pen = Stroke(color, 1.4f);
+      Polyline(canvas, {{7.0f, 1.4f}, {12.8f, 12.2f}, {1.2f, 12.2f}}, pen,
+               /*close=*/true);
+      Line(canvas, 7.0f, 5.2f, 7.0f, 8.4f, pen);
+      Circle(canvas, 7.0f, 10.4f, 0.85f, Fill(color));
+      break;
+    }
+    case Glyph::kError: {
+      const cc::PaintFlags pen = Stroke(color, 1.4f);
+      Polyline(canvas,
+               {{4.5f, 1.2f},
+                {9.5f, 1.2f},
+                {12.8f, 4.5f},
+                {12.8f, 9.5f},
+                {9.5f, 12.8f},
+                {4.5f, 12.8f},
+                {1.2f, 9.5f},
+                {1.2f, 4.5f}},
+               pen, /*close=*/true);
+      Line(canvas, 4.8f, 4.8f, 9.2f, 9.2f, pen);
+      Line(canvas, 9.2f, 4.8f, 4.8f, 9.2f, pen);
+      break;
+    }
+    case Glyph::kOpenDoorway: {
+      // Open's doorway-and-sun minimalist mark (16 x 16): clean arched doorway
+      // with horizon threshold and rising sun disc.
+      const cc::PaintFlags pen = Stroke(color, 1.45f);
+      SkPathBuilder arch;
+      arch.moveTo(2.4f, 14.2f);
+      arch.lineTo(2.4f, 7.4f);
+      arch.arcTo(SkRect::MakeLTRB(2.4f, 1.8f, 13.6f, 13.0f), 180.0f, 180.0f,
+                 false);
+      arch.lineTo(13.6f, 14.2f);
+      canvas->DrawPath(arch.detach(), pen);
+      // Threshold line at base.
+      Line(canvas, 1.4f, 14.2f, 14.6f, 14.2f, pen);
+      // Sun disc centered under the arch.
+      Circle(canvas, 8.0f, 8.6f, 2.3f, Fill(color));
+      break;
+    }
+    case Glyph::kReturnArrow: {
+      // Curved return arrow (12 x 12) for pinned-tab reset.
+      const cc::PaintFlags pen = Stroke(color, 1.45f);
+      Polyline(canvas, {{4.6f, 1.8f}, {1.8f, 4.4f}, {4.6f, 7.0f}}, pen);
+      SkPathBuilder tail;
+      tail.moveTo(2.0f, 4.4f);
+      tail.lineTo(7.4f, 4.4f);
+      tail.arcTo(SkRect::MakeLTRB(4.6f, 4.4f, 10.4f, 10.2f), 270.0f, 180.0f,
+                 false);
+      tail.lineTo(4.6f, 10.2f);
+      canvas->DrawPath(tail.detach(), pen);
+      break;
+    }
   }
 }
 
@@ -953,9 +1582,9 @@ void DrawLetterTile(gfx::Canvas* canvas,
   const gfx::FontList& font = typography::Make(
       std::max(7, static_cast<int>(std::lround(rect.height() * 0.6f))),
       gfx::Font::Weight::SEMIBOLD);
-  canvas->DrawStringRectWithFlags(letter, font, foreground,
-                                  gfx::ToEnclosingRect(rect),
-                                  gfx::Canvas::TEXT_ALIGN_CENTER);
+  canvas->DrawStringRectWithFlags(
+      letter, font, foreground, gfx::ToEnclosingRect(rect),
+      gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_SUBPIXEL_RENDERING);
 }
 
 void DrawSpaceIcon(gfx::Canvas* canvas,
@@ -987,9 +1616,10 @@ void DrawSpaceIcon(gfx::Canvas* canvas,
     // Emoji sit 1 pt above center (NCC fits on F0001).
     gfx::RectF r = box;
     r.Offset(0, -1);
-    canvas->DrawStringRectWithFlags(base::UTF8ToUTF16(icon->value), emoji_font,
-                                    tint, gfx::ToEnclosingRect(r),
-                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+    canvas->DrawStringRectWithFlags(
+        base::UTF8ToUTF16(icon->value), emoji_font, tint,
+        gfx::ToEnclosingRect(r),
+        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_SUBPIXEL_RENDERING);
   } else if (icon && !icon->value.empty() &&
              (icon->kind == SpaceIconKind::kSymbol ||
               icon->kind == SpaceIconKind::kNamed)) {

@@ -13,6 +13,7 @@
 #include "base/pickle.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_flags.h"
@@ -27,6 +28,8 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/clipboard_url_info.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
@@ -36,6 +39,7 @@
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -337,6 +341,40 @@ std::optional<ItemID> ReadNode(const ui::OSExchangeData& data) {
   return id;
 }
 
+const ui::ClipboardFormatType& SpaceFormat() {
+#if BUILDFLAG(IS_MAC)
+  static const base::NoDestructor<ui::ClipboardFormatType> format(
+      ui::ClipboardFormatType::CustomPlatformType("org.open.sidebar.space"));
+#else
+  static const base::NoDestructor<ui::ClipboardFormatType> format(
+      ui::ClipboardFormatType::CustomPlatformType(
+          "application/x-open-sidebar-space"));
+#endif
+  return *format;
+}
+
+void WriteSpace(ui::OSExchangeData* data, const SpaceID& space_id) {
+  base::Pickle pickle;
+  pickle.WriteString(space_id);
+  data->SetPickledData(SpaceFormat(), pickle);
+}
+
+std::optional<SpaceID> ReadSpace(const ui::OSExchangeData& data) {
+  if (!data.HasCustomFormat(SpaceFormat())) {
+    return std::nullopt;
+  }
+  std::optional<base::Pickle> pickle = data.GetPickledData(SpaceFormat());
+  if (!pickle) {
+    return std::nullopt;
+  }
+  base::PickleIterator it(*pickle);
+  std::string id;
+  if (!it.ReadString(&id) || id.empty()) {
+    return std::nullopt;
+  }
+  return id;
+}
+
 }  // namespace sidebar_dnd
 
 // ---------------------------------------------------------------------------
@@ -390,6 +428,13 @@ class OpenTabTreeView::HeaderView : public views::View,
 
   void Layout(PassKey) override { LayoutRename(); }
 
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    if (!rename_ && !IsIncognito()) {
+      return ui::Cursor(ui::mojom::CursorType::kHand);
+    }
+    return views::View::GetCursor(event);
+  }
+
   void OnPaint(gfx::Canvas* canvas) override {
     const Space* space = tree_->space();
     if (!space) {
@@ -433,7 +478,9 @@ class OpenTabTreeView::HeaderView : public views::View,
     const int top = typography::TextTopForBaseline(
         font, sl::kHeaderTitleY + sl::kHeaderTitleBaselineOffset);
     const gfx::Rect text_rect(text_x, top, text_w, font.GetHeight());
-    canvas->DrawStringRect(title, font, Sk(state.roles.space_title), text_rect);
+    canvas->DrawStringRectWithFlags(
+        title, font, Sk(state.roles.space_title), text_rect,
+        gfx::Canvas::TEXT_ALIGN_LEFT | gfx::Canvas::NO_SUBPIXEL_RENDERING);
     if (!controls) {
       chevron_rect_ = gfx::RectF();
       more_rect_ = gfx::RectF();
@@ -590,6 +637,13 @@ class OpenTabTreeView::RowView : public views::View,
     UpdateAccessibility();
   }
 
+  ~RowView() override {
+    if (is_dragging_) {
+      is_dragging_ = false;
+      tree_->NotifyTabDragStateChanged(false, descriptor_.node_id);
+    }
+  }
+
   const RowDescriptor& descriptor() const { return descriptor_; }
   void SetDescriptor(const RowDescriptor& d) {
     if (d == descriptor_) {
@@ -665,6 +719,24 @@ class OpenTabTreeView::RowView : public views::View,
 
   void OnPaint(gfx::Canvas* canvas) override { PaintContent(canvas, false); }
 
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    if (rename_) {
+      return views::View::GetCursor(event);
+    }
+    switch (descriptor_.kind) {
+      case RowKind::kSpacer:
+        return views::View::GetCursor(event);
+      case RowKind::kDivider:
+        return hovered_ && ClearRect().Contains(gfx::PointF(event.location()))
+                   ? ui::Cursor(ui::mojom::CursorType::kHand)
+                   : views::View::GetCursor(event);
+      case RowKind::kNewTab:
+      case RowKind::kNode:
+        return ui::Cursor(ui::mojom::CursorType::kHand);
+    }
+    return views::View::GetCursor(event);
+  }
+
   std::u16string GetRenderedTooltipText(const gfx::Point& p) const override {
     if (descriptor_.kind != RowKind::kNode) {
       return std::u16string();
@@ -672,6 +744,10 @@ class OpenTabTreeView::RowView : public views::View,
     const SidebarNode* node =
         tree_->context_->controller()->FindNode(descriptor_.node_id);
     if (const Tab* tab = node ? node->as_tab() : nullptr) {
+      if (descriptor_.in_pinned && LeftPinnedUrl(*tab) &&
+          ResetRect().Contains(gfx::PointF(p))) {
+        return alt_down_ ? u"Separate From Pinned Tab" : u"Back to Pinned URL";
+      }
       return base::UTF8ToUTF16(tab->display_title());
     }
     return std::u16string();
@@ -679,22 +755,26 @@ class OpenTabTreeView::RowView : public views::View,
 
   void OnMouseEntered(const ui::MouseEvent& event) override {
     hovered_ = true;
+    alt_down_ = event.IsAltDown();
     hover_.Show();
     UpdateHoveredPart(event.location());
   }
 
   void OnMouseExited(const ui::MouseEvent& event) override {
     hovered_ = false;
+    alt_down_ = false;
     hover_.Hide();
     hovered_part_ = Part::kNone;
     SchedulePaint();
   }
 
   void OnMouseMoved(const ui::MouseEvent& event) override {
+    alt_down_ = event.IsAltDown();
     UpdateHoveredPart(event.location());
   }
 
   bool OnMousePressed(const ui::MouseEvent& event) override {
+    alt_down_ = event.IsAltDown();
     pressed_part_ = PartAt(event.location());
     if (event.IsOnlyLeftMouseButton() && event.GetClickCount() == 2 &&
         descriptor_.kind == RowKind::kNode && pressed_part_ == Part::kBody) {
@@ -720,7 +800,15 @@ class OpenTabTreeView::RowView : public views::View,
       }
       return;
     }
-    Activate(part, event.location());
+    Activate(part, event.location(), event.flags());
+  }
+
+  void OnDragDone() override {
+    views::View::OnDragDone();
+    if (is_dragging_) {
+      is_dragging_ = false;
+      tree_->NotifyTabDragStateChanged(false, descriptor_.node_id);
+    }
   }
 
   // gfx::AnimationDelegate:
@@ -763,6 +851,8 @@ class OpenTabTreeView::RowView : public views::View,
       }
     }
     sidebar_dnd::WriteNode(data, descriptor_.node_id, url, title);
+    is_dragging_ = true;
+    tree_->NotifyTabDragStateChanged(true, descriptor_.node_id);
     // Drag image: the row as drawn, selected look.
     const float scale = DeviceScale(this);
     gfx::Canvas canvas(size(), scale, /*is_opaque=*/false);
@@ -786,8 +876,8 @@ class OpenTabTreeView::RowView : public views::View,
   }
 
  private:
-  enum class Part { kNone, kBody, kAccessory, kAudio, kClear, kSplitCell0,
-                    kSplitCell1, kSplitCell2, kSplitCell3 };
+  enum class Part { kNone, kBody, kAccessory, kAudio, kResetPinned, kClear,
+                    kSplitCell0, kSplitCell1, kSplitCell2, kSplitCell3 };
 
   void Send(const OpenIntent& intent) { tree_->context_->Send(intent); }
 
@@ -837,6 +927,10 @@ class OpenTabTreeView::RowView : public views::View,
                       metrics::row_media::kButtonSize);
   }
 
+  gfx::RectF ResetRect() const {
+    return ToRectF(sl::ResetGlyphPlate(indent()));
+  }
+
   gfx::RectF ClearRect() const {
     const float w = width();
     return gfx::RectF(w + sl::kClearArrowFrame.x - 2, 0,
@@ -879,6 +973,10 @@ class OpenTabTreeView::RowView : public views::View,
       return Part::kBody;
     }
     if (const Tab* tab = n->as_tab()) {
+      if (descriptor_.in_pinned && LeftPinnedUrl(*tab) &&
+          ResetRect().Contains(p)) {
+        return Part::kResetPinned;
+      }
       if (HasAudio(*tab) && AudioRect().Contains(p)) {
         return Part::kAudio;
       }
@@ -902,7 +1000,7 @@ class OpenTabTreeView::RowView : public views::View,
     SchedulePaint();
   }
 
-  void Activate(Part part, const gfx::Point& point) {
+  void Activate(Part part, const gfx::Point& point, int event_flags) {
     const SpaceID& space_id = tree_->space_id();
     switch (descriptor_.kind) {
       case RowKind::kSpacer:
@@ -940,6 +1038,28 @@ class OpenTabTreeView::RowView : public views::View,
       Send(OpenIntent::ForNode(OpenIntentKind::kToggleMute, descriptor_.node_id));
       return;
     }
+    if (part == Part::kResetPinned) {
+      const bool separate = (event_flags & ui::EF_ALT_DOWN) != 0;
+      tree_->NotifyResetPinnedTab(descriptor_.node_id, separate);
+      return;
+    }
+    // Multi-selection on Cmd/Ctrl-click or Shift-click.
+#if BUILDFLAG(IS_MAC)
+    const bool primary_down = (event_flags & ui::EF_COMMAND_DOWN) != 0;
+#else
+    const bool primary_down = (event_flags & ui::EF_CONTROL_DOWN) != 0;
+#endif
+    const bool shift_down = (event_flags & ui::EF_SHIFT_DOWN) != 0;
+    if (primary_down) {
+      tree_->ToggleMultiSelect(descriptor_.node_id);
+      return;
+    }
+    if (shift_down) {
+      tree_->SelectRangeTo(descriptor_.node_id);
+      return;
+    }
+    tree_->ClearMultiSelection();
+    tree_->anchor_id_ = descriptor_.node_id;
     if (const Folder* f = n->as_folder()) {
       OpenIntent intent = OpenIntent::ForNode(OpenIntentKind::kSetFolderExpanded,
                                               descriptor_.node_id);
@@ -1043,6 +1163,8 @@ class OpenTabTreeView::RowView : public views::View,
     const float hov = for_drag ? 0.0f : static_cast<float>(hover_.GetCurrentValue());
     const bool is_peek_source =
         tree_->peek_source_ && *tree_->peek_source_ == descriptor_.node_id;
+    const bool multi_selected =
+        !for_drag && tree_->IsNodeMultiSelected(descriptor_.node_id);
     const Split* split = n->as_split();
     if (sel > 0 && !split) {
       if (roles.content == theme::ContentAppearance::kLight) {
@@ -1050,8 +1172,19 @@ class OpenTabTreeView::RowView : public views::View,
       }
       FillRoundRect(canvas, fill, sl::kRowFillCornerRadius,
                     Sk(roles.active_plate, sel));
+    } else if (multi_selected && !split) {
+      FillRoundRect(canvas, fill, sl::kRowFillCornerRadius,
+                    Sk(roles.active_plate, 0.55f));
+      cc::PaintFlags rim;
+      rim.setAntiAlias(true);
+      rim.setStyle(cc::PaintFlags::kStroke_Style);
+      rim.setStrokeWidth(1.0f);
+      rim.setColor(Sk(state.contrast_accent, 0.55f));
+      gfx::RectF inset = fill;
+      inset.Inset(0.5f);
+      canvas->DrawRoundRect(inset, sl::kRowFillCornerRadius - 0.5f, rim);
     }
-    if (hov > 0 && sel < 1 && !split) {
+    if (hov > 0 && sel < 1 && !multi_selected && !split) {
       FillRoundRect(canvas, fill, sl::kRowFillCornerRadius,
                     Sk(roles.row_hover, hov * (1 - sel)));
     }
@@ -1061,18 +1194,10 @@ class OpenTabTreeView::RowView : public views::View,
                     Sk(roles.active_plate, 0.5f));
     }
 
+    const bool show_accessory = ShowsAccessory() && !for_drag;
     float title_right = w - sl::kTitleTrailingInset;
-    if (ShowsAccessory() && !for_drag) {
-      const gfx::RectF acc = AccessoryRect();
-      if (hovered_part_ == Part::kAccessory) {
-        FillRoundRect(canvas, acc, metrics::chrome::kButtonPlateRadius,
-                      Sk(roles.row_hover));
-      }
-      glyphs::Draw(canvas,
-                   AccessoryIsUnload() ? glyphs::Glyph::kMinus
-                                       : glyphs::Glyph::kClose,
-                   acc, Sk(roles.title, 0.6f));
-      title_right = acc.x();
+    if (show_accessory) {
+      title_right = AccessoryRect().x();
     } else if (is_peek_source) {
       const gfx::RectF badge(w - sl::kPeekBadgeTrailingInset, sl::kPeekBadgeY,
                              sl::kPeekBadgeSize, sl::kPeekBadgeSize);
@@ -1091,7 +1216,30 @@ class OpenTabTreeView::RowView : public views::View,
     } else if (const Folder* folder = n->as_folder()) {
       PaintFolder(canvas, *folder, state, title_right);
     } else if (split) {
-      PaintSplit(canvas, *split, state, fill, sel, hov);
+      PaintSplit(canvas, *split, state, fill, sel, hov,
+                 show_accessory ? AccessoryRect().x() : fill.right(),
+                 multi_selected);
+    }
+
+    // Paint close/unload accessory AFTER tab/folder/split so the split row's
+    // rightmost pane cell never covers the close (x) button.
+    if (show_accessory) {
+      const gfx::RectF acc = AccessoryRect();
+      if (split) {
+        // Subtle backing plate so x stays legible over a split row's edge.
+        FillRoundRect(
+            canvas, acc, metrics::chrome::kButtonPlateRadius,
+            Sk(hovered_part_ == Part::kAccessory ? roles.active_plate
+                                                 : roles.row_hover,
+               hovered_part_ == Part::kAccessory ? 0.92f : 0.78f));
+      } else if (hovered_part_ == Part::kAccessory) {
+        FillRoundRect(canvas, acc, metrics::chrome::kButtonPlateRadius,
+                      Sk(roles.row_hover));
+      }
+      glyphs::Draw(canvas,
+                   AccessoryIsUnload() ? glyphs::Glyph::kMinus
+                                       : glyphs::Glyph::kClose,
+                   acc, Sk(roles.title, hovered_part_ == Part::kAccessory ? 0.85f : 0.6f));
     }
   }
 
@@ -1117,6 +1265,25 @@ class OpenTabTreeView::RowView : public views::View,
                            Sk(roles.title, opacity));
   }
 
+  void DrawLoadingArc(gfx::Canvas* canvas,
+                      const gfx::RectF& frame,
+                      const theme::SidebarRoles& roles) {
+    const gfx::PointF c = frame.CenterPoint();
+    const float r = std::min(frame.width(), frame.height()) * 0.5f + 0.5f;
+    cc::PaintFlags pen;
+    pen.setAntiAlias(true);
+    pen.setStyle(cc::PaintFlags::kStroke_Style);
+    pen.setStrokeWidth(1.5f);
+    pen.setStrokeCap(cc::PaintFlags::kRound_Cap);
+    pen.setColor(Sk(roles.title, 0.20f));
+    canvas->DrawCircle(c, r, pen);
+    pen.setColor(Sk(roles.title, 0.65f));
+    SkPathBuilder arc;
+    arc.arcTo(SkRect::MakeLTRB(c.x() - r, c.y() - r, c.x() + r, c.y() + r),
+              tree_->loading_phase(), 110.0f, /*forceMoveTo=*/true);
+    canvas->DrawPath(arc.detach(), pen);
+  }
+
   void PaintTab(gfx::Canvas* canvas,
                 const Tab& tab,
                 const theme::SidebarRoles& roles,
@@ -1124,10 +1291,20 @@ class OpenTabTreeView::RowView : public views::View,
                 bool selected) {
     const float x0 = indent();
     const float opacity = SleepOpacity(tab);
-    DrawFavicon(canvas, tab,
-                gfx::RectF(sl::kFaviconX + x0, sl::kFaviconY, sl::kFaviconSize,
-                           sl::kFaviconSize),
-                roles, opacity);
+    const bool left_pinned = descriptor_.in_pinned && LeftPinnedUrl(tab);
+    const gfx::RectF fav_frame(sl::kFaviconX + x0, sl::kFaviconY,
+                               sl::kFaviconSize, sl::kFaviconSize);
+    if (left_pinned && hovered_part_ == Part::kResetPinned) {
+      const gfx::RectF plate = ResetRect();
+      FillRoundRect(canvas, plate, 5.0f, Sk(roles.row_hover));
+      glyphs::Draw(canvas, glyphs::Glyph::kReturnArrow, plate,
+                   Sk(roles.title, 0.85f));
+    } else {
+      DrawFavicon(canvas, tab, fav_frame, roles, opacity);
+      if (tab.live_state.is_loading) {
+        DrawLoadingArc(canvas, fav_frame, roles);
+      }
+    }
     float title_x = sl::kTitleX + x0;
     if (HasAudio(tab)) {
       const gfx::RectF audio = AudioRect();
@@ -1141,7 +1318,7 @@ class OpenTabTreeView::RowView : public views::View,
                    audio, Sk(roles.title, 0.75f));
       title_x += metrics::row_media::kTitleShift;
     }
-    if (descriptor_.in_pinned && LeftPinnedUrl(tab)) {
+    if (left_pinned) {
       // "/" before the title once a pinned tab left its pinned URL.
       const float cx = title_x + sl::kPinnedSlashCenterX;
       const float cy = sl::kPinnedSlashCenterY;
@@ -1157,7 +1334,7 @@ class OpenTabTreeView::RowView : public views::View,
                        gfx::PointF(cx - dx, cy + half), pen);
       title_x += sl::kPinnedSlashTitleShift;
     }
-    if (tab.is_unread && !selected) {
+    if (tab.is_unread && !selected && !ShowsAccessory()) {
       const float cx = width() - sl::kUnreadDotTrailingCenter;
       cc::PaintFlags dot;
       dot.setAntiAlias(true);
@@ -1218,22 +1395,60 @@ class OpenTabTreeView::RowView : public views::View,
                   const OpenSpaceThemeState& state,
                   const gfx::RectF& fill,
                   float sel,
-                  float hov) {
+                  float hov,
+                  float content_right,
+                  bool multi_selected) {
     const auto& roles = state.roles;
     const auto cells = SplitCells(split.panes.size());
+    std::optional<ItemID> focused_pane = tree_->SelectedNodeId();
+    if (!focused_pane) {
+      if (const Tab* active = tree_->context_->controller()->GetActiveTab(
+              tree_->context_->window_id())) {
+        focused_pane = active->id;
+      }
+    }
+    // Check if focused_pane actually belongs to this split; default to pane 0.
+    size_t focused_idx = 0;
+    for (size_t i = 0; i < split.panes.size(); ++i) {
+      if (focused_pane && split.panes[i].id == *focused_pane) {
+        focused_idx = i;
+        break;
+      }
+    }
     if (sel > 0) {
-      // Selected split: the fill is a card, each pane its own cell (F0081).
+      // Selected split: outer card hosts distinct cells; the focused pane
+      // takes the full active plate while inactive sibling panes stay quiet.
       if (roles.content == theme::ContentAppearance::kLight) {
-        DrawPlateShadow(canvas, fill, sl::kRowFillCornerRadius, sel);
+        DrawPlateShadow(canvas, fill, sl::kRowFillCornerRadius, sel * 0.65f);
       }
       FillRoundRect(canvas, fill, sl::kRowFillCornerRadius,
-                    Sk(roles.active_plate, sel));
-      for (const gfx::RectF& cell : cells) {
-        FillRoundRect(canvas, cell, sl::kSplitCellCornerRadius,
-                      Sk(roles.row_hover, sel));
+                    Sk(roles.active_plate, sel * 0.42f));
+      for (size_t i = 0; i < cells.size(); ++i) {
+        const bool is_focused_cell = (i == focused_idx);
+        if (is_focused_cell) {
+          if (roles.content == theme::ContentAppearance::kLight) {
+            DrawPlateShadow(canvas, cells[i], sl::kSplitCellCornerRadius, sel);
+          }
+          FillRoundRect(canvas, cells[i], sl::kSplitCellCornerRadius,
+                        Sk(roles.active_plate, sel));
+        } else {
+          FillRoundRect(canvas, cells[i], sl::kSplitCellCornerRadius,
+                        Sk(roles.row_hover, sel * 0.65f));
+        }
       }
     } else {
-      if (hov > 0) {
+      if (multi_selected) {
+        FillRoundRect(canvas, fill, sl::kRowFillCornerRadius,
+                      Sk(roles.active_plate, 0.55f));
+        cc::PaintFlags rim;
+        rim.setAntiAlias(true);
+        rim.setStyle(cc::PaintFlags::kStroke_Style);
+        rim.setStrokeWidth(1.0f);
+        rim.setColor(Sk(state.contrast_accent, 0.55f));
+        gfx::RectF inset = fill;
+        inset.Inset(0.5f);
+        canvas->DrawRoundRect(inset, sl::kRowFillCornerRadius - 0.5f, rim);
+      } else if (hov > 0) {
         FillRoundRect(canvas, fill, sl::kRowFillCornerRadius,
                       Sk(roles.row_hover, hov));
       }
@@ -1246,21 +1461,32 @@ class OpenTabTreeView::RowView : public views::View,
       }
     }
     const gfx::FontList& font = typography::Get(OpenFont::kSplitCellTitle);
-    const SkColor text = Sk(state.style.SplitTitleColor(state.appearance));
+    const Rgba split_text_base = state.style.SplitTitleColor(state.appearance);
     for (size_t i = 0; i < cells.size(); ++i) {
       const Tab& pane = split.panes[i];
       const gfx::RectF& cell = cells[i];
+      const bool inactive_in_selected = (sel > 0.5f && i != focused_idx);
+      const float pane_alpha = inactive_in_selected ? 0.68f : 1.0f;
       const gfx::RectF icon(cell.x() + 5, cell.y() + (cell.height() - 18) / 2,
                             18, 18);
-      DrawFavicon(canvas, pane, icon, roles, SleepOpacity(pane));
+      DrawFavicon(canvas, pane, icon, roles, SleepOpacity(pane) * pane_alpha);
+      if (pane.live_state.is_loading) {
+        DrawLoadingArc(canvas, icon, roles);
+      }
       const float tx = icon.right() + 6;
+      const float cell_right =
+          (i + 1 == cells.size()) ? std::min(cell.right() - 4, content_right)
+                                  : cell.right() - 4;
       const int top = static_cast<int>(
           cell.y() + (cell.height() - font.GetHeight()) / 2);
-      canvas->DrawStringRect(
-          base::UTF8ToUTF16(pane.display_title()), font, text,
-          gfx::Rect(static_cast<int>(tx), top,
-                    std::max(0, static_cast<int>(cell.right() - 4 - tx)),
-                    font.GetHeight()));
+      const int avail_w = std::max(0, static_cast<int>(cell_right - tx));
+      if (avail_w > 0) {
+        canvas->DrawStringRectWithFlags(
+            base::UTF8ToUTF16(pane.display_title()), font,
+            Sk(split_text_base, pane_alpha),
+            gfx::Rect(static_cast<int>(tx), top, avail_w, font.GetHeight()),
+            gfx::Canvas::TEXT_ALIGN_LEFT | gfx::Canvas::NO_SUBPIXEL_RENDERING);
+      }
     }
   }
 
@@ -1274,8 +1500,9 @@ class OpenTabTreeView::RowView : public views::View,
     const int text_w = std::max(
         0, static_cast<int>(right - sl::kTextTrailingInset) - text_x);
     const int top = typography::TextTopForBaseline(font, sl::kTitleBaselineOffset);
-    canvas->DrawStringRect(title, font, color,
-                           gfx::Rect(text_x, top, text_w, font.GetHeight()));
+    canvas->DrawStringRectWithFlags(
+        title, font, color, gfx::Rect(text_x, top, text_w, font.GetHeight()),
+        gfx::Canvas::TEXT_ALIGN_LEFT | gfx::Canvas::NO_SUBPIXEL_RENDERING);
   }
 
   void PaintDivider(gfx::Canvas* canvas, const theme::SidebarRoles& roles) {
@@ -1290,23 +1517,26 @@ class OpenTabTreeView::RowView : public views::View,
     if (!clear) {
       return;
     }
-    // "Clear" label and arrow: SidebarForeground (black 0.30 / white 0.45),
-    // darker under the pointer (black 0.45 / white 0.45).
     const bool dark = roles.content == theme::ContentAppearance::kDark;
-    const bool pressed_look = hovered_part_ == Part::kClear;
+    const bool clear_hovered = hovered_part_ == Part::kClear;
+    if (clear_hovered) {
+      FillRoundRect(canvas, ClearRect(), 4.0f,
+                    Sk(dark ? Rgba::White(0.10) : Rgba::Black(0.06)));
+    }
     const SkColor color = theme::ToSkColor(
-        dark ? Rgba::White(0.45)
-             : Rgba::Black(pressed_look ? 0.45 : 0.30));
+        dark ? Rgba::White(clear_hovered ? 0.72 : 0.45)
+             : Rgba::Black(clear_hovered ? 0.60 : 0.30));
     glyphs::Draw(canvas, glyphs::Glyph::kArrowDown,
                  gfx::RectF(w + sl::kClearArrowFrame.x, sl::kClearArrowFrame.y,
                             sl::kClearArrowFrame.w, sl::kClearArrowFrame.h),
                  color);
     const gfx::FontList& font = typography::Get(OpenFont::kClearLabel);
     const int top = typography::TextTopForBaseline(font, sl::kClearLabelBaseline);
-    canvas->DrawStringRect(
+    canvas->DrawStringRectWithFlags(
         u"Clear", font, color,
         gfx::Rect(static_cast<int>(w + sl::kClearLabelX), top,
-                  static_cast<int>(sl::kClearLabelWidth) + 4, font.GetHeight()));
+                  static_cast<int>(sl::kClearLabelWidth) + 4, font.GetHeight()),
+        gfx::Canvas::TEXT_ALIGN_LEFT | gfx::Canvas::NO_SUBPIXEL_RENDERING);
   }
 
   void PaintNewTab(gfx::Canvas* canvas, const theme::SidebarRoles& roles) {
@@ -1341,6 +1571,8 @@ class OpenTabTreeView::RowView : public views::View,
   gfx::SlideAnimation selection_{this};
   bool hovered_ = false;
   bool selected_ = false;
+  bool alt_down_ = false;
+  bool is_dragging_ = false;
   Part hovered_part_ = Part::kNone;
   Part pressed_part_ = Part::kNone;
   raw_ptr<RenameField> rename_ = nullptr;
@@ -1707,11 +1939,20 @@ void OpenTabTreeView::Reconcile(bool animate) {
   }
   rows_ = std::move(next);
   row_views_ = std::move(next_views);
+  // Prune any multi-selected IDs that are no longer in the tree.
+  for (auto it = selected_ids_.begin(); it != selected_ids_.end();) {
+    if (!row_views_.contains(*it)) {
+      it = selected_ids_.erase(it);
+    } else {
+      ++it;
+    }
+  }
   // Keep child order equal to row order (focus traversal, a11y).
   for (size_t i = 0; i < rows_.size(); ++i) {
     list_->ReorderChildView(row_views_[rows_[i].key], i);
   }
   OnSelectionChanged();
+  UpdateLoadingTimer();
   list_->NotifyPreferredSizeChanged();
   list_->LayoutRows(animate && context_->AnimationsEnabled() &&
                     !motion::PrefersReducedMotion());
@@ -1791,6 +2032,7 @@ void OpenTabTreeView::OnSelectionChanged() {
 }
 
 void OpenTabTreeView::OnTabLiveStateChanged(const ItemID& tab_id) {
+  UpdateLoadingTimer();
   if (RowView* row = FindRow(tab_id)) {
     row->SchedulePaint();
     return;
@@ -1812,6 +2054,191 @@ void OpenTabTreeView::OnTabLiveStateChanged(const ItemID& tab_id) {
         }
       }
     }
+  }
+}
+
+std::vector<ItemID> OpenTabTreeView::SelectedIds() const {
+  std::vector<ItemID> result;
+  if (!selected_ids_.empty()) {
+    for (const RowDescriptor& d : rows_) {
+      if (d.kind == RowKind::kNode && selected_ids_.contains(d.node_id)) {
+        result.push_back(d.node_id);
+      }
+    }
+    if (!result.empty()) {
+      return result;
+    }
+  }
+  if (std::optional<ItemID> active = SelectedNodeId()) {
+    result.push_back(*active);
+  }
+  return result;
+}
+
+bool OpenTabTreeView::IsNodeMultiSelected(const ItemID& id) const {
+  return selected_ids_.contains(id);
+}
+
+void OpenTabTreeView::ClearMultiSelection() {
+  if (selected_ids_.empty()) {
+    return;
+  }
+  std::set<ItemID> old = std::move(selected_ids_);
+  selected_ids_.clear();
+  for (const ItemID& id : old) {
+    if (RowView* row = FindRow(id)) {
+      row->SchedulePaint();
+    }
+  }
+}
+
+void OpenTabTreeView::ToggleMultiSelect(const ItemID& id) {
+  if (selected_ids_.empty() && last_selected_ && *last_selected_ != id) {
+    selected_ids_.insert(*last_selected_);
+    if (RowView* prev = FindRow(*last_selected_)) {
+      prev->SchedulePaint();
+    }
+  }
+  if (selected_ids_.contains(id)) {
+    selected_ids_.erase(id);
+  } else {
+    selected_ids_.insert(id);
+  }
+  anchor_id_ = id;
+  if (RowView* row = FindRow(id)) {
+    row->SchedulePaint();
+  }
+}
+
+void OpenTabTreeView::SelectRangeTo(const ItemID& id) {
+  const std::optional<ItemID> anchor =
+      anchor_id_.has_value() ? anchor_id_ : last_selected_;
+  if (!anchor) {
+    ToggleMultiSelect(id);
+    return;
+  }
+  int start_idx = -1;
+  int end_idx = -1;
+  for (size_t i = 0; i < rows_.size(); ++i) {
+    if (rows_[i].kind != RowKind::kNode) {
+      continue;
+    }
+    if (rows_[i].node_id == *anchor) {
+      start_idx = static_cast<int>(i);
+    }
+    if (rows_[i].node_id == id) {
+      end_idx = static_cast<int>(i);
+    }
+  }
+  if (start_idx < 0 || end_idx < 0) {
+    ToggleMultiSelect(id);
+    return;
+  }
+  if (start_idx > end_idx) {
+    std::swap(start_idx, end_idx);
+  }
+  std::set<ItemID> old = std::move(selected_ids_);
+  selected_ids_.clear();
+  for (int i = start_idx; i <= end_idx; ++i) {
+    if (rows_[static_cast<size_t>(i)].kind == RowKind::kNode) {
+      selected_ids_.insert(rows_[static_cast<size_t>(i)].node_id);
+    }
+  }
+  for (const ItemID& changed : old) {
+    if (RowView* row = FindRow(changed)) {
+      row->SchedulePaint();
+    }
+  }
+  for (const ItemID& changed : selected_ids_) {
+    if (RowView* row = FindRow(changed)) {
+      row->SchedulePaint();
+    }
+  }
+}
+
+void OpenTabTreeView::NotifyResetPinnedTab(const ItemID& id, bool separate) {
+  if (delegate_) {
+    delegate_->OnResetPinnedTab(id, separate);
+    return;
+  }
+  context_->OnResetPinnedTab(id, separate);
+}
+
+void OpenTabTreeView::NotifyTabDragStateChanged(bool dragging,
+                                                const ItemID& tab_id) {
+  if (delegate_) {
+    delegate_->OnTabDragStateChanged(dragging, tab_id);
+  }
+  context_->OnTabDragStateChanged(dragging, tab_id);
+}
+
+void OpenTabTreeView::UpdateLoadingTimer() {
+  bool any_loading = false;
+  for (const RowDescriptor& d : rows_) {
+    if (d.kind != RowKind::kNode) {
+      continue;
+    }
+    const SidebarNode* n = context_->controller()->FindNode(d.node_id);
+    if (!n) {
+      continue;
+    }
+    if (const Tab* tab = n->as_tab()) {
+      if (tab->live_state.is_loading) {
+        any_loading = true;
+        break;
+      }
+    } else if (const Split* split = n->as_split()) {
+      for (const Tab& pane : split->panes) {
+        if (pane.live_state.is_loading) {
+          any_loading = true;
+          break;
+        }
+      }
+      if (any_loading) {
+        break;
+      }
+    }
+  }
+  if (any_loading && !loading_timer_.IsRunning()) {
+    loading_timer_.Start(FROM_HERE, base::Milliseconds(33),
+                         base::BindRepeating(&OpenTabTreeView::OnLoadingTick,
+                                             base::Unretained(this)));
+  } else if (!any_loading && loading_timer_.IsRunning()) {
+    loading_timer_.Stop();
+  }
+}
+
+void OpenTabTreeView::OnLoadingTick() {
+  loading_phase_ = std::fmod(loading_phase_ + 14.0f, 360.0f);
+  bool any_loading = false;
+  for (const RowDescriptor& d : rows_) {
+    if (d.kind != RowKind::kNode) {
+      continue;
+    }
+    const SidebarNode* n = context_->controller()->FindNode(d.node_id);
+    if (!n) {
+      continue;
+    }
+    bool row_loading = false;
+    if (const Tab* tab = n->as_tab()) {
+      row_loading = tab->live_state.is_loading;
+    } else if (const Split* split = n->as_split()) {
+      for (const Tab& pane : split->panes) {
+        if (pane.live_state.is_loading) {
+          row_loading = true;
+          break;
+        }
+      }
+    }
+    if (row_loading) {
+      any_loading = true;
+      if (RowView* row = FindRow(d.node_id)) {
+        row->SchedulePaint();
+      }
+    }
+  }
+  if (!any_loading) {
+    loading_timer_.Stop();
   }
 }
 

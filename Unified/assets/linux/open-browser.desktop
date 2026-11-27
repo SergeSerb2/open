@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Open
+GenericName=Web Browser
+Comment=Browse the Web with Open
+Exec=open %U
+Terminal=false
+Type=Application
+Icon=open-browser
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+StartupWMClass=open-browser

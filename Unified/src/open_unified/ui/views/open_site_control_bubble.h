@@ -461,6 +461,8 @@ class OpenSiteControlView : public views::View,
   void SetAdBlockState(bool enabled, int blocked_count);
   // Re-reads the in-use indicators from the tab.
   void RefreshInUse();
+  // Re-reads the live page zoom level and updates the Zoom row.
+  void RefreshZoom();
   // Re-reads every tab-derived field (tiles, ad blocking, certificate).
   void RefreshFromTab();
   void SetReloadBannerVisible(bool visible);
@@ -515,6 +517,15 @@ class OpenSiteControlView : public views::View,
   void OnBoostPressed(size_t index);
   void OnReloadPressed();
   void OnSecurityPressed();
+  void OnAudioMuteToggled();
+  void OnZoomIn();
+  void OnZoomOut();
+  void OnZoomReset();
+  void UpdateZoomControls();
+  int CurrentZoomPercent() const;
+  bool CanZoomIn() const;
+  bool CanZoomOut() const;
+  bool ShouldShowAudioRow() const;
   void ShowMoreMenu();
   void ShowTileMenu(size_t index, const gfx::Point& point,
                     ui::mojom::MenuSourceType source_type);
@@ -557,6 +568,19 @@ class OpenSiteControlView : public views::View,
                     gfx::Canvas* canvas,
                     const gfx::Rect& bounds,
                     bool hovered);
+  void PaintAudioMuteRow(gfx::Canvas* canvas,
+                         const gfx::Rect& bounds,
+                         bool hovered);
+  void PaintZoomLabel(gfx::Canvas* canvas,
+                      const gfx::Rect& bounds,
+                      bool hovered);
+  void PaintZoomStepButton(bool zoom_in,
+                           gfx::Canvas* canvas,
+                           const gfx::Rect& bounds,
+                           bool hovered);
+  void PaintZoomResetButton(gfx::Canvas* canvas,
+                            const gfx::Rect& bounds,
+                            bool hovered);
   void PaintReloadLabel(gfx::Canvas* canvas,
                         const gfx::Rect& bounds,
                         bool hovered);
@@ -609,6 +633,11 @@ class OpenSiteControlView : public views::View,
   std::vector<raw_ptr<secondary::PaintedButton>> boost_circles_;
   std::vector<raw_ptr<secondary::PaintedButton>> tile_rows_;
   std::vector<size_t> tile_row_indices_;  // Into all_tiles_.
+  raw_ptr<secondary::PaintedButton> audio_mute_row_ = nullptr;
+  raw_ptr<secondary::PaintedButton> zoom_out_button_ = nullptr;
+  raw_ptr<secondary::PaintedButton> zoom_reset_button_ = nullptr;
+  raw_ptr<secondary::PaintedButton> zoom_in_button_ = nullptr;
+  bool showing_audio_row_ = false;
   int body_height_ = 0;
   int separator_y_ = 0;
 
@@ -666,6 +695,7 @@ class OpenSiteControlBubble {
   void OnTabNavigated();
   void OnTabDestroyed();
   void OnLiveSourceChanged();
+  void OnZoomLevelChanged();
   void OnBlockedCountChanged(int count);
 
   raw_ptr<SiteControlDelegate> delegate_;

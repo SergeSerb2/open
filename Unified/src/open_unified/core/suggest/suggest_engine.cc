@@ -1640,6 +1640,33 @@ std::optional<std::string> SuggestEngine::ClassifyTypedUrl(
     return std::nullopt;
   }
 
+  auto normalize_windows_path = [](std::string_view path) {
+    std::string out;
+    out.reserve(path.size());
+    for (char c : path) {
+      if (c == '\\') {
+        out.push_back('/');
+      } else if (c == ' ') {
+        out.append("%20");
+      } else {
+        out.push_back(c);
+      }
+    }
+    return out;
+  };
+
+  // Windows absolute drive path (e.g. C:\Users\name\file.html or C:/path).
+  if (s.size() >= 3 && std::isalpha(static_cast<unsigned char>(s[0])) &&
+      s[1] == ':' && (s[2] == '\\' || s[2] == '/')) {
+    return "file:///" + normalize_windows_path(s);
+  }
+
+  // Windows UNC path (e.g. \\server\share\file.html).
+  if (s.size() >= 3 && s[0] == '\\' && s[1] == '\\' && s[2] != '\\' &&
+      s[2] != '/' && !std::isspace(static_cast<unsigned char>(s[2]))) {
+    return "file:" + normalize_windows_path(s);
+  }
+
   // Explicit schemes.
   static const std::set<std::string_view> kKnownSchemes = {
       "http",        "https",  "file",   "ftp",

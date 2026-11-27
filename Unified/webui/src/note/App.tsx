@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { Modal, Toast } from '../shared/components';
 import { OpenDoorwayMark, RedoIcon, UndoIcon } from '../shared/icons';
 import { replacePageRoute } from '../shared/route';
+import { formatShortcut } from '../shared/shortcuts';
 import {
   duplicateNote,
   exportNoteHtml,
@@ -840,10 +841,10 @@ export function NoteApp(): JSX.Element {
         <div class="note-topbar-left">
           <OpenDoorwayMark size={24} />
           <div class="note-toolbar" role="toolbar" aria-label="Note formatting">
-            <button type="button" class="note-tool-btn" title="Undo (Cmd/Ctrl+Z)" disabled={undoStack.length === 0} onClick={handleUndo}>
+            <button type="button" class="note-tool-btn" title={`Undo (${formatShortcut('Mod+Z')})`} disabled={undoStack.length === 0} onClick={handleUndo}>
               <UndoIcon size={13} />
             </button>
-            <button type="button" class="note-tool-btn" title="Redo (Cmd/Ctrl+Shift+Z)" disabled={redoStack.length === 0} onClick={handleRedo}>
+            <button type="button" class="note-tool-btn" title={`Redo (${formatShortcut('Mod+Shift+Z')})`} disabled={redoStack.length === 0} onClick={handleRedo}>
               <RedoIcon size={13} />
             </button>
             <span class="note-tool-sep" />
@@ -857,19 +858,19 @@ export function NoteApp(): JSX.Element {
               H3
             </button>
             <span class="note-tool-sep" />
-            <button type="button" class={`note-tool-btn${activeFormats.bold ? ' is-active' : ''}`} title="Bold (Cmd/Ctrl+B)" onClick={() => execFormat('bold')}>
+            <button type="button" class={`note-tool-btn${activeFormats.bold ? ' is-active' : ''}`} title={`Bold (${formatShortcut('Mod+B')})`} onClick={() => execFormat('bold')}>
               <strong>B</strong>
             </button>
-            <button type="button" class={`note-tool-btn${activeFormats.italic ? ' is-active' : ''}`} title="Italic (Cmd/Ctrl+I)" onClick={() => execFormat('italic')}>
+            <button type="button" class={`note-tool-btn${activeFormats.italic ? ' is-active' : ''}`} title={`Italic (${formatShortcut('Mod+I')})`} onClick={() => execFormat('italic')}>
               <em>I</em>
             </button>
-            <button type="button" class={`note-tool-btn${activeFormats.underline ? ' is-active' : ''}`} title="Underline (Cmd/Ctrl+U)" onClick={() => execFormat('underline')}>
+            <button type="button" class={`note-tool-btn${activeFormats.underline ? ' is-active' : ''}`} title={`Underline (${formatShortcut('Mod+U')})`} onClick={() => execFormat('underline')}>
               <u>U</u>
             </button>
             <button type="button" class={`note-tool-btn${activeFormats.strike ? ' is-active' : ''}`} title="Strikethrough" onClick={() => execFormat('strikeThrough')}>
               <s>S</s>
             </button>
-            <button type="button" class={`note-tool-btn${activeFormats.code ? ' is-active' : ''}`} title="Inline code (Cmd/Ctrl+E)" onClick={toggleInlineCode}>
+            <button type="button" class={`note-tool-btn${activeFormats.code ? ' is-active' : ''}`} title={`Inline code (${formatShortcut('Mod+E')})`} onClick={toggleInlineCode}>
               {'</>'}
             </button>
             <span class="note-tool-sep" />
@@ -895,7 +896,7 @@ export function NoteApp(): JSX.Element {
             <button
               type="button"
               class="note-tool-btn"
-              title="Insert link (Cmd/Ctrl+K)"
+              title={`Insert link (${formatShortcut('Mod+K')})`}
               onClick={() => {
                 const sel = window.getSelection();
                 if (sel && sel.rangeCount > 0) savedRangeRef.current = sel.getRangeAt(0).cloneRange();

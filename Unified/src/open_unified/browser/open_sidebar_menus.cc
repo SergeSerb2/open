@@ -1079,6 +1079,12 @@ class Builder {
            !focused.empty() && !ctx_->hides_space_chrome);
     }
     Sep(m);
+    Item(m, u"New Note", Cmd(Action::kNewNote), !ctx_->is_incognito,
+#if BUILDFLAG(IS_MAC)
+         ui::Accelerator(ui::VKEY_N, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN));
+#else
+         ui::Accelerator(ui::VKEY_N, ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN));
+#endif
     Item(m, u"New Easel", Cmd(Action::kNewEasel), !ctx_->is_incognito,
          ui::Accelerator(ui::VKEY_E, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN));
     Item(m, u"New Boost", Cmd(Action::kNewBoost),
@@ -1241,6 +1247,190 @@ std::unique_ptr<ui::SimpleMenuModel> BuildSidebarMenuModel(
   if (!built || root->GetItemCount() == 0) {
     return nullptr;
   }
+  return root;
+}
+
+namespace {
+
+class AppMenuModel : public ui::SimpleMenuModel::Delegate,
+                     public ui::SimpleMenuModel {
+ public:
+  explicit AppMenuModel(AppMenuCommandCallback on_command)
+      : ui::SimpleMenuModel(this), on_command_(std::move(on_command)) {}
+  AppMenuModel(const AppMenuModel&) = delete;
+  AppMenuModel& operator=(const AppMenuModel&) = delete;
+  ~AppMenuModel() override = default;
+
+  struct Entry {
+    CommandId command = CommandId::kUnknown;
+    bool enabled = true;
+    std::optional<ui::Accelerator> accelerator;
+  };
+
+  int NewEntry(Entry entry) {
+    const int id = next_id_++;
+    entries_[id] = std::move(entry);
+    return id;
+  }
+
+  ui::SimpleMenuModel* NewSubmenu() {
+    submenus_.push_back(std::make_unique<ui::SimpleMenuModel>(this));
+    return submenus_.back().get();
+  }
+
+  // ui::SimpleMenuModel::Delegate:
+  bool IsCommandIdEnabled(int command_id) const override {
+    auto it = entries_.find(command_id);
+    return it == entries_.end() || it->second.enabled;
+  }
+
+  void ExecuteCommand(int command_id, int /*event_flags*/) override {
+    auto it = entries_.find(command_id);
+    if (it == entries_.end() || !it->second.enabled ||
+        it->second.command == CommandId::kUnknown || !on_command_) {
+      return;
+    }
+    const CommandId command = it->second.command;
+    AppMenuCommandCallback callback = on_command_;
+    callback.Run(command);
+  }
+
+  bool GetAcceleratorForCommandId(
+      int command_id,
+      ui::Accelerator* accelerator) const override {
+    auto it = entries_.find(command_id);
+    if (it == entries_.end() || !it->second.accelerator) {
+      return false;
+    }
+    *accelerator = *it->second.accelerator;
+    return true;
+  }
+
+ private:
+  AppMenuCommandCallback on_command_;
+  std::map<int, Entry> entries_;
+  std::vector<std::unique_ptr<ui::SimpleMenuModel>> submenus_;
+  int next_id_ = 1;
+};
+
+}  // namespace
+
+std::unique_ptr<ui::SimpleMenuModel> BuildAppMenuModel(
+    const AppMenuContext& ctx,
+    AppMenuCommandCallback on_command) {
+  auto root = std::make_unique<AppMenuModel>(std::move(on_command));
+
+  auto add = [&](ui::SimpleMenuModel* menu, std::u16string title,
+                 CommandId command, bool enabled = true,
+                 std::optional<ui::Accelerator> accelerator = std::nullopt) {
+    AppMenuModel::Entry entry;
+    entry.command = command;
+    entry.enabled = enabled;
+    entry.accelerator = accelerator;
+    menu->AddItem(root->NewEntry(std::move(entry)), std::move(title));
+  };
+  auto sep = [](ui::SimpleMenuModel* menu) {
+    menu->AddSeparator(ui::NORMAL_SEPARATOR);
+  };
+  auto sub = [&](ui::SimpleMenuModel* menu, std::u16string title,
+                 bool enabled = true) -> ui::SimpleMenuModel* {
+    ui::SimpleMenuModel* child = root->NewSubmenu();
+    AppMenuModel::Entry entry;
+    entry.enabled = enabled;
+    menu->AddSubMenu(root->NewEntry(std::move(entry)), std::move(title), child);
+    return child;
+  };
+
+  // --- Window & Tab Creation ---
+  add(root.get(), u"New Tab", CommandId::kNewTab, true,
+      ui::Accelerator(ui::VKEY_T, kPrimary));
+  add(root.get(), u"New Window", CommandId::kNewWindow, true,
+      ui::Accelerator(ui::VKEY_N, kPrimary));
+  add(root.get(), u"New Incognito Window", CommandId::kNewIncognitoWindow, true,
+      ui::Accelerator(ui::VKEY_N, kPrimary | ui::EF_SHIFT_DOWN));
+  add(root.get(), u"New Blank Window", CommandId::kBlankWindow);
+  add(root.get(), u"New Little Open", CommandId::kNewLittleOpenWindow, true,
+      ui::Accelerator(ui::VKEY_N, kPrimary | ui::EF_ALT_DOWN));
+
+  sep(root.get());
+
+  // --- Workspace & Documents ---
+  add(root.get(), u"New Space", CommandId::kNewSpace, !ctx.is_incognito);
+  add(root.get(), u"New Folder", CommandId::kNewFolder, !ctx.is_incognito);
+  add(root.get(), u"New Note", CommandId::kNewNote, !ctx.is_incognito);
+  add(root.get(), u"New Easel", CommandId::kNewEasel, !ctx.is_incognito);
+  add(root.get(), u"New Boost", CommandId::kNewBoost,
+      !ctx.is_incognito && ctx.has_active_tab);
+
+  sep(root.get());
+
+  // --- View Submenu ---
+  ui::SimpleMenuModel* view_menu = sub(root.get(), u"View");
+  add(view_menu, ctx.sidebar_hidden ? u"Show Sidebar" : u"Hide Sidebar",
+      CommandId::kToggleSidebar, true, ui::Accelerator(ui::VKEY_S, kPrimary));
+  add(view_menu, ctx.toolbar_visible ? u"Hide Toolbar" : u"Show Toolbar",
+      CommandId::kToggleToolbar, true,
+      ui::Accelerator(ui::VKEY_D, kPrimary | ui::EF_SHIFT_DOWN));
+  add(view_menu, ctx.is_fullscreen ? u"Exit Fullscreen" : u"Fullscreen",
+      CommandId::kToggleFullScreen, true,
+#if BUILDFLAG(IS_MAC)
+      ui::Accelerator(ui::VKEY_F, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN));
+#else
+      ui::Accelerator(ui::VKEY_F11, ui::EF_NONE));
+#endif
+  sep(view_menu);
+  add(view_menu, u"Zoom In", CommandId::kZoomIn, ctx.has_active_tab,
+      ui::Accelerator(ui::VKEY_OEM_PLUS, kPrimary));
+  add(view_menu, u"Zoom Out", CommandId::kZoomOut, ctx.has_active_tab,
+      ui::Accelerator(ui::VKEY_OEM_MINUS, kPrimary));
+  add(view_menu, u"Actual Size", CommandId::kZoomActualSize, ctx.has_active_tab,
+      ui::Accelerator(ui::VKEY_0, kPrimary));
+
+  // --- Library Submenu ---
+  ui::SimpleMenuModel* library_menu =
+      sub(root.get(), u"Library", !ctx.is_incognito);
+  add(library_menu, u"Downloads", CommandId::kViewDownloads, !ctx.is_incognito);
+  add(library_menu, u"History", CommandId::kViewHistory, !ctx.is_incognito,
+      ui::Accelerator(ui::VKEY_H, kPrimary));
+  add(library_menu, u"Archive", CommandId::kViewArchive, !ctx.is_incognito);
+  add(library_menu, u"Media", CommandId::kViewMedia, !ctx.is_incognito);
+  add(library_menu, u"Spaces", CommandId::kManageSpaces, !ctx.is_incognito);
+  add(library_menu, u"Boosts", CommandId::kViewBoosts, !ctx.is_incognito);
+
+  // --- Developer Submenu ---
+  ui::SimpleMenuModel* dev_menu = sub(root.get(), u"Developer");
+  add(dev_menu, u"Developer Tools", CommandId::kDeveloperTools,
+      ctx.has_active_tab, ui::Accelerator(ui::VKEY_F12, ui::EF_NONE));
+  add(dev_menu, u"Inspect Elements", CommandId::kInspectElements,
+      ctx.has_active_tab,
+      ui::Accelerator(ui::VKEY_I, ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN));
+  add(dev_menu, u"JavaScript Console", CommandId::kJavaScriptConsole,
+      ctx.has_active_tab);
+  add(dev_menu, u"View Page Source", CommandId::kViewSource, ctx.has_active_tab,
+      ui::Accelerator(ui::VKEY_U, kPrimary));
+  add(dev_menu, u"Task Manager", CommandId::kTaskManager, true,
+      ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN));
+
+  sep(root.get());
+
+  // --- Tools & Page ---
+  add(root.get(), u"Extensions", CommandId::kManageExtensions);
+  add(root.get(), u"Import from Another Browser…",
+      CommandId::kImportFromBrowser);
+  add(root.get(), u"Print…", CommandId::kPrint, ctx.has_active_tab,
+      ui::Accelerator(ui::VKEY_P, kPrimary));
+  add(root.get(), u"Save Page As…", CommandId::kSavePageAs, ctx.has_active_tab,
+      ui::Accelerator(ui::VKEY_S, kPrimary | ui::EF_SHIFT_DOWN));
+
+  sep(root.get());
+
+  // --- Settings & App ---
+  add(root.get(), u"Settings", CommandId::kSettings, true,
+      ui::Accelerator(ui::VKEY_OEM_COMMA, kPrimary));
+  add(root.get(), u"About Open", CommandId::kAboutOpen);
+  add(root.get(), u"Quit Open", CommandId::kQuitOpen, true,
+      ui::Accelerator(ui::VKEY_Q, kPrimary));
+
   return root;
 }
 

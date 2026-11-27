@@ -44,6 +44,21 @@ class OpenSidebarView : public views::View {
   METADATA_HEADER(OpenSidebarView, views::View)
 
  public:
+  class Delegate {
+   public:
+    virtual ~Delegate() = default;
+    // Fired when the Win/Linux Open App Menu button is pressed.
+    virtual void OnAppMenuRequested(views::View* anchor) {}
+    // Fired when a pinned extension button in the URL pill is right-clicked.
+    virtual void OnExtensionContextMenuRequested(
+        const std::string& extension_id,
+        views::View* anchor,
+        const gfx::Point& screen_pt) {}
+    // Fired when a Space is drag-reordered in the bottom Space switcher strip.
+    virtual void OnSpaceReordered(const std::string& space_id,
+                                  size_t to_index) {}
+  };
+
   enum class Presentation { kAnchored, kFloatingCard };
   // kNativeReserved: macOS keeps the system traffic lights in the leading
   // 77 pt. kNone: no window controls in the sidebar (Windows, Linux).
@@ -57,6 +72,16 @@ class OpenSidebarView : public views::View {
   void SetPresentation(Presentation presentation);
   Presentation presentation() const { return presentation_; }
   void SetWindowControlsSlot(WindowControlsSlot slot);
+  // On Linux with leading window buttons (close/min/max on the left), the
+  // sidebar stays at y = 0 and shifts its toolbar buttons right of the cluster.
+  void SetLeadingControlsInset(int px);
+  // Keeps URL pill accessories (Copy, Site Control, pinned extensions) visible
+  // while a popover anchored to one of them is open.
+  void SetHasOpenPopover(bool open);
+  bool has_open_popover() const { return has_open_popover_; }
+
+  void SetDelegate(Delegate* delegate) { delegate_ = delegate; }
+  Delegate* delegate() const { return delegate_; }
 
   // --- Model notifications (forwarded by OpenBrowserView) ------------------
   void OnTreeChanged(const TreeChange& change);
@@ -76,6 +101,7 @@ class OpenSidebarView : public views::View {
   // --- Accessors for anchors and automation --------------------------------
   views::View* url_pill() const;
   views::View* site_control_button() const;
+  views::View* GetAppMenuButton() const;
   OpenSpacePagerView* pager() const { return pager_; }
   OpenTabTreeView* GetTreeForSpace(const SpaceID& space_id) const;
   // Toolbar row and bottom bar dim while Peek shows (F0090).
@@ -139,8 +165,14 @@ class OpenSidebarView : public views::View {
   void DismissFavoritesEmptyState();
   // Applies Incognito visibility to the chrome (favorites, bottom bar).
   void ApplyIncognitoChrome();
+  void NotifyAppMenuRequested(views::View* anchor);
+  void NotifyExtensionContextMenuRequested(const std::string& extension_id,
+                                           views::View* anchor,
+                                           const gfx::Point& screen_pt);
+  void NotifySpaceReordered(const std::string& space_id, size_t to_index);
 
   raw_ptr<OpenSidebarContext> context_;
+  raw_ptr<Delegate> delegate_ = nullptr;
   Presentation presentation_ = Presentation::kAnchored;
   raw_ptr<ToolbarView> toolbar_ = nullptr;
   raw_ptr<UrlPillView> url_pill_ = nullptr;
@@ -154,6 +186,7 @@ class OpenSidebarView : public views::View {
   bool favorites_empty_state_dismissed_ = false;
   base::RepeatingClosure favorites_empty_state_dismissed_callback_;
   bool sidebar_hovered_ = false;
+  bool has_open_popover_ = false;
   bool split_view_active_ = false;
   bool peek_dimmed_ = false;
 };

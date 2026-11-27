@@ -12,6 +12,9 @@
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_shader.h"
@@ -27,6 +30,8 @@
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
@@ -38,6 +43,7 @@
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/events/event.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -150,6 +156,19 @@ bool IsBlankPage(const Tab* tab) {
          gurl.spec() == "chrome://newtab/";
 }
 
+bool IsInsecureHttpUrl(const std::string& url) {
+  const GURL gurl(url);
+  if (!gurl.is_valid() || !gurl.SchemeIs("http")) {
+    return false;
+  }
+  const std::string_view host = gurl.host();
+  if (host == "localhost" || host == "127.0.0.1" || host == "[::1]" ||
+      host.ends_with(".localhost")) {
+    return false;
+  }
+  return true;
+}
+
 float DeviceScale(const views::View* view) {
   const views::Widget* widget = view->GetWidget();
   return widget && widget->GetCompositor()
@@ -195,6 +214,16 @@ class OpenSidebarView::ToolbarButton : public views::Button {
     image_ = image;
     SchedulePaint();
   }
+  void SetBadge(std::u16string text,
+                SkColor background,
+                SkColor foreground,
+                bool has_badge) {
+    badge_text_ = std::move(text);
+    badge_bg_ = background;
+    badge_fg_ = foreground;
+    has_badge_ = has_badge;
+    SchedulePaint();
+  }
   void SetDimmedLook(bool dimmed) {
     if (dimmed_ != dimmed) {
       dimmed_ = dimmed;
@@ -213,6 +242,11 @@ class OpenSidebarView::ToolbarButton : public views::Button {
   }
 
   // views::Button:
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return GetEnabled() ? ui::Cursor(ui::mojom::CursorType::kHand)
+                        : views::Button::GetCursor(event);
+  }
+
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const OpenSpaceThemeState& s =
         context_->ThemeStateFor(context_->FocusedSpaceId());
@@ -248,6 +282,7 @@ class OpenSidebarView::ToolbarButton : public views::Button {
       flags.setAlphaf(dimmed_ ? 0.5f : 1.0f);
       canvas->DrawImageInt(image_, 0, 0, image_.width(), image_.height(), r.x(),
                            r.y(), r.width(), r.height(), true, flags);
+      PaintExtensionBadge(canvas, s);
       return;
     }
     // Arrows and reload sit 1 pt low (icon map).
@@ -257,10 +292,37 @@ class OpenSidebarView::ToolbarButton : public views::Button {
                      glyph_ == glyphs::Glyph::kStop;
     glyphs::Draw(canvas, glyph_, bounds, Sk(color),
                  gfx::Vector2dF(0, low ? 1 : 0));
+    PaintExtensionBadge(canvas, s);
     PaintProgressRing(canvas, s);
   }
 
  private:
+  void PaintExtensionBadge(gfx::Canvas* canvas, const OpenSpaceThemeState& s) {
+    if (badge_text_.empty() && !has_badge_) {
+      return;
+    }
+    const SkColor bg = SkColorGetA(badge_bg_) > 0 ? badge_bg_
+                                                  : Sk(s.contrast_accent);
+    if (badge_text_.empty()) {
+      cc::PaintFlags dot;
+      dot.setAntiAlias(true);
+      dot.setColor(bg);
+      canvas->DrawCircle(gfx::PointF(width() - 5.5f, height() - 5.5f), 2.5f,
+                         dot);
+      return;
+    }
+    const gfx::FontList& font = typography::Make(8, gfx::Font::Weight::BOLD);
+    const float h = 11.0f;
+    const float text_w =
+        static_cast<float>(gfx::Canvas::GetStringWidth(badge_text_, font));
+    const float w = std::clamp(text_w + 5.0f, h, static_cast<float>(width()) - 2.0f);
+    const gfx::RectF plate(width() - w - 1.0f, height() - h - 1.0f, w, h);
+    FillRoundRect(canvas, plate, h * 0.5f, bg);
+    const SkColor fg = SkColorGetA(badge_fg_) > 0 ? badge_fg_ : SK_ColorWHITE;
+    canvas->DrawStringRectWithFlags(
+        badge_text_, font, fg, gfx::ToEnclosingRect(plate),
+        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_SUBPIXEL_RENDERING);
+  }
   // guess: a 2 pt ring at r 13 inside the 32 pt plate, the track at the
   // glyph color 0.20, progress in the Space's contrast accent clockwise from
   // 12 o'clock (Arc's Library download ring; capture pending).
@@ -288,6 +350,10 @@ class OpenSidebarView::ToolbarButton : public views::Button {
   glyphs::Glyph glyph_;
   Role role_;
   gfx::ImageSkia image_;
+  std::u16string badge_text_;
+  SkColor badge_bg_ = SK_ColorTRANSPARENT;
+  SkColor badge_fg_ = SK_ColorWHITE;
+  bool has_badge_ = false;
   bool dimmed_ = false;
   std::optional<double> progress_;
 };
@@ -312,6 +378,14 @@ class OpenSidebarView::ToolbarView : public views::View {
         ctx, base::BindRepeating(send, base::Unretained(ctx), OpenIntentKind::kToggleSidebar),
         glyphs::Glyph::kSidebarToggle, u"Toggle Sidebar",
         ToolbarButton::Role::kToolbar));
+#if !BUILDFLAG(IS_MAC)
+    app_menu_ = AddChildView(std::make_unique<ToolbarButton>(
+        ctx,
+        base::BindRepeating(&ToolbarView::OnAppMenuPressed,
+                            base::Unretained(this)),
+        glyphs::Glyph::kOpenDoorway, u"Open Menu",
+        ToolbarButton::Role::kToolbar));
+#endif
     back_ = AddChildView(std::make_unique<ToolbarButton>(
         ctx, base::BindRepeating(send, base::Unretained(ctx), OpenIntentKind::kGoBack),
         glyphs::Glyph::kBack, u"Back", ToolbarButton::Role::kToolbar));
@@ -330,9 +404,19 @@ class OpenSidebarView::ToolbarView : public views::View {
         glyphs::Glyph::kMore, u"More Options", ToolbarButton::Role::kToolbar));
   }
 
+  views::View* app_menu_button() const { return app_menu_; }
+
   void SetWindowControls(WindowControlsSlot slot) {
     if (slot_ != slot) {
       slot_ = slot;
+      InvalidateLayout();
+    }
+  }
+
+  void SetLeadingControlsInset(int px) {
+    const int clamped = std::max(0, px);
+    if (leading_controls_inset_ != clamped) {
+      leading_controls_inset_ = clamped;
       InvalidateLayout();
     }
   }
@@ -344,7 +428,9 @@ class OpenSidebarView::ToolbarView : public views::View {
     forward_->SetEnabled(tab && tab->live_state.can_go_forward);
     loading_ = tab && tab->live_state.is_loading;
     reload_->SetGlyph(loading_ ? glyphs::Glyph::kStop : glyphs::Glyph::kReload);
-    reload_->SetTooltipText(loading_ ? u"Stop" : u"Reload");
+    const std::u16string reload_label = loading_ ? u"Stop" : u"Reload";
+    reload_->SetTooltipText(reload_label);
+    reload_->GetViewAccessibility().SetName(reload_label);
     reload_->SetEnabled(tab != nullptr);
     InvalidateLayout();
     SchedulePaint();
@@ -354,9 +440,11 @@ class OpenSidebarView::ToolbarView : public views::View {
   }
 
   void SetDimmed(bool dimmed) {
-    for (ToolbarButton* b : {toggle_.get(), back_.get(), forward_.get(),
-                             reload_.get(), more_.get()}) {
-      b->SetDimmedLook(dimmed);
+    for (ToolbarButton* b : {toggle_.get(), app_menu_.get(), back_.get(),
+                             forward_.get(), reload_.get(), more_.get()}) {
+      if (b) {
+        b->SetDimmedLook(dimmed);
+      }
     }
   }
 
@@ -370,15 +458,26 @@ class OpenSidebarView::ToolbarView : public views::View {
     const int b = static_cast<int>(m::chrome::kToolbarButtonSize);
     const int y = static_cast<int>(m::chrome::kToolbarButtonY);
     // macOS: the system traffic lights (x 12..70) own the leading 77 pt, so
-    // the toggle starts at kSidebarToggleX. Windows and Linux have no window
-    // controls in the sidebar: the toggle's plate lines up with the URL
-    // pill's leading edge.
-    const int toggle_x = static_cast<int>(
-        native_controls ? m::chrome::kSidebarToggleX : m::url_field::kInsetX);
+    // the toggle starts at kSidebarToggleX. Windows and Linux: inside the 32
+    // DIP top strip, starting after leading_controls_inset_ (if any) or at
+    // kSidebarToggleX (8 DIP), aligning 1:1 with HiddenSidebarToggleButton.
+    const int toggle_x =
+        native_controls
+            ? static_cast<int>(m::chrome::kSidebarToggleX)
+            : (leading_controls_inset_ > 0
+                   ? leading_controls_inset_
+                   : static_cast<int>(m::chrome::kSidebarToggleX));
     toggle_->SetBounds(toggle_x, y, b, b);
+    const int app_menu_x = toggle_x + b + 2;
+    if (app_menu_) {
+      app_menu_->SetBounds(app_menu_x, y, b, b);
+    }
     if (split) {
-      // Split View keeps only the sidebar toggle (F0081, F0082).
+      // Split View keeps only the sidebar toggle (and Win/Linux app menu).
       toggle_->SetVisible(true);
+      if (app_menu_) {
+        app_menu_->SetVisible(app_menu_x + b <= static_cast<int>(w) - 6);
+      }
       back_->SetVisible(false);
       forward_->SetVisible(false);
       reload_->SetVisible(false);
@@ -386,37 +485,50 @@ class OpenSidebarView::ToolbarView : public views::View {
       return;
     }
     if (compact) {
-      // Back, Forward, More: 28 x 28 at y 9, pitch 28 (completion 3.16).
+      // Back, Forward, More: 28 x 28 (y 9 on macOS, y 2 on Win/Linux), pitch 28.
       const int cb = static_cast<int>(m::compact_toolbar::kButtonSize);
       const int cy = static_cast<int>(m::compact_toolbar::kY);
+      const int back_x = static_cast<int>(m::compact_toolbar::BackX(w));
       // With the traffic lights in the leading slot the compact row has no
       // room for the toggle (Arc). Without them it stays while it clears
       // Back by the 2 pt nav gap.
-      toggle_->SetVisible(!native_controls &&
-                          toggle_x + b + 2 <=
-                              static_cast<int>(m::compact_toolbar::BackX(w)));
+      const bool toggle_fits = !native_controls && toggle_x + b + 2 <= back_x;
+      toggle_->SetVisible(toggle_fits);
+      if (app_menu_) {
+        app_menu_->SetVisible(toggle_fits && app_menu_x + b + 2 <= back_x);
+      }
       back_->SetVisible(true);
       forward_->SetVisible(true);
       reload_->SetVisible(false);
       more_->SetVisible(true);
-      back_->SetBounds(static_cast<int>(m::compact_toolbar::BackX(w)), cy, cb, cb);
+      back_->SetBounds(back_x, cy, cb, cb);
       forward_->SetBounds(static_cast<int>(m::compact_toolbar::ForwardX(w)), cy,
                           cb, cb);
       more_->SetBounds(static_cast<int>(m::compact_toolbar::MoreX(w)), cy, cb,
                        cb);
       return;
     }
-    toggle_->SetVisible(true);
+    const int back_x = static_cast<int>(m::chrome::BackX(w));
+    toggle_->SetVisible(native_controls || toggle_x + b + 2 <= back_x);
+    if (app_menu_) {
+      app_menu_->SetVisible(toggle_->GetVisible() &&
+                            app_menu_x + b + 2 <= back_x);
+    }
     back_->SetVisible(true);
     forward_->SetVisible(true);
     reload_->SetVisible(true);
     more_->SetVisible(false);
-    back_->SetBounds(static_cast<int>(m::chrome::BackX(w)), y, b, b);
+    back_->SetBounds(back_x, y, b, b);
     forward_->SetBounds(static_cast<int>(m::chrome::ForwardX(w)), y, b, b);
     reload_->SetBounds(static_cast<int>(m::chrome::ReloadX(w)), y, b, b);
   }
 
  private:
+  void OnAppMenuPressed() {
+    if (app_menu_) {
+      sidebar_->NotifyAppMenuRequested(app_menu_);
+    }
+  }
   void OnReloadPressed() {
     sidebar_->context_->Send(OpenIntent::Of(
         loading_ ? OpenIntentKind::kStopLoading : OpenIntentKind::kReload));
@@ -429,7 +541,9 @@ class OpenSidebarView::ToolbarView : public views::View {
 
   raw_ptr<OpenSidebarView> sidebar_;
   WindowControlsSlot slot_ = WindowControlsSlot::kNone;
+  int leading_controls_inset_ = 0;
   raw_ptr<ToolbarButton> toggle_ = nullptr;
+  raw_ptr<ToolbarButton> app_menu_ = nullptr;
   raw_ptr<ToolbarButton> back_ = nullptr;
   raw_ptr<ToolbarButton> forward_ = nullptr;
   raw_ptr<ToolbarButton> reload_ = nullptr;
@@ -451,6 +565,7 @@ class OpenSidebarView::UrlPillView : public views::View,
  public:
   explicit UrlPillView(OpenSidebarView* sidebar) : sidebar_(sidebar) {
     OpenSidebarContext* ctx = sidebar->context_;
+    SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     SetNotifyEnterExitOnChild(true);
     // Right-click: the URL field menu (Copy URL, Site Controls, ...).
     set_context_menu_controller(this);
@@ -498,6 +613,7 @@ class OpenSidebarView::UrlPillView : public views::View,
       old_extensions.push_back(b);
     }
     extensions_.clear();
+    extension_ids_.clear();
     for (ToolbarButton* b : old_extensions) {
       RemoveChildViewT(b);
     }
@@ -509,27 +625,64 @@ class OpenSidebarView::UrlPillView : public views::View,
                               base::Unretained(this), action.id, index),
           glyphs::Glyph::kPuzzle, action.tooltip,
           ToolbarButton::Role::kAccessory);
-      if (!action.icon.isNull()) {
-        button->SetImage(action.icon);
+      if (!action.icon_with_badge.isNull()) {
+        button->SetImage(action.icon_with_badge);
+      } else {
+        if (!action.icon.isNull()) {
+          button->SetImage(action.icon);
+        }
+        if (!action.badge_text.empty() || action.has_badge) {
+          button->SetBadge(action.badge_text, action.badge_background_color,
+                           action.badge_text_color, action.has_badge);
+        }
       }
+      button->set_context_menu_controller(this);
+      extension_ids_.push_back(action.id);
       extensions_.push_back(AddChildView(std::move(button)));
     }
   }
 
   // views::View:
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return ui::Cursor(ui::mojom::CursorType::kIBeam);
+  }
+
+  void OnFocus() override {
+    views::View::OnFocus();
+    SchedulePaint();
+  }
+
+  void OnBlur() override {
+    views::View::OnBlur();
+    SchedulePaint();
+  }
+
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    if (event.key_code() == ui::VKEY_RETURN ||
+        event.key_code() == ui::VKEY_SPACE) {
+      sidebar_->context_->Send(OpenIntent::CommandBar(
+          CommandBarSource::kUrlField, GetBoundsInScreen()));
+      return true;
+    }
+    return views::View::OnKeyPressed(event);
+  }
+
   void Layout(PassKey) override {
     const float w = width();
     const int a = static_cast<int>(m::url_field::kAccessorySize);
     const int ay = static_cast<int>(m::url_field::kAccessoryY - m::url_field::kY);
-    const bool page = !IsBlankPage(ActiveTab());
+    const Tab* tab = ActiveTab();
+    const bool page = !IsBlankPage(tab);
+    const bool insecure = page && tab && IsInsecureHttpUrl(tab->url);
     // Accessories stack leftward from the trailing edge, but never into the
     // leading text: the host (or the magnifier and placeholder) keeps at
     // least kMinTextWidth, and an extension button that does not fit hides.
     const int min_left =
-        TextLeft(page) + kMinTextWidth +
+        TextLeft(page, insecure) + kMinTextWidth +
         static_cast<int>(m::url_field::kControlsTextGap);
-    // Sidebar frames [W - 42, 49] and [W - 70, 49] in pill coordinates: the
-    // pill is W - 16 wide at x 8, so Site Control sits at w + 8 - 12 - 30.
+    // Sidebar frames [W - 42, kAccessoryY] and [W - 70, kAccessoryY] in pill
+    // coordinates: pill is W - 16 wide at x 8, so Site Control sits at
+    // w + 8 - 12 - 30.
     int x = static_cast<int>(w + m::url_field::kInsetX -
                              m::url_field::kSiteControlsTrailing - a);
     const int pitch = static_cast<int>(m::url_field::kAccessoryPitch);
@@ -554,6 +707,16 @@ class OpenSidebarView::UrlPillView : public views::View,
                           ? kIncognitoFieldFill
                           : (hovered_ ? s.roles.field_hover : s.roles.field_fill);
     FillRoundRect(canvas, bounds, m::url_field::kCornerRadius, Sk(fill));
+    if (HasFocus()) {
+      cc::PaintFlags ring;
+      ring.setAntiAlias(true);
+      ring.setStyle(cc::PaintFlags::kStroke_Style);
+      ring.setStrokeWidth(1.5f);
+      ring.setColor(Sk(s.contrast_accent, 0.85f));
+      gfx::RectF inset = bounds;
+      inset.Inset(0.75f);
+      canvas->DrawRoundRect(inset, m::url_field::kCornerRadius - 0.75f, ring);
+    }
     const Tab* tab = ActiveTab();
     const float text_y_frame = m::url_field::kTextY - m::url_field::kY;
     if (IsBlankPage(tab)) {
@@ -563,7 +726,7 @@ class OpenSidebarView::UrlPillView : public views::View,
                               mag.y - m::url_field::kY, mag.w, mag.h),
                    Sk(Magnifier(s)));
       const gfx::FontList& font = typography::Get(OpenFont::kUrlPlaceholder);
-      const int x = TextLeft(/*page=*/false);
+      const int x = TextLeft(/*page=*/false, /*insecure=*/false);
       const int top = typography::TextTopForBaseline(
           font, text_y_frame + m::url_field::kTextBaselineOffset);
       canvas->DrawStringRectWithFlags(
@@ -572,9 +735,17 @@ class OpenSidebarView::UrlPillView : public views::View,
           gfx::Canvas::NO_SUBPIXEL_RENDERING);
       return;
     }
+    const bool insecure = IsInsecureHttpUrl(tab->url);
+    if (insecure) {
+      const SkColor warn = IsDark(s) ? SkColorSetARGB(220, 0xFB, 0xBF, 0x24)
+                                     : SkColorSetARGB(230, 0xB4, 0x53, 0x09);
+      glyphs::Draw(canvas, glyphs::Glyph::kLockOpen,
+                   gfx::RectF(10.0f, (height() - 14.0f) * 0.5f, 14.0f, 14.0f),
+                   warn);
+    }
     const std::u16string host = DisplayHost(tab->url);
     const gfx::FontList& font = typography::Get(OpenFont::kUrlHost);
-    const int x0 = TextLeft(/*page=*/true);
+    const int x0 = TextLeft(/*page=*/true, insecure);
     const int available = std::max(0, TextRight() - x0);
     const int text_w = gfx::Canvas::GetStringWidth(host, font);
     const int top = typography::TextTopForBaseline(
@@ -634,6 +805,13 @@ class OpenSidebarView::UrlPillView : public views::View,
       views::View* source,
       const gfx::Point& point,
       ui::mojom::MenuSourceType source_type) override {
+    for (size_t i = 0; i < extensions_.size(); ++i) {
+      if (source == extensions_[i] && i < extension_ids_.size()) {
+        sidebar_->NotifyExtensionContextMenuRequested(extension_ids_[i], source,
+                                                      point);
+        return;
+      }
+    }
     OpenMenuTarget target;
     target.kind = OpenMenuTarget::Kind::kUrlField;
     target.space_id = sidebar_->context_->FocusedSpaceId();
@@ -648,12 +826,14 @@ class OpenSidebarView::UrlPillView : public views::View,
   // extension buttons start to hide.
   static constexpr int kMinTextWidth = 48;
 
-  // Pill-local x where the text starts: the host at sidebar x 20, or the
-  // placeholder at sidebar x 41, right of the magnifier [14, 52, 24, 24].
-  static int TextLeft(bool page) {
-    return static_cast<int>((page ? m::url_field::kHostX
-                                  : m::url_field::kPlaceholderX) -
-                            m::url_field::kInsetX + 1);
+  // Pill-local x where the text starts: the host at sidebar x 20 (shifted right
+  // by 16 pt when the insecure HTTP padlock is shown), or the placeholder at
+  // sidebar x 41, right of the magnifier [14, kY + 6, 24, 24].
+  static int TextLeft(bool page, bool insecure) {
+    const int base = static_cast<int>(
+        (page ? m::url_field::kHostX : m::url_field::kPlaceholderX) -
+        m::url_field::kInsetX + 1);
+    return (page && insecure) ? base + 16 : base;
   }
   // Pill-local x where the text must end: the trailing inset, or the gap
   // before the leftmost visible accessory.
@@ -693,6 +873,7 @@ class OpenSidebarView::UrlPillView : public views::View,
   raw_ptr<ToolbarButton> copy_ = nullptr;
   raw_ptr<ToolbarButton> site_ = nullptr;
   std::vector<raw_ptr<ToolbarButton>> extensions_;
+  std::vector<std::string> extension_ids_;
   bool hovered_ = false;
   bool controls_visible_ = false;
 };
@@ -715,8 +896,15 @@ class OpenSidebarView::FavoriteTileView : public views::View,
     set_drag_controller(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
   }
+  ~FavoriteTileView() override {
+    if (is_dragging_) {
+      is_dragging_ = false;
+      sidebar_->context_->OnTabDragStateChanged(false, tab_id_);
+    }
+  }
 
   const ItemID& tab_id() const { return tab_id_; }
+  void SetSpinnerAngle(float angle) { spinner_angle_ = angle; }
 
   void Refresh() {
     if (const Tab* tab = FavoriteTab()) {
@@ -726,27 +914,63 @@ class OpenSidebarView::FavoriteTileView : public views::View,
   }
 
   // views::View:
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    return ui::Cursor(ui::mojom::CursorType::kHand);
+  }
+
   void OnPaint(gfx::Canvas* canvas) override { PaintTile(canvas, false); }
 
   std::u16string GetRenderedTooltipText(const gfx::Point& p) const override {
     const Tab* tab = FavoriteTab();
+    if (tab && ShowsSpeakerBadge(*tab) &&
+        SpeakerHitRect().Contains(gfx::PointF(p))) {
+      return tab->is_muted ? u"Unmute Tab" : u"Mute Tab";
+    }
     return tab ? base::UTF8ToUTF16(tab->display_title()) : std::u16string();
   }
   void OnMouseEntered(const ui::MouseEvent& event) override {
     hovered_ = true;
+    speaker_hovered_ = IsOverSpeaker(event.location());
     SchedulePaint();
+  }
+  void OnMouseMoved(const ui::MouseEvent& event) override {
+    const bool over = IsOverSpeaker(event.location());
+    if (over != speaker_hovered_) {
+      speaker_hovered_ = over;
+      SchedulePaint();
+    }
   }
   void OnMouseExited(const ui::MouseEvent& event) override {
     hovered_ = false;
+    speaker_hovered_ = false;
     SchedulePaint();
   }
   bool OnMousePressed(const ui::MouseEvent& event) override {
-    return event.IsOnlyLeftMouseButton();
+    if (!event.IsOnlyLeftMouseButton()) {
+      return false;
+    }
+    pressed_speaker_ = IsOverSpeaker(event.location());
+    return true;
   }
   void OnMouseReleased(const ui::MouseEvent& event) override {
-    if (event.IsOnlyLeftMouseButton() && HitTestPoint(event.location())) {
+    const bool was_speaker = pressed_speaker_;
+    pressed_speaker_ = false;
+    if (!event.IsOnlyLeftMouseButton() || !HitTestPoint(event.location())) {
+      return;
+    }
+    if (was_speaker && IsOverSpeaker(event.location())) {
       sidebar_->context_->Send(
-          OpenIntent::ForNode(OpenIntentKind::kSelectFavorite, tab_id_));
+          OpenIntent::ForNode(OpenIntentKind::kToggleMute, tab_id_));
+      return;
+    }
+    sidebar_->context_->Send(
+        OpenIntent::ForNode(OpenIntentKind::kSelectFavorite, tab_id_));
+  }
+  void OnDragDone() override {
+    views::View::OnDragDone();
+    if (is_dragging_) {
+      is_dragging_ = false;
+      sidebar_->context_->OnTabDragStateChanged(false, tab_id_);
     }
   }
 
@@ -772,6 +996,8 @@ class OpenSidebarView::FavoriteTileView : public views::View,
     sidebar_dnd::WriteNode(data, tab_id_, tab ? tab->url : std::string(),
                            tab ? base::UTF8ToUTF16(tab->display_title())
                                : std::u16string());
+    is_dragging_ = true;
+    sidebar_->context_->OnTabDragStateChanged(true, tab_id_);
     const float scale = DeviceScale(this);
     gfx::Canvas canvas(size(), scale, false);
     PaintTile(&canvas, true);
@@ -845,16 +1071,38 @@ class OpenSidebarView::FavoriteTileView : public views::View,
       glyphs::DrawLetterTile(canvas, icon, DisplayHost(tab->url),
                              Sk(s.roles.title, 0.15f), Sk(s.roles.title));
     }
+    if (tab->live_state.is_loading && !for_drag) {
+      const gfx::PointF c = icon.CenterPoint();
+      const float r = ink * 0.5f + 3.0f;
+      cc::PaintFlags pen;
+      pen.setAntiAlias(true);
+      pen.setStyle(cc::PaintFlags::kStroke_Style);
+      pen.setStrokeWidth(1.5f);
+      pen.setStrokeCap(cc::PaintFlags::kRound_Cap);
+      pen.setColor(Sk(s.roles.title, 0.18f));
+      canvas->DrawCircle(c, r, pen);
+      pen.setColor(Sk(s.roles.title, 0.62f));
+      SkPathBuilder arc;
+      arc.arcTo(SkRect::MakeLTRB(c.x() - r, c.y() - r, c.x() + r, c.y() + r),
+                spinner_angle_, 105.0f, /*forceMoveTo=*/true);
+      canvas->DrawPath(arc.detach(), pen);
+    }
     if (subtitle && !for_drag) {
       PaintSubtitle(canvas, *subtitle, selected, IsDark(s));
     }
     const std::u16string* badge = sidebar_->FavoriteBadge(tab_id_);
     if (badge && !hovered_ && !for_drag) {
       PaintBadge(canvas, *badge, s);
-    } else if (tab->live_state.is_audible && !tab->is_muted) {
-      glyphs::Draw(canvas, glyphs::Glyph::kSpeaker,
+    } else if (tab->live_state.is_audible || tab->is_muted) {
+      const gfx::RectF hit = SpeakerHitRect();
+      if (speaker_hovered_ && !for_drag) {
+        FillRoundRect(canvas, hit, 5.0f, Sk(ButtonHover(s)));
+      }
+      glyphs::Draw(canvas,
+                   tab->is_muted ? glyphs::Glyph::kSpeakerMuted
+                                 : glyphs::Glyph::kSpeaker,
                    gfx::RectF(bounds.right() - 18, 3, 15, 11),
-                   Sk(s.roles.title, 0.6f));
+                   Sk(s.roles.title, speaker_hovered_ ? 0.90f : 0.65f));
     }
   }
 
@@ -904,9 +1152,31 @@ class OpenSidebarView::FavoriteTileView : public views::View,
         gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_SUBPIXEL_RENDERING);
   }
 
+  bool ShowsSpeakerBadge(const Tab& tab) const {
+    const std::u16string* badge = sidebar_->FavoriteBadge(tab_id_);
+    if (badge && !hovered_) {
+      return false;
+    }
+    return tab.live_state.is_audible || tab.is_muted;
+  }
+
+  gfx::RectF SpeakerHitRect() const {
+    return gfx::RectF(width() - 21.0f, 1.0f, 20.0f, 16.0f);
+  }
+
+  bool IsOverSpeaker(const gfx::Point& p) const {
+    const Tab* tab = FavoriteTab();
+    return tab && ShowsSpeakerBadge(*tab) &&
+           SpeakerHitRect().Contains(gfx::PointF(p));
+  }
+
   raw_ptr<OpenSidebarView> sidebar_;
   ItemID tab_id_;
   bool hovered_ = false;
+  bool speaker_hovered_ = false;
+  bool pressed_speaker_ = false;
+  bool is_dragging_ = false;
+  float spinner_angle_ = 0.0f;
 };
 
 BEGIN_METADATA(OpenSidebarView, FavoriteTileView)
@@ -993,11 +1263,12 @@ class OpenSidebarView::FavoritesEmptyStateView : public views::View {
         gfx::Rect(11, 34, std::max(0, width() - 22), 17),
         gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_SUBPIXEL_RENDERING);
     const gfx::FontList& body_font =
-        typography::Make(12, gfx::Font::Weight::NORMAL);
-    const int body_w = std::min(150, std::max(0, width() - 22));
+        typography::Make(11, gfx::Font::Weight::NORMAL);
+    const int body_w = std::max(0, width() - 20);
+    const int body_h = std::max(36, height() - 56);
     canvas->DrawStringRectWithFlags(
-        std::u16string(kBody), body_font, Sk(title, 0.70f * fade),
-        gfx::Rect((width() - body_w) / 2, 54, body_w, 32),
+        std::u16string(kBody), body_font, Sk(title, 0.72f * fade),
+        gfx::Rect((width() - body_w) / 2, 53, body_w, body_h),
         gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::MULTI_LINE |
             gfx::Canvas::NO_SUBPIXEL_RENDERING);
 
@@ -1018,6 +1289,13 @@ class OpenSidebarView::FavoritesEmptyStateView : public views::View {
     ink.Inset(4.0f);
     canvas->DrawLine(ink.origin(), ink.bottom_right(), x);
     canvas->DrawLine(ink.top_right(), ink.bottom_left(), x);
+  }
+
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    if (DismissRect().Contains(gfx::PointF(event.location()))) {
+      return ui::Cursor(ui::mojom::CursorType::kHand);
+    }
+    return views::View::GetCursor(event);
   }
 
   void OnMouseMoved(const ui::MouseEvent& event) override {
@@ -1118,11 +1396,13 @@ class OpenSidebarView::FavoritesView : public views::View {
       tiles_.push_back(tile);
     }
     SyncEmptyCard();
+    UpdateSpinnerTimer();
     PreferredSizeChanged();
     InvalidateLayout();
   }
 
   void RefreshTiles() {
+    UpdateSpinnerTimer();
     for (FavoriteTileView* t : tiles_) {
       t->SchedulePaint();
     }
@@ -1130,6 +1410,7 @@ class OpenSidebarView::FavoritesView : public views::View {
   }
 
   void RefreshTile(const ItemID& id) {
+    UpdateSpinnerTimer();
     if (auto it = by_id_.find(id); it != by_id_.end()) {
       it->second->SchedulePaint();
     }
@@ -1279,11 +1560,51 @@ class OpenSidebarView::FavoritesView : public views::View {
     return gfx::RectF(x - 1, r.y() + 6, 2, r.height() - 12);
   }
 
+  void UpdateSpinnerTimer() {
+    bool any_loading = false;
+    if (const Profile* profile = sidebar_->focused_profile()) {
+      for (const Tab& t : profile->favorites) {
+        if (t.live_state.is_loading) {
+          any_loading = true;
+          break;
+        }
+      }
+    }
+    if (any_loading && !spinner_timer_.IsRunning()) {
+      spinner_timer_.Start(FROM_HERE, base::Milliseconds(33),
+                           base::BindRepeating(&FavoritesView::OnSpinnerTick,
+                                               base::Unretained(this)));
+    } else if (!any_loading && spinner_timer_.IsRunning()) {
+      spinner_timer_.Stop();
+    }
+  }
+
+  void OnSpinnerTick() {
+    spinner_angle_ = std::fmod(spinner_angle_ + 14.0f, 360.0f);
+    bool any_loading = false;
+    if (const Profile* profile = sidebar_->focused_profile()) {
+      for (const Tab& t : profile->favorites) {
+        if (t.live_state.is_loading) {
+          any_loading = true;
+          if (auto it = by_id_.find(t.id); it != by_id_.end()) {
+            it->second->SetSpinnerAngle(spinner_angle_);
+            it->second->SchedulePaint();
+          }
+        }
+      }
+    }
+    if (!any_loading) {
+      spinner_timer_.Stop();
+    }
+  }
+
   raw_ptr<OpenSidebarView> sidebar_;
   raw_ptr<FavoritesEmptyStateView> empty_card_ = nullptr;
   std::map<ItemID, raw_ptr<FavoriteTileView>> by_id_;
   std::vector<raw_ptr<FavoriteTileView>> tiles_;
   int drop_index_ = -1;
+  base::RepeatingTimer spinner_timer_;
+  float spinner_angle_ = 0.0f;
   base::WeakPtrFactory<FavoritesView> weak_factory_{this};
 };
 
@@ -1295,12 +1616,14 @@ END_METADATA
 // centered when they fit, else scrolled with 28 pt edge fades.
 
 class OpenSidebarView::SwitcherStripView : public views::View,
-                                           public views::ContextMenuController {
+                                           public views::ContextMenuController,
+                                           public views::DragController {
   METADATA_HEADER(SwitcherStripView, views::View)
 
  public:
   explicit SwitcherStripView(OpenSidebarView* sidebar) : sidebar_(sidebar) {
     set_context_menu_controller(this);
+    set_drag_controller(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kTabList);
     GetViewAccessibility().SetName(u"Spaces");
     reveal_ = std::make_unique<motion::OpenSpringAnimator>(
@@ -1399,6 +1722,15 @@ class OpenSidebarView::SwitcherStripView : public views::View,
           Sk(current ? focused.roles.title : focused.roles.bottom_glyph),
           current ? 1.0f : m::bottom_bar::kInactiveIconOpacity, !current);
     }
+    if (reorder_drop_index_ >= 0 &&
+        reorder_drop_index_ <= static_cast<int>(spaces_.size())) {
+      const float hx =
+          x0 + reorder_drop_index_ * m::bottom_bar::kSwitcherPitch - 0.5f;
+      FillRoundRect(
+          canvas, gfx::RectF(hx, m::bottom_bar::kSwitcherItemY + 4.0f, 2.0f,
+                             m::bottom_bar::kSwitcherItemSize.h - 8.0f),
+          1.0f, Sk(IsDark(focused) ? Rgba::White(0.75) : Rgba::Black(0.70)));
+    }
     if ((fade_left || fade_right) && w > 0.0f) {
       const float fade = std::min(m::bottom_bar::kSwitcherFadeWidth, w * 0.5f);
       const float stop = fade / w;
@@ -1427,12 +1759,21 @@ class OpenSidebarView::SwitcherStripView : public views::View,
                  : std::u16string();
   }
 
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override {
+    if (IndexAt(event.location()) >= 0) {
+      return ui::Cursor(ui::mojom::CursorType::kHand);
+    }
+    return views::View::GetCursor(event);
+  }
+
   void OnMouseMoved(const ui::MouseEvent& event) override {
     SetHovered(IndexAt(event.location()));
   }
   void OnMouseExited(const ui::MouseEvent& event) override { SetHovered(-1); }
   bool OnMousePressed(const ui::MouseEvent& event) override {
-    pressed_ = event.IsOnlyLeftMouseButton() && IndexAt(event.location()) >= 0;
+    pressed_index_ =
+        event.IsOnlyLeftMouseButton() ? IndexAt(event.location()) : -1;
+    pressed_ = pressed_index_ >= 0;
     SchedulePaint();
     return pressed_;
   }
@@ -1440,6 +1781,7 @@ class OpenSidebarView::SwitcherStripView : public views::View,
     const int i = IndexAt(event.location());
     const bool was_pressed = pressed_;
     pressed_ = false;
+    pressed_index_ = -1;
     SchedulePaint();
     if (was_pressed && i >= 0) {
       sidebar_->context_->Send(
@@ -1456,24 +1798,120 @@ class OpenSidebarView::SwitcherStripView : public views::View,
     return true;
   }
 
-  // Drop a tab on a Space icon: move it to that Space's Today.
+  // views::DragController: horizontal drag-to-reorder Spaces.
+  void WriteDragDataForView(views::View* sender,
+                            const gfx::Point& press_pt,
+                            ui::OSExchangeData* data) override {
+    const int i = pressed_index_ >= 0 ? pressed_index_ : IndexAt(press_pt);
+    if (i < 0 || static_cast<size_t>(i) >= spaces_.size()) {
+      return;
+    }
+    const SpaceID& space_id = spaces_[static_cast<size_t>(i)];
+    sidebar_dnd::WriteSpace(data, space_id);
+    if (const Space* space =
+            sidebar_->context_->controller()->GetSpace(space_id)) {
+      const float scale = DeviceScale(this);
+      const gfx::Size img_size(34, 34);
+      gfx::Canvas canvas(img_size, scale, /*is_opaque=*/false);
+      const OpenSpaceThemeState& focused =
+          sidebar_->context_->ThemeStateFor(sidebar_->context_->FocusedSpaceId());
+      FillRoundRect(&canvas, gfx::RectF(gfx::Rect(img_size)),
+                    m::bottom_bar::kPlateRadius, Sk(ButtonHover(focused)));
+      glyphs::DrawSpaceIcon(
+          &canvas, space->icon ? &*space->icon : nullptr,
+          base::UTF8ToUTF16(space->title.value_or(std::string())),
+          gfx::RectF(gfx::Rect(img_size)),
+          typography::Get(OpenFont::kSwitcherEmoji), Sk(focused.roles.title),
+          1.0f, false);
+      data->provider().SetDragImage(
+          gfx::ImageSkia(gfx::ImageSkiaRep(canvas.GetBitmap(), scale)),
+          gfx::Vector2d(img_size.width() / 2, img_size.height() / 2));
+    }
+  }
+  int GetDragOperationsForView(views::View* sender,
+                               const gfx::Point& p) override {
+    return ui::DragDropTypes::DRAG_MOVE;
+  }
+  bool CanStartDragForView(views::View* sender,
+                           const gfx::Point& press_pt,
+                           const gfx::Point& p) override {
+    return pressed_index_ >= 0 && spaces_.size() > 1 &&
+           views::View::ExceededDragThreshold(p - press_pt);
+  }
+
+  // Drop a tab on a Space icon (move to Space's Today) OR drop a dragged Space
+  // to reorder horizontally.
   bool GetDropFormats(int* formats,
                       std::set<ui::ClipboardFormatType>* format_types) override {
     *formats = 0;
     format_types->insert(sidebar_dnd::NodeFormat());
+    format_types->insert(sidebar_dnd::SpaceFormat());
     return true;
   }
   bool CanDrop(const ui::OSExchangeData& data) override {
-    return data.HasCustomFormat(sidebar_dnd::NodeFormat());
+    return data.HasCustomFormat(sidebar_dnd::NodeFormat()) ||
+           data.HasCustomFormat(sidebar_dnd::SpaceFormat());
   }
   int OnDragUpdated(const ui::DropTargetEvent& event) override {
+    if (event.data().HasCustomFormat(sidebar_dnd::SpaceFormat())) {
+      SetHovered(-1);
+      const int slot = InsertionIndexAt(event.location());
+      if (slot != reorder_drop_index_) {
+        reorder_drop_index_ = slot;
+        SchedulePaint();
+      }
+      return reorder_drop_index_ >= 0 ? ui::DragDropTypes::DRAG_MOVE
+                                      : ui::DragDropTypes::DRAG_NONE;
+    }
+    if (reorder_drop_index_ != -1) {
+      reorder_drop_index_ = -1;
+      SchedulePaint();
+    }
     SetHovered(IndexAt(event.location()));
     return hovered_ >= 0 ? ui::DragDropTypes::DRAG_MOVE
                          : ui::DragDropTypes::DRAG_NONE;
   }
-  void OnDragExited() override { SetHovered(-1); }
+  void OnDragExited() override {
+    SetHovered(-1);
+    if (reorder_drop_index_ != -1) {
+      reorder_drop_index_ = -1;
+      SchedulePaint();
+    }
+  }
   views::View::DropCallback GetDropCallback(
       const ui::DropTargetEvent& event) override {
+    if (std::optional<SpaceID> dragged_space =
+            sidebar_dnd::ReadSpace(event.data())) {
+      const int slot = reorder_drop_index_ >= 0
+                           ? reorder_drop_index_
+                           : InsertionIndexAt(event.location());
+      reorder_drop_index_ = -1;
+      SchedulePaint();
+      const int from = IndexOf(*dragged_space);
+      if (from < 0 || slot < 0 || spaces_.empty()) {
+        return base::NullCallback();
+      }
+      size_t to_index = static_cast<size_t>(slot);
+      if (static_cast<size_t>(from) < to_index) {
+        --to_index;
+      }
+      to_index = std::min(to_index, spaces_.size() - 1);
+      if (to_index == static_cast<size_t>(from)) {
+        return base::NullCallback();
+      }
+      return base::BindOnce(
+          [](base::WeakPtr<SwitcherStripView> self, std::string space_id,
+             size_t to_idx, const ui::DropTargetEvent&,
+             ui::mojom::DragOperation& op,
+             std::unique_ptr<ui::LayerTreeOwner>) {
+            if (!self) {
+              return;
+            }
+            self->sidebar_->NotifySpaceReordered(space_id, to_idx);
+            op = ui::mojom::DragOperation::kMove;
+          },
+          weak_factory_.GetWeakPtr(), *dragged_space, to_index);
+    }
     const std::optional<ItemID> id = sidebar_dnd::ReadNode(event.data());
     const int i = IndexAt(event.location());
     SetHovered(-1);
@@ -1532,6 +1970,18 @@ class OpenSidebarView::SwitcherStripView : public views::View,
     const int i = static_cast<int>(rel / m::bottom_bar::kSwitcherPitch);
     return i < static_cast<int>(spaces_.size()) ? i : -1;
   }
+  int InsertionIndexAt(const gfx::Point& p) const {
+    if (spaces_.empty()) {
+      return -1;
+    }
+    const float w = width();
+    const float content = ContentWidth();
+    const float x0 = content <= w ? (w - content) / 2 - 1 : -1 - scroll_x_;
+    const float rel = p.x() - x0;
+    const int slot = static_cast<int>(
+        std::lround(rel / m::bottom_bar::kSwitcherPitch));
+    return std::clamp(slot, 0, static_cast<int>(spaces_.size()));
+  }
   void SetHovered(int i) {
     if (i != hovered_) {
       hovered_ = i;
@@ -1542,9 +1992,12 @@ class OpenSidebarView::SwitcherStripView : public views::View,
   raw_ptr<OpenSidebarView> sidebar_;
   std::vector<SpaceID> spaces_;
   int hovered_ = -1;
+  int pressed_index_ = -1;
+  int reorder_drop_index_ = -1;
   bool pressed_ = false;
   float scroll_x_ = 0;
   std::unique_ptr<motion::OpenSpringAnimator> reveal_;
+  base::WeakPtrFactory<SwitcherStripView> weak_factory_{this};
 };
 
 BEGIN_METADATA(OpenSidebarView, SwitcherStripView)
@@ -1686,6 +2139,46 @@ void OpenSidebarView::SetPresentation(Presentation presentation) {
 
 void OpenSidebarView::SetWindowControlsSlot(WindowControlsSlot slot) {
   toolbar_->SetWindowControls(slot);
+}
+
+void OpenSidebarView::SetLeadingControlsInset(int px) {
+  toolbar_->SetLeadingControlsInset(px);
+}
+
+void OpenSidebarView::SetHasOpenPopover(bool open) {
+  if (has_open_popover_ == open) {
+    return;
+  }
+  has_open_popover_ = open;
+  url_pill_->SetControlsVisible(sidebar_hovered_ || has_open_popover_);
+}
+
+void OpenSidebarView::NotifyAppMenuRequested(views::View* anchor) {
+  if (delegate_) {
+    delegate_->OnAppMenuRequested(anchor);
+    return;
+  }
+  context_->OnAppMenuRequested(anchor);
+}
+
+void OpenSidebarView::NotifyExtensionContextMenuRequested(
+    const std::string& extension_id,
+    views::View* anchor,
+    const gfx::Point& screen_pt) {
+  if (delegate_) {
+    delegate_->OnExtensionContextMenuRequested(extension_id, anchor, screen_pt);
+    return;
+  }
+  context_->OnExtensionContextMenuRequested(extension_id, anchor, screen_pt);
+}
+
+void OpenSidebarView::NotifySpaceReordered(const std::string& space_id,
+                                           size_t to_index) {
+  if (delegate_) {
+    delegate_->OnSpaceReordered(space_id, to_index);
+    return;
+  }
+  context_->OnSpaceReordered(space_id, to_index);
 }
 
 const Space* OpenSidebarView::focused_space() const {
@@ -1942,6 +2435,10 @@ views::View* OpenSidebarView::site_control_button() const {
   return url_pill_->site_button();
 }
 
+views::View* OpenSidebarView::GetAppMenuButton() const {
+  return toolbar_->app_menu_button();
+}
+
 OpenTabTreeView* OpenSidebarView::GetTreeForSpace(const SpaceID& space_id) const {
   return pager_->FindPage(space_id);
 }
@@ -2010,8 +2507,9 @@ void OpenSidebarView::UpdateHover(bool hovered) {
     return;
   }
   sidebar_hovered_ = hovered;
-  // guess: URL field controls show while the pointer is over the sidebar.
-  url_pill_->SetControlsVisible(hovered);
+  // Keep URL pill controls visible while hovered OR while a popover anchored
+  // to Site Control / a pinned extension is open.
+  url_pill_->SetControlsVisible(sidebar_hovered_ || has_open_popover_);
 }
 
 BEGIN_METADATA(OpenSidebarView)

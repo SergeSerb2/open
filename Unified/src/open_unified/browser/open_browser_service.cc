@@ -353,6 +353,122 @@ void CollectLiveFoldersFromNodes(
   }
 }
 
+std::vector<std::string> ParseIcsFeedUrlsValue(const base::Value& value) {
+  std::vector<std::string> urls;
+  auto push_if_valid = [&urls](std::string_view raw) {
+    std::string trimmed(base::TrimWhitespaceASCII(raw, base::TRIM_ALL));
+    if (!trimmed.empty()) {
+      urls.push_back(std::move(trimmed));
+    }
+  };
+  if (value.is_list()) {
+    for (const base::Value& entry : value.GetList()) {
+      if (entry.is_string()) {
+        push_if_valid(entry.GetString());
+      }
+    }
+  } else if (value.is_string()) {
+    for (std::string_view part : base::SplitStringPiece(
+             value.GetString(), ",\r\n", base::TRIM_WHITESPACE,
+             base::SPLIT_WANT_NONEMPTY)) {
+      push_if_valid(part);
+    }
+  }
+  return urls;
+}
+
+struct LiveDataDiskConfig {
+  std::optional<std::vector<std::string>> ics_urls;
+  std::optional<std::string> github_token;
+};
+
+LiveDataDiskConfig LoadLiveDataDiskConfig(const base::FilePath& state_dir,
+                                          bool read_ics_from_disk) {
+  LiveDataDiskConfig config;
+  if (read_ics_from_disk) {
+    const base::FilePath prefs_path = state_dir.AppendASCII(kPreferencesFile);
+    std::string raw;
+    if (base::PathExists(prefs_path) &&
+        base::ReadFileToStringWithMaxSize(prefs_path, &raw, 1024 * 1024)) {
+      if (auto dict = base::JSONReader::ReadDict(raw, base::JSON_PARSE_RFC)) {
+        if (const base::Value* ics_val = dict->Find("calendar.icsUrls")) {
+          config.ics_urls = ParseIcsFeedUrlsValue(*ics_val);
+        }
+      }
+    }
+  }
+  if (OpenPlatform* platform = OpenPlatform::Get()) {
+    if (std::unique_ptr<SecretStore> store =
+            platform->CreateSecretStore(state_dir)) {
+      for (std::string_view service :
+           {"open.livedata", "com.open.browser", "open"}) {
+        if (auto bytes = store->LoadSecret(service, "github.token");
+            bytes && !bytes->empty()) {
+          std::string token(bytes->begin(), bytes->end());
+          base::TrimWhitespaceASCII(token, base::TRIM_ALL, &token);
+          if (!token.empty()) {
+            config.github_token = std::move(token);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return config;
+}
+
+void ScheduleLiveDataPreferencesAndAuth(
+    scoped_refptr<base::SequencedTaskRunner> file_runner,
+    base::WeakPtr<OpenBrowserService> service_weak,
+    const base::FilePath& state_dir,
+    OpenLiveDataService* livedata) {
+  if (!livedata) {
+    return;
+  }
+  webui::OpenPreferences* prefs = webui::OpenPreferences::Get();
+  const base::Value cal_enabled_val = prefs->GetValue("previews.calendar");
+  const bool calendar_enabled =
+      !cal_enabled_val.is_bool() || cal_enabled_val.GetBool();
+  bool has_pref_ics = false;
+  if (!calendar_enabled) {
+    livedata->SetIcsFeedUrls({});
+    has_pref_ics = true;
+  } else {
+    const base::Value ics_val = prefs->GetValue("calendar.icsUrls");
+    if (!ics_val.is_none()) {
+      livedata->SetIcsFeedUrls(ParseIcsFeedUrlsValue(ics_val));
+      has_pref_ics = true;
+    }
+  }
+  if (!file_runner) {
+    return;
+  }
+  file_runner->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&LoadLiveDataDiskConfig, state_dir,
+                     /*read_ics_from_disk=*/!has_pref_ics && calendar_enabled),
+      base::BindOnce(
+          [](base::WeakPtr<OpenBrowserService> self, LiveDataDiskConfig cfg) {
+            if (!self || !self->started() || !self->livedata()) {
+              return;
+            }
+            if (cfg.ics_urls.has_value()) {
+              const base::Value cal_val =
+                  webui::OpenPreferences::Get()->GetValue("previews.calendar");
+              const bool still_enabled =
+                  !cal_val.is_bool() || cal_val.GetBool();
+              if (still_enabled) {
+                self->livedata()->SetIcsFeedUrls(std::move(*cfg.ics_urls));
+              }
+            }
+            if (cfg.github_token.has_value()) {
+              self->livedata()->SetGitHubBearerToken(
+                  std::move(*cfg.github_token));
+            }
+          },
+          std::move(service_weak)));
+}
+
 }  // namespace
 
 // Bridges OpenDownloadBridge updates to OpenSleepController download
@@ -694,6 +810,9 @@ void OpenBrowserService::Start() {
   livedata_ = std::make_unique<OpenLiveDataService>();
   RefreshNetworkFactories();
   SyncLiveDataFromModel();
+  ScheduleLiveDataPreferencesAndAuth(
+      file_runner_, weak_factory_.GetWeakPtr(),
+      user_data_dir_.AppendASCII(kStateDirName), livedata_.get());
   livedata_->Start();
 
   capture_controller_ = std::make_unique<OpenCaptureController>(user_data_dir_);
@@ -1811,6 +1930,13 @@ void OpenBrowserService::ApplyPreferencesInternal(bool schedule_sync_push) {
   // 5. Boosts enabled toggle.
   if (boost_controller_) {
     boost_controller_->OnBoostsPreferenceChanged();
+  }
+
+  // 5b. LiveData calendar ICS feeds & GitHub bearer token.
+  if (livedata_) {
+    ScheduleLiveDataPreferencesAndAuth(
+        file_runner_, weak_factory_.GetWeakPtr(),
+        user_data_dir_.AppendASCII(kStateDirName), livedata_.get());
   }
 
   // 6. Global Little Open hotkey.

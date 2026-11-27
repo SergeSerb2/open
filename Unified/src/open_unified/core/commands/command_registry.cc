@@ -33,6 +33,19 @@ std::string ShiftedToBaseKey(const std::string& key) {
 
 std::string DisplayKeyName(const std::string& key) {
   if (key == " " || key == "space") return "Space";
+#if BUILDFLAG(IS_MAC)
+  if (key == "\t" || key == "tab") return "⇥";
+  if (key == "\r" || key == "\n" || key == "return") return "↩";
+  if (key == "escape" || key == "esc") return "⎋";
+  if (key == "left") return "←";
+  if (key == "right") return "→";
+  if (key == "up") return "↑";
+  if (key == "down") return "↓";
+  if (key == "pageup") return "⇞";
+  if (key == "pagedown") return "⇟";
+  if (key == "backspace") return "⌫";
+  if (key == "delete") return "⌦";
+#else
   if (key == "\t" || key == "tab") return "Tab";
   if (key == "\r" || key == "\n" || key == "return") return "Return";
   if (key == "escape" || key == "esc") return "Esc";
@@ -40,6 +53,9 @@ std::string DisplayKeyName(const std::string& key) {
   if (key == "right") return "Right";
   if (key == "up") return "Up";
   if (key == "down") return "Down";
+  if (key == "pageup") return "PageUp";
+  if (key == "pagedown") return "PageDown";
+#endif
   if (key.size() == 1) {
     return std::string(1, static_cast<char>(std::toupper(
                               static_cast<unsigned char>(key[0]))));
@@ -210,20 +226,23 @@ KeyboardShortcut KeyboardShortcut::Normalized() const {
 }
 
 std::string KeyboardShortcut::DisplayString() const {
-  std::vector<std::string> parts;
 #if BUILDFLAG(IS_MAC)
-  if (modifiers & kModMeta) parts.push_back("Cmd");
-  if (modifiers & kModCtrl) parts.push_back("Ctrl");
-  if (modifiers & kModAlt) parts.push_back("Opt");
-  if (modifiers & kModShift) parts.push_back("Shift");
+  std::string out;
+  if (modifiers & kModCtrl) out += "⌃";
+  if (modifiers & kModAlt) out += "⌥";
+  if (modifiers & kModShift) out += "⇧";
+  if (modifiers & kModMeta) out += "⌘";
+  out += DisplayKeyName(key);
+  return out;
 #else
+  std::vector<std::string> parts;
   if (modifiers & kModCtrl) parts.push_back("Ctrl");
   if (modifiers & kModAlt) parts.push_back("Alt");
   if (modifiers & kModShift) parts.push_back("Shift");
-  if (modifiers & kModMeta) parts.push_back("Super");
-#endif
+  if (modifiers & kModMeta) parts.push_back("Win");
   parts.push_back(DisplayKeyName(key));
   return base::JoinString(parts, "+");
+#endif
 }
 
 std::vector<std::string> KeyboardShortcut::ModifierNames() const {
@@ -246,7 +265,8 @@ uint32_t KeyboardShortcut::ModifiersFromNames(
       mods |= kModAlt;
     } else if (n == "shift") {
       mods |= kModShift;
-    } else if (n == "command" || n == "cmd" || n == "meta" || n == "super") {
+    } else if (n == "command" || n == "cmd" || n == "meta" || n == "super" ||
+               n == "win") {
       mods |= kModMeta;
     } else if (n == "mod" || n == "primary") {
       mods |= kModPrimary;
@@ -357,7 +377,7 @@ std::optional<KeyboardShortcut> CommandRegistry::ParseShortcutString(
     if (mod == "mod" || mod == "primary") {
       shortcut.modifiers |= kModPrimary;
     } else if (mod == "cmd" || mod == "command" || mod == "meta" ||
-               mod == "super") {
+               mod == "super" || mod == "win") {
       shortcut.modifiers |= kModMeta;
     } else if (mod == "ctrl" || mod == "control") {
       shortcut.modifiers |= kModCtrl;
@@ -379,6 +399,10 @@ std::optional<KeyboardShortcut> CommandRegistry::ParseShortcutString(
     key = "+";
   } else if (key == "minus") {
     key = "-";
+  } else if (key == "pgup" || key == "page_up") {
+    key = "pageup";
+  } else if (key == "pgdn" || key == "page_down") {
+    key = "pagedown";
   }
   if (key.empty()) {
     return std::nullopt;
@@ -437,17 +461,26 @@ CommandRegistry::CommandRegistry() {
       "Import from Another Browser…", {"Open"}, {}, CommandScope::kWindow,
       false, "always",
       {"Import Bookmarks", "Import Passwords", "Import Settings", "Bookmarks"});
+#if BUILDFLAG(IS_MAC)
   add(CommandId::kHideOpen, "hide-open", "Hide Open", {"Open"}, {Primary("h")});
   add(CommandId::kHideOthers, "hide-others", "Hide Others", {"Open"},
       {PrimaryAlt("h")});
   add(CommandId::kShowAll, "show-all", "Show All", {"Open"}, {});
+#endif
   add(CommandId::kQuitOpen, "quit-open", "Quit Open", {"Open"}, {Primary("q")});
 
   // --- File menu (23) ---
   add(CommandId::kNewTab, "new-tab", "New Tab…", {"File"}, {Primary("t")},
       CommandScope::kWindow, true, "always", {"Open New Tab", "Create Tab"});
   add(CommandId::kOpenCommandBar, "open-command-bar", "Open Command Bar",
-      {"File"}, {Primary("l")}, CommandScope::kCommandBar, true, "always",
+      {"File"},
+#if BUILDFLAG(IS_MAC)
+      {Primary("l")},
+#else
+      {Primary("l"), KeyboardShortcut{"d", kModAlt}.Normalized(),
+       KeyboardShortcut{"f6", kModNone}.Normalized()},
+#endif
+      CommandScope::kCommandBar, true, "always",
       {"Edit URL", "Command Bar", "Omnibox"});
   add(CommandId::kNewWindow, "new-window", "New Window", {"File"},
       {Primary("n")}, CommandScope::kWindow, true, "always",
@@ -489,7 +522,12 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kCloseWindow, "close-window", "Close Window", {"File"},
       {PrimaryShift("w")});
   add(CommandId::kArchiveTab, "archive-tab", "Archive Tab", {"File"},
-      {Primary("w")}, CommandScope::kWindow, true, "hasCurrentTab",
+#if BUILDFLAG(IS_MAC)
+      {Primary("w")},
+#else
+      {Primary("w"), Primary("f4")},
+#endif
+      CommandScope::kWindow, true, "hasCurrentTab",
       {"Close Tab", "Close Current Tab"});
   add(CommandId::kRestoreLastClosedTab, "restore-last-closed-tab",
       "Restore Last Closed Tab", {"File"}, {PrimaryShift("t")},
@@ -604,10 +642,21 @@ CommandRegistry::CommandRegistry() {
       CommandScope::kWindow, false, "always",
       {"Exit Full Screen", "Full Screen", "Toggle Full Screen"});
   add(CommandId::kReload, "reload", "Refresh the Page", {"View"},
-      {Primary("r")}, CommandScope::kWindow, false, "hasCurrentTab",
+#if BUILDFLAG(IS_MAC)
+      {Primary("r")},
+#else
+      {Primary("r"), KeyboardShortcut{"f5", kModNone}.Normalized()},
+#endif
+      CommandScope::kWindow, false, "hasCurrentTab",
       {"Reload Page", "Reload", "Refresh"});
   add(CommandId::kForceReload, "force-reload", "Force Refresh the Page",
-      {"View"}, {PrimaryShift("r")}, CommandScope::kWindow, false,
+      {"View"},
+#if BUILDFLAG(IS_MAC)
+      {PrimaryShift("r")},
+#else
+      {PrimaryShift("r"), Primary("f5")},
+#endif
+      CommandScope::kWindow, false,
       "hasCurrentTab", {"Force Reload", "Force Refresh"});
   add(CommandId::kStopLoading, "stop-loading", "Stop Loading", {"View"},
       {Primary(".")}, CommandScope::kWindow, false, "hasCurrentTab");
@@ -693,9 +742,19 @@ CommandRegistry::CommandRegistry() {
       {Primary("d")}, CommandScope::kWindow, true, "hasCurrentTab",
       {"Pin Tab", "Unpin Tab", "Pin", "Unpin"});
   add(CommandId::kNextTab, "next-tab", "Next Tab", {"Tabs"},
-      {PrimaryAlt("down")}, CommandScope::kWindow, true);
+#if BUILDFLAG(IS_MAC)
+      {PrimaryAlt("down")},
+#else
+      {PrimaryAlt("down"), Primary("pagedown")},
+#endif
+      CommandScope::kWindow, true);
   add(CommandId::kPreviousTab, "previous-tab", "Previous Tab", {"Tabs"},
-      {PrimaryAlt("up")}, CommandScope::kWindow, true);
+#if BUILDFLAG(IS_MAC)
+      {PrimaryAlt("up")},
+#else
+      {PrimaryAlt("up"), Primary("pageup")},
+#endif
+      CommandScope::kWindow, true);
   add(CommandId::kCycleTabForward, "cycle-tab-forward", "Cycle Tab Forward",
       {"Tabs"},
 #if BUILDFLAG(IS_MAC)
@@ -779,7 +838,12 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kViewArchive, "view-archive", "View Archive", {"Archive"}, {},
       CommandScope::kWindow, false, "always", {"Archive", "Open Archive"});
   add(CommandId::kViewHistory, "view-history", "View History", {"Archive"},
-      {Primary("y")}, CommandScope::kWindow, false, "always",
+#if BUILDFLAG(IS_MAC)
+      {Primary("y")},
+#else
+      {Primary("h"), Primary("y")},
+#endif
+      CommandScope::kWindow, false, "always",
       {"Show History", "History"});
   add(CommandId::kClearArchive, "clear-archive", "Clear Archive", {"Archive"},
       {}, CommandScope::kWindow, false, "always", {"Delete Archive"});
@@ -817,8 +881,10 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kMinimizeWindow, "minimize-window", "Minimize", {"Window"},
       {Primary("m")});
   add(CommandId::kZoomWindow, "zoom-window", "Zoom", {"Window"}, {});
+#if BUILDFLAG(IS_MAC)
   add(CommandId::kBringAllToFront, "bring-all-to-front", "Bring All to Front",
       {"Window"}, {});
+#endif
 
   // --- Help (11) ---
   add(CommandId::kExportNotes, "export-notes", "Export Notes…", {"Help"}, {},
@@ -890,8 +956,10 @@ CommandRegistry::CommandRegistry() {
 #endif
   add(CommandId::kNetworkInspector, "network-inspector", "Network Inspector",
       {"View", "Developer"}, {}, CommandScope::kWindow, false, "hasCurrentTab");
+#if BUILDFLAG(IS_MAC)
   add(CommandId::kAllowJsAppleEvents, "allow-js-apple-events",
       "Allow JavaScript from Apple Events", {"View", "Developer"}, {});
+#endif
 
   // --- Text submenus (21) ---
   add(CommandId::kShowSpelling, "show-spelling", "Show Spelling and Grammar",
@@ -996,7 +1064,12 @@ CommandRegistry::CommandRegistry() {
       "Show Little Open (Global)", {}, {PrimaryAlt("n")}, CommandScope::kGlobal,
       false, "always", {"Little Open", "Little Arc"});
   add(CommandId::kShowShortcutsOverlay, "show-shortcuts-overlay",
-      "Show Shortcuts While Holding Command", {}, {}, CommandScope::kWindow);
+#if BUILDFLAG(IS_MAC)
+      "Show Shortcuts While Holding Command",
+#else
+      "Show Shortcuts While Holding Ctrl",
+#endif
+      {}, {}, CommandScope::kWindow);
   add(CommandId::kAccountSync, "account-sync", "Account & Sync…", {}, {},
       CommandScope::kWindow, false, "always",
       {"Sync", "Arc Sync", "Sign In", "Open Account", "Cloud Sync"});

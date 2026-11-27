@@ -28,7 +28,6 @@
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
@@ -44,8 +43,11 @@
 #include "extensions/common/manifest_handlers/description_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "open_unified/browser/open_browser_service.h"
+#include "open_unified/browser/open_chromium_hooks.h"
 #include "open_unified/browser/open_tab_bridge.h"
 #include "open_unified/ui/design/open_glyphs.h"
+#include "open_unified/ui/views/open_browser_view.h"
+#include "open_unified/ui/views/open_sidebar_view.h"
 #include "open_unified/ui/views/open_split_container_view.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -178,12 +180,55 @@ struct OpenExtensionBridge::WindowState : public views::WidgetObserver {
   }
 
   views::View* FallbackAnchor() const {
+    if (views::View* hook_anchor =
+            hooks::GetBubbleAnchorView(window.browser.get());
+        hook_anchor && hook_anchor->IsDrawn() &&
+        hook_anchor->GetWidget() == widget.get()) {
+      return hook_anchor;
+    }
     if (BrowserView* browser_view =
             BrowserView::GetBrowserViewForBrowser(window.browser.get());
         browser_view && browser_view->GetWidget() == widget.get()) {
-      return browser_view->top_container();
+      if (OpenBrowserView* open_view =
+              OpenBrowserView::FromBrowserView(browser_view);
+          open_view && open_view->IsDrawn()) {
+        if (!open_view->sidebar_hidden()) {
+          if (views::View* sc = open_view->GetSiteControlAnchorView();
+              sc && sc->IsDrawn()) {
+            return sc;
+          }
+          if (views::View* pill = open_view->GetUrlPillView();
+              pill && pill->IsDrawn()) {
+            return pill;
+          }
+        } else if (open_view->single_pane_toolbar_visible()) {
+          if (views::View* sc = open_view->GetSinglePaneSiteControlAnchor();
+              sc && sc->IsDrawn()) {
+            return sc;
+          }
+        }
+        if (views::View* panel = open_view->web_contents_host();
+            panel && panel->IsDrawn() && !panel->bounds().IsEmpty()) {
+          return panel;
+        }
+        return open_view;
+      }
     }
     return widget->GetRootView();
+  }
+
+  OpenSidebarView* SidebarView() const {
+    if (!window.browser) {
+      return nullptr;
+    }
+    BrowserView* browser_view =
+        BrowserView::GetBrowserViewForBrowser(window.browser.get());
+    if (!browser_view || browser_view->GetWidget() != widget.get()) {
+      return nullptr;
+    }
+    OpenBrowserView* open_view =
+        OpenBrowserView::FromBrowserView(browser_view);
+    return open_view ? open_view->sidebar() : nullptr;
   }
 
   // views::WidgetObserver:
@@ -310,7 +355,7 @@ class OpenExtensionBridge::ActionDelegate
     popup_host_ = host.get();
     popup_host_observation_.Observe(popup_host_.get());
     views::View* anchor = window_->next_anchor.view();
-    if (!anchor) {
+    if (!anchor || !anchor->IsDrawn()) {
       anchor = window_->FallbackAnchor();
     }
     has_opened_popup_ = true;
@@ -337,7 +382,7 @@ class OpenExtensionBridge::ActionDelegate
 
   void ShowContextMenuAsFallback() override {
     views::View* anchor = window_->next_anchor.view();
-    if (!anchor) {
+    if (!anchor || !anchor->IsDrawn()) {
       anchor = window_->FallbackAnchor();
     }
     bridge_->ShowContextMenu(window_->window, extension_id_, anchor,
@@ -443,6 +488,11 @@ class OpenExtensionBridge::ActionEntry
 };
 
 OpenExtensionBridge::WindowState::~WindowState() {
+  if (menu_runner && menu_runner->IsRunning()) {
+    if (OpenSidebarView* sidebar = SidebarView()) {
+      sidebar->SetHasOpenPopover(false);
+    }
+  }
   menu_runner.reset();
   // View models (and their delegates) before the keybinding registry.
   entries.clear();
@@ -1268,6 +1318,9 @@ bool OpenExtensionBridge::ShowContextMenu(
   if (state->menu_runner && state->menu_runner->IsRunning()) {
     return true;
   }
+  // Destroy any previous MenuRunner before GetContextMenu() frees the old
+  // ExtensionContextMenuModel (~MenuModelAdapter dereferences menu_model_).
+  state->menu_runner.reset();
   ui::MenuModel* menu = entry->model()->GetContextMenu(
       extensions::ExtensionContextMenuModel::ContextMenuSource::kToolbarAction);
   if (!menu) {
@@ -1275,8 +1328,42 @@ bool OpenExtensionBridge::ShowContextMenu(
   }
   // "Inspect Popup" anchors the popup to the same button.
   state->next_anchor.SetView(StableAnchor(anchor));
+  views::Widget* host_widget = state->widget;
+  if (OpenSidebarView* sidebar = state->SidebarView()) {
+    sidebar->SetHasOpenPopover(true);
+  }
   state->menu_runner = std::make_unique<views::MenuRunner>(
-      menu, views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU);
+      menu, views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU,
+      base::BindRepeating(
+          [](base::WeakPtr<OpenExtensionBridge> self,
+             views::Widget* menu_widget) {
+            if (!self) {
+              return;
+            }
+            if (WindowState* ws = self->FindWindow(menu_widget)) {
+              if (!self->IsPickerOpen()) {
+                if (OpenSidebarView* sidebar = ws->SidebarView()) {
+                  sidebar->SetHasOpenPopover(false);
+                }
+              }
+            }
+            base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+                FROM_HERE,
+                base::BindOnce(
+                    [](base::WeakPtr<OpenExtensionBridge> bridge,
+                       views::Widget* target_widget) {
+                      if (!bridge) {
+                        return;
+                      }
+                      if (WindowState* ws = bridge->FindWindow(target_widget);
+                          ws && ws->menu_runner &&
+                          !ws->menu_runner->IsRunning()) {
+                        ws->menu_runner.reset();
+                      }
+                    },
+                    self, menu_widget));
+          },
+          weak_factory_.GetWeakPtr(), host_widget));
   state->menu_runner->RunMenuAt(state->widget, nullptr,
                                 gfx::Rect(point_in_screen, gfx::Size()),
                                 views::MenuAnchorPosition::kTopLeft,
@@ -1338,7 +1425,7 @@ void OpenExtensionBridge::ShowExtensionsPicker(
   if (!state) {
     return;
   }
-  if (!anchor) {
+  if (!anchor || !anchor->IsDrawn()) {
     anchor = state->FallbackAnchor();
   }
   auto view = std::make_unique<PickerView>(this, state->window, callbacks,

@@ -349,6 +349,60 @@ if [[ "${SKIP_ADBLOCK_LISTS}" == 0 ]]; then
   fi
 fi
 
+# --- 3c. Brand icons (Windows .ico, Linux .png/.xpm, macOS .icns/Assets.car) ---
+icons_dir="${UNIFIED_DIR}/assets/icons"
+if [[ -d "${icons_dir}" ]]; then
+  log "overlay Open brand icons -> chrome/app/theme/chromium"
+  python3 -I - "${icons_dir}" "${SRC}/chrome/app/theme" "${CHECK}" <<'PY'
+import os, shutil, sys
+src_root, dst_root, check = sys.argv[1], sys.argv[2], sys.argv[3] == '1'
+pairs = [
+    ('win/chromium.ico', 'chromium/win/chromium.ico'),
+    ('win/chromium.ico', 'chromium/win/chromium_doc.ico'),
+    ('win/chromium.ico', 'chromium/win/chromium_pdf.ico'),
+    ('win/chromium.ico', 'chromium/win/app_list.ico'),
+    ('win/tiles/Logo.png', 'chromium/win/tiles/Logo.png'),
+    ('win/tiles/SmallLogo.png', 'chromium/win/tiles/SmallLogo.png'),
+    ('linux/product_logo_24.png', 'chromium/linux/product_logo_24.png'),
+    ('linux/product_logo_48.png', 'chromium/linux/product_logo_48.png'),
+    ('linux/product_logo_64.png', 'chromium/linux/product_logo_64.png'),
+    ('linux/product_logo_128.png', 'chromium/linux/product_logo_128.png'),
+    ('linux/product_logo_256.png', 'chromium/linux/product_logo_256.png'),
+    ('linux/product_logo_32.xpm', 'chromium/linux/product_logo_32.xpm'),
+    ('root/product_logo_16.png', 'chromium/product_logo_16.png'),
+    ('linux/product_logo_24.png', 'chromium/product_logo_24.png'),
+    ('linux/product_logo_48.png', 'chromium/product_logo_48.png'),
+    ('linux/product_logo_64.png', 'chromium/product_logo_64.png'),
+    ('linux/product_logo_128.png', 'chromium/product_logo_128.png'),
+    ('linux/product_logo_256.png', 'chromium/product_logo_256.png'),
+    ('default_100_percent/product_logo_16.png', 'default_100_percent/chromium/product_logo_16.png'),
+    ('default_100_percent/product_logo_32.png', 'default_100_percent/chromium/product_logo_32.png'),
+    ('default_100_percent/product_logo_16.png', 'default_100_percent/chromium/linux/product_logo_16.png'),
+    ('default_100_percent/product_logo_32.png', 'default_100_percent/chromium/linux/product_logo_32.png'),
+    ('default_200_percent/product_logo_16.png', 'default_200_percent/chromium/product_logo_16.png'),
+    ('default_200_percent/product_logo_32.png', 'default_200_percent/chromium/product_logo_32.png'),
+    ('mac/app.icns', 'chromium/mac/app.icns'),
+    ('mac/Assets.car', 'chromium/mac/Assets.car'),
+]
+changed = []
+for rel_src, rel_dst in pairs:
+  s = os.path.join(src_root, rel_src)
+  d = os.path.join(dst_root, rel_dst)
+  if not os.path.isfile(s):
+    continue
+  if os.path.isfile(d) and os.path.getsize(d) == os.path.getsize(s):
+    with open(s, 'rb') as a, open(d, 'rb') as b:
+      if a.read() == b.read():
+        continue
+  changed.append(rel_dst)
+  if not check:
+    os.makedirs(os.path.dirname(d), exist_ok=True)
+    shutil.copy2(s, d)
+verb = 'would update' if check else 'updated'
+print(f'    {len(changed)} brand icon file(s) {verb}')
+PY
+fi
+
 if [[ "${CHECK}" == 0 ]]; then
   generate_sources_gni
 fi

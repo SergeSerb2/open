@@ -55,6 +55,7 @@ struct DetectedBrowserProfile {
   bool is_default = false;
   int bookmark_count = 0;
   int history_count = 0;
+  std::vector<std::string> extension_ids;
   bool access_denied = false;
   std::string access_error;
 };
@@ -303,6 +304,11 @@ class BrowserImporter {
       const std::vector<ImportedBookmarkNode>& roots);
 
   // --- Chromium-family readers (Chrome, Edge, Brave, Vivaldi, Chromium) ---
+  // Discovers Chrome Web Store extension IDs from a Chromium profile's
+  // Secure Preferences / Preferences files.
+  static std::vector<std::string> ReadChromiumExtensionIds(
+      const base::FilePath& profile_dir);
+
   static bool ReadChromiumBookmarks(const base::FilePath& profile_dir,
                                     std::vector<ImportedBookmarkNode>* out_roots,
                                     ImportBookmarksReport* out_report = nullptr);

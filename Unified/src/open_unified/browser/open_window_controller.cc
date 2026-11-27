@@ -27,12 +27,16 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/extensions/extension_view_host.h"
+#include "chrome/browser/extensions/extension_view_host_factory.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/extensions/extension_popup_types.h"
 #include "chrome/browser/ui/simple_message_box.h"
+#include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -42,6 +46,7 @@
 #include "components/find_in_page/find_types.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
@@ -52,6 +57,12 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_registrar.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/uninstall_reason.h"
+#include "extensions/common/manifest_handlers/options_page_info.h"
 #include "open_unified/browser/open_boost_controller.h"
 #include "open_unified/browser/open_browser_service.h"
 #include "open_unified/browser/open_capture_controller.h"
@@ -90,6 +101,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer.h"
@@ -97,10 +109,15 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/native_theme_observer.h"
+#include "ui/views/bubble/bubble_anchor.h"
+#include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/webview/webview.h"
@@ -733,22 +750,46 @@ void CollectTabUrls(const std::vector<SidebarNode>& nodes,
   }
 }
 
-bool SpaceContainsLiveFolder(const Space& space) {
-  auto has_live = [](const auto& self,
-                     const std::vector<SidebarNode>& nodes) -> bool {
+std::optional<ItemID> FindLiveFolderInSpace(const Space& space) {
+  auto find_live = [](const auto& self,
+                      const std::vector<SidebarNode>& nodes)
+      -> std::optional<ItemID> {
     for (const SidebarNode& node : nodes) {
       if (const Folder* folder = node.as_folder()) {
         if (folder->live.has_value()) {
-          return true;
+          return folder->id;
         }
-        if (self(self, folder->children)) {
-          return true;
+        if (auto nested = self(self, folder->children)) {
+          return nested;
         }
       }
     }
-    return false;
+    return std::nullopt;
   };
-  return has_live(has_live, space.pinned) || has_live(has_live, space.today);
+  if (auto pinned = find_live(find_live, space.pinned)) {
+    return pinned;
+  }
+  return find_live(find_live, space.today);
+}
+
+bool SpaceContainsLiveFolder(const Space& space) {
+  return FindLiveFolderInSpace(space).has_value();
+}
+
+std::string ExtractDocumentIdFromUrl(const GURL& url) {
+  if (!url.is_valid()) {
+    return {};
+  }
+  std::string_view path = url.path();
+  while (!path.empty() && path.front() == '/') {
+    path.remove_prefix(1);
+  }
+  const size_t slash = path.find('/');
+  if (slash != std::string_view::npos) {
+    path = path.substr(0, slash);
+  }
+  return DocumentStore::IsValidDocumentId(path) ? std::string(path)
+                                                : std::string();
 }
 
 bool IsMailUrl(std::string_view raw_url) {
@@ -834,9 +875,92 @@ class MinSizeWebContainer : public views::View {
   raw_ptr<views::WebView> web_view_ = nullptr;
 };
 
+#if !BUILDFLAG(IS_MAC)
+// Wraps OpenWindowControlsView with a subtle dark translucent pill backdrop so
+// white caption glyphs stay legible even over bright light Onboarding swatches.
+class ControlsScrimView : public views::View {
+ public:
+  ControlsScrimView(OpenWindowControlsView::Mode mode,
+                    std::vector<WindowControlButton> buttons,
+                    bool allow_maximize)
+      : mode_(mode) {
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+    auto controls = std::make_unique<OpenWindowControlsView>(
+        mode, std::move(buttons), allow_maximize);
+    controls->SetThemeState(/*dark_content=*/true, /*window_active=*/true,
+                            /*increase_contrast=*/false);
+    controls_ = AddChildView(std::move(controls));
+  }
+  ControlsScrimView(const ControlsScrimView&) = delete;
+  ControlsScrimView& operator=(const ControlsScrimView&) = delete;
+  ~ControlsScrimView() override = default;
+
+  void SetThemeState(bool dark_content,
+                     bool window_active,
+                     bool increase_contrast) {
+    window_active_ = window_active;
+    if (controls_) {
+      controls_->SetThemeState(dark_content, window_active, increase_contrast);
+    }
+    SchedulePaint();
+  }
+
+  int HitTestCode(const gfx::Point& point_in_this) const {
+    if (!controls_) {
+      return HTNOWHERE;
+    }
+    gfx::Point local = point_in_this;
+    views::View::ConvertPointToTarget(this, controls_.get(), &local);
+    return controls_->HitTestCode(local);
+  }
+
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
+    const gfx::Size inner =
+        controls_ ? controls_->GetPreferredSize(available_size) : gfx::Size();
+    if (mode_ == OpenWindowControlsView::Mode::kLinuxCsd) {
+      return gfx::Size(inner.width() + 8, inner.height() + 4);
+    }
+    return inner;
+  }
+
+  void Layout(PassKey) override {
+    if (!controls_) {
+      return;
+    }
+    if (mode_ == OpenWindowControlsView::Mode::kLinuxCsd) {
+      controls_->SetBounds(4, 2, std::max(0, width() - 8),
+                           std::max(0, height() - 4));
+    } else {
+      controls_->SetBounds(0, 0, width(), height());
+    }
+  }
+
+  void OnPaint(gfx::Canvas* canvas) override {
+    const float radius = mode_ == OpenWindowControlsView::Mode::kLinuxCsd
+                             ? static_cast<float>(height()) * 0.5f
+                             : 8.f;
+    const SkColor fill =
+        window_active_ ? SkColorSetARGB(0x88, 0x14, 0x15, 0x1E)
+                       : SkColorSetARGB(0x55, 0x14, 0x15, 0x1E);
+    const gfx::RectF rect(0.f, 0.f, static_cast<float>(width()),
+                          static_cast<float>(height()));
+    secondary::FillRoundRect(canvas, rect, radius, fill);
+    secondary::StrokeRoundRect(canvas, rect, radius,
+                               SkColorSetARGB(0x22, 0xFF, 0xFF, 0xFF), 1.f);
+  }
+
+ private:
+  OpenWindowControlsView::Mode mode_;
+  bool window_active_ = true;
+  raw_ptr<OpenWindowControlsView> controls_ = nullptr;
+};
+#endif  // !BUILDFLAG(IS_MAC)
+
 // Lightweight custom frame for frameless standalone WebUI windows (First Run /
 // Onboarding): provides a 36 DIP draggable caption strip at the top and, on
-// Windows/Linux, a quiet top-right Minimize + Close control cluster.
+// Windows/Linux, a quiet Minimize + Close control cluster with a contrast pill.
 class FramelessWebFrameView : public views::FrameView {
   METADATA_HEADER(FramelessWebFrameView, views::FrameView)
 
@@ -846,20 +970,47 @@ class FramelessWebFrameView : public views::FrameView {
   FramelessWebFrameView() {
 #if !BUILDFLAG(IS_MAC)
 #if BUILDFLAG(IS_WIN)
-    const auto mode = OpenWindowControlsView::Mode::kWindowsFluent;
-#else
-    const auto mode = OpenWindowControlsView::Mode::kLinuxCsd;
-#endif
-    auto controls = std::make_unique<OpenWindowControlsView>(
-        mode,
+    window_controls_ = AddChildView(std::make_unique<ControlsScrimView>(
+        OpenWindowControlsView::Mode::kWindowsFluent,
         std::vector<WindowControlButton>{WindowControlButton::kMinimize,
                                          WindowControlButton::kClose},
-        /*allow_maximize=*/false);
-    controls->SetPaintToLayer();
-    controls->layer()->SetFillsBoundsOpaquely(false);
-    controls->SetThemeState(/*dark_content=*/true, /*window_active=*/true,
-                            /*increase_contrast=*/false);
-    window_controls_ = AddChildView(std::move(controls));
+        /*allow_maximize=*/false));
+#else
+    auto filter_non_maximize =
+        [](const std::vector<WindowControlButton>& source) {
+          std::vector<WindowControlButton> out;
+          for (WindowControlButton btn : source) {
+            if (btn != WindowControlButton::kMaximize) {
+              out.push_back(btn);
+            }
+          }
+          return out;
+        };
+    LinuxWindowButtons buttons;
+    if (OpenPlatform* platform = OpenPlatform::Get()) {
+      buttons = platform->GetLinuxWindowButtons();
+    } else {
+      buttons.trailing = {WindowControlButton::kMinimize,
+                          WindowControlButton::kClose};
+    }
+    std::vector<WindowControlButton> leading =
+        filter_non_maximize(buttons.leading);
+    std::vector<WindowControlButton> trailing =
+        filter_non_maximize(buttons.trailing);
+    if (leading.empty() && trailing.empty()) {
+      trailing = {WindowControlButton::kMinimize, WindowControlButton::kClose};
+    }
+    if (!leading.empty()) {
+      leading_controls_ = AddChildView(std::make_unique<ControlsScrimView>(
+          OpenWindowControlsView::Mode::kLinuxCsd, std::move(leading),
+          /*allow_maximize=*/false));
+    }
+    if (!trailing.empty()) {
+      window_controls_ = AddChildView(std::make_unique<ControlsScrimView>(
+          OpenWindowControlsView::Mode::kLinuxCsd, std::move(trailing),
+          /*allow_maximize=*/false));
+    }
+#endif
 #endif
   }
   FramelessWebFrameView(const FramelessWebFrameView&) = delete;
@@ -876,19 +1027,27 @@ class FramelessWebFrameView : public views::FrameView {
   void Layout(PassKey) override {
     LayoutSuperclass<views::FrameView>(this);
 #if !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_WIN)
     if (window_controls_) {
       const gfx::Size pref = window_controls_->GetPreferredSize();
-#if BUILDFLAG(IS_WIN)
       window_controls_->SetBounds(width() - pref.width(), 0, pref.width(),
                                   pref.height());
+    }
 #else
-      constexpr int kLinuxControlsInsetX = 8;
-      constexpr int kLinuxControlsInsetY = 4;
+    constexpr int kLinuxControlsInsetX = 8;
+    constexpr int kLinuxControlsInsetY = 4;
+    if (leading_controls_) {
+      const gfx::Size pref = leading_controls_->GetPreferredSize();
+      leading_controls_->SetBounds(kLinuxControlsInsetX, kLinuxControlsInsetY,
+                                   pref.width(), pref.height());
+    }
+    if (window_controls_) {
+      const gfx::Size pref = window_controls_->GetPreferredSize();
       window_controls_->SetBounds(
           width() - pref.width() - kLinuxControlsInsetX, kLinuxControlsInsetY,
           pref.width(), pref.height());
-#endif
     }
+#endif
 #endif
   }
 
@@ -897,12 +1056,16 @@ class FramelessWebFrameView : public views::FrameView {
       return HTNOWHERE;
     }
 #if !BUILDFLAG(IS_MAC)
-    if (window_controls_ && window_controls_->GetVisible()) {
-      gfx::Point local = point;
-      views::View::ConvertPointToTarget(this, window_controls_, &local);
-      const int hit = window_controls_->HitTestCode(local);
-      if (hit != HTNOWHERE) {
-        return hit;
+    for (ControlsScrimView* cluster :
+         std::initializer_list<ControlsScrimView*>{leading_controls_.get(),
+                                                   window_controls_.get()}) {
+      if (cluster && cluster->GetVisible()) {
+        gfx::Point local = point;
+        views::View::ConvertPointToTarget(this, cluster, &local);
+        const int hit = cluster->HitTestCode(local);
+        if (hit != HTNOWHERE) {
+          return hit;
+        }
       }
     }
 #endif
@@ -935,17 +1098,25 @@ class FramelessWebFrameView : public views::FrameView {
  private:
 #if !BUILDFLAG(IS_MAC)
   void UpdateWindowControlsState() {
-    if (!window_controls_ || !GetWidget()) {
+    if (!GetWidget()) {
       return;
     }
     OpenPlatform* platform = OpenPlatform::Get();
     const bool high_contrast =
         platform && platform->IsIncreaseContrastEnabled();
-    window_controls_->SetThemeState(/*dark_content=*/true,
-                                    ShouldPaintAsActive(), high_contrast);
+    const bool active = ShouldPaintAsActive();
+    if (leading_controls_) {
+      leading_controls_->SetThemeState(/*dark_content=*/true, active,
+                                       high_contrast);
+    }
+    if (window_controls_) {
+      window_controls_->SetThemeState(/*dark_content=*/true, active,
+                                      high_contrast);
+    }
   }
 
-  raw_ptr<OpenWindowControlsView> window_controls_ = nullptr;
+  raw_ptr<ControlsScrimView> leading_controls_ = nullptr;
+  raw_ptr<ControlsScrimView> window_controls_ = nullptr;
   base::CallbackListSubscription paint_as_active_subscription_;
 #endif
 };
@@ -1023,7 +1194,8 @@ class LibraryDrawerWebView : public views::WebView {
 // Hosts standalone open:// WebUI windows (Settings 960x660 min 800x540 and
 // First Run 860x620 frameless centered) using Chromium 156's CLIENT_OWNS_WIDGET
 // pattern where the WidgetDelegate outlives its Widget.
-class OpenWindowController::StandaloneWebWindow {
+class OpenWindowController::StandaloneWebWindow
+    : public ui::NativeThemeObserver {
  public:
   StandaloneWebWindow(content::BrowserContext* browser_context,
                       const GURL& url,
@@ -1047,6 +1219,10 @@ class OpenWindowController::StandaloneWebWindow {
 #if BUILDFLAG(IS_MAC)
     const float corner_radius = frameless ? 16.f : 0.f;
     const int hit_test_top_inset = 0;
+#elif BUILDFLAG(IS_WIN)
+    const float corner_radius = frameless ? 8.f : 0.f;
+    const int hit_test_top_inset =
+        frameless ? FramelessWebFrameView::kDragStripHeight : 0;
 #else
     const float corner_radius = frameless ? 12.f : 0.f;
     const int hit_test_top_inset =
@@ -1103,14 +1279,19 @@ class OpenWindowController::StandaloneWebWindow {
     widget_ = std::make_unique<views::Widget>();
     widget_->Init(std::move(params));
     widget_->SetBounds(initial_bounds_);
-    if (OpenPlatform* platform = OpenPlatform::Get()) {
-      platform->ApplyWindowEffects(widget_.get(), /*dark_mode=*/true);
+    ApplyNativeThemeEffects();
+    if (ui::NativeTheme* native_theme =
+            widget_->GetNativeTheme()
+                ? widget_->GetNativeTheme()
+                : ui::NativeTheme::GetInstanceForNativeUi()) {
+      native_theme_observation_.Observe(native_theme);
     }
     web_view_->LoadInitialURL(url);
     container_ptr->ApplyNativeViewEffects();
   }
 
-  ~StandaloneWebWindow() {
+  ~StandaloneWebWindow() override {
+    native_theme_observation_.Reset();
     on_closed_.Reset();
     web_view_ = nullptr;
     if (widget_) {
@@ -1122,6 +1303,11 @@ class OpenWindowController::StandaloneWebWindow {
 
   StandaloneWebWindow(const StandaloneWebWindow&) = delete;
   StandaloneWebWindow& operator=(const StandaloneWebWindow&) = delete;
+
+  // ui::NativeThemeObserver:
+  void OnNativeThemeUpdated(ui::NativeTheme* /*observed_theme*/) override {
+    ApplyNativeThemeEffects();
+  }
 
   void ShowAndActivate() {
     if (!widget_) {
@@ -1166,8 +1352,24 @@ class OpenWindowController::StandaloneWebWindow {
   views::Widget* widget() const { return widget_.get(); }
 
  private:
+  void ApplyNativeThemeEffects() {
+    if (!widget_) {
+      return;
+    }
+    const ui::NativeTheme* theme =
+        widget_->GetNativeTheme() ? widget_->GetNativeTheme()
+                                  : ui::NativeTheme::GetInstanceForNativeUi();
+    const bool is_dark =
+        theme && theme->preferred_color_scheme() ==
+                     ui::NativeTheme::PreferredColorScheme::kDark;
+    if (OpenPlatform* platform = OpenPlatform::Get()) {
+      platform->ApplyWindowEffects(widget_.get(), is_dark);
+    }
+  }
+
   void OnWindowClosing() {
     closing_ = true;
+    native_theme_observation_.Reset();
     web_view_ = nullptr;
     if (on_closed_) {
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -1183,6 +1385,8 @@ class OpenWindowController::StandaloneWebWindow {
   gfx::Rect initial_bounds_;
   bool shown_once_ = false;
   bool closing_ = false;
+  base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
+      native_theme_observation_{this};
   base::WeakPtrFactory<StandaloneWebWindow> weak_factory_{this};
 };
 
@@ -1942,8 +2146,11 @@ OpenWindowController::GetPinnedToolbarActions(const WindowID& window_id) const {
     action.id = info.id;
     action.tooltip = !info.tooltip.empty() ? info.tooltip
                                            : base::UTF8ToUTF16(info.title);
-    action.icon =
-        !info.icon_with_badge.isNull() ? info.icon_with_badge : info.icon;
+    action.icon = info.icon;
+    action.icon_with_badge = info.icon_with_badge;
+    action.badge_text = base::UTF8ToUTF16(info.badge_text);
+    action.badge_background_color = info.badge_background_color;
+    action.badge_text_color = info.badge_text_color;
     action.has_badge = !info.badge_text.empty();
     actions.push_back(std::move(action));
   }
@@ -2245,8 +2452,24 @@ OpenWindowController::BuildMenuModelForTarget(const WindowID& window_id,
   ctx.model = &model;
   ctx.window_id = window_id;
   ctx.is_incognito = incognito;
+  ctx.option_held = ui && ui->is_alt_down();
   ctx.developer_mode = IsDeveloperModeEnabled();
   ctx.shared_quotes_enabled = PrefBool("advanced.sharedQuotes", true);
+
+  if (ui && ui->open_view() && ui->open_view()->sidebar()) {
+    std::optional<SpaceID> tree_space =
+        !target.space_id.empty()
+            ? std::optional<SpaceID>(target.space_id)
+            : (!target.node_id.empty()
+                   ? model_util::SpaceOfNode(model, target.node_id)
+                   : model_util::FocusedSpace(model, window_id));
+    if (tree_space) {
+      if (OpenTabTreeView* tree =
+              ui->open_view()->sidebar()->GetTreeForSpace(*tree_space)) {
+        ctx.selected_node_ids = tree->SelectedIds();
+      }
+    }
+  }
 
   content::WebContents* active_wc =
       ui && ui->peek_shown() ? ui->PeekWebContents()
@@ -2279,7 +2502,9 @@ OpenWindowController::BuildMenuModelForTarget(const WindowID& window_id,
       ctx.offers_space_header_toggle =
           model.spaces().size() == 1 &&
           (!space->title.has_value() || space->title->empty());
-      ctx.space_header_shown = true;
+      auto it = space_header_shown_by_space_.find(space->id);
+      ctx.space_header_shown =
+          it == space_header_shown_by_space_.end() ? true : it->second;
     }
   }
 
@@ -2326,6 +2551,12 @@ OpenWindowController::BuildMenuModelForTarget(const WindowID& window_id,
   }
 
   if (target.kind == OpenMenuTarget::Kind::kToolbarAction) {
+    ::Profile* chrome_profile = nullptr;
+    if (ui && ui->browser_view() && ui->browser_view()->browser()) {
+      chrome_profile = ui->browser_view()->browser()->GetProfile();
+    } else {
+      chrome_profile = service_->ChromeProfileFor(service_->ActiveProfileId());
+    }
     if (OpenExtensionBridge* extensions = ExtensionBridgeForWindow(window_id)) {
       for (const ExtensionActionInfo& info : extensions->ListInstalled()) {
         if (info.id == target.text) {
@@ -2334,11 +2565,30 @@ OpenWindowController::BuildMenuModelForTarget(const WindowID& window_id,
           act.name = base::UTF8ToUTF16(info.name);
           act.has_popup = info.has_popup;
           act.can_remove = !info.force_pinned;
+          if (chrome_profile) {
+            if (const extensions::Extension* ext =
+                    extensions::ExtensionRegistry::Get(chrome_profile)
+                        ->GetInstalledExtension(info.id)) {
+              act.has_options_page =
+                  extensions::OptionsPageInfo::HasOptionsPage(ext);
+            }
+          }
           ctx.toolbar_action = std::move(act);
           break;
         }
       }
     }
+  }
+
+  if (target.kind == OpenMenuTarget::Kind::kLibrary) {
+    auto is_enabled = [&](const std::string& id) {
+      auto it = library_media_source_enabled_.find(id);
+      return it == library_media_source_enabled_.end() ? true : it->second;
+    };
+    ctx.library_media_sources.push_back(
+        {"captures", u"Captures", is_enabled("captures")});
+    ctx.library_media_sources.push_back(
+        {"downloads", u"Downloads", is_enabled("downloads")});
   }
 
   return BuildSidebarMenuModel(
@@ -2424,17 +2674,17 @@ void OpenWindowController::DispatchSidebarMenuCommand(
       }
       return;
     case SidebarMenuAction::kReplacePinnedUrl:
-      if (const Tab* tab = model.FindTab(cmd.node_id);
-          tab && model.IsPinned(cmd.node_id)) {
-        const std::optional<NodeParent> parent = model.GetParent(cmd.node_id);
-        const std::optional<NodeIndexEntry> entry =
-            model.GetIndexEntry(cmd.node_id);
-        model.UnpinTab(cmd.node_id);
-        if (parent && entry) {
-          model.MoveNode(cmd.node_id, *parent, entry->index);
-        } else {
-          model.PinTab(cmd.node_id);
+      if (Tab* tab = model.FindTab(cmd.node_id);
+          tab && (model.IsPinned(cmd.node_id) || model.IsFavorite(cmd.node_id))) {
+        tab->pinned_url = tab->url;
+        TreeChange change;
+        change.kind = TreeChange::Kind::kUpdate;
+        change.node_id = cmd.node_id;
+        if (auto parent = model.GetParent(cmd.node_id)) {
+          change.parent = *parent;
         }
+        OnTreeChanged(change);
+        service_->ScheduleSave();
       }
       return;
     case SidebarMenuAction::kEditPinnedUrl:
@@ -2518,9 +2768,32 @@ void OpenWindowController::DispatchSidebarMenuCommand(
       bridge->SelectNode(cmd.node_id, window_id);
       return;
     case SidebarMenuAction::kDeleteEasel:
-    case SidebarMenuAction::kDeleteNote:
+    case SidebarMenuAction::kDeleteNote: {
+      const bool is_easel = cmd.action == SidebarMenuAction::kDeleteEasel;
+      if (const Tab* tab = model.FindTab(cmd.node_id)) {
+        const std::string doc_id = ExtractDocumentIdFromUrl(GURL(tab->url));
+        const ProfileID profile_id =
+            model_util::ProfileOfNode(model, cmd.node_id)
+                .value_or(service_->ActiveProfileId());
+        if (!doc_id.empty()) {
+          if (ProfileServices* ps = service_->ProfileServicesFor(profile_id)) {
+            RunOnStore(
+                ps->documents,
+                base::BindOnce(
+                    [](bool easel, std::string id, DocumentStore* store) {
+                      if (easel) {
+                        store->DeleteEasel(id);
+                      } else {
+                        store->DeleteNote(id);
+                      }
+                    },
+                    is_easel, doc_id));
+          }
+        }
+      }
       bridge->CloseNode(cmd.node_id);
       return;
+    }
 
     // --- Favorite tiles ---
     case SidebarMenuAction::kSetShowsUnreadBadge: {
@@ -2587,11 +2860,17 @@ void OpenWindowController::DispatchSidebarMenuCommand(
       model.RemovePane(cmd.node_id, cmd.secondary_id, /*archive=*/false);
       return;
     case SidebarMenuAction::kResetSplitCustomization:
-      if (const Split* split = model.FindSplit(cmd.node_id);
-          split && !split->panes.empty()) {
-        model.SetSplitFractions(
-            cmd.node_id, std::vector<double>(split->panes.size(),
-                                             1.0 / split->panes.size()));
+      if (Split* split = model.FindSplit(cmd.node_id)) {
+        split->custom_title.reset();
+        split->icon_override.reset();
+        TreeChange change;
+        change.kind = TreeChange::Kind::kUpdate;
+        change.node_id = split->id;
+        if (auto parent = model.GetParent(split->id)) {
+          change.parent = *parent;
+        }
+        OnTreeChanged(change);
+        service_->ScheduleSave();
       }
       return;
 
@@ -2767,6 +3046,13 @@ void OpenWindowController::DispatchSidebarMenuCommand(
       OpenSettingsWindow("profiles");
       return;
     case SidebarMenuAction::kSetSpaceHeaderShown:
+      if (!cmd.space_id.empty()) {
+        space_header_shown_by_space_[cmd.space_id] = cmd.flag;
+        for (OpenViewObserver& observer : view_observers_) {
+          observer.OnSpacesChanged(window_id);
+          observer.OnWindowStateChanged(window_id);
+        }
+      }
       return;
     case SidebarMenuAction::kNewFolder: {
       const SpaceID sid =
@@ -2780,6 +3066,28 @@ void OpenWindowController::DispatchSidebarMenuCommand(
     }
     case SidebarMenuAction::kToggleLiveFolder:
       if (!cmd.space_id.empty()) {
+        const Space* space = model.FindSpace(cmd.space_id);
+        if (std::optional<ItemID> existing =
+                space ? FindLiveFolderInSpace(*space) : std::nullopt) {
+          if (OpenLiveDataService* ld = service_->livedata()) {
+            ld->UnregisterLiveFolder(*existing);
+          }
+          if (Folder* folder = model.FindFolder(*existing)) {
+            folder->live.reset();
+            folder->live_sso_url.reset();
+            if (folder->children.empty()) {
+              bridge->CloseNode(*existing);
+            } else {
+              TreeChange change;
+              change.kind = TreeChange::Kind::kUpdate;
+              change.node_id = *existing;
+              change.space_id = cmd.space_id;
+              OnTreeChanged(change);
+              service_->ScheduleSave();
+            }
+          }
+          return;
+        }
         const ItemID fid = model.CreateFolder(
             NodeParent{NodeParentKind::kSpacePinned, cmd.space_id},
             "GitHub PRs");
@@ -2948,16 +3256,101 @@ void OpenWindowController::DispatchSidebarMenuCommand(
       }
       return;
     case SidebarMenuAction::kManageExtension:
-    case SidebarMenuAction::kExtensionOptions:
-    case SidebarMenuAction::kRemoveExtension:
-    case SidebarMenuAction::kInspectExtensionPopup:
       bridge->OpenTab(
           GURL(base::StrCat({"chrome://extensions/?id=", cmd.text})),
           /*background=*/false, window_id);
       return;
+    case SidebarMenuAction::kExtensionOptions: {
+      ::Profile* chrome_profile =
+          (ui && ui->browser_view() && ui->browser_view()->browser())
+              ? ui->browser_view()->browser()->GetProfile()
+              : service_->ChromeProfileFor(service_->ActiveProfileId());
+      const extensions::Extension* ext =
+          chrome_profile ? extensions::ExtensionRegistry::Get(chrome_profile)
+                               ->GetInstalledExtension(cmd.text)
+                         : nullptr;
+      const GURL url =
+          (ext && extensions::OptionsPageInfo::HasOptionsPage(ext))
+              ? extensions::OptionsPageInfo::GetOptionsPage(ext)
+              : GURL(base::StrCat({"chrome://extensions/?id=", cmd.text}));
+      bridge->OpenTab(url, /*background=*/false, window_id);
+      return;
+    }
+    case SidebarMenuAction::kRemoveExtension: {
+      ::Profile* chrome_profile =
+          (ui && ui->browser_view() && ui->browser_view()->browser())
+              ? ui->browser_view()->browser()->GetProfile()
+              : service_->ChromeProfileFor(service_->ActiveProfileId());
+      if (chrome_profile && !cmd.text.empty()) {
+        if (extensions::ExtensionRegistrar* registrar =
+                extensions::ExtensionRegistrar::Get(chrome_profile)) {
+          std::u16string error;
+          registrar->UninstallExtension(
+              cmd.text, extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+        }
+      }
+      return;
+    }
+    case SidebarMenuAction::kInspectExtensionPopup: {
+      BrowserWindowInterface* browser =
+          (ui && ui->browser_view()) ? ui->browser_view()->browser() : nullptr;
+      ::Profile* chrome_profile =
+          browser ? browser->GetProfile()
+                  : service_->ChromeProfileFor(service_->ActiveProfileId());
+      if (browser && chrome_profile && !cmd.text.empty()) {
+        if (const extensions::Extension* ext =
+                extensions::ExtensionRegistry::Get(chrome_profile)
+                    ->enabled_extensions()
+                    .GetByID(cmd.text)) {
+          if (extensions::ExtensionAction* action =
+                  extensions::ExtensionActionManager::Get(chrome_profile)
+                      ->GetExtensionAction(*ext)) {
+            content::WebContents* wc = ActiveWebContentsFor(window_id);
+            const int tab_id =
+                wc ? sessions::SessionTabHelper::IdForTab(wc).id() : -1;
+            const GURL popup_url = action->GetPopupUrl(tab_id);
+            if (popup_url.is_valid()) {
+              if (auto host = extensions::ExtensionViewHostFactory::
+                      CreatePopupHost(*ext, popup_url, browser)) {
+                views::View* anchor = GetBubbleAnchorView(browser);
+                if (!anchor && ui && ui->open_view()) {
+                  if (views::View* pill = ui->open_view()->GetUrlPillView();
+                      pill && pill->IsDrawn()) {
+                    anchor = pill;
+                  } else if (views::View* host_view =
+                                 ui->open_view()->web_contents_host();
+                             host_view && host_view->IsDrawn()) {
+                    anchor = host_view;
+                  } else if (ui->open_view()->IsDrawn()) {
+                    anchor = ui->open_view();
+                  }
+                }
+                if (!anchor && ui && ui->widget()) {
+                  anchor = ui->widget()->GetRootView();
+                }
+                if (anchor) {
+                  ExtensionPopup::ShowPopup(
+                      browser, std::move(host), views::BubbleAnchor(anchor),
+                      views::BubbleBorder::TOP_LEFT,
+                      PopupShowAction::kShowAndInspect, base::DoNothing());
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+      bridge->OpenTab(
+          GURL(base::StrCat({"chrome://extensions/?id=", cmd.text})),
+          /*background=*/false, window_id);
+      return;
+    }
 
     // --- Library button ---
     case SidebarMenuAction::kToggleLibraryMediaSource:
+      if (!cmd.text.empty()) {
+        library_media_source_enabled_[cmd.text] = cmd.flag;
+      }
       if (ui) {
         ui->ShowLibraryDrawer("media");
       }
@@ -3000,6 +3393,9 @@ void OpenWindowController::OnTreeChanged(const TreeChange& change) {
       if (!change.node_id.empty()) {
         for (OpenViewObserver& observer : view_observers_) {
           observer.OnTabLiveStateChanged(change.node_id);
+        }
+        for (auto& [browser_view, ui] : windows_) {
+          ui->SyncSinglePaneToolbar();
         }
       }
       if (!change.space_id.empty()) {
@@ -3115,6 +3511,9 @@ void OpenWindowController::OnTabContentsAttached(
   for (OpenViewObserver& observer : view_observers_) {
     observer.OnTabLiveStateChanged(tab_id);
   }
+  for (auto& [browser_view, ui] : windows_) {
+    ui->SyncSinglePaneToolbar();
+  }
 }
 
 void OpenWindowController::OnBrowserWindowBound(BrowserWindowInterface* browser,
@@ -3158,6 +3557,14 @@ void OpenWindowController::OnExtensionActionsChanged() {
   }
   for (const auto& lo : little_opens_) {
     lo->RefreshState();
+  }
+}
+
+void OpenWindowController::OnExtensionPopupVisibilityChanged(
+    const std::string& /*extension_id*/,
+    bool showing) {
+  for (auto& [browser_view, ui] : windows_) {
+    ui->SetExtensionPopupOpen(showing);
   }
 }
 
@@ -3491,8 +3898,22 @@ bool OpenWindowController::MaybeInterceptLinkOpen(
   if (!ui) {
     return false;
   }
-  // Honor Split View disposition directly.
+  // Option+Cmd+Click (macOS) / Ctrl+Alt+Click (Win/Linux) arrives from
+  // DispositionFromClick as WindowOpenDisposition::NEW_SPLIT_VIEW. When
+  // links.optionCommandClick is enabled, route renderer-initiated clicks to
+  // Little Open; otherwise honor Split View.
   if (params.disposition == WindowOpenDisposition::NEW_SPLIT_VIEW) {
+    if (params.is_renderer_initiated && params.user_gesture &&
+        PrefBool("links.optionCommandClick", true)) {
+      const std::optional<SpaceID> focused =
+          model_util::FocusedSpace(service_->model(), ui->window_id());
+      const Space* space =
+          focused ? service_->model().FindSpace(*focused) : nullptr;
+      const ProfileID profile =
+          space ? space->profile_id : service_->ActiveProfileId();
+      OpenLittleOpen(params.url, profile, focused);
+      return true;
+    }
     ui->OpenLinkInSplitView(params.url);
     return true;
   }
@@ -3561,6 +3982,18 @@ bool OpenWindowController::MaybeInterceptAddNewContents(
   }
 
   if (disposition == WindowOpenDisposition::NEW_SPLIT_VIEW) {
+    if (PrefBool("links.optionCommandClick", true)) {
+      const std::optional<SpaceID> focused =
+          model_util::FocusedSpace(service_->model(), ui->window_id());
+      const Space* space =
+          focused ? service_->model().FindSpace(*focused) : nullptr;
+      const ProfileID profile =
+          space ? space->profile_id : service_->ActiveProfileId();
+      if (OpenLittleOpen(url, profile, focused)) {
+        new_contents.reset();
+        return true;
+      }
+    }
     OpenTabBridge* bridge = service_->tab_bridge();
     const std::optional<SpaceID> focused =
         model_util::FocusedSpace(service_->model(), ui->window_id());
@@ -3685,21 +4118,25 @@ views::View* OpenWindowController::GetBubbleAnchorView(
   if (!open_view || !open_view->IsDrawn()) {
     return nullptr;
   }
-  if (!open_view->sidebar_hidden()) {
-    if (views::View* sc = open_view->GetSiteControlAnchorView();
-        sc && sc->IsDrawn()) {
-      return sc;
+  if (open_view->sidebar_hidden()) {
+    if (open_view->single_pane_toolbar_visible()) {
+      if (views::View* sc = open_view->GetSinglePaneSiteControlAnchor();
+          sc && sc->IsDrawn()) {
+        return sc;
+      }
     }
-    if (views::View* pill = open_view->GetUrlPillView();
-        pill && pill->IsDrawn()) {
-      return pill;
-    }
+    // Fall through to GetBubbleAnchorRect() at (panel.x + 16, panel.y + 8).
+    return nullptr;
   }
-  if (views::View* panel = open_view->web_contents_host();
-      panel && panel->IsDrawn()) {
-    return panel;
+  if (views::View* sc = open_view->GetSiteControlAnchorView();
+      sc && sc->IsDrawn()) {
+    return sc;
   }
-  return open_view;
+  if (views::View* pill = open_view->GetUrlPillView();
+      pill && pill->IsDrawn()) {
+    return pill;
+  }
+  return nullptr;
 }
 
 std::optional<gfx::Rect> OpenWindowController::GetBubbleAnchorRect(
@@ -3709,7 +4146,14 @@ std::optional<gfx::Rect> OpenWindowController::GetBubbleAnchorRect(
   if (!open_view || !open_view->IsDrawn()) {
     return std::nullopt;
   }
-  if (!open_view->sidebar_hidden()) {
+  if (open_view->sidebar_hidden()) {
+    if (open_view->single_pane_toolbar_visible()) {
+      if (views::View* sc = open_view->GetSinglePaneSiteControlAnchor();
+          sc && sc->IsDrawn()) {
+        return sc->GetBoundsInScreen();
+      }
+    }
+  } else {
     if (views::View* sc = open_view->GetSiteControlAnchorView();
         sc && sc->IsDrawn()) {
       return sc->GetBoundsInScreen();
@@ -3729,6 +4173,30 @@ std::optional<gfx::Rect> OpenWindowController::GetBubbleAnchorRect(
 // OpenWindowUi
 // ===========================================================================
 
+class OpenWindowUi::ModifierEventObserver : public ui::EventObserver {
+ public:
+  explicit ModifierEventObserver(OpenWindowUi* ui) : ui_(ui) {}
+  ~ModifierEventObserver() override = default;
+
+  void OnEvent(const ui::Event& event) override {
+    if (event.IsKeyEvent()) {
+      const ui::KeyEvent* key = event.AsKeyEvent();
+      const ui::KeyboardCode code = key->key_code();
+      if (code == ui::VKEY_MENU || code == ui::VKEY_LMENU ||
+          code == ui::VKEY_RMENU) {
+        ui_->alt_down_ = (key->type() == ui::EventType::kKeyPressed);
+        return;
+      }
+      ui_->alt_down_ = (key->flags() & ui::EF_ALT_DOWN) != 0;
+    } else if (event.IsMouseEvent()) {
+      ui_->alt_down_ = (event.flags() & ui::EF_ALT_DOWN) != 0;
+    }
+  }
+
+ private:
+  raw_ptr<OpenWindowUi> ui_;
+};
+
 OpenWindowUi::OpenWindowUi(OpenWindowController* controller,
                            BrowserView* browser_view,
                            OpenBrowserView* open_view,
@@ -3737,6 +4205,7 @@ OpenWindowUi::OpenWindowUi(OpenWindowController* controller,
       browser_view_(browser_view),
       open_view_(open_view),
       window_id_(std::move(window_id)) {
+  open_view_->SetDelegate(this);
   split_ = static_cast<OpenSplitContainerView*>(open_view_->SetSplitContainer(
       std::make_unique<OpenSplitContainerView>(this)));
 
@@ -3751,6 +4220,13 @@ OpenWindowUi::OpenWindowUi(OpenWindowController* controller,
 
   if (views::Widget* w = widget()) {
     widget_observation_.Observe(w);
+    if (gfx::NativeWindow native_window = w->GetNativeWindow()) {
+      modifier_observer_ = std::make_unique<ModifierEventObserver>(this);
+      modifier_monitor_ = views::EventMonitor::CreateWindowMonitor(
+          modifier_observer_.get(), native_window,
+          {ui::EventType::kKeyPressed, ui::EventType::kKeyReleased,
+           ui::EventType::kMousePressed});
+    }
   }
 
   // Traffic lights placement callback (subtracting kTrafficLightFrames[0]
@@ -3796,11 +4272,15 @@ OpenWindowUi::~OpenWindowUi() {
   }
   escape_priority_ = EscapePriority::kNone;
   switcher_monitor_.reset();
+  modifier_monitor_.reset();
+  modifier_observer_.reset();
   widget_observation_.Reset();
   panel_observation_.Reset();
 
   // Close all popovers, editors, and child overlay widgets BEFORE tearing down
   // OpenBrowserView slots so no view retains a dangling delegate pointer.
+  app_menu_runner_.reset();
+  app_menu_model_.reset();
   plus_popover_.Close();
   more_popover_.Close();
   downloads_popover_.reset();
@@ -3844,8 +4324,10 @@ OpenWindowUi::~OpenWindowUi() {
   media_stack_ = nullptr;
 
   if (open_view_) {
+    open_view_->SetDelegate(nullptr);
     open_view_->SetTrafficLightsCallback(base::NullCallback());
     if (open_view_->sidebar()) {
+      open_view_->sidebar()->SetHasOpenPopover(false);
       open_view_->sidebar()->SetMediaPlayerStack(nullptr);
     }
     open_view_->SetOverlay(OpenBrowserView::OverlaySlot::kCommandBar, nullptr);
@@ -3993,6 +4475,7 @@ void OpenWindowUi::RefreshDownloadsPopover() {
 
 void OpenWindowUi::UpdateThemeForLiveSurfaces() {
   ApplyWindowEffects();
+  SyncSinglePaneToolbar();
   if (media_stack_ && open_view_) {
     media_stack_->SetTheme(open_view_->FocusedThemeState());
   }
@@ -4565,6 +5048,7 @@ void OpenWindowUi::ShowSpaceThemeEditor(const SpaceID& space_id,
       [](base::WeakPtr<OpenWindowUi> self, SpaceID sid) {
         if (self) {
           self->controller_->ClearSpaceThemePreview(sid);
+          self->UpdateSidebarPopoverState();
         }
       },
       weak_factory_.GetWeakPtr(), space->id);
@@ -4582,6 +5066,7 @@ void OpenWindowUi::ShowSpaceThemeEditor(const SpaceID& space_id,
   ed_anchor.arrow = views::BubbleBorder::LEFT_TOP;
   space_editor_popover_.ShowThemeEditor(ed_anchor, std::move(params),
                                         std::move(cb));
+  UpdateSidebarPopoverState();
 }
 
 void OpenWindowUi::ShowSpaceCreation(views::View* anchor) {
@@ -4602,6 +5087,7 @@ void OpenWindowUi::ShowSpaceCreation(views::View* anchor) {
         if (!self) {
           return;
         }
+        self->UpdateSidebarPopoverState();
         auto create_in_profile = [](base::WeakPtr<OpenWindowUi> ui_weak,
                                     CreateSpaceRequest request,
                                     ProfileID pid) {
@@ -4628,6 +5114,13 @@ void OpenWindowUi::ShowSpaceCreation(views::View* anchor) {
         }
       },
       weak_factory_.GetWeakPtr());
+  cb.on_cancel = base::BindOnce(
+      [](base::WeakPtr<OpenWindowUi> self) {
+        if (self) {
+          self->UpdateSidebarPopoverState();
+        }
+      },
+      weak_factory_.GetWeakPtr());
 
   SpaceEditorAnchor ed_anchor;
   if (anchor) {
@@ -4643,11 +5136,102 @@ void OpenWindowUi::ShowSpaceCreation(views::View* anchor) {
   }
   space_editor_popover_.ShowCreation(ed_anchor, std::move(params),
                                      std::move(cb));
+  UpdateSidebarPopoverState();
 }
 
 views::View* OpenWindowUi::FindViewMatchingScreenRect(
     const gfx::Rect& rect) const {
   return FindDescendantByScreenRect(open_view_, rect);
+}
+
+void OpenWindowUi::UpdateSidebarPopoverState() {
+  if (!open_view_ || !open_view_->sidebar()) {
+    return;
+  }
+  const bool any_open =
+      site_controls_shown() || extension_picker_open_ ||
+      extension_popup_open_ || space_editor_popover_.IsShowing() ||
+      plus_popover_.IsShowing() || more_popover_.IsShowing() ||
+      (downloads_popover_ && downloads_popover_->IsShowing()) ||
+      (app_menu_runner_ && app_menu_runner_->IsRunning());
+  open_view_->sidebar()->SetHasOpenPopover(any_open);
+}
+
+void OpenWindowUi::SetExtensionPopupOpen(bool open) {
+  extension_popup_open_ = open;
+  UpdateSidebarPopoverState();
+}
+
+void OpenWindowUi::ShowAppMenu(views::View* anchor) {
+  if (!open_view_ || !widget()) {
+    return;
+  }
+  if (app_menu_runner_ && app_menu_runner_->IsRunning()) {
+    app_menu_runner_->Cancel();
+    return;
+  }
+  views::View* target = anchor;
+  if (!target && open_view_->sidebar()) {
+    target = open_view_->sidebar()->GetAppMenuButton();
+  }
+  if (!target || !target->IsDrawn()) {
+    target = open_view_->sidebar() && open_view_->sidebar()->IsDrawn()
+                 ? static_cast<views::View*>(open_view_->sidebar())
+                 : static_cast<views::View*>(open_view_);
+  }
+  if (!target) {
+    return;
+  }
+
+  AppMenuContext ctx;
+  ctx.is_incognito = controller_->IsIncognitoWindow(window_id_);
+  ctx.sidebar_hidden = open_view_->sidebar_hidden();
+  ctx.toolbar_visible = single_pane_toolbar_visible_;
+  ctx.is_fullscreen = widget()->IsFullscreen();
+  ctx.has_active_tab = ActiveTabId().has_value();
+
+  // Destroy any previous MenuRunner before replacing app_menu_model_, since
+  // ~MenuModelAdapter() calls menu_model_->SetMenuModelDelegate(nullptr).
+  app_menu_runner_.reset();
+  app_menu_model_.reset();
+  app_menu_model_ = BuildAppMenuModel(
+      ctx, base::BindRepeating(
+               [](base::WeakPtr<OpenWindowUi> self, CommandId command) {
+                 if (self) {
+                   self->RunCommandId(command);
+                 }
+               },
+               weak_factory_.GetWeakPtr()));
+  if (!app_menu_model_) {
+    return;
+  }
+  app_menu_runner_ = std::make_unique<views::MenuRunner>(
+      app_menu_model_.get(), views::MenuRunner::HAS_MNEMONICS,
+      base::BindRepeating(&OpenWindowUi::OnAppMenuClosed,
+                          weak_factory_.GetWeakPtr()));
+  app_menu_runner_->RunMenuAt(widget(), /*button_controller=*/nullptr,
+                              target->GetBoundsInScreen(),
+                              views::MenuAnchorPosition::kTopLeft,
+                              ui::mojom::MenuSourceType::kMouse);
+  UpdateSidebarPopoverState();
+}
+
+void OpenWindowUi::OnAppMenuClosed() {
+  UpdateSidebarPopoverState();
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<OpenWindowUi> self) {
+                       if (!self) {
+                         return;
+                       }
+                       if (!self->app_menu_runner_ ||
+                           !self->app_menu_runner_->IsRunning()) {
+                         self->app_menu_runner_.reset();
+                         self->app_menu_model_.reset();
+                       }
+                       self->UpdateSidebarPopoverState();
+                     },
+                     weak_factory_.GetWeakPtr()));
 }
 
 void OpenWindowUi::TogglePlusPopover(views::View* anchor) {
@@ -4667,7 +5251,11 @@ void OpenWindowUi::TogglePlusPopover(views::View* anchor) {
   const OpenPopoverColors colors = OpenPopoverColors::ForThemeState(
       open_view_->FocusedThemeState(),
       ToContentAppearance(controller_->IsSystemDarkMode()));
-  plus_popover_.Toggle(target, std::move(model), colors);
+  plus_popover_.Toggle(
+      target, std::move(model), colors,
+      base::BindOnce(&OpenWindowUi::UpdateSidebarPopoverState,
+                     weak_factory_.GetWeakPtr()));
+  UpdateSidebarPopoverState();
 }
 
 void OpenWindowUi::ToggleToolbarMorePopover(
@@ -4690,8 +5278,12 @@ void OpenWindowUi::ToggleToolbarMorePopover(
   if (!model) {
     return;
   }
-  more_popover_.Toggle(anchor, std::move(model),
-                       OpenPopoverColors::ToolbarMore(CurrentAppearance().dark));
+  more_popover_.Toggle(
+      anchor, std::move(model),
+      OpenPopoverColors::ToolbarMore(CurrentAppearance().dark),
+      base::BindOnce(&OpenWindowUi::UpdateSidebarPopoverState,
+                     weak_factory_.GetWeakPtr()));
+  UpdateSidebarPopoverState();
 }
 
 void OpenWindowUi::ToggleDownloadsPopover(views::View* anchor) {
@@ -4705,6 +5297,7 @@ void OpenWindowUi::ToggleDownloadsPopover(views::View* anchor) {
   }
   if (downloads_popover_->IsShowing()) {
     downloads_popover_->Close();
+    UpdateSidebarPopoverState();
     return;
   }
   OpenDownloadBridge* downloads = service()->download_bridge();
@@ -4720,7 +5313,11 @@ void OpenWindowUi::ToggleDownloadsPopover(views::View* anchor) {
       open_view_->FocusedThemeState(),
       ToContentAppearance(controller_->IsSystemDarkMode()));
   views::View* target = anchor ? anchor : open_view_->sidebar();
-  downloads_popover_->Show(target, std::move(entries), colors);
+  downloads_popover_->Show(
+      target, std::move(entries), colors,
+      base::BindOnce(&OpenWindowUi::UpdateSidebarPopoverState,
+                     weak_factory_.GetWeakPtr()));
+  UpdateSidebarPopoverState();
 }
 
 void OpenWindowUi::HandleDownloadPopoverAction(DownloadPopoverAction action,
@@ -5263,14 +5860,17 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
       }
       return true;
     case CommandId::kReplacePinnedUrl:
-      if (active && model.IsPinned(*active)) {
-        const std::optional<NodeParent> parent = model.GetParent(*active);
-        const std::optional<NodeIndexEntry> entry = model.GetIndexEntry(*active);
-        model.UnpinTab(*active);
-        if (parent && entry) {
-          model.MoveNode(*active, *parent, entry->index);
-        } else {
-          model.PinTab(*active);
+      if (active && (model.IsPinned(*active) || model.IsFavorite(*active))) {
+        if (Tab* tab = model.FindTab(*active)) {
+          tab->pinned_url = tab->url;
+          TreeChange change;
+          change.kind = TreeChange::Kind::kUpdate;
+          change.node_id = *active;
+          if (std::optional<NodeParent> parent = model.GetParent(*active)) {
+            change.parent = *parent;
+          }
+          controller_->OnTreeChanged(change);
+          s->ScheduleSave();
         }
       }
       return true;
@@ -5388,6 +5988,11 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
       if (split_) {
         split_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
       }
+      if (open_view_) {
+        open_view_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
+        SyncSinglePaneToolbar();
+      }
+      UpdateOverlayAnchors();
       return true;
     case CommandId::kCollapsePinnedSection:
       if (focused) {
@@ -5605,6 +6210,7 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
 
     // --- Find & Modal Dismiss ---
     case CommandId::kFind:
+    case CommandId::kFindAndReplace:
       ShowFindBar();
       return true;
     case CommandId::kFindNext:
@@ -5652,6 +6258,16 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
               }
             },
             weak_factory_.GetWeakPtr());
+        cb.on_closed = base::BindRepeating(
+            [](base::WeakPtr<OpenWindowUi> self) {
+              if (self) {
+                self->extension_picker_open_ = false;
+                self->UpdateSidebarPopoverState();
+              }
+            },
+            weak_factory_.GetWeakPtr());
+        extension_picker_open_ = true;
+        UpdateSidebarPopoverState();
         extensions->ShowExtensionsPicker(MakeExtensionHostWindow(), anchor, cb);
       }
       return true;
@@ -5749,8 +6365,13 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
 
     default:
       // Pure Chromium native commands (Print, SavePageAs, Zoom, DevTools,
-      // ViewSource, TaskManager, Cast, etc.) fall through to
-      // FallbackChromiumCommandForOpen.
+      // ViewSource, TaskManager, Cast, etc.) route through the passthrough
+      // guard into Chromium's BrowserCommandController.
+      if (browser_view_ && browser_view_->browser() &&
+          hooks::FallbackChromiumCommandForOpen(command) != 0) {
+        return hooks::ExecuteFallbackChromiumCommand(browser_view_->browser(),
+                                                     command);
+      }
       return false;
   }
 }
@@ -6345,19 +6966,36 @@ void OpenWindowUi::ShowSiteControls(views::View* anchor) {
   if (!site_controls_) {
     site_controls_ = std::make_unique<OpenSiteControlBubble>(this);
   }
-  views::View* target =
-      anchor ? anchor : open_view_->GetSiteControlAnchorView();
+  views::View* target = (anchor && anchor->IsDrawn()) ? anchor : nullptr;
+  if (!target && open_view_->sidebar_hidden() &&
+      open_view_->single_pane_toolbar_visible()) {
+    if (views::View* sc = open_view_->GetSinglePaneSiteControlAnchor();
+        sc && sc->IsDrawn()) {
+      target = sc;
+    }
+  }
+  if (!target && !open_view_->sidebar_hidden()) {
+    if (views::View* sc = open_view_->GetSiteControlAnchorView();
+        sc && sc->IsDrawn()) {
+      target = sc;
+    } else if (views::View* pill = open_view_->GetUrlPillView();
+               pill && pill->IsDrawn()) {
+      target = pill;
+    }
+  }
   if (!target) {
-    target = open_view_->GetUrlPillView();
+    target = open_view_;
   }
   site_controls_->Show(target, BuildSiteControlState(), CurrentAppearance(),
                        contents, BuildSiteControlCallbacks());
+  UpdateSidebarPopoverState();
 }
 
 void OpenWindowUi::HideSiteControls() {
   if (site_controls_) {
     site_controls_->Close();
   }
+  UpdateSidebarPopoverState();
 }
 
 bool OpenWindowUi::site_controls_shown() const {
@@ -6469,7 +7107,205 @@ void OpenWindowUi::OnSiteControlAdBlockToggled(bool enabled) {
   }
 }
 
-void OpenWindowUi::OnSiteControlClosed() {}
+void OpenWindowUi::OnSiteControlClosed() {
+  UpdateSidebarPopoverState();
+}
+
+// --- OpenBrowserView::Delegate & Single-Pane Toolbar -------------------------
+
+void OpenWindowUi::SyncSinglePaneToolbar() {
+  if (!open_view_) {
+    return;
+  }
+  OpenBrowserView::SinglePaneToolbarState state;
+  const secondary::Appearance appearance = CurrentAppearance();
+  state.background =
+      appearance.dark ? SkColorSetRGB(0x1E, 0x1E, 0x22) : SK_ColorWHITE;
+  content::WebContents* wc = ActiveWebContents();
+  const Tab* tab = controller_->GetActiveTab(window_id_);
+  if (wc) {
+    state.can_go_back = wc->GetController().CanGoBack();
+    state.can_go_forward = wc->GetController().CanGoForward();
+    state.is_loading = wc->IsLoading();
+    const GURL url = wc->GetVisibleURL().is_valid()
+                         ? wc->GetVisibleURL()
+                         : wc->GetLastCommittedURL();
+    state.url = url.spec();
+    if (url.SchemeIs(webui::kOpenScheme)) {
+      state.host = url.host() == webui::kHostNote    ? u"Note"
+                   : url.host() == webui::kHostEasel ? u"Easel"
+                                                     : u"Open";
+      state.hides_copy = url.host() == webui::kHostNote;
+      state.site_controls_available = false;
+    } else if (url.is_valid()) {
+      const bool full_url = PrefBool("appearance.fullUrl", false);
+      const std::string host = HostWithoutWww(url);
+      state.host =
+          base::UTF8ToUTF16(full_url || host.empty() ? url.spec() : host);
+      state.site_controls_available = url.SchemeIsHTTPOrHTTPS();
+    }
+  } else if (tab) {
+    state.url = tab->url;
+    const GURL url(tab->url);
+    if (url.SchemeIs(webui::kOpenScheme)) {
+      state.host = url.host() == webui::kHostNote    ? u"Note"
+                   : url.host() == webui::kHostEasel ? u"Easel"
+                                                     : u"Open";
+      state.hides_copy = url.host() == webui::kHostNote;
+      state.site_controls_available = false;
+    } else if (url.is_valid()) {
+      const bool full_url = PrefBool("appearance.fullUrl", false);
+      const std::string host = HostWithoutWww(url);
+      state.host =
+          base::UTF8ToUTF16(full_url || host.empty() ? tab->url : host);
+      state.site_controls_available = url.SchemeIsHTTPOrHTTPS();
+    }
+  } else {
+    state.site_controls_available = false;
+    state.hides_copy = true;
+  }
+  if (tab && tab->live_state.page_background_color) {
+    state.background = ToSkColor(*tab->live_state.page_background_color);
+  }
+  open_view_->UpdateSinglePaneToolbar(state);
+}
+
+void OpenWindowUi::OnAppMenuRequested(views::View* anchor) {
+  ShowAppMenu(anchor);
+}
+
+void OpenWindowUi::OnExtensionContextMenuRequested(
+    const std::string& extension_id,
+    views::View* anchor,
+    const gfx::Point& screen_pt) {
+  if (OpenExtensionBridge* extensions = ExtensionBridge()) {
+    extensions->ShowContextMenu(MakeExtensionHostWindow(), extension_id, anchor,
+                                screen_pt, ui::mojom::MenuSourceType::kMouse);
+  }
+}
+
+void OpenWindowUi::OnSpaceReordered(const std::string& space_id,
+                                    size_t to_index) {
+  BrowserModel& model = service()->model();
+  std::vector<SpaceID> ordered;
+  ordered.reserve(model.spaces().size());
+  for (const Space& space : model.spaces()) {
+    if (space.id != space_id) {
+      ordered.push_back(space.id);
+    }
+  }
+  if (ordered.size() == model.spaces().size()) {
+    return;
+  }
+  const size_t clamped = std::min(to_index, ordered.size());
+  ordered.insert(ordered.begin() + static_cast<ptrdiff_t>(clamped), space_id);
+  model.ReorderSpaces(ordered);
+}
+
+void OpenWindowUi::OnResetPinnedTab(const ItemID& id, bool separate) {
+  BrowserModel& model = service()->model();
+  OpenTabBridge* bridge = service()->tab_bridge();
+  const Tab* tab = model.FindTab(id);
+  if (!tab) {
+    return;
+  }
+  const std::string previous_url = tab->url;
+  const std::optional<SpaceID> tab_space = model_util::SpaceOfNode(model, id);
+  if (!model.ResetPinnedTab(id)) {
+    return;
+  }
+  if (const Tab* reset_tab = model.FindTab(id); reset_tab && bridge) {
+    if (bridge->WebContentsForTab(id)) {
+      bridge->Navigate(id, GURL(reset_tab->url));
+    }
+  }
+  if (separate && !previous_url.empty()) {
+    const GURL separated_url(previous_url);
+    if (separated_url.is_valid() && bridge) {
+      const std::optional<SpaceID> focused =
+          model_util::FocusedSpace(model, window_id_);
+      if (tab_space && (!focused || *tab_space != *focused)) {
+        const ItemID created = model.NewTab(*tab_space, separated_url.spec());
+        if (!created.empty()) {
+          bridge->SelectNode(created, window_id_);
+        }
+      } else {
+        bridge->OpenTab(separated_url, /*background=*/false, window_id_);
+      }
+    }
+  } else {
+    ShowToast(ToastSpec::ForKind(OpenToastKind::kTabReset));
+  }
+}
+
+void OpenWindowUi::OnTabDragStateChanged(bool dragging,
+                                         const ItemID& /*tab_id*/) {
+  if (open_view_) {
+    open_view_->SetSplitDropOverlayActive(dragging);
+  }
+}
+
+void OpenWindowUi::OnSinglePaneToolbarCommand(PaneCommand command,
+                                              views::View* anchor) {
+  OpenTabBridge* bridge = service()->tab_bridge();
+  content::WebContents* contents = ActiveWebContents();
+  switch (command) {
+    case PaneCommand::kBack:
+      if (std::optional<ItemID> active = ActiveTabId(); active && bridge) {
+        bridge->GoBack(*active);
+      } else if (contents && contents->GetController().CanGoBack()) {
+        contents->GetController().GoBack();
+      }
+      return;
+    case PaneCommand::kForward:
+      if (contents && contents->GetController().CanGoForward()) {
+        contents->GetController().GoForward();
+      }
+      return;
+    case PaneCommand::kReload:
+      if (contents) {
+        contents->GetController().Reload(content::ReloadType::NORMAL, true);
+      }
+      return;
+    case PaneCommand::kStop:
+      if (contents) {
+        contents->Stop();
+      }
+      return;
+    case PaneCommand::kCopyUrl:
+      if (contents) {
+        CopyUrl(contents->GetLastCommittedURL());
+      }
+      return;
+    case PaneCommand::kSiteControl:
+      ShowSiteControls(anchor);
+      return;
+    default:
+      if (std::optional<ItemID> active = ActiveTabId()) {
+        OnPaneCommand(std::nullopt, *active, command, anchor);
+      }
+      return;
+  }
+}
+
+void OpenWindowUi::OnSinglePaneHostClicked(views::View* anchor) {
+  std::u16string initial_text;
+  if (content::WebContents* wc = ActiveWebContents()) {
+    const GURL url = wc->GetVisibleURL().is_valid()
+                         ? wc->GetVisibleURL()
+                         : wc->GetLastCommittedURL();
+    if (url.is_valid()) {
+      initial_text = base::UTF8ToUTF16(url.spec());
+    }
+  } else if (const Tab* tab = controller_->GetActiveTab(window_id_)) {
+    initial_text = base::UTF8ToUTF16(tab->url);
+  }
+  std::optional<gfx::Rect> anchor_rect;
+  if (anchor && anchor->IsDrawn()) {
+    anchor_rect = anchor->GetBoundsInScreen();
+  }
+  ShowCommandBar(CommandBarMode::kEditCurrentUrl, initial_text, anchor_rect);
+}
 
 // --- Split View --------------------------------------------------------------
 
@@ -6500,6 +7336,8 @@ void OpenWindowUi::UpdatePanel() {
       }
     }
     split_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
+    open_view_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
+    SyncSinglePaneToolbar();
     return;
   }
   SplitPresentation presentation;
@@ -6646,6 +7484,39 @@ void OpenWindowUi::OnPanesSwapped(const ItemID& split_id,
   model.MoveNode(id_lo, parent, hi);
 }
 
+void OpenWindowUi::OnPaneHostClicked(const std::optional<ItemID>& split_id,
+                                     const ItemID& tab_id,
+                                     size_t /*pane_index*/,
+                                     views::View* anchor) {
+  if (OpenTabBridge* bridge = service()->tab_bridge()) {
+    bridge->SelectNode(tab_id, window_id_);
+  }
+  if (split_) {
+    split_->SetFocusedPane(tab_id);
+  }
+  std::u16string initial_text;
+  if (OpenTabBridge* bridge = service()->tab_bridge()) {
+    if (content::WebContents* wc = bridge->WebContentsForTab(tab_id)) {
+      const GURL url = wc->GetVisibleURL().is_valid()
+                           ? wc->GetVisibleURL()
+                           : wc->GetLastCommittedURL();
+      if (url.is_valid()) {
+        initial_text = base::UTF8ToUTF16(url.spec());
+      }
+    }
+  }
+  if (initial_text.empty()) {
+    if (const Tab* tab = service()->model().FindTab(tab_id)) {
+      initial_text = base::UTF8ToUTF16(tab->url);
+    }
+  }
+  std::optional<gfx::Rect> anchor_rect;
+  if (anchor && anchor->IsDrawn()) {
+    anchor_rect = anchor->GetBoundsInScreen();
+  }
+  ShowCommandBar(CommandBarMode::kEditCurrentUrl, initial_text, anchor_rect);
+}
+
 bool OpenWindowUi::CanDropInSplit(const std::optional<ItemID>& dragged_tab_id,
                                   const GURL& dragged_url,
                                   SplitDropZone zone,
@@ -6660,6 +7531,9 @@ bool OpenWindowUi::OnDropInSplit(const std::optional<ItemID>& dragged_tab_id,
                                  const GURL& dragged_url,
                                  SplitDropZone zone,
                                  std::optional<size_t> target_pane_index) {
+  if (open_view_) {
+    open_view_->SetSplitDropOverlayActive(false);
+  }
   BrowserModel& model = service()->model();
   OpenTabBridge* bridge = service()->tab_bridge();
   if (!bridge) {
@@ -6785,7 +7659,13 @@ gfx::Rect OpenWindowUi::LibraryDrawerRectInWidget() const {
                        : 228;
   const int drawer_w =
       std::min(std::max(320, win.width() - 40), sb_w + kLibraryDrawerExtraWidth);
+#if !BUILDFLAG(IS_MAC)
+  const int top_inset = metrics::win_controls::kStripHeight;
+  return gfx::Rect(win.x(), win.y() + top_inset, drawer_w,
+                   std::max(0, win.height() - top_inset));
+#else
   return gfx::Rect(win.x(), win.y(), drawer_w, win.height());
+#endif
 }
 
 void OpenWindowUi::EnsureFindBar() {
@@ -6957,7 +7837,9 @@ void OpenWindowUi::OnViewIsDeleting(views::View* observed_view) {
 
 void OpenWindowUi::OnWidgetActivationChanged(views::Widget* widget,
                                              bool active) {
-  if (active) {
+  if (!active) {
+    alt_down_ = false;
+  } else {
     if (OpenHandoffController* handoff = service()->handoff()) {
       handoff->OnWindowActivated();
     }
@@ -6966,6 +7848,8 @@ void OpenWindowUi::OnWidgetActivationChanged(views::Widget* widget,
 }
 
 void OpenWindowUi::OnWidgetDestroying(views::Widget* widget) {
+  modifier_monitor_.reset();
+  switcher_monitor_.reset();
   widget_observation_.Reset();
 }
 
@@ -7146,6 +8030,7 @@ void OpenWindowUi::OnTabActivated(const ItemID& tab_id) {
       find_bar_->target() != FindTargetContents()) {
     CloseFindBar();
   }
+  SyncSinglePaneToolbar();
 }
 
 bool OpenWindowUi::tab_switcher_active() const {
@@ -7352,6 +8237,18 @@ void OpenWindowUi::RegisterAccelerators() {
           *accelerator, ui::AcceleratorManager::kHighPriority, this);
     }
   }
+#if !BUILDFLAG(IS_MAC)
+  const ui::Accelerator alt_f(ui::VKEY_F, ui::EF_ALT_DOWN);
+  const ui::Accelerator f10(ui::VKEY_F10, ui::EF_NONE);
+  if (!accelerator_commands_.contains(alt_f)) {
+    focus_manager->RegisterAccelerator(
+        alt_f, ui::AcceleratorManager::kNormalPriority, this);
+  }
+  if (!accelerator_commands_.contains(f10)) {
+    focus_manager->RegisterAccelerator(
+        f10, ui::AcceleratorManager::kNormalPriority, this);
+  }
+#endif
   UpdateEscapeRegistration();
 }
 
@@ -7492,7 +8389,19 @@ bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
     return false;
   }
   auto it = accelerator_commands_.find(accelerator);
-  return it != accelerator_commands_.end() && RunShortcut(it->second);
+  if (it != accelerator_commands_.end()) {
+    return RunShortcut(it->second);
+  }
+#if !BUILDFLAG(IS_MAC)
+  if ((accelerator.key_code() == ui::VKEY_F &&
+       accelerator.modifiers() == ui::EF_ALT_DOWN) ||
+      (accelerator.key_code() == ui::VKEY_F10 &&
+       accelerator.modifiers() == ui::EF_NONE)) {
+    ShowAppMenu(nullptr);
+    return true;
+  }
+#endif
+  return false;
 }
 
 bool OpenWindowUi::CanHandleAccelerators() const {

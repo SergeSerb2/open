@@ -2,6 +2,7 @@ import type { ComponentType, JSX } from 'preact';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { RPC_EVENTS, type ProfileSummary } from '../shared/bridge';
 import { currentPageRoute } from '../shared/route';
+import { isMacPlatform } from '../shared/shortcuts';
 import { call, errorText, LIBRARY_EVENTS, onEvent } from './api';
 import { ArchiveSection } from './ArchiveSection';
 import { BoostsSection } from './BoostsSection';
@@ -90,6 +91,7 @@ function isTextField(el: EventTarget | null): el is HTMLInputElement | HTMLTextA
 
 export function LibraryApp(): JSX.Element {
   const drawer = useMemo(isDrawerMode, []);
+  const nonMac = useMemo(() => !isMacPlatform(), []);
   const [section, setSection] = useState<SectionId>(initialSection);
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profileId, setProfileId] = useState<string>('all');
@@ -310,7 +312,7 @@ export function LibraryApp(): JSX.Element {
   const View = def.View;
   return (
     <NavContext.Provider value={nav}>
-      <div class={`lib-shell${drawer ? ' is-drawer' : ' is-tab'} is-${section}`}>
+      <div class={`lib-shell${drawer ? ' is-drawer' : ' is-tab'}${nonMac ? ' is-non-mac' : ''} is-${section}`}>
         <nav ref={railRef} class="lib-rail" aria-label="Library sections">
           <div class="lib-rail-tiles" role="tablist" aria-orientation="vertical">
             {SECTIONS.map((s) => {

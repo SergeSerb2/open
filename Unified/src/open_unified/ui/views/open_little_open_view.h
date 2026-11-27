@@ -34,6 +34,8 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "build/build_config.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "open_unified/core/model/open_types.h"
 #include "open_unified/ui/views/open_split_container_view.h"
@@ -43,6 +45,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/view.h"
+#include "ui/views/widget/widget_observer.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -58,13 +61,27 @@ class WidgetDelegate;
 
 namespace open_unified {
 
+class OpenWindowControlsView;
+
 namespace little_open_metrics {
 inline constexpr gfx::Size kBarSize{490, 329};
 inline constexpr int kScreenInset = 20;
 inline constexpr gfx::Size kPageSize{1185, 832};
 inline constexpr gfx::Size kMinimumPageSize{360, 240};
 inline constexpr int kTitleBarHeight = 47;
+inline constexpr int kNonMacTitleBarHeight = 40;
+inline constexpr int kPillMinWidth = 120;
+inline constexpr int kPillMaxWidth = 240;
+inline constexpr int kMinCapsuleWidth = 88;
 inline constexpr int kWindowCornerRadius = 12;
+
+inline constexpr int EffectiveTitleBarHeight() {
+#if BUILDFLAG(IS_MAC)
+  return kTitleBarHeight;
+#else
+  return kNonMacTitleBarHeight;
+#endif
+}
 inline constexpr std::array<int, 3> kWindowButtonX = {9, 32, 55};
 inline constexpr int kWindowButtonY = 16;
 inline constexpr int kWindowButtonSize = 16;
@@ -205,7 +222,8 @@ class LittleOpenDelegate {
 };
 
 class OpenLittleOpenView : public views::View,
-                           public content::WebContentsObserver {
+                           public content::WebContentsObserver,
+                           public views::WidgetObserver {
   METADATA_HEADER(OpenLittleOpenView, views::View)
 
  public:
@@ -284,10 +302,22 @@ class OpenLittleOpenView : public views::View,
   // content::WebContentsObserver:
   void TitleWasSet(content::NavigationEntry* entry) override;
   void DidFinishNavigation(content::NavigationHandle* handle) override;
+  void DidStartLoading() override;
+  void DidStopLoading() override;
+  void LoadProgressChanged(double progress) override;
+
+  // views::WidgetObserver:
+  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetShowStateChanged(views::Widget* widget) override;
+  void OnWidgetDestroying(views::Widget* widget) override;
 
  private:
   void LayoutTitleBar();
   void UpdateWindowTitle();
+  void SyncWindowControlsState();
+  void RepaintTrafficLights();
+  int TitleBarHeight() const;
+  int DesiredPillWidth() const;
   gfx::Rect CapsuleRect() const;
   gfx::Rect PillRect() const;
   gfx::Rect PillLabelRect() const;
@@ -295,7 +325,9 @@ class OpenLittleOpenView : public views::View,
   gfx::Rect ChevronRect() const;
   gfx::Rect CopyRect() const;
   gfx::Rect ExtensionsRect() const;
+#if BUILDFLAG(IS_MAC)
   gfx::Rect WindowButtonRect(int index) const;
+#endif
   void RebuildExtensionActionButtons();
   void TriggerOpenInSpace(std::optional<SpaceID> space_id);
   void PaintPill(gfx::Canvas* canvas, const gfx::Rect& bounds, bool hovered);
@@ -308,11 +340,13 @@ class OpenLittleOpenView : public views::View,
                             gfx::Canvas* canvas,
                             const gfx::Rect& bounds,
                             bool hovered);
+#if BUILDFLAG(IS_MAC)
   void PaintWindowButton(int index,
                          gfx::Canvas* canvas,
                          const gfx::Rect& bounds,
                          bool hovered);
   void PressWindowButton(int index);
+#endif
   void ShowSpacePicker();
   void OnSpacePickerClosed();
   void ShowProfilePicker();
@@ -324,7 +358,12 @@ class OpenLittleOpenView : public views::View,
   Mode mode_ = Mode::kBar;
   LittleOpenState state_;
 
+#if BUILDFLAG(IS_MAC)
   std::array<raw_ptr<secondary::PaintedButton>, 3> window_buttons_{};
+#else
+  raw_ptr<OpenWindowControlsView> leading_window_controls_view_ = nullptr;
+  raw_ptr<OpenWindowControlsView> window_controls_view_ = nullptr;
+#endif
   raw_ptr<secondary::PaintedButton> profile_button_ = nullptr;
   raw_ptr<secondary::PaintedButton> host_button_ = nullptr;
   raw_ptr<secondary::PaintedButton> downloads_button_ = nullptr;
@@ -335,6 +374,12 @@ class OpenLittleOpenView : public views::View,
   raw_ptr<secondary::GlyphButton> chevron_button_ = nullptr;
   raw_ptr<views::WebView> web_view_ = nullptr;
   raw_ptr<views::View> bar_contents_ = nullptr;
+
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
+  bool window_active_ = true;
+  bool page_loading_ = false;
+  double load_progress_ = 0.0;
 
   std::unique_ptr<content::WebContents> owned_contents_;
   bool promoted_to_main_ = false;

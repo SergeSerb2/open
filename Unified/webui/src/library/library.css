@@ -147,6 +147,10 @@ input:focus-visible {
   top: 16px;
 }
 
+.is-non-mac .lib-rail-tiles {
+  top: 12px;
+}
+
 .lib-tile {
   border: 0;
   border-radius: 12px;
