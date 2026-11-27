@@ -1344,7 +1344,7 @@ std::unique_ptr<BrowserModel> SnapshotStore::DeserializeModel(
       w.id = SafeUuid(wd->FindString("id"));
       w.focused_space_id = SafeUuid(wd->FindString("focusedSpaceID"));
       if (const base::DictValue* sel = wd->FindDict("selectedNodeBySpace")) {
-        for (const auto& [k, val] : *sel) {
+        for (const auto [k, val] : *sel) {
           if (!val.is_string()) continue;
           auto sid = NormalizeUuid(k);
           auto nid = NormalizeUuid(val.GetString());

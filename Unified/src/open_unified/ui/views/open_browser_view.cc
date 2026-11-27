@@ -660,6 +660,10 @@ class OpenBrowserView::HiddenSidebarToggleButton : public views::Button {
  public:
   explicit HiddenSidebarToggleButton(PressedCallback callback)
       : views::Button(std::move(callback)) {
+    // Composite on its own non-opaque layer so it paints above
+    // OpenThemeLayerView's opaque ui::Layer.
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
     SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     SetInstallFocusRingOnFocus(false);
     SetRequestFocusOnPress(false);

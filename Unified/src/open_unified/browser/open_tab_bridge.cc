@@ -2010,19 +2010,22 @@ void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
       // sidebar_width, sidebar_mode, focused_space_id, and
       // selected_node_by_space for the next launch.
       if (started_ && service_ && service_->started()) {
-#if !BUILDFLAG(IS_MAC)
+        // Preserve standard windows in model_.windows_ during app-wide quit on
+        // all platforms (and on Windows/Linux when the last standard window
+        // closes, since closing the last window exits the app) so browser.json
+        // retains window geometry, sidebar_width, sidebar_mode, focused Space,
+        // and selected_node_by_space for the next launch.
         const bool preserve_standard_window =
             !closed_info->incognito &&
-            (service_->model().windows().size() <= 1 ||
-             browser_shutdown::IsTryingToQuit());
+            (browser_shutdown::IsTryingToQuit()
+#if !BUILDFLAG(IS_MAC)
+             || service_->model().windows().size() <= 1
+#endif
+            );
         if (!preserve_standard_window) {
           base::AutoReset<bool> applying(&applying_, true);
           service_->model().CloseWindow(closed_info->window);
         }
-#else
-        base::AutoReset<bool> applying(&applying_, true);
-        service_->model().CloseWindow(closed_info->window);
-#endif
       }
     }
   }

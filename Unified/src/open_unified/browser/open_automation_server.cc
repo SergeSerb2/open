@@ -68,6 +68,7 @@
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/base_window.h"
+#include "ui/compositor/compositor.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -1676,15 +1677,36 @@ void OpenAutomationServer::RegisterCommands() {
           Err(std::move(reply), "no window");
           return;
         }
-        const gfx::Rect bounds(widget->GetWindowBoundsInScreen().size());
-        ui::GrabWindowSnapshotAsPNG(
-            widget->GetNativeWindow(), bounds,
+        widget->LayoutRootViewIfNecessary();
+        if (ui::Compositor* compositor = widget->GetCompositor()) {
+          compositor->ScheduleDraw();
+        }
+        // Let the scheduled Views/overlay commit reach Viz before grabbing the
+        // window snapshot so snapshots reflect the just-applied UI state.
+        base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+            FROM_HERE,
             base::BindOnce(
-                [](base::FilePath path, int width, int height, Reply reply,
-                   scoped_refptr<base::RefCountedMemory> png) {
-                  WritePngAndReply(path, png, width, height, std::move(reply));
+                [](base::FilePath path, Reply reply) {
+                  BrowserView* bv = MainBrowserView();
+                  views::Widget* w = bv ? bv->GetWidget() : nullptr;
+                  if (!w) {
+                    Err(std::move(reply), "no window");
+                    return;
+                  }
+                  const gfx::Rect bounds(w->GetWindowBoundsInScreen().size());
+                  ui::GrabWindowSnapshotAsPNG(
+                      w->GetNativeWindow(), bounds,
+                      base::BindOnce(
+                          [](base::FilePath p, int width, int height, Reply r,
+                             scoped_refptr<base::RefCountedMemory> png) {
+                            WritePngAndReply(p, png, width, height,
+                                             std::move(r));
+                          },
+                          path, bounds.width(), bounds.height(),
+                          std::move(reply)));
                 },
-                path, bounds.width(), bounds.height(), std::move(reply)));
+                path, std::move(reply)),
+            base::Milliseconds(120));
       }));
 
   // --- Spaces ----------------------------------------------------------------

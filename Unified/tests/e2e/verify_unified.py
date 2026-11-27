@@ -328,6 +328,11 @@ class Browser:
 
   def command_line(self) -> List[str]:
     browser_ud = to_browser_path(self.user_data, self.binary)
+    disabled_features = ["Translate", "MediaRouter", "OptimizationHints"]
+    if self._windows_target:
+      # Prevent Windows occlusion tracking from suspending compositor frames
+      # and input delivery when E2E runs behind another window or unattended.
+      disabled_features.append("CalculateNativeWinOcclusion")
     args = [
         self.binary,
         f"--user-data-dir={browser_ud}",
@@ -337,7 +342,7 @@ class Browser:
         "--password-store=basic",
         "--disable-background-networking",
         "--disable-component-update",
-        "--disable-features=Translate,MediaRouter,OptimizationHints",
+        "--disable-features=" + ",".join(disabled_features),
         "--window-size=1440,900",
         "--enable-logging=stderr",
         "--v=0",

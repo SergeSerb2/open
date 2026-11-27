@@ -17,6 +17,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -219,7 +220,11 @@ OpenWindowControlsView::OpenWindowControlsView(
     std::vector<WindowControlButton> buttons,
     bool allow_maximize)
     : mode_(mode) {
-  // Paint directly onto the parent OpenBrowserView surface (no extra layer).
+  // Composite on its own non-opaque layer so caption controls always paint
+  // above OpenThemeLayerView's opaque ui::Layer (and StandaloneWebWindow's
+  // WebView).
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
   GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
 
   for (WindowControlButton kind : buttons) {
