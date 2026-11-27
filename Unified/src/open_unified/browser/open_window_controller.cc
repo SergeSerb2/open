@@ -85,6 +85,7 @@
 #include "open_unified/core/suggest/suggest_engine.h"
 #include "open_unified/core/sync/sync_engine.h"
 #include "open_unified/ui/design/open_metrics.h"
+#include "open_unified/ui/design/open_theme_math.h"
 #include "open_unified/ui/views/open_sidebar_view.h"
 #include "open_unified/ui/views/open_tab_tree_view.h"
 #include "open_unified/ui/views/open_window_controls_view.h"
@@ -101,6 +102,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/menu_model.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_types.h"
@@ -1545,6 +1547,9 @@ void OpenWindowController::OnBrowserViewInstalled(BrowserView* browser_view) {
 }
 
 void OpenWindowController::OnBrowserViewDestroying(BrowserView* browser_view) {
+  if (hidden_main_browser_view_for_first_run_ == browser_view) {
+    hidden_main_browser_view_for_first_run_ = nullptr;
+  }
   windows_.erase(browser_view);
   if (windows_.empty()) {
     // Detach observers as soon as the last browser window closes so
@@ -1681,7 +1686,7 @@ void OpenWindowController::OpenFirstRunWindow() {
   if (OpenWindowUi* main_ui = MainWindowUi()) {
     if (views::Widget* w = main_ui->widget(); w && w->IsVisible()) {
       w->Hide();
-      hid_main_window_for_first_run_ = true;
+      hidden_main_browser_view_for_first_run_ = main_ui->browser_view();
     }
   }
   first_run_window_ = std::make_unique<StandaloneWebWindow>(
@@ -1697,10 +1702,12 @@ void OpenWindowController::CloseFirstRunWindow() {
   if (first_run_window_) {
     first_run_window_.reset();
   }
-  if (hid_main_window_for_first_run_) {
-    hid_main_window_for_first_run_ = false;
-    if (OpenWindowUi* main_ui = MainWindowUi()) {
-      if (views::Widget* w = main_ui->widget()) {
+  BrowserView* hidden_bv = hidden_main_browser_view_for_first_run_;
+  hidden_main_browser_view_for_first_run_ = nullptr;
+  if (started_ && hidden_bv) {
+    auto it = windows_.find(hidden_bv);
+    if (it != windows_.end()) {
+      if (views::Widget* w = it->second->widget(); w && !w->IsClosed()) {
         w->Show();
         w->Activate();
       }
@@ -1721,10 +1728,12 @@ void OpenWindowController::OnOnboardingCompleted() {
         FROM_HERE, base::BindOnce(&OpenWindowController::CloseFirstRunWindow,
                                   weak_factory_.GetWeakPtr()));
   }
-  if (hid_main_window_for_first_run_) {
-    hid_main_window_for_first_run_ = false;
-    if (OpenWindowUi* main_ui = MainWindowUi()) {
-      if (views::Widget* w = main_ui->widget()) {
+  BrowserView* hidden_bv = hidden_main_browser_view_for_first_run_;
+  hidden_main_browser_view_for_first_run_ = nullptr;
+  if (started_ && hidden_bv) {
+    auto it = windows_.find(hidden_bv);
+    if (it != windows_.end()) {
+      if (views::Widget* w = it->second->widget(); w && !w->IsClosed()) {
         w->Show();
         w->Activate();
       }
@@ -1768,6 +1777,25 @@ void OpenWindowController::OnOnboardingCompleted() {
 
 bool OpenWindowController::first_run_window_open() const {
   return first_run_window_ != nullptr;
+}
+
+views::Widget* OpenWindowController::ActiveLittleOpenWidget() const {
+  for (auto it = little_opens_.rbegin(); it != little_opens_.rend(); ++it) {
+    if (*it && !(*it)->closing()) {
+      if (views::Widget* w = (*it)->widget()) {
+        return w;
+      }
+    }
+  }
+  return nullptr;
+}
+
+views::Widget* OpenWindowController::FirstRunWidget() const {
+  return first_run_window_ ? first_run_window_->widget() : nullptr;
+}
+
+views::Widget* OpenWindowController::SettingsWindowWidget() const {
+  return settings_window_ ? settings_window_->widget() : nullptr;
 }
 
 void OpenWindowController::OnFirstRunWindowClosed() {
@@ -4570,18 +4598,36 @@ OpenBrowserService* OpenWindowUi::service() const {
 
 secondary::Appearance OpenWindowUi::CurrentAppearance() const {
   secondary::Appearance appearance;
-  appearance.dark = controller_->IsSystemDarkMode();
+  const bool system_dark = controller_->IsSystemDarkMode();
+  appearance.dark = system_dark;
+  // Default refined focus ring matching Swift Open Core.focusRing (#458AFF);
+  // FocusRingView handles alpha attenuation.
+  appearance.focus_ring = SkColorSetRGB(0x45, 0x8A, 0xFF);
   std::optional<SpaceID> space =
       model_util::FocusedSpace(service()->model(), window_id_);
   if (const Space* s = space ? controller_->GetSpace(*space) : nullptr) {
+    const theme::ContentAppearance system_app =
+        ToContentAppearance(system_dark);
+    const theme::ThemeStyle style =
+        theme::ThemeStyle::FromSpaceTheme(s->theme, system_app);
+    const theme::ContentAppearance content_app =
+        style.ResolvedAppearance(system_app);
     if (s->theme.accent) {
       appearance.accent = ToSkColor(*s->theme.accent);
       appearance.dark_accent = appearance.accent;
+      appearance.focus_ring = appearance.accent;
     } else if (s->theme.style) {
       appearance.accent = ToSkColor(s->theme.style->key_color);
     }
+    if (!s->theme.accent && !style.IsDefaultTheme()) {
+      const theme::Rgba accent = style.AccentColor(content_app);
+      auto ch = [](double v) -> U8CPU {
+        return static_cast<U8CPU>(std::clamp(v, 0.0, 1.0) * 255.0 + 0.5);
+      };
+      appearance.focus_ring =
+          SkColorSetARGB(ch(accent.a), ch(accent.r), ch(accent.g), ch(accent.b));
+    }
     if (s->theme.style) {
-      appearance.focus_ring = ToSkColor(s->theme.style->key_color);
       if (s->theme.style->appearance == ThemeAppearance::kDark) {
         appearance.dark = true;
       } else if (s->theme.style->appearance == ThemeAppearance::kLight) {
@@ -4590,6 +4636,130 @@ secondary::Appearance OpenWindowUi::CurrentAppearance() const {
     }
   }
   return appearance;
+}
+
+bool OpenWindowUi::sidebar_hidden() const {
+  if (open_view_) {
+    return open_view_->sidebar_hidden();
+  }
+  if (const BrowserWindowState* w =
+          service()->model().FindWindow(window_id_)) {
+    return w->sidebar_mode == SidebarMode::kHidden;
+  }
+  return false;
+}
+
+base::DictValue OpenWindowUi::AppMenuSnapshot() {
+  base::DictValue result;
+  base::ListValue labels;
+#if !BUILDFLAG(IS_MAC)
+  AppMenuContext ctx;
+  ctx.is_incognito = controller_->IsIncognitoWindow(window_id_);
+  ctx.sidebar_hidden = sidebar_hidden();
+  ctx.toolbar_visible = single_pane_toolbar_visible_;
+  ctx.is_fullscreen = widget() && widget()->IsFullscreen();
+  ctx.has_active_tab = ActiveTabId().has_value();
+
+  std::unique_ptr<ui::SimpleMenuModel> model =
+      BuildAppMenuModel(ctx, base::DoNothing());
+  auto collect = [](auto& self, const ui::MenuModel* menu,
+                    base::ListValue* out) -> void {
+    if (!menu) {
+      return;
+    }
+    const size_t count = menu->GetItemCount();
+    for (size_t i = 0; i < count; ++i) {
+      const ui::MenuModel::ItemType type = menu->GetTypeAt(i);
+      if (type == ui::MenuModel::TYPE_SEPARATOR) {
+        continue;
+      }
+      std::string label = base::UTF16ToUTF8(menu->GetLabelAt(i));
+      if (!label.empty()) {
+        out->Append(std::move(label));
+      }
+      if (type == ui::MenuModel::TYPE_SUBMENU) {
+        self(self, menu->GetSubmenuModelAt(i), out);
+      }
+    }
+  };
+  collect(collect, model.get(), &labels);
+  result.Set("supported", true);
+  result.Set("itemCount", static_cast<int>(labels.size()));
+  result.Set("labels", std::move(labels));
+#else
+  result.Set("supported", false);
+  result.Set("itemCount", 0);
+  result.Set("labels", std::move(labels));
+#endif
+  return result;
+}
+
+bool OpenWindowUi::ExecuteAutomationCommand(std::string_view name,
+                                            const base::DictValue& args) {
+  if (name == "toggle-sidebar") {
+    return RunCommandId(CommandId::kToggleSidebar);
+  }
+  if (name == "toggle-toolbar") {
+    return RunCommandId(CommandId::kToggleToolbar);
+  }
+  if (name == "zoom-in") {
+    return RunCommandId(CommandId::kZoomIn);
+  }
+  if (name == "zoom-reset") {
+    return RunCommandId(CommandId::kZoomActualSize);
+  }
+  if (name == "open-settings-window") {
+    const std::string* section = args.FindString("section");
+    controller_->OpenSettingsWindow(section ? std::string_view(*section)
+                                            : std::string_view());
+    return controller_->settings_window_open();
+  }
+  if (name == "close-settings-window") {
+    controller_->CloseSettingsWindow();
+    return true;
+  }
+  if (name == "open-first-run-window") {
+    controller_->OpenFirstRunWindow();
+    return controller_->first_run_window_open();
+  }
+  if (name == "close-first-run-window") {
+    controller_->CloseFirstRunWindow();
+    return true;
+  }
+  if (name == "reset-pinned") {
+    std::string tab_id;
+    if (const std::string* t = args.FindString("tab")) {
+      tab_id = *t;
+    } else if (std::optional<ItemID> active = ActiveTabId()) {
+      tab_id = *active;
+    }
+    if (tab_id.empty() || !service()->model().FindTab(tab_id)) {
+      return false;
+    }
+    const bool separate = args.FindBool("separate").value_or(false);
+    OnResetPinnedTab(tab_id, separate);
+    return true;
+  }
+  if (name == "reorder-space") {
+    const std::string* space_id = args.FindString("space");
+    if (!space_id) {
+      space_id = args.FindString("space_id");
+    }
+    std::optional<int> to_index = args.FindInt("toIndex");
+    if (!to_index) {
+      to_index = args.FindInt("to_index");
+    }
+    if (!to_index) {
+      to_index = args.FindInt("index");
+    }
+    if (!space_id || space_id->empty() || !to_index || *to_index < 0 ||
+        !service()->model().FindSpace(*space_id)) {
+      return false;
+    }
+    OnSpaceReordered(*space_id, static_cast<size_t>(*to_index));
+    return true;
+  }
+  return false;
 }
 
 // --- Command Bar -------------------------------------------------------------
@@ -6488,6 +6658,11 @@ void OpenWindowUi::OpenPeekWithContents(
   }
   if (!peek_->is_showing()) {
     peek_source_ = source_node;
+    if (toasts_) {
+      toasts_->DismissKind(OpenToastKind::kTabArchived);
+      toasts_->DismissKind(OpenToastKind::kPeekPromoted);
+      toasts_->DismissKind(OpenToastKind::kPeekClosed);
+    }
   }
   PopulatePeekSpaceChoices();
   peek_->SetAppearance(CurrentAppearance());
@@ -7774,8 +7949,8 @@ void OpenWindowUi::UpdateOverlayAnchors() {
 
 void OpenWindowUi::RestackVisibleOverlays() {
   // Deterministic bottom-to-top Z-order across all visible child overlays:
-  // FindBar < Toasts < BoostEditor < LibraryDrawer < Peek < TabSwitcher
-  // < CaptureOverlay < CommandBar.
+  // FindBar < BoostEditor < LibraryDrawer < Peek < TabSwitcher
+  // < CaptureOverlay < CommandBar < Toasts.
   std::vector<views::Widget*> ordered;
   ordered.reserve(9);
   auto push_if_visible = [&ordered](views::Widget* w) {
@@ -7785,9 +7960,6 @@ void OpenWindowUi::RestackVisibleOverlays() {
   };
   if (find_host_ && find_host_->IsVisible()) {
     push_if_visible(find_host_->widget());
-  }
-  if (toast_host_ && toast_host_->IsVisible()) {
-    push_if_visible(toast_host_->widget());
   }
   if (boost_editor_ && boost_editor_->IsVisible() && boost_editor_->view()) {
     push_if_visible(boost_editor_->view()->GetWidget());
@@ -7825,8 +7997,11 @@ void OpenWindowUi::RestackVisibleOverlays() {
   if (command_bar_host_ && command_bar_host_->IsVisible()) {
     push_if_visible(command_bar_host_->widget());
   }
+  if (toast_host_ && toast_host_->IsVisible()) {
+    push_if_visible(toast_host_->widget());
+  }
   for (views::Widget* w : ordered) {
-    w->StackAtTop();
+    secondary::OverlayWidgetHost::StackWidgetAtTop(w);
   }
 }
 

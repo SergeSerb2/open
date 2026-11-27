@@ -30,6 +30,7 @@
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/restore_type.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
@@ -537,7 +538,18 @@ bool OpenSleepController::DoRestore(const ItemID& tab_id) {
     return true;  // A placeholder loads when OpenTabBridge creates it.
   }
   contents->SetPageFrozen(false);
-  // A discarded page reloads by itself once it is shown.
+  // Desktop Chromium 156 only auto-reloads a discarded TabLifecycleUnit on
+  // SetFocused(true), which never fires for unfocused windows or Linux WSLg.
+  // Explicitly request a reload here when restoring a discarded page.
+  content::NavigationController& controller = contents->GetController();
+  if (controller.NeedsReload()) {
+    controller.LoadIfNecessary();
+  } else if (contents->WasDiscarded() && !contents->IsLoading() &&
+             (!contents->GetPrimaryMainFrame() ||
+              !contents->GetPrimaryMainFrame()->IsRenderFrameLive())) {
+    controller.SetNeedsReload();
+    controller.LoadIfNecessary();
+  }
   return true;
 }
 

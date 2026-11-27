@@ -647,6 +647,8 @@ class MacKeychainSecretStore final : public SecretStore {
         (__bridge id)kSecAttrAccount : ns_account,
         (__bridge id)kSecReturnData : @YES,
         (__bridge id)kSecMatchLimit : (__bridge id)kSecMatchLimitOne,
+        (__bridge id)kSecUseAuthenticationUI :
+            (__bridge id)kSecUseAuthenticationUISkip,
       };
       CFTypeRef result = nullptr;
       OSStatus status =

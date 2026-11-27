@@ -6,7 +6,7 @@
 // Packages/OpenKit/Sources/OpenFeatures/PeekOverlayView.swift).
 //
 // Look: a 0.70 scrim over the overlay, a card 80 % of the content panel's
-// width (2 pt top and bottom inset) holding a live `views::WebView`, and a
+// width (16 pt top and bottom inset) holding a live `views::WebView`, and a
 // floating vertical pill action rail outside the card's right edge:
 //   Close (x), Expand to Tab (Cmd/Ctrl+O), Open in Split View, Copy URL,
 //   and Open in Favorite / Space, plus a Back/Forward/Stack navigation pill
@@ -60,7 +60,7 @@ class OpenSpringAnimator;
 
 namespace peek_metrics {
 inline constexpr float kWidthFraction = 0.8f;
-inline constexpr int kVerticalInset = 2;
+inline constexpr int kVerticalInset = 16;
 inline constexpr int kButtonDiameter = 33;
 inline constexpr int kButtonHitWidth = 35;
 inline constexpr int kButtonGap = 13;

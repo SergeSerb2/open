@@ -418,7 +418,6 @@ LiveDataDiskConfig LoadLiveDataDiskConfig(const base::FilePath& state_dir,
 }
 
 void ScheduleLiveDataPreferencesAndAuth(
-    scoped_refptr<base::SequencedTaskRunner> file_runner,
     base::WeakPtr<OpenBrowserService> service_weak,
     const base::FilePath& state_dir,
     OpenLiveDataService* livedata) {
@@ -440,11 +439,13 @@ void ScheduleLiveDataPreferencesAndAuth(
       has_pref_ics = true;
     }
   }
-  if (!file_runner) {
-    return;
-  }
-  file_runner->PostTaskAndReplyWithResult(
+  // Post on the thread pool with CONTINUE_ON_SHUTDOWN rather than file_runner_
+  // (BLOCK_SHUTDOWN) so a slow Keychain or libsecret D-Bus lookup can never
+  // stall browser.json writes or trigger a shutdown watchdog hang.
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&LoadLiveDataDiskConfig, state_dir,
                      /*read_ics_from_disk=*/!has_pref_ics && calendar_enabled),
       base::BindOnce(
@@ -811,8 +812,8 @@ void OpenBrowserService::Start() {
   RefreshNetworkFactories();
   SyncLiveDataFromModel();
   ScheduleLiveDataPreferencesAndAuth(
-      file_runner_, weak_factory_.GetWeakPtr(),
-      user_data_dir_.AppendASCII(kStateDirName), livedata_.get());
+      weak_factory_.GetWeakPtr(), user_data_dir_.AppendASCII(kStateDirName),
+      livedata_.get());
   livedata_->Start();
 
   capture_controller_ = std::make_unique<OpenCaptureController>(user_data_dir_);
@@ -1935,8 +1936,8 @@ void OpenBrowserService::ApplyPreferencesInternal(bool schedule_sync_push) {
   // 5b. LiveData calendar ICS feeds & GitHub bearer token.
   if (livedata_) {
     ScheduleLiveDataPreferencesAndAuth(
-        file_runner_, weak_factory_.GetWeakPtr(),
-        user_data_dir_.AppendASCII(kStateDirName), livedata_.get());
+        weak_factory_.GetWeakPtr(), user_data_dir_.AppendASCII(kStateDirName),
+        livedata_.get());
   }
 
   // 6. Global Little Open hotkey.

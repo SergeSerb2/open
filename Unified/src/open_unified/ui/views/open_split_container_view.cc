@@ -58,6 +58,10 @@
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
+#if defined(USE_AURA)
+#include "ui/aura/window.h"
+#endif
+
 namespace open_unified {
 
 // ===========================================================================
@@ -921,9 +925,43 @@ void OverlayWidgetHost::SetAnchor(const gfx::Rect& anchor_in_parent,
   ApplyBounds();
 }
 
+// static
+void OverlayWidgetHost::StackWidgetAtTop(views::Widget* widget) {
+  if (!widget || widget->IsClosed()) {
+    return;
+  }
+#if defined(USE_AURA)
+  aura::Window* win = widget->GetNativeWindow();
+  aura::Window* parent = win ? win->parent() : nullptr;
+  if (win && parent && win->layer_managed_by_parent() && win->layer()) {
+    const auto& children = parent->children();
+    size_t win_index = children.size();
+    size_t target_index = 0;
+    aura::Window* target = nullptr;
+    for (size_t i = 0; i < children.size(); ++i) {
+      aura::Window* child = children[i];
+      if (child == win) {
+        win_index = i;
+      } else if (child->layer_managed_by_parent() && child->layer()) {
+        target = child;
+        target_index = i;
+      }
+    }
+    if (target && win_index < target_index) {
+      parent->StackChildAbove(win, target);
+    }
+  }
+  if (win && win->layer() && win->layer()->parent()) {
+    win->layer()->parent()->StackAtTop(win->layer());
+  }
+#else
+  widget->StackAtTop();
+#endif
+}
+
 void OverlayWidgetHost::Show() {
   ApplyBounds();
-  widget_->StackAtTop();
+  StackWidgetAtTop(widget_.get());
   if (activatable_) {
     // Lock before the overlay takes key status, so the parent never paints
     // one inactive frame.
@@ -1612,10 +1650,10 @@ class FocusRingView : public views::View {
     gfx::RectF r(GetLocalBounds());
     if (focused_) {
       // WebContentContainer: path inset 1 pt, radius cornerRadius - 1, width 2.
-      // Attenuate alpha to 0.40 when the browser window is inactive.
+      // Refined alpha: 0.78 when active, 0.35 when the browser window is inactive.
       flags.setStrokeWidth(split_metrics::kRingWidth);
-      flags.setColor(window_active_ ? color_
-                                    : secondary::WithAlpha(color_, 0.40f));
+      flags.setColor(
+          secondary::WithAlpha(color_, window_active_ ? 0.78f : 0.35f));
       r.Inset(split_metrics::kRingWidth / 2.f);
       canvas->DrawRoundRect(
           r, split_metrics::kPanelCornerRadius - split_metrics::kRingWidth / 2.f,
@@ -1643,7 +1681,7 @@ class FocusRingView : public views::View {
     }
   }
 
-  SkColor color_ = SkColorSetRGB(0x31, 0x39, 0xFF);
+  SkColor color_ = SkColorSetRGB(0x45, 0x8A, 0xFF);
   bool focused_ = true;
   bool dark_content_ = false;
   bool window_active_ = true;

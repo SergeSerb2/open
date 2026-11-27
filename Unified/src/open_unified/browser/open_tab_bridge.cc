@@ -38,6 +38,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -167,6 +168,23 @@ bool IsBrowserClosing(BrowserWindowInterface* browser) {
   return !browser || !browser->GetTabStripModel() ||
          browser->GetTabStripModel()->closing_all() ||
          browser->IsDeleteScheduled();
+}
+
+void ReloadDiscardedIfNeeded(content::WebContents* wc) {
+  if (!wc) {
+    return;
+  }
+  content::NavigationController& controller = wc->GetController();
+  if (controller.NeedsReload()) {
+    controller.LoadIfNecessary();
+    return;
+  }
+  if (wc->WasDiscarded() && !wc->IsLoading() &&
+      (!wc->GetPrimaryMainFrame() ||
+       !wc->GetPrimaryMainFrame()->IsRenderFrameLive())) {
+    controller.SetNeedsReload();
+    controller.LoadIfNecessary();
+  }
 }
 
 }  // namespace
@@ -899,8 +917,7 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
   }
   const std::optional<ItemID> previous_active = ActiveTabIdForWindow(window_id);
   ShowBrowserForSpace(window_id, window->focused_space_id);
-  auto selected = window->selected_node_by_space.find(window->focused_space_id);
-  if (selected == window->selected_node_by_space.end()) {
+  auto show_empty_state = [&]() {
     // Empty Space state: ensure the window displays Open's clean tinted empty
     // Space canvas (never chrome://newtab or a stale tab from another Space).
     if (BrowserWindowInterface* browser = BrowserForWindow(window_id)) {
@@ -921,11 +938,77 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
         sleep->OnTabHidden(*previous_active);
       }
     }
+  };
+  auto selected = window->selected_node_by_space.find(window->focused_space_id);
+  if (selected == window->selected_node_by_space.end()) {
+    show_empty_state();
     return;
   }
   const SidebarNode* node = service_->model().FindNode(selected->second);
   if (!node) {
-    return;
+    // Stale selection pointing to a removed node (e.g., active tab was just
+    // closed): select the best surviving node in the focused Space so the
+    // sidebar highlight stays synced with the visible page.
+    BrowserModel& model = service_->model();
+    const SpaceID space_id = window->focused_space_id;
+    const bool is_incognito = window->is_incognito;
+    std::optional<ItemID> next_selection;
+    if (BrowserWindowInterface* browser = BrowserForWindow(window_id)) {
+      if (content::WebContents* active_wc =
+              browser->GetTabStripModel()->GetActiveWebContents();
+          active_wc && !IsEmptyState(active_wc)) {
+        if (std::optional<ItemID> active_id = TabIdForWebContents(active_wc);
+            active_id && model.FindNode(*active_id)) {
+          const bool in_space =
+              model_util::SpaceOfNode(model, *active_id) == space_id ||
+              (!is_incognito && model.IsFavorite(*active_id));
+          if (in_space) {
+            const ItemID candidate =
+                model.SidebarSelectionId(*active_id).value_or(*active_id);
+            if (model.IsSelectable(candidate, space_id)) {
+              next_selection = candidate;
+            }
+          }
+        }
+      }
+    }
+    if (!next_selection) {
+      std::vector<ItemID> ids;
+      if (is_incognito) {
+        if (const Space* space = model.FindSpace(space_id)) {
+          AppendNodeTabIds(space->pinned, &ids);
+          AppendNodeTabIds(space->today, &ids);
+        }
+      } else {
+        ids = model_util::OrderedTabIds(model, space_id);
+      }
+      for (const ItemID& id : ids) {
+        const ItemID candidate = model.SidebarSelectionId(id).value_or(id);
+        if (model.IsSelectable(candidate, space_id)) {
+          next_selection = candidate;
+          break;
+        }
+      }
+    }
+    {
+      base::AutoReset<bool> applying(&applying_, true);
+      model.SelectNode(window_id, space_id, next_selection);
+    }
+    window = model.FindWindow(window_id);
+    if (!window || !next_selection) {
+      show_empty_state();
+      return;
+    }
+    selected = window->selected_node_by_space.find(window->focused_space_id);
+    if (selected == window->selected_node_by_space.end()) {
+      show_empty_state();
+      return;
+    }
+    node = model.FindNode(selected->second);
+    if (!node) {
+      show_empty_state();
+      return;
+    }
   }
 
   ItemID to_activate;
@@ -956,9 +1039,7 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
   if (index != TabStripModel::kNoTab && index != strip->active_index()) {
     strip->ActivateTabAt(index);
   }
-  if (wc->GetController().NeedsReload()) {
-    wc->GetController().LoadIfNecessary();
-  }
+  ReloadDiscardedIfNeeded(wc);
   if (previous_active && *previous_active != to_activate) {
     if (OpenSleepController* sleep = service_->sleep_controller()) {
       sleep->OnTabHidden(*previous_active);
@@ -1101,9 +1182,7 @@ content::WebContents* OpenTabBridge::EnsureLoaded(
     const ItemID& tab_id,
     const WindowID& preferred_window_id) {
   if (auto it = contents_.find(tab_id); it != contents_.end()) {
-    if (it->second && it->second->GetController().NeedsReload()) {
-      it->second->GetController().LoadIfNecessary();
-    }
+    ReloadDiscardedIfNeeded(it->second.get());
     return it->second;
   }
   const Tab* tab = service_->model().FindTab(tab_id);

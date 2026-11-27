@@ -400,7 +400,8 @@ export function LibraryApp(): JSX.Element {
             <View {...sectionProps} />
           </div>
           <div class="lib-hint" aria-hidden="true">
-            {def.hasSearch ? `${modKey()}F Search · ` : ''}↑↓ Move · Return Open · {modKey()}⌫ Delete · Esc Close
+            {def.hasSearch ? `${modKey()}F Search · ` : ''}↑↓ Move ·{' '}
+            {nonMac ? 'Enter Open · Ctrl+Backspace Delete' : 'Return Open · ⌘⌫ Delete'} · Esc Close
           </div>
         </main>
 

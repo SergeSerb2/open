@@ -1000,6 +1000,46 @@ std::string NormalizeHotkeyPref(std::string_view raw) {
   return base::JoinString(parts, "+");
 }
 
+// Formats a profile's download directory for the Settings UI. On Windows,
+// resolves the default Unix-style "~/Downloads" placeholder to the user's real
+// Windows Downloads path (matching OpenDownloadBridge::ExpandDownloadDirectory);
+// on macOS and Linux, keeps "~/Downloads" as-is.
+std::string DisplayDownloadDirectory(std::string_view raw) {
+#if BUILDFLAG(IS_WIN)
+  const std::string_view trimmed =
+      base::TrimWhitespaceASCII(raw, base::TRIM_ALL);
+  if (trimmed.empty() || trimmed == "~/Downloads" ||
+      trimmed == "~\\Downloads") {
+    base::FilePath home;
+    if (base::PathService::Get(base::DIR_HOME, &home) && !home.empty()) {
+      return home.AppendASCII("Downloads").AsUTF8Unsafe();
+    }
+    const base::FilePath fallback =
+        DownloadPrefs::GetDefaultDownloadDirectory();
+    if (!fallback.empty()) {
+      return fallback.AsUTF8Unsafe();
+    }
+  }
+  if (trimmed == "~" || base::StartsWith(trimmed, "~/") ||
+      base::StartsWith(trimmed, "~\\")) {
+    base::FilePath home;
+    if (base::PathService::Get(base::DIR_HOME, &home) && !home.empty()) {
+      if (trimmed.size() <= 2) {
+        return home.AsUTF8Unsafe();
+      }
+      const base::FilePath rel =
+          base::FilePath::FromUTF8Unsafe(trimmed.substr(2));
+      if (!rel.empty() && !rel.IsAbsolute()) {
+        return home.Append(rel).AsUTF8Unsafe();
+      }
+    }
+  }
+  return std::string(trimmed.empty() ? "~/Downloads" : trimmed);
+#else
+  return raw.empty() ? std::string("~/Downloads") : std::string(raw);
+#endif
+}
+
 }  // namespace
 
 // ===========================================================================
@@ -1042,7 +1082,7 @@ const base::DictValue& OpenPreferences::Defaults() {
           .Set("tabs.splitOrientation", "horizontal")
           .Set("search.engine", "google")
           .Set("search.suggestions", true)
-          .Set("downloads.location", "~/Downloads")
+          .Set("downloads.location", DisplayDownloadDirectory("~/Downloads"))
           .Set("downloads.askEachTime", false)
           .Set("profiles.newDocuments", "note")
           .Set("previews.enabled", true)
@@ -1158,7 +1198,13 @@ base::DictValue OpenPreferences::Values(const ProfileID& profile_id) const {
         json::ProfileSettingsToValue(profile->settings);
     for (const ProfileKey& entry : kProfileKeys) {
       if (base::Value* v = settings.Find(entry.field)) {
-        values.Set(entry.preference, v->Clone());
+        if (std::string_view(entry.preference) == "downloads.location" &&
+            v->is_string()) {
+          values.Set(entry.preference,
+                     DisplayDownloadDirectory(v->GetString()));
+        } else {
+          values.Set(entry.preference, v->Clone());
+        }
       }
     }
   }
@@ -1833,7 +1879,14 @@ base::FilePath ExpandHome(const std::string& raw) {
   if (raw.empty()) {
     return base::FilePath();
   }
-  if (raw == "~" || base::StartsWith(raw, "~/")) {
+  if (raw == "~" || base::StartsWith(raw, "~/") ||
+      base::StartsWith(raw, "~\\")) {
+    base::FilePath home;
+    if (base::PathService::Get(base::DIR_HOME, &home) && !home.empty()) {
+      return raw.size() > 2
+                 ? home.Append(base::FilePath::FromUTF8Unsafe(raw.substr(2)))
+                 : home;
+    }
     return base::GetHomeDir().AppendASCII(raw.size() > 2 ? raw.substr(2)
                                                          : std::string());
   }
@@ -2089,8 +2142,8 @@ void OpenSettingsUI::PickDownloadFolder(const base::DictValue& payload,
                                         Reply reply) {
   const ProfileID profile = ProfileFromPayload(payload);
   const Profile* p = service()->model().FindProfile(profile);
-  const std::string current =
-      p ? p->settings.download_directory : std::string("~/Downloads");
+  const std::string current = DisplayDownloadDirectory(
+      p ? p->settings.download_directory : std::string("~/Downloads"));
   RunFileDialog(
       ui::SelectFileDialog::SELECT_FOLDER, u"Choose Download Folder",
       ExpandHome(current), {},
@@ -2230,6 +2283,10 @@ base::DictValue OpenSettingsUI::ProfileSummary(const ProfileID& profile_id) {
       [&](const Space& space) { return space.profile_id == profile_id; }));
   const SpaceIcon icon =
       profile->icon.value_or(SpaceIcon{SpaceIconKind::kNamed, "person"});
+  base::DictValue settings = json::ProfileSettingsToValue(profile->settings);
+  if (const std::string* dir = settings.FindString("download_directory")) {
+    settings.Set("download_directory", DisplayDownloadDirectory(*dir));
+  }
   return base::DictValue()
       .Set("id", profile->id)
       .Set("name", profile->name)
@@ -2239,7 +2296,7 @@ base::DictValue OpenSettingsUI::ProfileSummary(const ProfileID& profile_id) {
                              model.profiles().front().id == profile->id)
       .Set("space_count", space_count)
       .Set("favorites_count", static_cast<int>(profile->favorites.size()))
-      .Set("settings", json::ProfileSettingsToValue(profile->settings));
+      .Set("settings", std::move(settings));
 }
 
 void OpenSettingsUI::ListProfiles(const base::DictValue& payload,

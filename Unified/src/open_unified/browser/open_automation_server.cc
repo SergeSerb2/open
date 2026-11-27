@@ -14,6 +14,7 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -66,6 +67,8 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/base_window.h"
 #include "ui/compositor/compositor.h"
@@ -79,8 +82,13 @@
 #include "ui/gfx/image/image.h"
 #include "ui/snapshot/snapshot.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
+
+#if defined(USE_AURA)
+#include "ui/aura/window.h"
+#endif
 
 #if BUILDFLAG(IS_WIN)
 #include <winsock2.h>
@@ -582,7 +590,11 @@ OpenWindowUi* MainUi() {
 }
 
 BrowserView* MainBrowserView() {
-  BrowserWindowInterface* browser = Svc()->tab_bridge()->MainBrowser();
+  OpenBrowserService* svc = Svc();
+  if (!svc || !svc->tab_bridge()) {
+    return nullptr;
+  }
+  BrowserWindowInterface* browser = svc->tab_bridge()->MainBrowser();
   return browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
 }
 
@@ -886,6 +898,91 @@ void ClickAt(content::WebContents* contents, double x, double y) {
   host->ForwardMouseEvent(up);
 }
 
+bool IsImageSolidBlack(const gfx::Image& img) {
+  if (img.IsEmpty()) {
+    return false;
+  }
+  const SkBitmap* bitmap = img.ToSkBitmap();
+  if (!bitmap || !bitmap->readyToDraw() || bitmap->drawsNothing() ||
+      bitmap->width() <= 0 || bitmap->height() <= 0) {
+    return false;
+  }
+  constexpr int kGrid = 16;
+  const int w = bitmap->width();
+  const int h = bitmap->height();
+  for (int gy = 0; gy < kGrid; ++gy) {
+    const int y = std::clamp((gy * h + h / 2) / kGrid, 0, h - 1);
+    for (int gx = 0; gx < kGrid; ++gx) {
+      const int x = std::clamp((gx * w + w / 2) / kGrid, 0, w - 1);
+      const SkColor c = bitmap->getColor(x, y);
+      if (SkColorGetR(c) != 0 || SkColorGetG(c) != 0 || SkColorGetB(c) != 0) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool IsWidgetCapturable(views::Widget* w) {
+  if (!w || w->IsClosed()) {
+    return false;
+  }
+  gfx::NativeWindow native = w->GetNativeWindow();
+  if (!native) {
+    return false;
+  }
+#if defined(USE_AURA)
+  if (!native->GetHost() || !native->layer()) {
+    return false;
+  }
+#endif
+  return true;
+}
+
+views::Widget* ResolveSnapshotWidget(const std::string& window_name,
+                                     bool* is_main_out) {
+  if (is_main_out) {
+    *is_main_out = false;
+  }
+  views::Widget* w = nullptr;
+  if (window_name.empty() || window_name == "main") {
+    if (is_main_out) {
+      *is_main_out = true;
+    }
+    BrowserView* bv = MainBrowserView();
+    w = bv ? bv->GetWidget() : nullptr;
+  } else {
+    OpenWindowController* wc = Svc() ? Svc()->window_controller() : nullptr;
+    if (!wc) {
+      return nullptr;
+    }
+    if (window_name == "little-open") {
+      w = wc->ActiveLittleOpenWidget();
+    } else if (window_name == "onboarding" || window_name == "first-run") {
+      w = wc->FirstRunWidget();
+    } else if (window_name == "settings") {
+      w = wc->SettingsWindowWidget();
+    }
+  }
+  return IsWidgetCapturable(w) ? w : nullptr;
+}
+
+gfx::Size SnapshotSizeForWidget(views::Widget* w, bool is_main) {
+  gfx::Size size;
+  if (is_main) {
+    if (BrowserView* bv = MainBrowserView(); bv && !bv->size().IsEmpty()) {
+      size = bv->size();
+    }
+  }
+  if (size.IsEmpty()) {
+    size = w->GetClientAreaBoundsInScreen().size();
+  }
+  if (size.IsEmpty()) {
+    size = w->GetWindowBoundsInScreen().size();
+  }
+  return size;
+}
+
 void WritePngAndReply(base::FilePath path,
                       scoped_refptr<base::RefCountedMemory> png,
                       int width,
@@ -894,6 +991,24 @@ void WritePngAndReply(base::FilePath path,
   if (!png || png->size() == 0) {
     Err(std::move(reply), "snapshot failed");
     return;
+  }
+  // Read the actual PNG IHDR dimensions so reported width/height always match
+  // the written file across 1x and HiDPI displays.
+  base::span<const uint8_t> bytes(*png);
+  if (bytes.size() >= 24 && bytes[0] == 0x89 && bytes[1] == 'P' &&
+      bytes[2] == 'N' && bytes[3] == 'G') {
+    const uint32_t ihdr_w = (static_cast<uint32_t>(bytes[16]) << 24) |
+                            (static_cast<uint32_t>(bytes[17]) << 16) |
+                            (static_cast<uint32_t>(bytes[18]) << 8) |
+                            static_cast<uint32_t>(bytes[19]);
+    const uint32_t ihdr_h = (static_cast<uint32_t>(bytes[20]) << 24) |
+                            (static_cast<uint32_t>(bytes[21]) << 16) |
+                            (static_cast<uint32_t>(bytes[22]) << 8) |
+                            static_cast<uint32_t>(bytes[23]);
+    if (ihdr_w > 0 && ihdr_h > 0) {
+      width = static_cast<int>(ihdr_w);
+      height = static_cast<int>(ihdr_h);
+    }
   }
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
@@ -917,6 +1032,61 @@ void WritePngAndReply(base::FilePath path,
                                      .Set("height", height));
           },
           path, png->size(), width, height, std::move(reply)));
+}
+
+void GrabWidgetSnapshotAttempt(std::string window_name,
+                               base::FilePath path,
+                               int attempt,
+                               Reply reply) {
+  bool is_main = false;
+  views::Widget* w = ResolveSnapshotWidget(window_name, &is_main);
+  if (!w) {
+    Err(std::move(reply), "no window " + window_name);
+    return;
+  }
+  const gfx::Size size = SnapshotSizeForWidget(w, is_main);
+  if (size.IsEmpty()) {
+    Err(std::move(reply), "empty window bounds");
+    return;
+  }
+  const gfx::Rect bounds(size);
+  ui::GrabWindowSnapshot(
+      w->GetNativeWindow(), bounds,
+      base::BindOnce(
+          [](std::string window_name, base::FilePath path, int attempt,
+             Reply reply, gfx::Image image) {
+            if ((image.IsEmpty() || IsImageSolidBlack(image)) && attempt < 4) {
+              bool retry_main = false;
+              views::Widget* retry_w =
+                  ResolveSnapshotWidget(window_name, &retry_main);
+              if (!retry_w) {
+                Err(std::move(reply), "no window " + window_name);
+                return;
+              }
+              if (views::View* root = retry_w->GetRootView()) {
+                root->SchedulePaint();
+              }
+              retry_w->LayoutRootViewIfNecessary();
+              if (ui::Compositor* compositor = retry_w->GetCompositor()) {
+                compositor->ScheduleFullRedraw();
+              }
+              base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+                  FROM_HERE,
+                  base::BindOnce(&GrabWidgetSnapshotAttempt,
+                                 std::move(window_name), std::move(path),
+                                 attempt + 1, std::move(reply)),
+                  base::Milliseconds(180));
+              return;
+            }
+            if (image.IsEmpty()) {
+              Err(std::move(reply), "snapshot failed");
+              return;
+            }
+            scoped_refptr<base::RefCountedMemory> png = image.As1xPNGBytes();
+            WritePngAndReply(std::move(path), std::move(png), image.Width(),
+                             image.Height(), std::move(reply));
+          },
+          std::move(window_name), std::move(path), attempt, std::move(reply)));
 }
 
 base::DictValue AdBlockStateFor(const ProfileID& profile_id) {
@@ -1670,42 +1840,26 @@ void OpenAutomationServer::RegisterCommands() {
                   path, std::move(reply)));
           return;
         }
-        BrowserView* browser_view = MainBrowserView();
-        views::Widget* widget =
-            browser_view ? browser_view->GetWidget() : nullptr;
+        const std::string window_name = json::GetString(args, "window", "main");
+        bool is_main = false;
+        views::Widget* widget = ResolveSnapshotWidget(window_name, &is_main);
         if (!widget) {
-          Err(std::move(reply), "no window");
+          Err(std::move(reply), "no window " + window_name);
           return;
+        }
+        if (views::View* root = widget->GetRootView()) {
+          root->SchedulePaint();
         }
         widget->LayoutRootViewIfNecessary();
         if (ui::Compositor* compositor = widget->GetCompositor()) {
-          compositor->ScheduleDraw();
+          compositor->ScheduleFullRedraw();
         }
         // Let the scheduled Views/overlay commit reach Viz before grabbing the
         // window snapshot so snapshots reflect the just-applied UI state.
         base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
             FROM_HERE,
-            base::BindOnce(
-                [](base::FilePath path, Reply reply) {
-                  BrowserView* bv = MainBrowserView();
-                  views::Widget* w = bv ? bv->GetWidget() : nullptr;
-                  if (!w) {
-                    Err(std::move(reply), "no window");
-                    return;
-                  }
-                  const gfx::Rect bounds(w->GetWindowBoundsInScreen().size());
-                  ui::GrabWindowSnapshotAsPNG(
-                      w->GetNativeWindow(), bounds,
-                      base::BindOnce(
-                          [](base::FilePath p, int width, int height, Reply r,
-                             scoped_refptr<base::RefCountedMemory> png) {
-                            WritePngAndReply(p, png, width, height,
-                                             std::move(r));
-                          },
-                          path, bounds.width(), bounds.height(),
-                          std::move(reply)));
-                },
-                path, std::move(reply)),
+            base::BindOnce(&GrabWidgetSnapshotAttempt, window_name, path,
+                           /*attempt=*/0, std::move(reply)),
             base::Milliseconds(120));
       }));
 
@@ -1924,6 +2078,65 @@ void OpenAutomationServer::RegisterCommands() {
           return;
         }
         Ok(std::move(reply), ui->ToastState());
+      }));
+
+  Add("chrome-state", base::BindRepeating([](const base::DictValue&,
+                                             Reply reply) {
+        OpenBrowserService* service = Svc();
+        OpenWindowController* wc = service->window_controller();
+        OpenWindowUi* ui = MainUi();
+        const BrowserModel& model = service->model();
+        const BrowserWindowState* window =
+            model.FindWindow(service->MainWindowId());
+        base::Value selected_node;
+        if (window) {
+          auto it =
+              window->selected_node_by_space.find(window->focused_space_id);
+          if (it != window->selected_node_by_space.end()) {
+            selected_node = base::Value(it->second);
+          }
+        }
+        std::optional<ItemID> active_tab = service->tab_bridge()->ActiveTabId();
+        Ok(std::move(reply),
+           base::DictValue()
+               .Set("sidebarHidden", ui && ui->sidebar_hidden())
+               .Set("singlePaneToolbar",
+                    ui && ui->single_pane_toolbar_visible())
+               .Set("splitActive", ui && ui->split_view_active())
+               .Set("selectedNode", std::move(selected_node))
+               .Set("activeTabId",
+                    active_tab ? base::Value(*active_tab) : base::Value())
+               .Set("firstRunOpen", wc && wc->first_run_window_open())
+               .Set("settingsWindowOpen", wc && wc->settings_window_open()));
+      }));
+
+  Add("run-command", base::BindRepeating([](const base::DictValue& args,
+                                            Reply reply) {
+        OpenWindowUi* ui = MainUi();
+        if (!ui) {
+          Err(std::move(reply), "no window");
+          return;
+        }
+        const std::string name = json::GetString(args, "name");
+        if (name.empty()) {
+          Err(std::move(reply), "run-command needs name");
+          return;
+        }
+        if (!ui->ExecuteAutomationCommand(name, args)) {
+          Err(std::move(reply), "command failed: " + name);
+          return;
+        }
+        Ok(std::move(reply),
+           base::DictValue().Set("ok", true).Set("command", name));
+      }));
+
+  Add("app-menu", base::BindRepeating([](const base::DictValue&, Reply reply) {
+        OpenWindowUi* ui = MainUi();
+        if (!ui) {
+          Err(std::move(reply), "no window");
+          return;
+        }
+        Ok(std::move(reply), ui->AppMenuSnapshot());
       }));
 
   Add("tab-switcher", base::BindRepeating([](const base::DictValue& args,

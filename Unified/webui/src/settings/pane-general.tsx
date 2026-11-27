@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { rpc } from '../shared/bridge';
 import { Toggle } from '../shared/components';
 import { CheckIcon, DoorwayLineMark, FolderIcon } from '../shared/icons';
+import { isMacPlatform } from '../shared/shortcuts';
 import { useSettings } from './context';
 import { Btn, Group, PaneHeader, PrefToggle, Row } from './ui';
 
@@ -78,7 +79,11 @@ export function GeneralPane(): JSX.Element {
           <DoorwayLineMark size={46} class="st-hero-mark" />
           <div class="st-hero-text">
             <div class="st-hero-title">Make Open your default browser</div>
-            <div class="st-hero-subtitle">Links from Mail, Messages, and other apps will open here.</div>
+            <div class="st-hero-subtitle">
+              {isMacPlatform()
+                ? 'Links from Mail, Messages, and other apps will open here.'
+                : 'Links from email, chat, and other apps will open here.'}
+            </div>
           </div>
           <button type="button" class="st-hero-cta" disabled={busy === 'default'} onClick={makeDefault}>
             {busy === 'default' ? 'Waiting…' : 'Set as default'}

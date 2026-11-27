@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_flags.h"
@@ -36,6 +37,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/compositor/compositor.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/events/event.h"
@@ -50,7 +52,8 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/scroll_view.h"
-#include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
+#include "ui/views/controls/scrollbar/base_scroll_bar_thumb.h"
+#include "ui/views/controls/scrollbar/scroll_bar.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/drag_controller.h"
@@ -291,6 +294,172 @@ class RenameField : public views::Textfield,
 };
 
 BEGIN_METADATA(RenameField)
+END_METADATA
+
+// Sleek translucent overlay scrollbar for the Space tab tree: zero opaque
+// track, auto-hidden at rest, revealing a thin rounded capsule on scroll or
+// hover tinted from the Space's title role.
+class OpenSidebarScrollBar : public views::ScrollBar {
+  METADATA_HEADER(OpenSidebarScrollBar, views::ScrollBar)
+
+ public:
+  OpenSidebarScrollBar(OpenSidebarContext* context, const SpaceID& space_id)
+      : views::ScrollBar(views::ScrollBar::Orientation::kVertical),
+        context_(context),
+        space_id_(space_id) {
+    SetNotifyEnterExitOnChild(true);
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+    auto* thumb = new Thumb(this);
+    SetThumb(thumb);
+    thumb_ = thumb;
+  }
+
+  OpenSidebarScrollBar(const OpenSidebarScrollBar&) = delete;
+  OpenSidebarScrollBar& operator=(const OpenSidebarScrollBar&) = delete;
+  ~OpenSidebarScrollBar() override = default;
+
+  bool IsThumbVisible() const { return thumb_visible_; }
+  const Rgba& TitleColor() const {
+    return context_->ThemeStateFor(space_id_).roles.title;
+  }
+
+  // views::ScrollBar:
+  bool OverlapsContent() const override { return true; }
+  int GetThickness() const override { return 8; }
+  gfx::Rect GetTrackBounds() const override { return GetLocalBounds(); }
+  void OnPaint(gfx::Canvas* canvas) override {}
+
+  void Update(int viewport_size,
+              int content_size,
+              int contents_scroll_offset) override {
+    views::ScrollBar::Update(viewport_size, content_size,
+                             contents_scroll_offset);
+    if (!has_initial_offset_) {
+      has_initial_offset_ = true;
+      last_offset_ = contents_scroll_offset;
+      return;
+    }
+    if (contents_scroll_offset != last_offset_) {
+      last_offset_ = contents_scroll_offset;
+      ShowThumbTemporarily();
+    }
+  }
+
+  void OnMouseEntered(const ui::MouseEvent& event) override {
+    thumb_visible_ = true;
+    hide_timer_.Stop();
+    RepaintThumb();
+  }
+
+  void OnMouseExited(const ui::MouseEvent& event) override {
+    if (!IsThumbEngaged()) {
+      ScheduleHide(base::Milliseconds(450));
+    }
+  }
+
+ private:
+  class Thumb : public views::BaseScrollBarThumb {
+    METADATA_HEADER(Thumb, views::BaseScrollBarThumb)
+
+   public:
+    explicit Thumb(OpenSidebarScrollBar* scroll_bar)
+        : views::BaseScrollBarThumb(scroll_bar), scroll_bar_(scroll_bar) {}
+    Thumb(const Thumb&) = delete;
+    Thumb& operator=(const Thumb&) = delete;
+    ~Thumb() override = default;
+
+    bool IsEngaged() const { return GetState() != views::Button::STATE_NORMAL; }
+
+    // views::BaseScrollBarThumb:
+    gfx::Size CalculatePreferredSize(
+        const views::SizeBounds& available_size) const override {
+      return gfx::Size(8, 24);
+    }
+
+   protected:
+    void OnPaint(gfx::Canvas* canvas) override {
+      if (!scroll_bar_->IsThumbVisible()) {
+        return;
+      }
+      const bool hovered = GetState() != views::Button::STATE_NORMAL;
+      const float pill_w = hovered ? 5.f : 3.5f;
+      const gfx::RectF bounds(GetLocalBounds());
+      const float pill_h = std::max(0.f, bounds.height() - 4.f);
+      if (pill_h <= 0.f) {
+        return;
+      }
+      const gfx::RectF pill(bounds.right() - 2.f - pill_w, bounds.y() + 2.f,
+                            pill_w, pill_h);
+      FillRoundRect(canvas, pill, pill_w / 2.f,
+                    Sk(scroll_bar_->TitleColor(), hovered ? 0.36f : 0.18f));
+    }
+
+    void OnStateChanged() override {
+      scroll_bar_->OnThumbStateChanged(IsEngaged());
+      SchedulePaint();
+    }
+
+   private:
+    raw_ptr<OpenSidebarScrollBar> scroll_bar_;
+  };
+  friend class Thumb;
+
+  bool IsThumbEngaged() const { return thumb_ && thumb_->IsEngaged(); }
+
+  void RepaintThumb() {
+    if (thumb_) {
+      thumb_->SchedulePaint();
+    }
+  }
+
+  void ShowThumbTemporarily() {
+    thumb_visible_ = true;
+    RepaintThumb();
+    if (IsMouseHovered() || IsThumbEngaged()) {
+      hide_timer_.Stop();
+    } else {
+      ScheduleHide(base::Milliseconds(900));
+    }
+  }
+
+  void OnThumbStateChanged(bool engaged) {
+    if (engaged) {
+      thumb_visible_ = true;
+      hide_timer_.Stop();
+    } else if (!IsMouseHovered()) {
+      ScheduleHide(base::Milliseconds(450));
+    }
+    RepaintThumb();
+  }
+
+  void ScheduleHide(base::TimeDelta delay) {
+    hide_timer_.Start(FROM_HERE, delay,
+                      base::BindOnce(&OpenSidebarScrollBar::HideThumb,
+                                     base::Unretained(this)));
+  }
+
+  void HideThumb() {
+    if (IsMouseHovered() || IsThumbEngaged()) {
+      return;
+    }
+    thumb_visible_ = false;
+    RepaintThumb();
+  }
+
+  raw_ptr<OpenSidebarContext> context_;
+  SpaceID space_id_;
+  raw_ptr<Thumb> thumb_ = nullptr;
+  bool thumb_visible_ = false;
+  bool has_initial_offset_ = false;
+  int last_offset_ = 0;
+  base::OneShotTimer hide_timer_;
+};
+
+BEGIN_METADATA(OpenSidebarScrollBar, Thumb)
+END_METADATA
+
+BEGIN_METADATA(OpenSidebarScrollBar)
 END_METADATA
 
 }  // namespace
@@ -1811,8 +1980,8 @@ OpenTabTreeView::OpenTabTreeView(OpenSidebarContext* context,
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
   scroll->SetDrawOverflowIndicator(false);
-  scroll->SetVerticalScrollBar(std::make_unique<views::OverlayScrollBar>(
-      views::ScrollBar::Orientation::kVertical));
+  scroll->SetVerticalScrollBar(
+      std::make_unique<OpenSidebarScrollBar>(context_, space_id_));
   scroll_view_ = AddChildView(std::move(scroll));
   list_ = scroll_view_->SetContents(std::make_unique<ListView>(this));
   Reload();
@@ -2000,6 +2169,9 @@ void OpenTabTreeView::OnSpaceThemeChanged() {
   header_->SchedulePaint();
   for (auto& [key, row] : row_views_) {
     row->SchedulePaint();
+  }
+  if (scroll_view_ && scroll_view_->vertical_scroll_bar()) {
+    scroll_view_->vertical_scroll_bar()->SchedulePaint();
   }
 }
 

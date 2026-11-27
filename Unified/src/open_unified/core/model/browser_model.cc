@@ -160,7 +160,6 @@ void BrowserModel::EnsureDefaultWorkspace() {
     s.id = GenerateUuidV4();
     s.title = "Personal";
     s.profile_id = profiles_.front().id;
-    s.theme.style = SpaceStyle{};
     spaces_.push_back(std::move(s));
   }
   if (windows_.empty()) {

@@ -372,6 +372,9 @@ class OverlayWidgetHost : public views::ViewObserver,
 
   // The default activation for an overlay `name` (see the constructor).
   static bool DefaultActivatableFor(std::string_view name);
+  // Stacks an overlay widget above its siblings without raising Aura
+  // StackChildLayerRelativeTo warnings on unmanaged WebContentsViewAura peers.
+  static void StackWidgetAtTop(views::Widget* widget);
 
   // views::ViewObserver:
   void OnViewPreferredSizeChanged(views::View* observed_view) override;

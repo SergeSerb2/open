@@ -479,9 +479,12 @@ class Context:
         return tab
     return None
 
-  def snapshot(self, name: str) -> str:
+  def snapshot(self, name: str, window: Optional[str] = None) -> str:
     path = os.path.join(self.out_dir, f"{name}.png")
-    result = self.call("snapshot", path=to_browser_path(path, self.browser.binary))
+    kwargs = {"path": to_browser_path(path, self.browser.binary)}
+    if window:
+      kwargs["window"] = window
+    result = self.call("snapshot", **kwargs)
     width, height = png_size(path)
     check(width > 200 and height > 200, f"window PNG too small: {width}x{height}")
     check(result.get("width") == width, "snapshot width mismatch")
@@ -983,7 +986,7 @@ def suite_little_open(ctx: Context):
                     not w.get("loading")), None),
       timeout=30, what="Little Open page loaded")
   check(window["mode"] == "page", f"mode {window['mode']}")
-  ctx.snapshot("little-open")
+  ctx.snapshot("little-open", window="little-open")
   ctx.call("little-open", action="open-in-space")
   tab = ctx.client.wait_until(lambda: ctx.tab_by_url("/page/71.html"),
                               what="Open in Space made a tab")
@@ -1444,6 +1447,172 @@ def suite_regression_core_and_chrome(ctx: Context):
   ctx.notes["regression_verified"] = True
 
 
+def suite_wave3_parity(ctx: Context):
+  # --- 1. Active-tab sidebar highlight after close (including folder next) ---
+  f1 = ctx.open_page("/page/121.html")
+  f2 = ctx.open_page("/page/122.html")
+  ctx.call("folder", tabs=[f1, f2], section="today",
+           title="Wave3 Folder", at=0)
+  extra = ctx.open_page("/page/123.html")
+  ctx.call("close", tab=extra)
+
+  def _valid_selected_node():
+    sb = ctx.call("tabs", sidebar=True)
+    sel = sb.get("selectedNode")
+    if not sel or sel == extra:
+      return None
+    rows = sb.get("rows") or {}
+    all_nodes: Dict[str, Dict] = {}
+    for fav in rows.get("favorites") or []:
+      if isinstance(fav, dict) and fav.get("id"):
+        all_nodes[fav["id"]] = fav
+    _collect_sidebar_nodes(rows.get("pinned") or [], all_nodes)
+    _collect_sidebar_nodes(rows.get("today") or [], all_nodes)
+    return sel if sel in all_nodes else None
+
+  selected_after = ctx.client.wait_until(
+      _valid_selected_node, timeout=10,
+      what="valid selectedNode in sidebar rows after closing active Today tab")
+  check(selected_after is not None and selected_after != extra,
+        f"invalid selectedNode after close: {selected_after!r}")
+
+  # --- 2. Hidden Sidebar + Quiet Toggle ---
+  handled = ctx.call("key", key="s", modifiers=["mod"])
+  check(handled.get("handled") == "accelerator",
+        f"Mod+S toggle-sidebar not handled as accelerator: {handled}")
+  ctx.client.wait_until(
+      lambda: ctx.call("chrome-state").get("sidebarHidden") is True,
+      timeout=10, what="sidebarHidden True after Mod+S")
+  time.sleep(0.25)
+  ctx.snapshot("hidden-sidebar")
+  ctx.call("key", key="s", modifiers=["mod"])
+  ctx.client.wait_until(
+      lambda: ctx.call("chrome-state").get("sidebarHidden") is False,
+      timeout=10, what="sidebarHidden False after second Mod+S")
+  time.sleep(0.25)
+
+  # --- 3. Single-Pane Toolbar ---
+  res = ctx.call("run-command", name="toggle-toolbar")
+  check(res.get("ok") is True, f"toggle-toolbar failed: {res}")
+  ctx.client.wait_until(
+      lambda: ctx.call("chrome-state").get("singlePaneToolbar") is True,
+      timeout=10, what="singlePaneToolbar True")
+  ctx.snapshot("single-pane-toolbar")
+  res = ctx.call("run-command", name="toggle-toolbar")
+  check(res.get("ok") is True, f"toggle-toolbar restore failed: {res}")
+  ctx.client.wait_until(
+      lambda: ctx.call("chrome-state").get("singlePaneToolbar") is False,
+      timeout=10, what="singlePaneToolbar False")
+
+  # --- 4. Command Bar Commands & Shortcut Keycaps ---
+  cb = ctx.call("command-bar", action="open", text="zoom")
+  check(cb.get("shown") is True, f"command-bar did not open: {cb}")
+  rows = ctx.client.wait_until(
+      lambda: ctx.call("command-bar").get("rows") or None,
+      timeout=10, what="command-bar rows for 'zoom'")
+  check(len(rows) >= 1, f"expected >= 1 command-bar row for 'zoom': {rows}")
+  ctx.snapshot("command-bar-commands")
+  ctx.call("command-bar", action="close")
+  ctx.client.wait_until(
+      lambda: not ctx.call("command-bar").get("shown"),
+      timeout=10, what="command-bar closed")
+
+  # --- 5. Chromium Command Fallback (zoom-in / zoom-reset) ---
+  ctx.call("select", tab=f1)
+  r_in = ctx.call("run-command", name="zoom-in")
+  check(r_in.get("ok") is True, f"zoom-in failed: {r_in}")
+  r_reset = ctx.call("run-command", name="zoom-reset")
+  check(r_reset.get("ok") is True, f"zoom-reset failed: {r_reset}")
+
+  # --- 6. Pinned-Tab Reset ---
+  ptab = ctx.open_page("/page/92.html")
+  pinned = ctx.call("pin", tab=ptab)
+  check(pinned.get("section") == "pinned", f"pin failed: {pinned}")
+  ctx.call("navigate", tab=ptab, url=ctx.fixtures.url("/page/93.html"))
+  ctx.call("wait", tab=ptab, timeout=30)
+  ctx.client.wait_until(
+      lambda: "/page/93.html" in ctx.call("tab-state", tab=ptab).get("url", ""),
+      timeout=15, what="pinned tab navigated to /page/93.html")
+  r_pin = ctx.call("run-command", name="reset-pinned", tab=ptab)
+  check(r_pin.get("ok") is True, f"reset-pinned failed: {r_pin}")
+  ctx.client.wait_until(
+      lambda: (lambda st: "/page/92.html" in st.get("url", "") and
+               "/page/92.html" in (st.get("page") or {}).get("url", "") and
+               not (st.get("page") or {}).get("loading", False))(
+                   ctx.call("tab-state", tab=ptab)),
+      timeout=30, what="pinned tab reset to /page/92.html")
+
+  # --- 7. Space Reorder ---
+  spaces_before = ctx.call("spaces")
+  if len(spaces_before) < 2:
+    ctx.call("space-create", title="Wave3 Reorder")
+    spaces_before = ctx.call("spaces")
+  ids_before = [s["id"] for s in spaces_before]
+  check(len(ids_before) >= 2, f"expected >= 2 spaces: {ids_before}")
+  moved_id = ids_before[-1]
+  r_reorder = ctx.call("run-command", name="reorder-space",
+                       space=moved_id, toIndex=0)
+  check(r_reorder.get("ok") is True, f"reorder-space failed: {r_reorder}")
+  ids_after = [s["id"] for s in ctx.call("spaces")]
+  check(ids_after[0] == moved_id and ids_after != ids_before,
+        f"space order did not change: before={ids_before} after={ids_after}")
+  r_restore = ctx.call("run-command", name="reorder-space",
+                       space=moved_id, toIndex=len(ids_before) - 1)
+  check(r_restore.get("ok") is True, f"reorder-space restore failed: {r_restore}")
+  ids_restored = [s["id"] for s in ctx.call("spaces")]
+  check(ids_restored == ids_before,
+        f"space order not restored: {ids_restored} vs {ids_before}")
+
+  # --- 8. Standalone Settings Window ---
+  try:
+    r_open_set = ctx.call("run-command", name="open-settings-window")
+    check(r_open_set.get("ok") is True,
+          f"open-settings-window failed: {r_open_set}")
+    ctx.client.wait_until(
+        lambda: ctx.call("chrome-state").get("settingsWindowOpen") is True,
+        timeout=15, what="settingsWindowOpen True")
+    time.sleep(0.6)
+    ctx.snapshot("standalone-settings", window="settings")
+  finally:
+    ctx.call("run-command", name="close-settings-window")
+  ctx.client.wait_until(
+      lambda: ctx.call("chrome-state").get("settingsWindowOpen") is False,
+      timeout=15, what="settingsWindowOpen False")
+
+  # --- 9. Onboarding Window ---
+  try:
+    r_open_fr = ctx.call("run-command", name="open-first-run-window")
+    check(r_open_fr.get("ok") is True,
+          f"open-first-run-window failed: {r_open_fr}")
+    ctx.client.wait_until(
+        lambda: ctx.call("chrome-state").get("firstRunOpen") is True,
+        timeout=15, what="firstRunOpen True")
+    time.sleep(0.6)
+    ctx.snapshot("onboarding", window="onboarding")
+  finally:
+    ctx.call("run-command", name="close-first-run-window")
+  ctx.client.wait_until(
+      lambda: ctx.call("chrome-state").get("firstRunOpen") is False,
+      timeout=15, what="firstRunOpen False")
+
+  # --- 10. Win/Linux App Menu ---
+  menu = ctx.call("app-menu")
+  plat = ctx.notes.get("platform") or ctx.call("ping").get("platform")
+  if plat in ("windows", "linux"):
+    check(menu.get("supported") is True,
+          f"app-menu unsupported on {plat}: {menu}")
+    check(menu.get("itemCount", 0) >= 10,
+          f"app-menu too few items on {plat}: {menu}")
+    labels = menu.get("labels") or []
+    check("Settings" in labels and "New Tab" in labels,
+          f"app-menu missing Settings / New Tab: {labels}")
+  else:
+    check(menu.get("supported") is False,
+          f"expected app-menu unsupported on {plat}: {menu}")
+
+  ctx.notes["wave3_parity_verified"] = True
+
+
 SUITES: Dict[str, Callable[[Context], None]] = {
     "startup": suite_startup,
     "spaces": suite_spaces,
@@ -1463,6 +1632,7 @@ SUITES: Dict[str, Callable[[Context], None]] = {
     "boosts": suite_boosts,
     "extensions": suite_extensions,
     "regression_core_and_chrome": suite_regression_core_and_chrome,
+    "wave3_parity": suite_wave3_parity,
     "snapshot": suite_snapshot,
 }
 

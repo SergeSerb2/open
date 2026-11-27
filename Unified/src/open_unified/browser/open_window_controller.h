@@ -131,6 +131,11 @@ class OpenWindowController : public OpenViewController,
   void OnOnboardingCompleted();
   bool first_run_window_open() const;
 
+  // Automation window accessors (null when the window is not open).
+  views::Widget* ActiveLittleOpenWidget() const;
+  views::Widget* FirstRunWidget() const;
+  views::Widget* SettingsWindowWidget() const;
+
   // Extension bridges of every Profile (OpenBrowserService adds each one
   // when its ProfileServices exist and removes it before they go away), so
   // a Profile switch or deletion never leaves an observer behind.
@@ -308,7 +313,7 @@ class OpenWindowController : public OpenViewController,
   raw_ptr<OpenBrowserService> service_;
   bool started_ = false;
   bool service_observers_attached_ = false;
-  bool hid_main_window_for_first_run_ = false;
+  raw_ptr<BrowserView> hidden_main_browser_view_for_first_run_ = nullptr;
   std::map<raw_ptr<BrowserView>, std::unique_ptr<OpenWindowUi>> windows_;
   std::vector<std::unique_ptr<OpenLittleOpenController>> little_opens_;
   std::unique_ptr<StandaloneWebWindow> settings_window_;
@@ -470,6 +475,14 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   views::Widget* command_bar_widget() const;
 
   // Automation readback (docs/automation.md).
+  bool sidebar_hidden() const;
+  bool single_pane_toolbar_visible() const {
+    return single_pane_toolbar_visible_;
+  }
+  bool split_view_active() const { return split_active_; }
+  base::DictValue AppMenuSnapshot();
+  bool ExecuteAutomationCommand(std::string_view name,
+                                const base::DictValue& args);
   base::DictValue CommandBarState() const;
   base::DictValue PeekState() const;
   base::DictValue SiteControlState() const;
@@ -748,6 +761,7 @@ class OpenLittleOpenController
   void Close();
 
   bool is_page() const;
+  bool closing() const { return closing_; }
   content::WebContents* page() const { return contents_; }
   const ProfileID& profile_id() const { return profile_id_; }
   views::Widget* widget() const { return window_ ? window_->widget() : nullptr; }

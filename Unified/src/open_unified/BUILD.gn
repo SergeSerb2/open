@@ -25,6 +25,7 @@
 #   //chrome:dependencies (hook 0001) and wired by hook 0003.
 
 import("//build/buildflag_header.gni")
+import("//build/config/ui.gni")
 import("//open_unified/open_unified.gni")
 import("//open_unified/sources.gni")
 import("//tools/grit/grit_rule.gni")
@@ -313,6 +314,9 @@ source_set("open_unified_browser") {
     "//ui/webui",
     "//url",
   ]
+  if (use_aura) {
+    deps += [ "//ui/aura" ]
+  }
   if (is_win) {
     libs = [
       # Owner-only DACL of automation.token + ShellExecute/SHFileOperation.
