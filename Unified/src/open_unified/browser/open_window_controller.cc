@@ -17,6 +17,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -187,6 +188,163 @@ std::string PrefString(const std::string& key, std::string_view default_value) {
   }
   const base::Value v = prefs->GetValue(key);
   return v.is_string() ? v.GetString() : std::string(default_value);
+}
+
+int PrefInt(const std::string& key, int default_value) {
+  webui::OpenPreferences* prefs = webui::OpenPreferences::Get();
+  if (!prefs) {
+    return default_value;
+  }
+  const base::Value v = prefs->GetValue(key);
+  if (v.is_int()) {
+    return v.GetInt();
+  }
+  if (v.is_double()) {
+    return static_cast<int>(std::lround(v.GetDouble()));
+  }
+  return default_value;
+}
+
+int MeetingReminderToMinutes(SidebarMeetingReminder reminder) {
+  switch (reminder) {
+    case SidebarMeetingReminder::kNever:
+      return -1;
+    case SidebarMeetingReminder::kOnStart:
+      return 0;
+    case SidebarMeetingReminder::kTwoMinutes:
+      return 2;
+    case SidebarMeetingReminder::kFiveMinutes:
+      return 5;
+    case SidebarMeetingReminder::kTenMinutes:
+      return 10;
+  }
+  return 2;
+}
+
+SidebarMeetingReminder MinutesToMeetingReminder(int minutes) {
+  if (minutes < 0) {
+    return SidebarMeetingReminder::kNever;
+  }
+  if (minutes == 0) {
+    return SidebarMeetingReminder::kOnStart;
+  }
+  if (minutes <= 2) {
+    return SidebarMeetingReminder::kTwoMinutes;
+  }
+  if (minutes <= 5) {
+    return SidebarMeetingReminder::kFiveMinutes;
+  }
+  return SidebarMeetingReminder::kTenMinutes;
+}
+
+std::u16string MeetingReminderToastTitle(SidebarMeetingReminder reminder) {
+  switch (reminder) {
+    case SidebarMeetingReminder::kNever:
+      return u"Meeting reminders off";
+    case SidebarMeetingReminder::kOnStart:
+      return u"Meeting reminder: On start";
+    case SidebarMeetingReminder::kTwoMinutes:
+      return u"Meeting reminder: 2 minutes before";
+    case SidebarMeetingReminder::kFiveMinutes:
+      return u"Meeting reminder: 5 minutes before";
+    case SidebarMeetingReminder::kTenMinutes:
+      return u"Meeting reminder: 10 minutes before";
+  }
+  return u"Meeting reminder updated";
+}
+
+std::string ExtractLiveRepoName(std::string_view subtitle,
+                                std::string_view url) {
+  const std::string_view trimmed =
+      base::TrimWhitespaceASCII(subtitle, base::TRIM_ALL);
+  if (!trimmed.empty()) {
+    const size_t space = trimmed.find_first_of(" \t");
+    const std::string_view first =
+        space == std::string_view::npos ? trimmed : trimmed.substr(0, space);
+    if (first.find('/') != std::string_view::npos) {
+      return std::string(first);
+    }
+  }
+  GURL parsed(url);
+  if (parsed.is_valid() && parsed.SchemeIsHTTPOrHTTPS() &&
+      base::ToLowerASCII(parsed.host()) == "github.com") {
+    const std::vector<std::string> parts = base::SplitString(
+        parsed.path(), "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+    if (parts.size() >= 2) {
+      return parts[0] + "/" + parts[1];
+    }
+  }
+  return std::string(trimmed);
+}
+
+std::vector<std::string> ParseHiddenLiveRepositories(std::string_view query) {
+  std::vector<std::string> hidden;
+  if (query.starts_with("http://") || query.starts_with("https://")) {
+    return hidden;
+  }
+  const std::vector<std::string> tokens = base::SplitString(
+      query, " \t\r\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  for (const std::string& token : tokens) {
+    if (base::StartsWith(token, "-repo:", base::CompareCase::INSENSITIVE_ASCII) &&
+        token.size() > 6) {
+      hidden.push_back(token.substr(6));
+    }
+  }
+  return hidden;
+}
+
+std::string UpdateLiveRepositoryFilterQuery(std::string_view query,
+                                            std::string_view raw_repo,
+                                            bool hidden) {
+  const std::string repo(base::TrimWhitespaceASCII(raw_repo, base::TRIM_ALL));
+  if (repo.empty() || repo.find_first_of(" \t\r\n") != std::string::npos ||
+      query.starts_with("http://") || query.starts_with("https://")) {
+    return std::string(query);
+  }
+  const std::string base_query =
+      query.empty() ? std::string("is:open is:pr") : std::string(query);
+  const std::string lower_repo = base::ToLowerASCII(repo);
+  std::vector<std::string> tokens = base::SplitString(
+      base_query, " \t\r\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  std::vector<std::string> next;
+  next.reserve(tokens.size() + 1);
+  for (std::string& token : tokens) {
+    if (base::StartsWith(token, "-repo:", base::CompareCase::INSENSITIVE_ASCII) &&
+        base::ToLowerASCII(std::string_view(token).substr(6)) == lower_repo) {
+      continue;
+    }
+    if (hidden &&
+        base::StartsWith(token, "repo:", base::CompareCase::INSENSITIVE_ASCII) &&
+        base::ToLowerASCII(std::string_view(token).substr(5)) == lower_repo) {
+      continue;
+    }
+    next.push_back(std::move(token));
+  }
+  if (hidden) {
+    next.push_back("-repo:" + repo);
+  }
+  return base::JoinString(next, " ");
+}
+
+std::optional<GURL> ExternalDocumentAppUrl(std::string_view app) {
+  const std::string lower = base::ToLowerASCII(app);
+  if (lower == "google-doc" || lower == "googledocs" ||
+      lower == "google_doc" || lower == "google_docs") {
+    return GURL("https://docs.new");
+  }
+  if (lower == "notion") {
+    return GURL("https://notion.new");
+  }
+  if (lower == "word") {
+    return GURL("https://word.new");
+  }
+  if (lower == "confluence") {
+    return GURL("https://confluence.new");
+  }
+  if (lower == "paper") {
+    return GURL("https://paper.dropbox.com/new");
+  }
+  return std::nullopt;
 }
 
 bool EffectiveDarkMode(const ui::NativeTheme* native_theme) {
@@ -3004,19 +3162,40 @@ OpenWindowController::BuildMenuModelForTarget(const WindowID& window_id,
     if (const Folder* folder = model.FindFolder(target.node_id);
         folder && folder->live.has_value()) {
       SidebarLiveFolderInfo info;
+      std::map<std::string, std::string> repos_by_lower;
+      std::set<std::string> hidden_lower;
+      for (const std::string& hidden_repo :
+           ParseHiddenLiveRepositories(folder->live->query)) {
+        const std::string lower = base::ToLowerASCII(hidden_repo);
+        hidden_lower.insert(lower);
+        repos_by_lower.emplace(lower, hidden_repo);
+      }
       if (OpenLiveDataService* ld = service_->livedata()) {
         if (auto state = ld->GetLiveFolderState(folder->id)) {
           info.last_fetch_failed = !state->last_error.empty();
-          std::set<std::string> repos;
           for (const LiveFolderItem& item : state->items) {
-            if (!item.subtitle.empty()) {
-              repos.insert(item.subtitle);
+            const std::string repo =
+                ExtractLiveRepoName(item.subtitle, item.url);
+            if (!repo.empty()) {
+              repos_by_lower.emplace(base::ToLowerASCII(repo), repo);
             }
           }
-          for (const std::string& r : repos) {
-            info.repositories.push_back({r, /*hidden=*/false});
+        }
+      }
+      for (const SidebarNode& child : folder->children) {
+        if (const Tab* tab = child.as_tab();
+            tab && tab->live_item_url.has_value()) {
+          const std::string subtitle =
+              tab->live_item.has_value() ? tab->live_item->subtitle : "";
+          const std::string repo =
+              ExtractLiveRepoName(subtitle, *tab->live_item_url);
+          if (!repo.empty()) {
+            repos_by_lower.emplace(base::ToLowerASCII(repo), repo);
           }
         }
+      }
+      for (const auto& [lower, name] : repos_by_lower) {
+        info.repositories.push_back({name, hidden_lower.contains(lower)});
       }
       info.needs_sso = folder->live_sso_url.has_value();
       ctx.live_folder = std::move(info);
@@ -3031,6 +3210,8 @@ OpenWindowController::BuildMenuModelForTarget(const WindowID& window_id,
       fav.live_calendar_enabled =
           previews_on && PrefBool("previews.calendar", true);
       fav.shows_time_to_next_meeting = fav.live_calendar_enabled;
+      fav.reminder =
+          MinutesToMeetingReminder(PrefInt("calendar.reminderMinutes", 2));
       if (fav.is_calendar && service_->livedata()) {
         if (auto meeting = service_->livedata()->NextUpcomingMeeting()) {
           if (!meeting->join_url.empty()) {
@@ -3362,8 +3543,23 @@ void OpenWindowController::DispatchSidebarMenuCommand(
         ui->open_view()->sidebar()->SetFavoriteSubtitle(cmd.node_id, u"");
       }
       return;
-    case SidebarMenuAction::kSetMeetingReminder:
+    case SidebarMenuAction::kSetMeetingReminder: {
+      if (cmd.value < static_cast<int>(SidebarMeetingReminder::kNever) ||
+          cmd.value > static_cast<int>(SidebarMeetingReminder::kTenMinutes)) {
+        return;
+      }
+      const auto reminder = static_cast<SidebarMeetingReminder>(cmd.value);
+      const int minutes = MeetingReminderToMinutes(reminder);
+      std::string err;
+      if (webui::OpenPreferences* prefs = webui::OpenPreferences::Get()) {
+        prefs->Set("calendar.reminderMinutes", base::Value(minutes),
+                   service_->ActiveProfileId(), /*all_profiles=*/true, &err);
+      }
+      if (ui) {
+        ui->ShowToast(ToastSpec::Info(MeetingReminderToastTitle(reminder)));
+      }
       return;
+    }
 
     // --- Split View rows ---
     case SidebarMenuAction::kShareSplit:
@@ -3481,8 +3677,27 @@ void OpenWindowController::DispatchSidebarMenuCommand(
         bridge->OpenTab(GURL(*folder->live_sso_url), false, window_id);
       }
       return;
-    case SidebarMenuAction::kSetLiveRepository:
+    case SidebarMenuAction::kSetLiveRepository: {
+      const Folder* folder = model.FindFolder(cmd.node_id);
+      if (!folder || !folder->live.has_value() || cmd.text.empty()) {
+        return;
+      }
+      LiveFolderConfig cfg = *folder->live;
+      const std::string next_query =
+          UpdateLiveRepositoryFilterQuery(cfg.query, cmd.text, cmd.flag);
+      if (next_query == cfg.query) {
+        return;
+      }
+      cfg.query = next_query;
+      if (model.SetLiveFolderConfig(cmd.node_id, cfg)) {
+        if (OpenLiveDataService* ld = service_->livedata()) {
+          ld->RegisterLiveFolder(cmd.node_id, cfg);
+          ld->RefreshLiveFolder(cmd.node_id, /*force=*/true);
+        }
+        service_->ScheduleSave();
+      }
       return;
+    }
 
     // --- Multi-selection ---
     case SidebarMenuAction::kCopyLinks:
@@ -3610,30 +3825,26 @@ void OpenWindowController::DispatchSidebarMenuCommand(
           if (OpenLiveDataService* ld = service_->livedata()) {
             ld->UnregisterLiveFolder(*existing);
           }
-          if (Folder* folder = model.FindFolder(*existing)) {
-            folder->live.reset();
-            folder->live_sso_url.reset();
-            if (folder->children.empty()) {
-              bridge->CloseNode(*existing);
-            } else {
-              TreeChange change;
-              change.kind = TreeChange::Kind::kUpdate;
-              change.node_id = *existing;
-              change.space_id = cmd.space_id;
-              OnTreeChanged(change);
-              service_->ScheduleSave();
-            }
+          const bool empty_folder = [&]() {
+            const Folder* f = model.FindFolder(*existing);
+            return f && f->children.empty();
+          }();
+          model.SetLiveFolderConfig(*existing, std::nullopt);
+          if (empty_folder) {
+            bridge->CloseNode(*existing);
+          } else {
+            service_->ScheduleSave();
           }
           return;
         }
         const ItemID fid = model.CreateFolder(
             NodeParent{NodeParentKind::kSpacePinned, cmd.space_id},
             "GitHub PRs");
-        if (Folder* folder = model.FindFolder(fid)) {
+        if (!fid.empty()) {
           LiveFolderConfig cfg;
           cfg.provider = "github_prs";
           cfg.query = "is:open is:pr";
-          folder->live = cfg;
+          model.SetLiveFolderConfig(fid, cfg);
           if (OpenLiveDataService* ld = service_->livedata()) {
             ld->RegisterLiveFolder(fid, cfg);
             ld->RefreshLiveFolder(fid, /*force=*/true);
@@ -4010,6 +4221,21 @@ void OpenWindowController::OnTreeChanged(const TreeChange& change) {
 }
 
 void OpenWindowController::OnTabActivated(const ItemID& tab_id) {
+  if (OpenLiveDataService* ld = service_->livedata()) {
+    const BrowserModel& model = service_->model();
+    if (const Tab* tab = model.FindTab(tab_id);
+        tab && tab->live_item_url.has_value()) {
+      if (auto parent = model.GetParent(tab_id);
+          parent && parent->kind == NodeParentKind::kFolder) {
+        // Copy before calling MarkLiveFolderItemRead, which synchronously
+        // triggers OnLiveFolderUpdated -> SyncLiveFolderItems and replaces
+        // folder->children.
+        const ItemID folder_id = parent->owner_id;
+        const std::string item_url = *tab->live_item_url;
+        ld->MarkLiveFolderItemRead(folder_id, item_url);
+      }
+    }
+  }
   OpenWindowUi* target = nullptr;
   if (OpenTabBridge* bridge = service_->tab_bridge()) {
     if (std::optional<WindowID> window =
@@ -4212,12 +4438,21 @@ void OpenWindowController::OnLiveFolderUpdated(
     const ItemID& folder_id,
     const std::vector<LiveFolderItem>& items,
     int unread_count) {
-  TreeChange change;
-  change.kind = TreeChange::Kind::kUpdate;
-  change.node_id = folder_id;
-  for (OpenViewObserver& observer : view_observers_) {
-    observer.OnTreeChanged(change);
+  BrowserModel& model = service_->model();
+  if (!model.SyncLiveFolderItems(folder_id, items, unread_count)) {
+    return;
   }
+  if (const Folder* folder = model.FindFolder(folder_id)) {
+    for (const SidebarNode& child : folder->children) {
+      if (const Tab* tab = child.as_tab();
+          tab && tab->live_item_url.has_value()) {
+        for (OpenViewObserver& observer : view_observers_) {
+          observer.OnTabLiveStateChanged(tab->id);
+        }
+      }
+    }
+  }
+  service_->ScheduleSave();
 }
 
 // --- OpenCaptureController::Delegate -----------------------------------------
@@ -6279,12 +6514,40 @@ void OpenWindowUi::ShowTranslatePagePopover(views::View* anchor) {
 }
 
 void OpenWindowUi::CreateAndOpenDocument(bool is_easel, bool in_split) {
-  ProfileServices* ps =
-      service()->ProfileServicesFor(service()->ActiveProfileId());
   OpenTabBridge* bridge = service()->tab_bridge();
   if (!bridge) {
     return;
   }
+  BrowserModel& model = service()->model();
+  ProfileID active_profile_id = service()->ActiveProfileId();
+  if (const std::optional<SpaceID> focused =
+          model_util::FocusedSpace(model, window_id_)) {
+    if (const Space* space = model.FindSpace(*focused);
+        space && !space->profile_id.empty()) {
+      active_profile_id = space->profile_id;
+    }
+  }
+  if (!is_easel) {
+    std::string doc_app;
+    if (const Profile* profile = model.FindProfile(active_profile_id);
+        profile && !profile->settings.default_document_app.empty()) {
+      doc_app = profile->settings.default_document_app;
+    } else {
+      doc_app = PrefString("profiles.newDocuments", "note");
+    }
+    if (base::ToLowerASCII(doc_app) == "easel") {
+      is_easel = true;
+    } else if (std::optional<GURL> external_url =
+                   ExternalDocumentAppUrl(doc_app)) {
+      if (in_split) {
+        OpenLinkInSplitView(*external_url);
+      } else {
+        bridge->OpenTab(*external_url, /*background=*/false, window_id_);
+      }
+      return;
+    }
+  }
+  ProfileServices* ps = service()->ProfileServicesFor(active_profile_id);
   if (!ps) {
     const GURL fallback(webui::OpenWebUIURL(
         is_easel ? webui::kHostEasel : webui::kHostNote));

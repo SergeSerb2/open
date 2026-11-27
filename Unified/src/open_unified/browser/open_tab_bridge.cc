@@ -1935,13 +1935,86 @@ void OpenTabBridge::OnTabStripModelChanged(
       }
       break;
     }
-    case TabStripModelChange::kMoved:
-      // The sidebar order is canonical; a chrome.tabs.move or drag is put
-      // back after the notification (no TabStripModel re-entry).
-      if (!applying_) {
+    case TabStripModelChange::kMoved: {
+      if (applying_) {
+        break;
+      }
+      const TabStripModelChange::Move* move = change.GetMove();
+      if (!move || !move->contents || move->from_index == move->to_index) {
+        break;
+      }
+      bool reordered = false;
+      if (std::optional<ItemID> moved_id =
+              TabIdForWebContents(move->contents)) {
+        BrowserModel& model = service_->model();
+        if (std::optional<NodeIndexEntry> moved_entry =
+                model.GetIndexEntry(*moved_id);
+            moved_entry &&
+            moved_entry->parent.kind != NodeParentKind::kSplitPane &&
+            model.CanMoveNode(*moved_id, moved_entry->parent)) {
+          const NodeParent& moved_parent = moved_entry->parent;
+          const size_t moved_old_index = moved_entry->index;
+          auto same_parent_neighbor =
+              [&](int strip_index) -> std::optional<NodeIndexEntry> {
+            if (strip_index < 0 || strip_index >= tab_strip_model->count()) {
+              return std::nullopt;
+            }
+            content::WebContents* neighbor_wc =
+                tab_strip_model->GetWebContentsAt(strip_index);
+            std::optional<ItemID> neighbor_id =
+                TabIdForWebContents(neighbor_wc);
+            if (!neighbor_id || *neighbor_id == *moved_id) {
+              return std::nullopt;
+            }
+            std::optional<NodeIndexEntry> entry =
+                model.GetIndexEntry(*neighbor_id);
+            if (!entry || !(entry->parent == moved_parent)) {
+              return std::nullopt;
+            }
+            return entry;
+          };
+          const std::optional<NodeIndexEntry> prev =
+              same_parent_neighbor(move->to_index - 1);
+          const std::optional<NodeIndexEntry> next =
+              same_parent_neighbor(move->to_index + 1);
+          auto index_after = [&](const NodeIndexEntry& neighbor) -> size_t {
+            return moved_old_index < neighbor.index ? neighbor.index
+                                                    : neighbor.index + 1;
+          };
+          auto index_before = [&](const NodeIndexEntry& neighbor) -> size_t {
+            return moved_old_index < neighbor.index ? neighbor.index - 1
+                                                    : neighbor.index;
+          };
+          std::optional<size_t> target_index;
+          if (move->to_index > move->from_index) {
+            if (prev) {
+              target_index = index_after(*prev);
+            } else if (next) {
+              target_index = index_before(*next);
+            }
+          } else {
+            if (next) {
+              target_index = index_before(*next);
+            } else if (prev) {
+              target_index = index_after(*prev);
+            }
+          }
+          if (target_index && *target_index != moved_old_index) {
+            base::AutoReset<bool> applying(&applying_, true);
+            reordered = model.MoveNode(*moved_id, moved_parent, *target_index);
+          }
+        }
+      }
+      if (reordered) {
+        service_->ScheduleSave();
+      } else {
+        // Cross-Space, cross-section, or split-pane moves do not map cleanly
+        // to a same-parent reorder: restore canonical sidebar order after the
+        // notification (no TabStripModel re-entry).
         ResyncBrowserLater(browser);
       }
       break;
+    }
     case TabStripModelChange::kSelectionOnly:
       break;
   }

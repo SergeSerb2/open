@@ -9,6 +9,7 @@
 
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "open_unified/core/livedata/open_livedata_service.h"
 #include "open_unified/core/model/uuid_util.h"
 
 namespace open_unified {
@@ -2092,6 +2093,203 @@ bool BrowserModel::SetFolderExpanded(const ItemID& folder_id, bool expanded) {
         m.Emit(c);
         return true;
       });
+  return true;
+}
+
+bool BrowserModel::SetLiveFolderConfig(const ItemID& folder_id,
+                                       std::optional<LiveFolderConfig> config) {
+  Folder* folder = FindFolder(folder_id);
+  if (!folder || folder->live == config) {
+    return false;
+  }
+  folder->live = std::move(config);
+  if (!folder->live.has_value()) {
+    folder->live_sso_url.reset();
+  }
+  TreeChange change;
+  change.kind = TreeChange::Kind::kUpdate;
+  change.node_id = folder_id;
+  if (auto parent = GetParent(folder_id)) {
+    change.parent = *parent;
+  }
+  Emit(change);
+  return true;
+}
+
+bool BrowserModel::SyncLiveFolderItems(const ItemID& folder_id,
+                                       const std::vector<LiveFolderItem>& items,
+                                       int unread_count) {
+  constexpr size_t kMaxLiveItems = 50;
+
+  Folder* folder = FindFolder(folder_id);
+  if (!folder || !folder->live.has_value()) {
+    return false;
+  }
+
+  const NodeParent folder_parent{NodeParentKind::kFolder, folder->id};
+  const bool keeps_pinned = KeepsPinnedUrl(SectionOf(folder_parent));
+  const std::string source_kind = folder->live->provider;
+  const std::set<ItemID> shown_tabs = ComputeShownTabIds();
+  const TimestampSec now = NowSec();
+
+  std::vector<ItemID> old_order;
+  old_order.reserve(folder->children.size());
+  for (const SidebarNode& child : folder->children) {
+    old_order.push_back(child.id());
+  }
+
+  bool changed = false;
+  std::vector<SidebarNode> manual_children;
+  std::unordered_map<std::string, Tab> existing_live_by_url;
+  for (SidebarNode& child : folder->children) {
+    if (Tab* tab = child.as_tab(); tab && tab->live_item_url.has_value()) {
+      std::string live_url = *tab->live_item_url;
+      if (existing_live_by_url.find(live_url) != existing_live_by_url.end()) {
+        if (folder->peeked_child_id == tab->id) {
+          folder->peeked_child_id.reset();
+        }
+        UnregisterTab(*tab);
+        changed = true;
+      } else {
+        existing_live_by_url.emplace(std::move(live_url), std::move(*tab));
+      }
+    } else {
+      manual_children.push_back(std::move(child));
+    }
+  }
+
+  std::vector<SidebarNode> next_children;
+  next_children.reserve(manual_children.size() +
+                        std::min(items.size(), kMaxLiveItems));
+  for (SidebarNode& child : manual_children) {
+    next_children.push_back(std::move(child));
+  }
+
+  std::unordered_set<std::string> seen_urls;
+  size_t live_count = 0;
+  for (const LiveFolderItem& item : items) {
+    if (live_count >= kMaxLiveItems) {
+      break;
+    }
+    if (item.url.empty() || !seen_urls.insert(item.url).second) {
+      continue;
+    }
+    ++live_count;
+
+    const std::string next_title =
+        item.title.empty() ? item.url : item.title;
+    LiveItemInfo info;
+    info.source_kind = source_kind;
+    info.subtitle = item.subtitle;
+    info.status_badge = item.status_badge;
+    info.updated_at = item.updated_at;
+
+    auto it = existing_live_by_url.find(item.url);
+    if (it != existing_live_by_url.end()) {
+      Tab tab = std::move(it->second);
+      existing_live_by_url.erase(it);
+
+      if (tab.title != next_title) {
+        tab.title = next_title;
+        changed = true;
+      }
+      if (!tab.live_state.has_web_content && tab.url != item.url) {
+        tab.url = item.url;
+        changed = true;
+      }
+      if (!tab.live_item.has_value() || *tab.live_item != info) {
+        tab.live_item = std::move(info);
+        changed = true;
+      }
+      const bool want_unread =
+          item.unread && unread_count > 0 && shown_tabs.count(tab.id) == 0;
+      if (tab.is_unread != want_unread) {
+        tab.is_unread = want_unread;
+        changed = true;
+      }
+      if (item.updated_at > 0.0 && item.updated_at > tab.last_active_at) {
+        tab.last_active_at = item.updated_at;
+      }
+      next_children.push_back(SidebarNode(std::move(tab)));
+    } else {
+      Tab tab;
+      tab.id = GenerateUuidV4();
+      tab.url = item.url;
+      tab.title = next_title;
+      if (keeps_pinned) {
+        tab.pinned_url = item.url;
+      }
+      tab.created_at = item.updated_at > 0.0 ? item.updated_at : now;
+      tab.last_active_at = item.updated_at > 0.0 ? item.updated_at : now;
+      tab.is_unread = item.unread && unread_count > 0;
+      tab.live_item_url = item.url;
+      tab.live_item = std::move(info);
+      next_children.push_back(SidebarNode(std::move(tab)));
+      changed = true;
+    }
+  }
+
+  // Remove stale live-generated children that are no longer in |items|.
+  std::vector<ItemID> removed_ids;
+  if (!existing_live_by_url.empty()) {
+    changed = true;
+    for (const auto& [url, stale_tab] : existing_live_by_url) {
+      if (folder->peeked_child_id == stale_tab.id) {
+        folder->peeked_child_id.reset();
+      }
+      removed_ids.push_back(stale_tab.id);
+      UnregisterTab(stale_tab);
+    }
+  }
+
+  bool order_changed = next_children.size() != old_order.size();
+  if (!order_changed) {
+    for (size_t i = 0; i < next_children.size(); ++i) {
+      if (next_children[i].id() != old_order[i]) {
+        order_changed = true;
+        break;
+      }
+    }
+  }
+  if (order_changed) {
+    changed = true;
+  }
+
+  folder->children = std::move(next_children);
+  if (!changed) {
+    return false;
+  }
+
+  for (size_t i = 0; i < folder->children.size(); ++i) {
+    RegisterSubtree(folder->children[i], folder_parent, i);
+  }
+
+  for (const ItemID& stale_id : removed_ids) {
+    for (BrowserWindowState& win : windows_) {
+      for (auto it = win.selected_node_by_space.begin();
+           it != win.selected_node_by_space.end();) {
+        if (it->second == stale_id) {
+          it = win.selected_node_by_space.erase(it);
+        } else {
+          ++it;
+        }
+      }
+    }
+    TreeChange rem;
+    rem.kind = TreeChange::Kind::kRemove;
+    rem.node_id = stale_id;
+    rem.parent = folder_parent;
+    Emit(rem);
+  }
+
+  TreeChange change;
+  change.kind =
+      order_changed ? TreeChange::Kind::kReload : TreeChange::Kind::kUpdate;
+  change.node_id = folder_id;
+  if (auto parent = GetParent(folder_id)) {
+    change.parent = *parent;
+  }
+  Emit(change);
   return true;
 }
 

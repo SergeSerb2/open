@@ -229,6 +229,12 @@ bool IsBuiltinEngine(std::string_view id) {
   return false;
 }
 
+bool IsValidDocumentApp(std::string_view app) {
+  return app == "note" || app == "easel" || app == "google-doc" ||
+         app == "googleDocs" || app == "notion" || app == "word" ||
+         app == "confluence" || app == "paper";
+}
+
 base::FilePath PreferencesPath() {
   OpenBrowserService* service = OpenBrowserService::Get();
   return service ? service->user_data_dir()
@@ -1329,6 +1335,7 @@ const base::DictValue& OpenPreferences::Defaults() {
           .Set("previews.recents", true)
           .Set("previews.calendar", true)
           .Set("previews.gmail", true)
+          .Set("calendar.reminderMinutes", 2)
           .Set("links.littleOpenHotkey", "Mod+Alt+N")
           .Set("links.optionCommandClick", true)
           .Set("links.externalLinksLittleOpen", true)
@@ -1503,7 +1510,13 @@ bool OpenPreferences::Set(const std::string& key,
         continue;
       }
       ProfileSettings settings = profile->settings;
-      if (!json::ApplyProfileSettings(patch, &settings)) {
+      if (key == "profiles.newDocuments") {
+        if (!value.is_string() || !IsValidDocumentApp(value.GetString())) {
+          *error = "invalid value for " + key;
+          return false;
+        }
+        settings.default_document_app = value.GetString();
+      } else if (!json::ApplyProfileSettings(patch, &settings)) {
         *error = "invalid value for " + key;
         return false;
       }

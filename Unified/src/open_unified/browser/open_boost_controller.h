@@ -6,6 +6,7 @@
 #define OPEN_UNIFIED_BROWSER_OPEN_BOOST_CONTROLLER_H_
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -98,9 +99,12 @@ class OpenBoostController : public OpenTabBridge::Observer {
 
   // `advanced.enableBoosts` (default true).
   static bool BoostsGloballyEnabled();
-  // Re-reads `advanced.enableBoosts` and re-applies every loaded tab when
-  // it changed (Settings calls this after a write; the controller also
-  // checks lazily on each new document).
+  // `advanced.themeData` (default true): exposes the active Space's palette
+  // custom properties on `:root` (`<style data-open-theme-data>`) for
+  // http(s) pages.
+  static bool ThemeDataEnabled();
+  // Re-reads `advanced.enableBoosts`, `advanced.themeData`, and appearance
+  // preferences and re-applies every loaded tab when any of them changed.
   void OnBoostsPreferenceChanged();
 
   // --- Editing (floating Boost editor) ---------------------------------
@@ -157,6 +161,8 @@ class OpenBoostController : public OpenTabBridge::Observer {
                               content::WebContents* contents) override;
 
  private:
+  class ServiceObserver;
+
   struct ZapSession {
     std::string boost_id;
     ProfileID profile_id;
@@ -175,6 +181,16 @@ class OpenBoostController : public OpenTabBridge::Observer {
   void ApplyToContents(const ItemID& tab_id,
                        content::WebContents* contents,
                        bool refresh);
+  // Injects or removes `<style data-open-theme-data>` on http(s) pages when
+  // `advanced.themeData` is enabled/disabled. Never touches open://,
+  // chrome://, or about:blank pages.
+  void ApplyThemeDataToContents(const ItemID& tab_id,
+                                content::WebContents* contents,
+                                bool refresh);
+  // Refreshes `<style data-open-theme-data>` on loaded tabs belonging to
+  // |space_id| (plus Favorite tabs that follow the focused Space).
+  void RefreshSpaceThemeData(const SpaceID& space_id);
+  std::string BuildThemeDataStylesheet(const ItemID& tab_id) const;
   // Re-applies every loaded tab of |profile_id| (all Profiles when empty).
   void RefreshTabs(const std::optional<ProfileID>& profile_id);
   // The Boosts that apply to |url| in |tab_id|, drafts included.
@@ -198,11 +214,17 @@ class OpenBoostController : public OpenTabBridge::Observer {
   std::map<std::string, int> pending_saves_;
   // Tabs whose current document has Boost styles applied.
   std::set<ItemID> boosted_tabs_;
+  // Tabs whose current document has `<style data-open-theme-data>` applied,
+  // mapped to the last injected stylesheet to skip redundant updates.
+  std::map<ItemID, std::string> applied_theme_css_;
   std::optional<ZapSession> zap_;
   base::RepeatingTimer zap_poll_;
   bool poll_in_flight_ = false;
   bool global_enabled_ = true;
+  bool theme_data_enabled_ = true;
+  bool last_system_dark_ = false;
   int applied_count_ = 0;
+  std::unique_ptr<ServiceObserver> service_observer_;
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<OpenBoostController> weak_factory_{this};
 };

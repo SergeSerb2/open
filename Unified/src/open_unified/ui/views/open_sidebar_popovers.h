@@ -351,6 +351,8 @@ std::u16string RevealInFolderLabel();
 // "4.5 MB", "820 KB" (1000-based, like Finder).
 std::u16string FormatDownloadBytes(int64_t bytes);
 
+// Recent downloads card. Completed rows with existing files support OS file
+// drag-out via views::DragController.
 class OpenDownloadsView : public views::View,
                           public ui::SimpleMenuModel::Delegate {
   METADATA_HEADER(OpenDownloadsView, views::View)
@@ -384,6 +386,8 @@ class OpenDownloadsView : public views::View,
   friend class RowView;
 
   void RebuildRows();
+  void BeginRowDrag();
+  void EndRowDrag();
   void ShowRowMenu(const std::string& id,
                    views::View* source,
                    const gfx::Point& screen_point,
@@ -400,6 +404,8 @@ class OpenDownloadsView : public views::View,
   std::string menu_download_id_;
   std::unique_ptr<ui::SimpleMenuModel> menu_model_;
   std::unique_ptr<views::MenuRunner> menu_runner_;
+  bool dragging_row_ = false;
+  bool pending_rebuild_ = false;
 };
 
 // The downloads card above the Library button (left-aligned to it).

@@ -129,6 +129,40 @@ class OpenMediaBridge::TabSessionObserver
     return wc ? content::MediaSession::GetIfExists(wc) : nullptr;
   }
 
+  // Returns true when Chromium's MediaSession reports that entering PiP is
+  // available for the active player. MediaSessionImpl::RebuildAndNotifyActions
+  // includes kEnterPictureInPicture only when IsPictureInPictureAvailable()
+  // succeeds (Blink's HTMLVideoElement::SupportsPictureInPicture(): metadata
+  // loaded, has video, no disablePictureInPicture attribute, Permissions
+  // Policy allows PiP) or when the site registered an enterpictureinpicture
+  // handler. Patch 0007's OpenIsPictureInPictureAvailable() is internal to
+  // content/browser/ and not exposed on content::MediaSession.
+  bool IsPictureInPictureAvailableNow() const {
+    if (content::MediaSession* session = GetMediaSession()) {
+      for (auto action : session->GetMediaSessionActionsSync()) {
+        if (action ==
+            media_session::mojom::MediaSessionAction::kEnterPictureInPicture) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return state_.pip_available;
+  }
+
+  bool HasChromiumAutoPiPNow() const {
+    if (content::MediaSession* session = GetMediaSession()) {
+      for (auto action : session->GetMediaSessionActionsSync()) {
+        if (action == media_session::mojom::MediaSessionAction::
+                          kEnterAutoPictureInPicture) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return state_.has_chromium_auto_pip;
+  }
+
   // Binds to the tab's MediaSession. Without |create_if_needed| this only
   // attaches to an already-existing session (never instantiates one).
   void BindMediaSession(bool create_if_needed) {
@@ -295,6 +329,8 @@ class OpenMediaBridge::TabSessionObserver
       state_.is_active = false;
       state_.is_controllable = false;
       state_.has_video = false;
+      state_.pip_available = false;
+      state_.has_chromium_auto_pip = false;
       return;
     }
 
@@ -321,9 +357,6 @@ class OpenMediaBridge::TabSessionObserver
       }
     }
     state_.has_video = has_video;
-    if (has_video) {
-      state_.pip_available = true;
-    }
 
     content::WebContents* wc = web_contents();
     const bool session_pip =
@@ -370,7 +403,7 @@ class OpenMediaBridge::TabSessionObserver
     bool can_play_pause = state_.is_controllable;
     bool can_next = false;
     bool can_previous = false;
-    bool pip_available = state_.has_video;
+    bool pip_available = false;
     bool has_chromium_auto_pip = false;
 
     for (auto action : actions) {
@@ -757,8 +790,11 @@ AutoPiPDecision OpenMediaBridge::EvaluateAutoPiP(const ItemID& tab_id) const {
       !active_pip_is_automatic_) {
     return AutoPiPDecision::kManualPiPActive;
   }
-  if (state.has_chromium_auto_pip) {
+  if (it->second->HasChromiumAutoPiPNow()) {
     return AutoPiPDecision::kChromiumAutoPiP;
+  }
+  if (!it->second->IsPictureInPictureAvailableNow()) {
+    return AutoPiPDecision::kDisallowedSite;
   }
   return AutoPiPDecision::kOpen;
 }

@@ -20,6 +20,8 @@
 
 namespace open_unified {
 
+struct LiveFolderItem;
+
 // Formatting helper matching OpenModel's archiveLocation strings:
 // "pinned:<id>", "today:<id>", "folder:<id>", "favorites:<id>", "split:<id>".
 std::string FormatArchiveLocation(const NodeParent& parent);
@@ -205,6 +207,11 @@ class BrowserModel {
   bool RenameNode(const ItemID& id, const std::string& title);
   bool SetNodeIconOverride(const ItemID& id, std::optional<SpaceIcon> icon);
   bool SetFolderExpanded(const ItemID& folder_id, bool expanded);
+  bool SetLiveFolderConfig(const ItemID& folder_id,
+                           std::optional<LiveFolderConfig> config);
+  bool SyncLiveFolderItems(const ItemID& folder_id,
+                           const std::vector<LiveFolderItem>& items,
+                           int unread_count);
   bool SetPinnedCollapsed(const SpaceID& space_id, bool collapsed);
   bool SetMuted(const ItemID& tab_id, bool muted);
   ItemID DuplicateNode(const ItemID& id,

@@ -9,6 +9,7 @@
 #include <string_view>
 #include <utility>
 
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/no_destructor.h"
@@ -26,16 +27,21 @@
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/base/models/menu_separator_types.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
+#include "ui/compositor/compositor.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -43,6 +49,7 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_types.h"
+#include "ui/views/drag_controller.h"
 #include "url/gurl.h"
 
 namespace open_unified {
@@ -1033,9 +1040,11 @@ class OpenDownloadsView::TextButton : public views::Button {
 };
 
 // One download: icon tile, name, status, progress, trailing actions. A click
-// opens a finished file; right-click shows the row menu.
+// opens a finished file; dragging past the drag threshold initiates an OS file
+// drag-out; right-click shows the row menu.
 class OpenDownloadsView::RowView : public views::Button,
-                                   public views::ContextMenuController {
+                                   public views::ContextMenuController,
+                                   public views::DragController {
   METADATA_HEADER(RowView, views::Button)
 
  public:
@@ -1046,8 +1055,14 @@ class OpenDownloadsView::RowView : public views::Button,
         id_(std::move(id)) {
     SetNotifyEnterExitOnChild(true);
     set_context_menu_controller(this);
+    set_drag_controller(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kListItem);
     Refresh();
+  }
+
+  ~RowView() override {
+    set_drag_controller(nullptr);
+    set_context_menu_controller(nullptr);
   }
 
   const std::string& id() const { return id_; }
@@ -1202,7 +1217,65 @@ class OpenDownloadsView::RowView : public views::Button,
     owner_->ShowRowMenu(id_, source, point, source_type);
   }
 
+  // views::DragController:
+  void WriteDragDataForView(views::View* sender,
+                            const gfx::Point& press_pt,
+                            ui::OSExchangeData* data) override {
+    const RecentDownloadEntry* e = owner_->Find(id_);
+    if (!e || StateOf(*e) != DownloadState::kCompleted || !e->file_exists ||
+        e->record.target_path.empty()) {
+      return;
+    }
+    dragging_ = true;
+    owner_->BeginRowDrag();
+    data->SetFilename(base::FilePath::FromUTF8Unsafe(e->record.target_path));
+#if defined(USE_AURA) || BUILDFLAG(IS_APPLE)
+    const gfx::Size img_size = size();
+    if (!img_size.IsEmpty()) {
+      float scale = 1.0f;
+      if (const views::Widget* w = GetWidget()) {
+        if (const ui::Compositor* c = w->GetCompositor()) {
+          scale = c->device_scale_factor();
+        }
+      }
+      gfx::Canvas canvas(img_size, scale, /*is_opaque=*/false);
+      FillRound(&canvas, gfx::RectF(gfx::Rect(img_size)),
+                pm::kDownloadsRowRadius, owner_->colors_.fill);
+      PaintButtonContents(&canvas);
+      data->provider().SetDragImage(
+          gfx::ImageSkia(gfx::ImageSkiaRep(canvas.GetBitmap(), scale)),
+          press_pt.OffsetFromOrigin());
+    }
+#endif
+  }
+
+  void OnDragDone() override {
+    views::Button::OnDragDone();
+    if (dragging_) {
+      dragging_ = false;
+      owner_->EndRowDrag();
+    }
+  }
+
+  int GetDragOperationsForView(views::View* sender,
+                               const gfx::Point& p) override {
+    return IsDraggable() ? ui::DragDropTypes::DRAG_COPY
+                         : ui::DragDropTypes::DRAG_NONE;
+  }
+
+  bool CanStartDragForView(views::View* sender,
+                           const gfx::Point& press_pt,
+                           const gfx::Point& p) override {
+    return IsDraggable() && views::View::ExceededDragThreshold(p - press_pt);
+  }
+
  private:
+  bool IsDraggable() const {
+    const RecentDownloadEntry* e = owner_->Find(id_);
+    return e && StateOf(*e) == DownloadState::kCompleted && e->file_exists &&
+           !e->record.target_path.empty();
+  }
+
   void OnPressed(const ui::Event& event) {
     const RecentDownloadEntry* e = owner_->Find(id_);
     if (e && StateOf(*e) == DownloadState::kCompleted && e->file_exists) {
@@ -1212,6 +1285,7 @@ class OpenDownloadsView::RowView : public views::Button,
 
   raw_ptr<OpenDownloadsView> owner_;
   std::string id_;
+  bool dragging_ = false;
   std::vector<std::pair<RowGlyph, DownloadPopoverAction>> shown_;
 };
 
@@ -1264,7 +1338,37 @@ void OpenDownloadsView::UpdateDownloads(
     }
     return;
   }
+  if (dragging_row_) {
+    pending_rebuild_ = true;
+    return;
+  }
   RebuildRows();
+}
+
+void OpenDownloadsView::BeginRowDrag() {
+  dragging_row_ = true;
+  if (views::Widget* w = GetWidget()) {
+    if (views::WidgetDelegate* wd = w->widget_delegate()) {
+      if (views::BubbleDialogDelegate* bubble = wd->AsBubbleDialogDelegate()) {
+        bubble->set_close_on_deactivate(false);
+      }
+    }
+  }
+}
+
+void OpenDownloadsView::EndRowDrag() {
+  dragging_row_ = false;
+  if (views::Widget* w = GetWidget()) {
+    if (views::WidgetDelegate* wd = w->widget_delegate()) {
+      if (views::BubbleDialogDelegate* bubble = wd->AsBubbleDialogDelegate()) {
+        bubble->set_close_on_deactivate(true);
+      }
+    }
+  }
+  if (pending_rebuild_) {
+    pending_rebuild_ = false;
+    RebuildRows();
+  }
 }
 
 void OpenDownloadsView::RebuildRows() {

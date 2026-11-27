@@ -5,6 +5,7 @@
 #include "open_unified/browser/open_boost_controller.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <set>
@@ -24,8 +25,11 @@
 #include "content/public/browser/web_contents.h"
 #include "open_unified/browser/open_browser_service.h"
 #include "open_unified/browser/open_model_util.h"
+#include "open_unified/browser/platform/open_platform.h"
 #include "open_unified/core/boosts/boost_store.h"
+#include "open_unified/ui/design/open_theme_math.h"
 #include "open_unified/ui/webui/open_settings_ui.h"
+#include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
 
 namespace open_unified {
@@ -48,6 +52,8 @@ constexpr base::TimeDelta kZapPollInterval = base::Milliseconds(200);
 constexpr size_t kMaxPicksPerPoll = 64;
 
 constexpr char kEnableBoostsPref[] = "advanced.enableBoosts";
+constexpr char kThemeDataPref[] = "advanced.themeData";
+constexpr char kWebsiteAppearancePref[] = "appearance.websiteAppearance";
 
 // Color ranges of the macOS editor (BoostColorWheel.clamped(),
 // Packages/OpenKit/Sources/OpenBoosts/Boost.swift): brightness and contrast
@@ -135,6 +141,64 @@ constexpr char kApplierTemplate[] = R"JS(
                            { childList: true, subtree: false });
   }
   return payload.css.length;
+})($1)
+)JS";
+
+// Injects or removes `<style data-open-theme-data>` in world 6 so http(s)
+// pages can opt into Open's live Space palette custom properties on `:root`
+// when `advanced.themeData` is enabled. Uses createElement/textContent only
+// (Trusted Types safe) and cleans up completely when disabled.
+constexpr char kThemeDataApplierTemplate[] = R"JS(
+(function(css) {
+  const KEY = '__openThemeDataApplier';
+  let state = window[KEY];
+  if (!css) {
+    if (state) {
+      if (state.observer) {
+        state.observer.disconnect();
+        state.observer = null;
+      }
+      if (state.style) {
+        state.style.remove();
+        state.style = null;
+      }
+      delete window[KEY];
+    }
+    document.querySelectorAll('style[data-open-theme-data]')
+        .forEach(el => el.remove());
+    return false;
+  }
+  if (!state) {
+    state = { style: null, observer: null, css: '' };
+    window[KEY] = state;
+  }
+  state.css = css;
+  function render() {
+    const root = document.head || document.documentElement;
+    if (!root) return;
+    if (!state.style) {
+      state.style = document.querySelector('style[data-open-theme-data]') ||
+                    document.createElement('style');
+      state.style.setAttribute('data-open-theme-data', '');
+    }
+    if (state.style.textContent !== state.css) {
+      state.style.textContent = state.css;
+    }
+    if (state.style.parentNode !== root) {
+      root.appendChild(state.style);
+    }
+  }
+  render();
+  if (!state.observer && document.documentElement) {
+    state.observer = new MutationObserver(() => {
+      if (!state.style || !state.style.isConnected) {
+        render();
+      }
+    });
+    state.observer.observe(document.documentElement,
+                           { childList: true, subtree: false });
+  }
+  return true;
 })($1)
 )JS";
 
@@ -379,6 +443,40 @@ std::string FormatNumber(double value) {
   return s == "-0" ? "0" : s;
 }
 
+bool ResolveSystemDark() {
+  if (webui::OpenPreferences* prefs = webui::OpenPreferences::Get()) {
+    const base::Value mode = prefs->GetValue(kWebsiteAppearancePref);
+    if (mode.is_string()) {
+      if (mode.GetString() == "dark") {
+        return true;
+      }
+      if (mode.GetString() == "light") {
+        return false;
+      }
+    }
+  }
+  const ui::NativeTheme* native_theme =
+      ui::NativeTheme::GetInstanceForNativeUi();
+  return native_theme && native_theme->preferred_color_scheme() ==
+                             ui::NativeTheme::PreferredColorScheme::kDark;
+}
+
+std::string FormatCssColor(const theme::Rgba& c) {
+  auto chan = [](double v) -> int {
+    return static_cast<int>(std::lround(std::clamp(v, 0.0, 1.0) * 255.0));
+  };
+  const double a = std::clamp(c.a, 0.0, 1.0);
+  const int r = chan(c.r);
+  const int g = chan(c.g);
+  const int b = chan(c.b);
+  if (a >= 0.999) {
+    return "rgb(" + base::NumberToString(r) + ", " + base::NumberToString(g) +
+           ", " + base::NumberToString(b) + ")";
+  }
+  return "rgba(" + base::NumberToString(r) + ", " + base::NumberToString(g) +
+         ", " + base::NumberToString(b) + ", " + FormatNumber(a) + ")";
+}
+
 std::u16string FillTemplate(const char* source, const base::Value& payload) {
   std::string json;
   base::JSONWriter::Write(payload, &json);
@@ -448,8 +546,81 @@ const BoostColorAdjustment* EffectiveColor(const std::vector<Boost>& boosts) {
 
 }  // namespace
 
+// Listens for `open.preferencesChanged` (so toggling `advanced.themeData` or
+// `appearance.websiteAppearance` refreshes open tabs immediately) and
+// BrowserModel Space theme / move updates.
+class OpenBoostController::ServiceObserver : public OpenBrowserService::Observer,
+                                             public BrowserModel::Observer {
+ public:
+  ServiceObserver(OpenBoostController* owner, OpenBrowserService* service)
+      : owner_(owner), service_(service) {
+    service_->AddObserver(this);
+    service_->model().AddObserver(this);
+  }
+
+  ServiceObserver(const ServiceObserver&) = delete;
+  ServiceObserver& operator=(const ServiceObserver&) = delete;
+
+  ~ServiceObserver() override {
+    service_->model().RemoveObserver(this);
+    service_->RemoveObserver(this);
+  }
+
+  // OpenBrowserService::Observer:
+  void OnOpenEvent(const std::string& event_name,
+                   const base::Value& payload) override {
+    if (event_name != "open.preferencesChanged") {
+      return;
+    }
+    const std::string* key =
+        payload.is_dict() ? payload.GetDict().FindString("key") : nullptr;
+    if (!key || key->empty() || *key == kEnableBoostsPref ||
+        *key == kThemeDataPref || *key == kWebsiteAppearancePref) {
+      owner_->OnBoostsPreferenceChanged();
+    }
+  }
+
+  // BrowserModel::Observer:
+  void OnTreeChanged(const TreeChange& change) override {
+    if (!owner_->theme_data_enabled_) {
+      return;
+    }
+    if (change.kind == TreeChange::Kind::kReload) {
+      owner_->RefreshTabs(std::nullopt);
+      return;
+    }
+    if ((change.kind == TreeChange::Kind::kUpdate ||
+         change.kind == TreeChange::Kind::kSpaceProfileChanged) &&
+        !change.space_id.empty() && change.node_id.empty()) {
+      owner_->RefreshSpaceThemeData(change.space_id);
+      return;
+    }
+    if (change.kind == TreeChange::Kind::kMove && !change.node_id.empty()) {
+      if (OpenTabBridge* bridge = service_->tab_bridge()) {
+        if (content::WebContents* contents =
+                bridge->WebContentsForTab(change.node_id)) {
+          owner_->ApplyThemeDataToContents(change.node_id, contents,
+                                           /*refresh=*/true);
+        } else {
+          // Moved Folder or Split: refresh loaded tabs (unchanged sheets are
+          // skipped via applied_theme_css_).
+          owner_->RefreshTabs(std::nullopt);
+        }
+      }
+    }
+  }
+
+ private:
+  raw_ptr<OpenBoostController> owner_;
+  raw_ptr<OpenBrowserService> service_;
+};
+
 OpenBoostController::OpenBoostController(OpenBrowserService* service)
-    : service_(service), global_enabled_(BoostsGloballyEnabled()) {
+    : service_(service),
+      global_enabled_(BoostsGloballyEnabled()),
+      theme_data_enabled_(ThemeDataEnabled()),
+      last_system_dark_(ResolveSystemDark()),
+      service_observer_(std::make_unique<ServiceObserver>(this, service)) {
   service_->tab_bridge()->AddObserver(this);
   for (const Profile& profile : service_->model().profiles()) {
     ReloadBoosts(profile.id);
@@ -458,6 +629,7 @@ OpenBoostController::OpenBoostController(OpenBrowserService* service)
 
 OpenBoostController::~OpenBoostController() {
   zap_poll_.Stop();
+  service_observer_.reset();
   if (OpenTabBridge* bridge = service_->tab_bridge()) {
     bridge->RemoveObserver(this);
   }
@@ -491,18 +663,37 @@ bool OpenBoostController::BoostsGloballyEnabled() {
   return value.is_bool() ? value.GetBool() : true;
 }
 
+// static
+bool OpenBoostController::ThemeDataEnabled() {
+  webui::OpenPreferences* prefs = webui::OpenPreferences::Get();
+  if (!prefs) {
+    return true;
+  }
+  const base::Value value = prefs->GetValue(kThemeDataPref);
+  return value.is_bool() ? value.GetBool() : true;
+}
+
 void OpenBoostController::OnBoostsPreferenceChanged() {
-  const bool enabled = BoostsGloballyEnabled();
-  if (enabled == global_enabled_) {
+  const bool boosts_enabled = BoostsGloballyEnabled();
+  const bool theme_data_enabled = ThemeDataEnabled();
+  const bool system_dark = ResolveSystemDark();
+  const bool boosts_changed = (boosts_enabled != global_enabled_);
+  const bool theme_changed = (theme_data_enabled != theme_data_enabled_) ||
+                             (system_dark != last_system_dark_);
+  if (!boosts_changed && !theme_changed) {
     return;
   }
-  global_enabled_ = enabled;
-  if (!enabled) {
+  global_enabled_ = boosts_enabled;
+  theme_data_enabled_ = theme_data_enabled;
+  last_system_dark_ = system_dark;
+  if (boosts_changed && !boosts_enabled) {
     CancelZap();
   }
   RefreshTabs(std::nullopt);
-  for (const auto& [profile_id, boosts] : boosts_) {
-    NotifyBoostsChanged(profile_id);
+  if (boosts_changed) {
+    for (const auto& [profile_id, boosts] : boosts_) {
+      NotifyBoostsChanged(profile_id);
+    }
   }
 }
 
@@ -720,12 +911,142 @@ std::string OpenBoostController::BuildStylesheet(
   return css;
 }
 
+std::string OpenBoostController::BuildThemeDataStylesheet(
+    const ItemID& tab_id) const {
+  const BrowserModel& model = service_->model();
+  const theme::ContentAppearance system =
+      ResolveSystemDark() ? theme::ContentAppearance::kDark
+                          : theme::ContentAppearance::kLight;
+
+  std::optional<SpaceID> space_id = model_util::SpaceOfNode(model, tab_id);
+  if (!space_id) {
+    // Favorites belong to the Profile and render inside the active Space.
+    const std::optional<ProfileID> profile_id =
+        model_util::ProfileOfNode(model, tab_id);
+    if (std::optional<SpaceID> focused =
+            model_util::FocusedSpace(model, service_->ActiveWindowId())) {
+      const Space* focused_space = model.FindSpace(*focused);
+      if (focused_space &&
+          (!profile_id || focused_space->profile_id == *profile_id)) {
+        space_id = *focused;
+      }
+    }
+    if (!space_id && profile_id) {
+      for (const Space& space : model.spaces()) {
+        if (space.profile_id == *profile_id) {
+          space_id = space.id;
+          break;
+        }
+      }
+    }
+  }
+
+  const Space* space = space_id ? model.FindSpace(*space_id) : nullptr;
+  const theme::ThemeStyle style =
+      space ? theme::ThemeStyle::FromSpaceTheme(space->theme, system)
+            : theme::ThemeStyle::Default(system);
+  const bool ic =
+      OpenPlatform::Get() && OpenPlatform::Get()->IsIncreaseContrastEnabled();
+  const theme::ContentAppearance appearance =
+      ic ? style.IncreasedContrastAppearance(system)
+         : style.ResolvedAppearance(system);
+  const theme::SidebarRoles roles = theme::RolesFor(style, appearance, ic);
+  const theme::SemanticPalette* palette = style.PaletteFor(appearance);
+  const bool is_dark = (appearance == theme::ContentAppearance::kDark);
+
+  theme::Rgba background;
+  if (palette) {
+    background = palette->background;
+  } else {
+    const theme::ThemeEvaluator field(style, 1000.0, 1000.0,
+                                      /*is_active=*/true);
+    const std::array<double, 3> center = field.Color(0.5, 0.5);
+    background = theme::Rgba{center[0], center[1], center[2], 1.0};
+  }
+  const theme::Rgba foreground =
+      palette ? palette->foreground_primary : roles.title;
+  const theme::Rgba title = roles.title;
+  const theme::Rgba subtitle = roles.subtitle;
+  const theme::Rgba accent = style.AccentColor(appearance);
+  const theme::Rgba hover = palette ? palette->hover : roles.row_hover;
+
+  std::string css;
+  css.reserve(320);
+  css += ":root {\n";
+  css += "  --open-palette-background: " + FormatCssColor(background) + ";\n";
+  css += "  --open-palette-foreground: " + FormatCssColor(foreground) + ";\n";
+  css += "  --open-palette-title: " + FormatCssColor(title) + ";\n";
+  css += "  --open-palette-subtitle: " + FormatCssColor(subtitle) + ";\n";
+  css += "  --open-palette-accent: " + FormatCssColor(accent) + ";\n";
+  css += "  --open-palette-hover: " + FormatCssColor(hover) + ";\n";
+  css += std::string("  --open-palette-is-dark: ") + (is_dark ? "1" : "0") +
+         ";\n";
+  css += "}\n";
+  return css;
+}
+
+void OpenBoostController::ApplyThemeDataToContents(
+    const ItemID& tab_id,
+    content::WebContents* contents,
+    bool refresh) {
+  if (!contents || contents->GetBrowserContext()->IsOffTheRecord()) {
+    return;
+  }
+  const GURL url = contents->GetLastCommittedURL();
+  // Never inject theme palette variables into open://, chrome://,
+  // about:blank, or other internal pages.
+  if (!url.SchemeIsHTTPOrHTTPS()) {
+    applied_theme_css_.erase(tab_id);
+    return;
+  }
+  content::RenderFrameHost* main_frame = contents->GetPrimaryMainFrame();
+  if (!main_frame || !main_frame->IsRenderFrameLive()) {
+    return;
+  }
+  if (!theme_data_enabled_) {
+    const bool had_theme_data = applied_theme_css_.erase(tab_id) > 0;
+    if (had_theme_data && refresh) {
+      main_frame->ExecuteJavaScriptInIsolatedWorld(
+          FillTemplate(kThemeDataApplierTemplate, base::Value(std::string())),
+          base::NullCallback(), kOpenWorldId);
+    }
+    return;
+  }
+  const std::string css = BuildThemeDataStylesheet(tab_id);
+  if (refresh) {
+    auto it = applied_theme_css_.find(tab_id);
+    if (it != applied_theme_css_.end() && it->second == css) {
+      return;
+    }
+  }
+  applied_theme_css_[tab_id] = css;
+  main_frame->ExecuteJavaScriptInIsolatedWorld(
+      FillTemplate(kThemeDataApplierTemplate, base::Value(css)),
+      base::NullCallback(), kOpenWorldId);
+}
+
+void OpenBoostController::RefreshSpaceThemeData(const SpaceID& space_id) {
+  OpenTabBridge* bridge = service_->tab_bridge();
+  if (!bridge) {
+    return;
+  }
+  const BrowserModel& model = service_->model();
+  for (const auto& [tab_id, contents] : bridge->LoadedTabs()) {
+    const std::optional<SpaceID> tab_space =
+        model_util::SpaceOfNode(model, tab_id);
+    if (!tab_space || *tab_space == space_id) {
+      ApplyThemeDataToContents(tab_id, contents, /*refresh=*/true);
+    }
+  }
+}
+
 void OpenBoostController::ApplyToContents(const ItemID& tab_id,
                                           content::WebContents* contents,
                                           bool refresh) {
   if (!contents || contents->GetBrowserContext()->IsOffTheRecord()) {
     return;
   }
+  ApplyThemeDataToContents(tab_id, contents, refresh);
   std::optional<ProfileID> profile =
       model_util::ProfileOfNode(service_->model(), tab_id);
   if (!profile) {
@@ -834,8 +1155,14 @@ void OpenBoostController::NotifyZapState(const std::string& boost_id) {
 void OpenBoostController::OnTabDocumentAvailable(
     const ItemID& tab_id,
     content::WebContents* contents) {
-  // Settings may have flipped advanced.enableBoosts since the last page.
-  if (BoostsGloballyEnabled() != global_enabled_) {
+  // Fresh document: clear any cached theme-data sheet from a prior navigation
+  // so it is injected into the new document even if RefreshTabs runs below.
+  applied_theme_css_.erase(tab_id);
+  // Settings may have flipped advanced.enableBoosts / advanced.themeData or
+  // appearance since the last page.
+  if (BoostsGloballyEnabled() != global_enabled_ ||
+      ThemeDataEnabled() != theme_data_enabled_ ||
+      ResolveSystemDark() != last_system_dark_) {
     OnBoostsPreferenceChanged();
     return;
   }
@@ -849,6 +1176,9 @@ void OpenBoostController::OnTabPrimaryPageCommitted(
   if (zap_ && zap_->tab_id == tab_id) {
     CancelZap();
   }
+  if (!contents || !contents->GetLastCommittedURL().SchemeIsHTTPOrHTTPS()) {
+    applied_theme_css_.erase(tab_id);
+  }
 }
 
 void OpenBoostController::OnTabContentsDetaching(
@@ -859,6 +1189,7 @@ void OpenBoostController::OnTabContentsDetaching(
   }
   previews_.erase(tab_id);
   boosted_tabs_.erase(tab_id);
+  applied_theme_css_.erase(tab_id);
 }
 
 // --- Editing -----------------------------------------------------------------
@@ -1321,6 +1652,7 @@ base::DictValue OpenBoostController::StateForAutomation() const {
   state.Set("zapPicked",
             zap_ ? static_cast<int>(zap_->picked.size()) : 0);
   state.Set("globalEnabled", global_enabled_);
+  state.Set("themeDataEnabled", theme_data_enabled_);
   state.Set("previews", static_cast<int>(previews_.size()));
   state.Set("applied", applied_count_);
   base::DictValue counts;
