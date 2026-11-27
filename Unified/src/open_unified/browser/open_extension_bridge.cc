@@ -1341,7 +1341,7 @@ bool OpenExtensionBridge::ShowContextMenu(
               return;
             }
             if (WindowState* ws = self->FindWindow(menu_widget)) {
-              if (!self->IsPickerOpen()) {
+              if (!self->IsExtensionsPickerShowing()) {
                 if (OpenSidebarView* sidebar = ws->SidebarView()) {
                   sidebar->SetHasOpenPopover(false);
                 }

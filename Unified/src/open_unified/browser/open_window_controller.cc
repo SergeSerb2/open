@@ -879,6 +879,8 @@ class MinSizeWebContainer : public views::View {
 // Wraps OpenWindowControlsView with a subtle dark translucent pill backdrop so
 // white caption glyphs stay legible even over bright light Onboarding swatches.
 class ControlsScrimView : public views::View {
+  METADATA_HEADER(ControlsScrimView, views::View)
+
  public:
   ControlsScrimView(OpenWindowControlsView::Mode mode,
                     std::vector<WindowControlButton> buttons,
@@ -956,6 +958,9 @@ class ControlsScrimView : public views::View {
   bool window_active_ = true;
   raw_ptr<OpenWindowControlsView> controls_ = nullptr;
 };
+
+BEGIN_METADATA(ControlsScrimView)
+END_METADATA
 #endif  // !BUILDFLAG(IS_MAC)
 
 // Lightweight custom frame for frameless standalone WebUI windows (First Run /

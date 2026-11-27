@@ -246,6 +246,8 @@ cc::PaintFlags FillFlags(SkColor color) {
 }
 
 class HandEditorButton : public EditorButton {
+  METADATA_HEADER(HandEditorButton, EditorButton)
+
  public:
   using EditorButton::EditorButton;
   ui::Cursor GetCursor(const ui::MouseEvent& event) override {
@@ -254,7 +256,12 @@ class HandEditorButton : public EditorButton {
   }
 };
 
+BEGIN_METADATA(HandEditorButton)
+END_METADATA
+
 class HandPresetStripView : public PresetStripView {
+  METADATA_HEADER(HandPresetStripView, PresetStripView)
+
  public:
   using PresetStripView::PresetStripView;
   ui::Cursor GetCursor(const ui::MouseEvent& event) override {
@@ -262,7 +269,12 @@ class HandPresetStripView : public PresetStripView {
   }
 };
 
+BEGIN_METADATA(HandPresetStripView)
+END_METADATA
+
 class HandSineSliderView : public SineSliderView {
+  METADATA_HEADER(HandSineSliderView, SineSliderView)
+
  public:
   using SineSliderView::SineSliderView;
   ui::Cursor GetCursor(const ui::MouseEvent& event) override {
@@ -271,7 +283,12 @@ class HandSineSliderView : public SineSliderView {
   }
 };
 
+BEGIN_METADATA(HandSineSliderView)
+END_METADATA
+
 class HandNoiseDialView : public NoiseDialView {
+  METADATA_HEADER(HandNoiseDialView, NoiseDialView)
+
  public:
   using NoiseDialView::NoiseDialView;
   ui::Cursor GetCursor(const ui::MouseEvent& event) override {
@@ -279,6 +296,9 @@ class HandNoiseDialView : public NoiseDialView {
                         : NoiseDialView::GetCursor(event);
   }
 };
+
+BEGIN_METADATA(HandNoiseDialView)
+END_METADATA
 
 // A four-point sparkle with concave sides.
 SkPath Sparkle(float cx, float cy, float r) {
@@ -2806,6 +2826,8 @@ std::u16string Trimmed(std::u16string_view text) {
 }
 
 class HandIconPickerView : public OpenSpaceIconPickerView {
+  METADATA_HEADER(HandIconPickerView, OpenSpaceIconPickerView)
+
  public:
   using OpenSpaceIconPickerView::OpenSpaceIconPickerView;
   ui::Cursor GetCursor(const ui::MouseEvent& event) override {
@@ -2816,6 +2838,9 @@ class HandIconPickerView : public OpenSpaceIconPickerView {
     return OpenSpaceIconPickerView::GetCursor(event);
   }
 };
+
+BEGIN_METADATA(HandIconPickerView)
+END_METADATA
 
 }  // namespace
 

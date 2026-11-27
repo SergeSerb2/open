@@ -58,6 +58,7 @@
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -997,7 +998,10 @@ class OpenBrowserView::BrowserSplitDropOverlayView : public views::View {
  private:
   std::vector<gfx::Rect> ActivePaneBounds() const {
     if (owner_->split_view_active_ && owner_->split_container_) {
-      return owner_->split_container_->GetPaneBounds();
+      if (auto* split = views::AsViewClass<OpenSplitContainerView>(
+              owner_->split_container_.get())) {
+        return split->GetPaneBounds();
+      }
     }
     return {};
   }

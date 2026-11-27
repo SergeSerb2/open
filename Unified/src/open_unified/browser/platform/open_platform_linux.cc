@@ -26,6 +26,7 @@
 #include "base/files/important_file_writer.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -62,30 +63,30 @@ constexpr char kSecretCollectionDefault[] = "default";
 // Exact C ABI mirror of libsecret's SecretSchemaAttribute / SecretSchema
 // (see third_party/libsecret/libsecret/secret-schema.h) and GLib's GError.
 struct LibSecretSchemaAttribute {
-  const char* name;
+  RAW_PTR_EXCLUSION const char* name;
   int type;  // SecretSchemaAttributeType: 0 = STRING
 };
 
 struct LibSecretSchema {
-  const char* name;
+  RAW_PTR_EXCLUSION const char* name;
   int flags;  // SecretSchemaFlags: 0 = SECRET_SCHEMA_NONE
   LibSecretSchemaAttribute attributes[32];
 
   // <private>
   int reserved;
-  void* reserved1;
-  void* reserved2;
-  void* reserved3;
-  void* reserved4;
-  void* reserved5;
-  void* reserved6;
-  void* reserved7;
+  RAW_PTR_EXCLUSION void* reserved1;
+  RAW_PTR_EXCLUSION void* reserved2;
+  RAW_PTR_EXCLUSION void* reserved3;
+  RAW_PTR_EXCLUSION void* reserved4;
+  RAW_PTR_EXCLUSION void* reserved5;
+  RAW_PTR_EXCLUSION void* reserved6;
+  RAW_PTR_EXCLUSION void* reserved7;
 };
 
 struct LibGError {
   uint32_t domain;
   int code;
-  char* message;
+  RAW_PTR_EXCLUSION char* message;
 };
 
 constexpr LibSecretSchema kOpenSecretSchema = {
