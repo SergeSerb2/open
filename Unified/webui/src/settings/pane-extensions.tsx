@@ -30,7 +30,8 @@ export function ExtensionsPane(): JSX.Element {
   };
 
   const blockers = (items ?? []).filter((e) => e.is_adblocker && e.enabled);
-  const open = (url: string) => void ctx.run(() => rpc('settings.openChromeUrl', { url }));
+  const open = (url: string) =>
+    void ctx.run(() => rpc('settings.openChromeUrl', ctx.profileId ? { url, profile_id: ctx.profileId } : { url }));
 
   return (
     <div class="st-pane">

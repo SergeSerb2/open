@@ -180,10 +180,11 @@ export function LinksPane(): JSX.Element {
 
   const clickLabel = isMacPlatform() ? 'Option-Command-click' : 'Ctrl+Alt-click';
   const formattedHotkey = formatShortcut(hotkey.replace(/Option/g, 'Alt'));
+  const sourceAppsSupported = atc?.source_apps_supported ?? (isMacPlatform() || shortcutPlatform() === 'windows');
   const hotkeyHelp = !hotkeyOn
     ? 'The global shortcut is off.'
     : shortcutPlatform() === 'linux'
-      ? `Press ${formattedHotkey} inside Open, or bind a desktop shortcut in your window manager to launch Little Open from other apps.`
+      ? 'On Linux, Little Open uses the in-app shortcut (rebindable in Settings → Shortcuts → New Little Open Window) or your desktop shortcut manager.'
       : `Press ${formattedHotkey} from any app.`;
 
   return (
@@ -427,8 +428,8 @@ export function LinksPane(): JSX.Element {
                 />
               </Field>
             </div>
-            {isMacPlatform() && (
-              <Field label="And comes from" hint={apps.length === 0 ? 'Source apps are known on macOS only.' : undefined}>
+            {sourceAppsSupported && (
+              <Field label="And comes from" hint={apps.length === 0 ? 'No running apps were detected right now.' : undefined}>
                 <Select ariaLabel="Source app" wide value={draft.source} options={sourceOptions} onChange={(v) => setDraft({ ...draft, source: v })} />
               </Field>
             )}

@@ -1,6 +1,7 @@
 import type { JSX } from 'preact';
 import { useState } from 'preact/hooks';
 import { rpc } from '../shared/bridge';
+import { BUILTIN_SEARCH_ENGINES } from '../shared/catalog';
 import { Modal, Toggle } from '../shared/components';
 import { ExternalIcon } from '../shared/icons';
 import { useSettings } from './context';
@@ -27,7 +28,7 @@ const KINDS = [
 export function ChromeLinkButton({ url, children }: { url: string; children: string }): JSX.Element {
   const ctx = useSettings();
   return (
-    <Btn onClick={() => void ctx.run(() => rpc('settings.openChromeUrl', { url }))}>
+    <Btn onClick={() => void ctx.run(() => rpc('settings.openChromeUrl', ctx.profileId ? { url, profile_id: ctx.profileId } : { url }))}>
       {children} <ExternalIcon size={12} />
     </Btn>
   );
@@ -43,6 +44,12 @@ export function PrivacyPane(): JSX.Element {
   const selected = Object.entries(kinds)
     .filter(([, on]) => on)
     .map(([k]) => k);
+
+  const searchEngineId = ctx.profile?.settings.search_engine_id;
+  const searchEngineName =
+    BUILTIN_SEARCH_ENGINES.find((e) => e.id === searchEngineId)?.name ??
+    ctx.profile?.settings.custom_search_engines.find((e) => e.id === searchEngineId)?.name ??
+    'your search engine';
 
   return (
     <div class="st-pane">
@@ -63,7 +70,7 @@ export function PrivacyPane(): JSX.Element {
       <Group title="Security">
         <PrefToggle id="privacy/https-only" label="Always use secure connections" help="Warn before you go to a site without HTTPS." prefKey="privacy.httpsOnly" />
         <PrefToggle id="privacy/do-not-track" label='Send a "Do Not Track" request' help="Most sites ignore it." prefKey="privacy.doNotTrack" />
-        <Row id="privacy/search-suggestions" label="Search suggestions" help={`Ask ${ctx.profile?.settings.search_engine_id ?? 'your search engine'} for suggestions as you type.`} prefKey="search.suggestions">
+        <Row id="privacy/search-suggestions" label="Search suggestions" help={`Ask ${searchEngineName} for suggestions as you type.`} prefKey="search.suggestions">
           <Toggle checked={ctx.prefs['search.suggestions'] === true} label="Search suggestions" onChange={(v) => void ctx.setPref('search.suggestions', v)} />
         </Row>
         <Row id="privacy/safe-browsing" label="Safe Browsing" help="Open does not send the pages you visit to a blocklist service. Safe Browsing is off by design.">

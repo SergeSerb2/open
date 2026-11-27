@@ -426,6 +426,10 @@ class OpenBrowserView : public views::View,
   // Applies a mode directly (used by the controller-less automation path).
   void SetSidebarHidden(bool hidden, bool animate);
   bool sidebar_hidden() const { return sidebar_hidden_; }
+  void SetSidebarOnRight(bool on_right);
+  bool is_sidebar_on_right() const { return sidebar_on_right_; }
+  void SetShowFullUrl(bool full_url);
+  bool shows_full_url() const { return show_full_url_; }
   float sidebar_width() const { return sidebar_width_; }
   bool IsRevealCardShown() const;
   // Holds the hover-reveal card open while a menu or popover is active.
@@ -560,6 +564,8 @@ class OpenBrowserView : public views::View,
   void EnableTranslucentChrome();
 
   // Sidebar mode and width.
+  double HiddenSidebarOffset() const;
+  double HiddenCardOffset() const;
   void SyncFromWindowState(bool animate);
   void AnimateSidebar(bool hidden);
   void OnSidebarSlideSettled();
@@ -628,6 +634,8 @@ class OpenBrowserView : public views::View,
   float sidebar_width_;
   float drag_start_width_ = 0;
   bool sidebar_hidden_ = false;
+  bool sidebar_on_right_ = false;
+  bool show_full_url_ = false;
   bool hidden_by_drag_ = false;
   bool resizing_ = false;
   bool split_view_active_ = false;

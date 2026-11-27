@@ -203,8 +203,9 @@ class OpenBrowserService : public BrowserModel::Observer,
 
   // Applies live runtime effects of preferences stored in OpenPreferences
   // (downloads, Auto-PiP, Translate, App Icon, Boosts, Global Hotkeys) and
-  // schedules a debounced Sync push when signed in.
-  void ApplyPreferencesNow();
+  // schedules a debounced Sync push when signed in. When |key| is non-empty,
+  // only subsystems affected by that preference are refreshed.
+  void ApplyPreferencesNow(std::string_view key = {});
 
   // URLs the OS hands over (hook 0011: command line, a second launch, macOS
   // application:openURLs:). Air Traffic Control places each one; before
@@ -305,7 +306,9 @@ class OpenBrowserService : public BrowserModel::Observer,
 
   void LoadOrCreateState();
   void ApplySessionRestorePreference();
-  void ApplyPreferencesInternal(bool schedule_sync_push);
+  void ApplyPreferencesInternal(bool schedule_sync_push,
+                                std::string_view key = {});
+  void RunScheduledUpdateCheck();
   void FinishPendingProfileWipes();
   void StartProfiles();
   void StartAutoArchiveSweeper();
@@ -358,6 +361,7 @@ class OpenBrowserService : public BrowserModel::Observer,
   bool first_run_ = false;
   bool onboarding_completed_ = false;
   bool state_event_pending_ = false;
+  bool applying_preferences_ = false;
   // The Profile whose history SuggestEngine holds, and the newest request
   // (older replies are dropped).
   ProfileID recent_history_profile_;
@@ -397,6 +401,9 @@ class OpenBrowserService : public BrowserModel::Observer,
   // Periodic auto-archive sweeper (60s + startup + resume) and Little Open
   // activity tracker.
   base::RepeatingTimer auto_archive_timer_;
+  // Periodic background update checker (6h, controlled by
+  // general.automaticUpdates and suppressed in E2E automation mode).
+  base::RepeatingTimer auto_update_timer_;
   std::map<raw_ptr<OpenLittleOpenController>, TimestampSec>
       little_open_last_active_;
 

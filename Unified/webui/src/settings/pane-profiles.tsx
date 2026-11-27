@@ -84,7 +84,10 @@ export function ProfilesPane(): JSX.Element {
   const saveEngines = async (next: CustomSearchEngineDraft[], message: string) => {
     if (!profile) return false;
     const res = await ctx.run(() => rpc('settings.profiles.setCustomSearchEngines', { profile_id: profile.id, engines: next }), message);
-    if (res) await ctx.reloadProfiles();
+    if (res) {
+      ctx.applyPreferences({ ...ctx.prefs, 'search.engine': res.profile.settings.search_engine_id });
+      await ctx.reloadProfiles();
+    }
     return res !== null;
   };
 
@@ -134,7 +137,6 @@ export function ProfilesPane(): JSX.Element {
               </div>
             </div>
             <div class="st-row-control">
-              <span class="st-row-count">{plural(p.space_count, 'Space')}</span>
               <Btn
                 kind="ghost"
                 small
@@ -173,14 +175,29 @@ export function ProfilesPane(): JSX.Element {
       {profile && (
         <>
           <Group title={`Search · ${profile.name}`}>
-            <Row id="profiles/search-engine" label="Search engine" help="Used by the Command Bar and the address field." changed={profile.settings.search_engine_id !== 'google'} onReset={() => void ctx.run(() => rpc('settings.profiles.setSearchEngine', { profile_id: profile.id, engine_id: 'google' })).then(() => ctx.reloadProfiles())}>
+            <Row
+              id="profiles/search-engine"
+              label="Search engine"
+              help="Used by the Command Bar and the address field."
+              changed={profile.settings.search_engine_id !== 'google'}
+              onReset={async () => {
+                const res = await ctx.run(() => rpc('settings.profiles.setSearchEngine', { profile_id: profile.id, engine_id: 'google' }));
+                if (res) {
+                  ctx.applyPreferences({ ...ctx.prefs, 'search.engine': 'google' });
+                  await ctx.reloadProfiles();
+                }
+              }}
+            >
               <Select
                 ariaLabel="Search engine"
                 value={profile.settings.search_engine_id}
                 options={engineOptions}
                 onChange={async (id) => {
                   const res = await ctx.run(() => rpc('settings.profiles.setSearchEngine', { profile_id: profile.id, engine_id: id }));
-                  if (res) await ctx.reloadProfiles();
+                  if (res) {
+                    ctx.applyPreferences({ ...ctx.prefs, 'search.engine': id });
+                    await ctx.reloadProfiles();
+                  }
                 }}
               />
             </Row>

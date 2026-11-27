@@ -10,27 +10,27 @@
   </outputs>
   <release seq="1">
     <includes>
-      <include name="IDR_OPEN_WEBUI_ASSETS_BOOSTS_B4MCXXD6_JS" file="assets/boosts-B4MCXXd6.js" resource_path="assets/boosts-B4MCXXd6.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_BOOSTS_GIX5489A_JS" file="assets/boosts-Gix5489a.js" resource_path="assets/boosts-Gix5489a.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_BOOSTS_C1J2P0YY_CSS" file="assets/boosts-c1J2P0yY.css" resource_path="assets/boosts-c1J2P0yY.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_ART_BXGS8YCJ_JS" file="assets/chunk-art-BxGS8YCJ.js" resource_path="assets/chunk-art-BxGS8YCJ.js" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_COMPONENTS_DIVXV1US_JS" file="assets/chunk-components-Divxv1us.js" resource_path="assets/chunk-components-Divxv1us.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_ART_B4YT5BRU_JS" file="assets/chunk-art-B4yT5Bru.js" resource_path="assets/chunk-art-B4yT5Bru.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_COMPONENTS_CHHL0KPL_JS" file="assets/chunk-components-ChhL0kpl.js" resource_path="assets/chunk-components-ChhL0kpl.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_ROUTE_CJOD8HVF_JS" file="assets/chunk-route-CjOd8HVF.js" resource_path="assets/chunk-route-CjOd8HVF.js" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_RPC_CBGJN569_JS" file="assets/chunk-rpc-CBGjN569.js" resource_path="assets/chunk-rpc-CBGjN569.js" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_THEME_BPO2VLRZ_JS" file="assets/chunk-theme-BPo2vlRz.js" resource_path="assets/chunk-theme-BPo2vlRz.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_RPC_6Z7FOZXK_JS" file="assets/chunk-rpc-6Z7FOzXK.js" resource_path="assets/chunk-rpc-6Z7FOzXK.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_CHUNK_THEME_UPQ_1QTU_JS" file="assets/chunk-theme-uPq-1qTu.js" resource_path="assets/chunk-theme-uPq-1qTu.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_COMPONENTS_DOSQN6XT_CSS" file="assets/components-Dosqn6xT.css" resource_path="assets/components-Dosqn6xT.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_EASEL_CFJDHQCB_JS" file="assets/easel-CfjdhqcB.js" resource_path="assets/easel-CfjdhqcB.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_EASEL_DNMGQ3SM_CSS" file="assets/easel-dNMgQ3sM.css" resource_path="assets/easel-dNMgQ3sM.css" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_EASEL_DI_XIX9W_JS" file="assets/easel-di_XIx9W.js" resource_path="assets/easel-di_XIx9W.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_LIBRARY_B3LS8F5K_CSS" file="assets/library-B3ls8F5k.css" resource_path="assets/library-B3ls8F5k.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_LIBRARY_CYEVZ1DH_JS" file="assets/library-CYEVz1dH.js" resource_path="assets/library-CYEVz1dH.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_LIBRARY_CIEQHISU_JS" file="assets/library-CieQhISU.js" resource_path="assets/library-CieQhISU.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_NOTE_B3QDV5PT_CSS" file="assets/note-B3qdv5Pt.css" resource_path="assets/note-B3qdv5Pt.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_NOTE_CJYM_IZZ_JS" file="assets/note-CJyM_IZz.js" resource_path="assets/note-CJyM_IZz.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_NOTE_DDTCVIG5_JS" file="assets/note-DdtcvIg5.js" resource_path="assets/note-DdtcvIg5.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_D04LV9VC_CSS" file="assets/onboarding-D04LV9vc.css" resource_path="assets/onboarding-D04LV9vc.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_AN2WG0AP_JS" file="assets/onboarding-aN2Wg0Ap.js" resource_path="assets/onboarding-aN2Wg0Ap.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_DM301QKB_JS" file="assets/onboarding-Dm301qKB.js" resource_path="assets/onboarding-Dm301qKB.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_RPC_CKVDL3RZ_CSS" file="assets/rpc-CKvdL3Rz.css" resource_path="assets/rpc-CKvdL3Rz.css" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_C0F65V_H_JS" file="assets/settings-C0F65V_H.js" resource_path="assets/settings-C0F65V_H.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_DOLK0Q35_CSS" file="assets/settings-DOlk0q35.css" resource_path="assets/settings-DOlk0q35.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_DP2BGUBR_JS" file="assets/settings-DP2Bgubr.js" resource_path="assets/settings-DP2Bgubr.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_WELCOME_4N45CUQA_CSS" file="assets/welcome-4n45CUQa.css" resource_path="assets/welcome-4n45CUQa.css" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_WELCOME_CHQMKMG1_JS" file="assets/welcome-ChqMkmG1.js" resource_path="assets/welcome-ChqMkmG1.js" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_WELCOME_7SUBS1C1_JS" file="assets/welcome-7subs1c1.js" resource_path="assets/welcome-7subs1c1.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_BOOSTS_HTML" file="boosts.html" resource_path="boosts.html" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_EASEL_HTML" file="easel.html" resource_path="easel.html" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_LIBRARY_HTML" file="library.html" resource_path="library.html" use_base_dir="true" type="BINDATA" />

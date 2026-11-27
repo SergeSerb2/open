@@ -36,6 +36,13 @@ export function ShortcutsPane(): JSX.Element {
     void ctx.run(() => rpc('settings.shortcuts.list', {})).then((res) => res && setState(res));
   }, []);
 
+  useEffect(() => {
+    const p = ctx.prefs['shortcuts.priority'];
+    if (p === 'open' || p === 'website') {
+      setState((prev) => (prev && prev.priority !== p ? { ...prev, priority: p } : prev));
+    }
+  }, [ctx.prefs['shortcuts.priority']]);
+
   const apply = (res: ShortcutsState | null, message = 'Saved.') => {
     if (!res) return;
     setState(res);
@@ -60,6 +67,7 @@ export function ShortcutsPane(): JSX.Element {
   }, [state, query, filter, category, findKeys]);
 
   const setKeys = async (entry: ShortcutEntry, keys: string) => {
+    if (entry.customizable === false) return;
     setRecordingId(null);
     const res = await ctx.run(() => (keys ? rpc('settings.shortcuts.set', { id: entry.id, keys }) : rpc('settings.shortcuts.clear', { id: entry.id })));
     apply(res, keys ? `${entry.title}: ${formatShortcut(keys)}.` : `${entry.title} has no shortcut now.`);
@@ -228,6 +236,7 @@ export function ShortcutsPane(): JSX.Element {
         {visible.map((s) => {
           const domId = rowDomId(`shortcuts/${s.id}`);
           const open = expanded === s.id;
+          const locked = s.customizable === false;
           return (
             <div key={s.id} id={domId} class={`st-shortcut${ctx.pulsingRow === domId ? ' is-pulsing' : ''}${s.conflict_with ? ' has-conflict' : ''}`}>
               <div class="st-shortcut-main">
@@ -242,12 +251,12 @@ export function ShortcutsPane(): JSX.Element {
                   {s.conflict_with && <Pill tone="warning">Conflict</Pill>}
                 </div>
                 <div class="st-shortcut-actions">
-                  {s.keys && recordingId !== s.id && (
+                  {!locked && s.keys && recordingId !== s.id && (
                     <button type="button" class="st-link-btn" onClick={() => void setKeys(s, '')}>
                       Clear
                     </button>
                   )}
-                  {s.modified && recordingId !== s.id && (
+                  {!locked && s.modified && recordingId !== s.id && (
                     <button
                       type="button"
                       class="st-link-btn"
@@ -256,11 +265,19 @@ export function ShortcutsPane(): JSX.Element {
                       Reset
                     </button>
                   )}
-                  {recordingId === s.id ? (
+                  {!locked && recordingId === s.id ? (
                     <KeyRecorder value={s.keys} onCancel={() => setRecordingId(null)} onRecord={(keys) => void setKeys(s, keys)} />
                   ) : (
-                    <button type="button" class="st-keys-btn" title="Click, then press new keys" onClick={() => setRecordingId(s.id)}>
-                      {s.keys ? <Keycaps keys={s.keys} /> : <span class="st-keys-add">Add shortcut</span>}
+                    <button
+                      type="button"
+                      class="st-keys-btn"
+                      disabled={locked}
+                      title={locked ? 'This shortcut cannot be changed' : 'Click, then press new keys'}
+                      onClick={() => {
+                        if (!locked) setRecordingId(s.id);
+                      }}
+                    >
+                      {s.keys ? <Keycaps keys={s.keys} muted={locked} /> : <span class="st-keys-add">{locked ? 'None' : 'Add shortcut'}</span>}
                     </button>
                   )}
                 </div>
@@ -313,7 +330,16 @@ export function ShortcutsPane(): JSX.Element {
       )}
 
       <Group title="When shortcuts overlap">
-        <Row id="shortcuts/priority" label="If a website uses the same keys" help="A command's own choice above wins over this." prefKey="shortcuts.priority">
+        <Row
+          id="shortcuts/priority"
+          label="If a website uses the same keys"
+          help="A command's own choice above wins over this."
+          prefKey="shortcuts.priority"
+          onReset={async () => {
+            await ctx.resetPref('shortcuts.priority');
+            setState((prev) => (prev ? { ...prev, priority: 'open' } : prev));
+          }}
+        >
           <SegmentedControl
             ariaLabel="Shortcut priority"
             value={(state?.priority ?? 'open') as 'open' | 'website'}

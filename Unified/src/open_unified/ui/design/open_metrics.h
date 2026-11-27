@@ -52,6 +52,12 @@ namespace chrome {
 inline constexpr Frame kTrafficLightFrames[3] = {
     {12, 16, 16, 16}, {35, 16, 16, 16}, {58, 16, 16, 16}};
 inline constexpr float kTrafficLightDiameter = 12;
+// Top strip clearance on macOS when the sidebar sits on the right, keeping
+// the native traffic lights [12/35/58, 16, 16, 16] cleanly above web content.
+inline constexpr float kTrafficLightStripHeight = 36;
+// Leading inset for the sidebar toggle when no macOS traffic lights share
+// the sidebar's top bar (right-side sidebar on macOS, and Win/Linux).
+inline constexpr float kSidebarToggleLeadingInset = 8;
 #if BUILDFLAG(IS_MAC)
 inline constexpr float kTrafficLightsClearance = 76;
 inline constexpr float kToolbarButtonSize = 32;
@@ -354,12 +360,20 @@ inline constexpr float kShadowBlur = 6;  // CSS blur; Gaussian sigma = 3
 inline constexpr float kShadowOffsetY = 1;
 inline constexpr double kEmptyFillWhiteAlpha = 0.10;
 
-// [sidebarWidth, top_inset, W - sidebarWidth - 10, H - top_inset - 10];
+// Left sidebar: [sidebarWidth, top_inset, W - sidebarWidth - 10, H - top_inset - 10];
+// right sidebar: [10, top_inset, W - sidebarWidth - 10, H - top_inset - 10];
 // hidden: [10, top_inset, W - 20, H - top_inset - 10].
 constexpr Frame PanelFrame(SizeF window,
                            float sidebar_width,
                            bool sidebar_hidden,
-                           float top_inset = kInset) {
+                           float top_inset = kInset,
+                           bool sidebar_on_right = false) {
+  if (sidebar_on_right) {
+    const float right_margin = sidebar_hidden ? kInset : sidebar_width;
+    return {kInset, top_inset,
+            std::max(0.0f, window.w - kInset - right_margin),
+            std::max(0.0f, window.h - top_inset - kInset)};
+  }
   const float x = sidebar_hidden ? kInset : sidebar_width;
   return {x, top_inset, window.w - x - kInset, window.h - top_inset - kInset};
 }
@@ -385,8 +399,14 @@ inline constexpr float kRevealCardShadowRadius = 4;
 // Resize sash: 4 pt centered on the sidebar edge.
 inline constexpr float kResizeHandleWidth = 4;
 
-constexpr Frame RevealCardFrame(SizeF window, float sidebar_width) {
-  return {kRevealCardInset, kRevealCardInset, sidebar_width,
+constexpr Frame RevealCardFrame(SizeF window,
+                                float sidebar_width,
+                                bool sidebar_on_right = false) {
+  const float x =
+      sidebar_on_right
+          ? std::max(0.0f, window.w - sidebar_width - kRevealCardInset)
+          : kRevealCardInset;
+  return {x, kRevealCardInset, sidebar_width,
           std::max(0.0f, window.h - 2 * kRevealCardInset)};
 }
 constexpr float ClampSidebarWidth(float w) {

@@ -77,6 +77,25 @@ bool IsTerminalState(std::string_view state) {
   return state == "completed" || state == "cancelled" || state == "interrupted";
 }
 
+#if BUILDFLAG(IS_LINUX)
+std::string PercentEncodeTrashPath(std::string_view raw) {
+  std::string encoded;
+  encoded.reserve(raw.size());
+  for (unsigned char c : raw) {
+    const bool unreserved =
+        (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' ||
+        c == '~' || c == '/';
+    if (unreserved) {
+      encoded.push_back(static_cast<char>(c));
+    } else {
+      base::StringAppendF(&encoded, "%%%02X", static_cast<unsigned int>(c));
+    }
+  }
+  return encoded;
+}
+#endif  // BUILDFLAG(IS_LINUX)
+
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 base::FilePath UniquePathInDirectory(const base::FilePath& dir,
                                      const base::FilePath& base_name) {
@@ -155,18 +174,37 @@ bool MoveFileToTrashOnBlockingSequence(base::FilePath path) {
           "%04d-%02d-%02dT%02d:%02d:%02d", now_exploded.year,
           now_exploded.month, now_exploded.day_of_month, now_exploded.hour,
           now_exploded.minute, now_exploded.second);
-      std::string trashinfo = "[Trash Info]\nPath=" + path.AsUTF8Unsafe() +
+      std::string trashinfo = "[Trash Info]\nPath=" +
+                              PercentEncodeTrashPath(path.value()) +
                               "\nDeletionDate=" + deletion_date + "\n";
       base::FilePath info_file = info_dir.Append(
           dest.BaseName().AddExtensionASCII("trashinfo"));
-      base::WriteFile(info_file, trashinfo);
+      if (!base::WriteFile(info_file, trashinfo)) {
+        return false;
+      }
       if (base::Move(path, dest)) {
         return true;
       }
+      // base::Move fails across filesystems (e.g. EXDEV): fall back to copying
+      // into Trash and removing the original only if the copy succeeds.
+      const bool copied = base::DirectoryExists(path)
+                              ? base::CopyDirectory(path, dest,
+                                                    /*recursive=*/true)
+                              : base::CopyFile(path, dest);
+      if (copied) {
+        if (base::DeletePathRecursively(path)) {
+          return true;
+        }
+        base::DeletePathRecursively(dest);
+        base::DeleteFile(info_file);
+        return false;
+      }
+      base::DeletePathRecursively(dest);
       base::DeleteFile(info_file);
+      return false;
     }
   }
-  return base::DeleteFile(path);
+  return false;
 #else
   return base::DeleteFile(path);
 #endif

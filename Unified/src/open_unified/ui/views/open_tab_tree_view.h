@@ -214,6 +214,9 @@ class OpenTabTreeView : public views::View {
   void UpdateLoadingTimer();
   void OnLoadingTick();
   float loading_phase() const { return loading_phase_; }
+  void FocusAdjacentRow(RowView* from, int delta);
+  void FocusRowByNodeId(const ItemID& node_id);
+  void FocusRowView(RowView* target);
 
   // Drop target support (ListView forwards).
   struct DropTarget {

@@ -5,8 +5,11 @@
 #ifndef OPEN_UNIFIED_UI_WEBUI_OPEN_LIBRARY_UI_H_
 #define OPEN_UNIFIED_UI_WEBUI_OPEN_LIBRARY_UI_H_
 
+#include <memory>
+#include <optional>
 #include <string>
 
+#include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -54,6 +57,11 @@ class OpenLibraryUI : public OpenRpcDomain {
   static void SetDownloadBridge(OpenDownloadBridge* bridge);
   static OpenDownloadBridge* download_bridge();
 
+  // Toggles a built-in Library media folder source ("screenshots", "desktop",
+  // "downloads", "pictures", "documents") in the active Profile's folder
+  // sources list so sidebar toggles stay synced with open://library.
+  static bool ToggleMediaFolderSource(const std::string& folder_id);
+
   // WebUIDataSource request filter of open://library.
   static bool ShouldHandleResource(const std::string& path);
   static void HandleResource(
@@ -62,6 +70,8 @@ class OpenLibraryUI : public OpenRpcDomain {
       content::WebUIDataSource::GotDataCallback callback);
 
  private:
+  class FolderDialog;
+
   // Drawer.
   void Close(const base::DictValue& payload, Reply reply);
   void GetTheme(const base::DictValue& payload, Reply reply);
@@ -91,6 +101,8 @@ class OpenLibraryUI : public OpenRpcDomain {
   void ListMedia(const base::DictValue& payload, Reply reply);
   void AddMediaFolder(const base::DictValue& payload, Reply reply);
   void RemoveMediaFolder(const base::DictValue& payload, Reply reply);
+  void PickMediaFolder(const base::DictValue& payload, Reply reply);
+  void OnFolderDialogDone(Reply reply, std::optional<base::FilePath> path);
   void MediaAction(const std::string& action,
                    const base::DictValue& payload,
                    Reply reply);
@@ -120,6 +132,7 @@ class OpenLibraryUI : public OpenRpcDomain {
   // the page's sidebar tab when open://library is shown as a tab).
   bool RequestClose(const WindowID& window_id);
 
+  std::unique_ptr<FolderDialog> folder_dialog_;
   base::WeakPtrFactory<OpenLibraryUI> weak_factory_{this};
 };
 

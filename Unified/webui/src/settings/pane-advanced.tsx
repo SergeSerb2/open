@@ -6,7 +6,7 @@ import { CloseIcon, CopyIcon, FolderIcon } from '../shared/icons';
 import { isMacPlatform } from '../shared/shortcuts';
 import { useSettings } from './context';
 import { ChromeLinkButton } from './pane-privacy';
-import { Banner, Btn, Group, PaneHeader, Pill, PrefToggle, Row, TextInput } from './ui';
+import { Banner, Btn, Group, PaneHeader, Pill, PrefToggle, Row } from './ui';
 
 function useAbout(): AboutInfo | null {
   const [about, setAbout] = useState<AboutInfo | null>(null);
@@ -23,9 +23,12 @@ export function AdvancedPane(): JSX.Element {
   const about = useAbout();
   const [host, setHost] = useState('');
   const hosts = Array.isArray(ctx.prefs['advanced.pipExcludedHosts']) ? (ctx.prefs['advanced.pipExcludedHosts'] as string[]) : [];
-  const widevineOn = ctx.prefs['advanced.widevine'] === true;
+  const pipOn = ctx.prefs['advanced.pictureInPicture'] === true;
+  const widevineOn = Boolean(ctx.prefs['advanced.widevine']);
+  const widevineRestartRequired = about ? widevineOn !== about.widevine.session_enabled : false;
 
   const addHost = () => {
+    if (!pipOn) return;
     const clean = host.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0] ?? '';
     if (!clean || hosts.includes(clean)) return;
     void ctx.setPref('advanced.pipExcludedHosts', [...hosts, clean]).then((ok) => ok && setHost(''));
@@ -50,11 +53,27 @@ export function AdvancedPane(): JSX.Element {
           help="Video calls and these sites keep playing in their tab."
           prefKey="advanced.pipExcludedHosts"
           stacked
-          disabled={ctx.prefs['advanced.pictureInPicture'] !== true}
+          disabled={!pipOn}
         >
           <div class="st-add-site">
-            <TextInput value={host} onInput={setHost} ariaLabel="Site without Picture in Picture" placeholder="meet.example.com" onEnter={addHost} />
-            <Btn disabled={!host.trim()} onClick={addHost}>
+            <input
+              class="st-input"
+              type="text"
+              value={host}
+              disabled={!pipOn}
+              placeholder="meet.example.com"
+              aria-label="Site without Picture in Picture"
+              spellcheck={false}
+              autocomplete="off"
+              onInput={(e) => setHost((e.currentTarget as HTMLInputElement).value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addHost();
+                }
+              }}
+            />
+            <Btn disabled={!pipOn || !host.trim()} onClick={addHost}>
               Add site
             </Btn>
           </div>
@@ -63,7 +82,12 @@ export function AdvancedPane(): JSX.Element {
               {hosts.map((h) => (
                 <span key={h} class="st-tag">
                   {h}
-                  <button type="button" aria-label={`Remove ${h}`} onClick={() => void ctx.setPref('advanced.pipExcludedHosts', hosts.filter((x) => x !== h))}>
+                  <button
+                    type="button"
+                    disabled={!pipOn}
+                    aria-label={`Remove ${h}`}
+                    onClick={() => void ctx.setPref('advanced.pipExcludedHosts', hosts.filter((x) => x !== h))}
+                  >
                     <CloseIcon size={10} />
                   </button>
                 </span>
@@ -88,9 +112,9 @@ export function AdvancedPane(): JSX.Element {
           prefKey="advanced.widevine"
         />
         {about && (
-          <Row id="advanced/widevine-status" label="Widevine in this session" help={about.widevine.restart_required ? 'Quit and reopen Open to apply your choice.' : undefined}>
+          <Row id="advanced/widevine-status" label="Widevine in this session" help={widevineRestartRequired ? 'Quit and reopen Open to apply your choice.' : undefined}>
             <Pill tone={about.widevine.session_enabled ? 'success' : 'default'}>{about.widevine.session_enabled ? 'On' : 'Off'}</Pill>
-            {about.widevine.restart_required && <Pill tone="warning">{widevineOn ? 'Turns on after restart' : 'Turns off after restart'}</Pill>}
+            {widevineRestartRequired && <Pill tone="warning">{widevineOn ? 'Turns on after restart' : 'Turns off after restart'}</Pill>}
           </Row>
         )}
       </Group>

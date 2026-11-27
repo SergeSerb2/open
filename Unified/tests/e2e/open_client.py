@@ -45,6 +45,11 @@ class OpenError(RuntimeError):
     self.message = message
 
 
+class WaitTimeoutError(TimeoutError):
+  """wait_until() elapsed without its predicate returning a truthy value."""
+  pass
+
+
 def default_socket_path(user_data_dir: str) -> str:
   return os.path.join(user_data_dir, "automation.sock")
 
@@ -182,7 +187,7 @@ class OpenClient:
       if last:
         return last
       time.sleep(interval)
-    raise TimeoutError(f"timed out waiting for {what} (last: {last!r})")
+    raise WaitTimeoutError(f"timed out waiting for {what} (last: {last!r})")
 
   def eval(self, js: str, tab: Optional[str] = None, world: str = "page"):
     args: Dict[str, Any] = {"js": js, "world": world}
@@ -196,17 +201,18 @@ class OpenClient:
     (chrome.send -> C++ handler -> window.__openRpcResolve), the same path
     the Preact frontend uses."""
     req_id = 900000 + (abs(hash((method, time.monotonic()))) % 90000)
+    eval_timeout = max(30.0, timeout)
     # bridge.ts installs window.__openRpcResolve lazily (its first RPC, and
     # only while the global is unset). Wait briefly for that, so the hook
     # below wraps the page's handler instead of shadowing it.
     try:
       self.wait_until(
           lambda: self.call(
-              "eval", _timeout=10, tab=tab,
+              "eval", _timeout=eval_timeout, tab=tab,
               js="typeof window.__openRpcResolve === 'function' || "
                  "window.__openE2EHooked === true"),
           timeout=10, interval=0.1, what="bridge.ts resolver")
-    except TimeoutError:
+    except WaitTimeoutError:
       pass  # A page that has made no RPC yet; the accessor still chains.
     fire_script = """
 (() => {
@@ -241,11 +247,11 @@ class OpenClient:
   return id;
 })()
 """ % (req_id, json.dumps(method), json.dumps(payload))
-    self.call("eval", _timeout=timeout + 5, tab=tab, js=fire_script)
+    self.call("eval", _timeout=eval_timeout + 5, tab=tab, js=fire_script)
 
     def _poll():
       res = self.call(
-          "eval", _timeout=10, tab=tab,
+          "eval", _timeout=eval_timeout, tab=tab,
           js=f"window.__openE2ERpc && window.__openE2ERpc[{req_id}] || null")
       return res if isinstance(res, dict) else None
 

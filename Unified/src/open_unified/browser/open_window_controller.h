@@ -63,6 +63,7 @@ class WebContents;
 }
 
 namespace views {
+class BubbleDialogDelegate;
 class EventMonitor;
 class MenuRunner;
 class WebView;
@@ -175,6 +176,9 @@ class OpenWindowController : public OpenViewController,
   // Syncs appearance.toolbar back to OpenPreferences without recursing into
   // OnPreferencesChanged().
   void SyncToolbarPreference(bool visible);
+  // Syncs appearance.sidebarAutoHide back to OpenPreferences without recursing
+  // into OnPreferencesChanged().
+  void SyncSidebarAutoHidePreference(bool hidden);
   // User closes archived these tabs (ArchiveSink, reason "closed"): the
   // main window shows "Tab Archived" with Undo.
   void OnTabsArchivedByUser(std::vector<ArchivedTabRecord> records);
@@ -323,6 +327,7 @@ class OpenWindowController : public OpenViewController,
   bool started_ = false;
   bool service_observers_attached_ = false;
   bool syncing_toolbar_pref_ = false;
+  bool syncing_sidebar_autohide_pref_ = false;
   raw_ptr<BrowserView> hidden_main_browser_view_for_first_run_ = nullptr;
   std::map<raw_ptr<BrowserView>, std::unique_ptr<OpenWindowUi>> windows_;
   std::vector<std::unique_ptr<OpenLittleOpenController>> little_opens_;
@@ -410,11 +415,13 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   void CloseBoostEditor();
   bool boost_editor_shown() const;
 
-  // Space Theme / Identity Editor and New Space popovers.
+  // Space Theme / Identity Editor, Node Icon Picker, and New Space popovers.
   void ShowSpaceThemeEditor(const SpaceID& space_id,
                             bool open_identity_page = false,
                             views::View* anchor = nullptr);
   void ShowSpaceCreation(views::View* anchor = nullptr);
+  void ShowNodeIconPicker(const ItemID& node_id);
+  void CloseNodeIconPicker(bool synchronous = false);
 
   // Sidebar popovers ("+", compact toolbar "More options", Recent Downloads).
   void TogglePlusPopover(views::View* anchor = nullptr);
@@ -621,6 +628,7 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   void SyncWindowChromeFromModel();
   void PersistWindowBounds(views::Widget* w, const gfx::Rect& bounds);
   void UpdateSidebarPopoverState();
+  void OnNodeIconPickerClosed(views::Widget::ClosedReason reason);
   void OnAppMenuClosed();
   open_unified::SiteControlState BuildSiteControlState() const;
   SiteControlCallbacks BuildSiteControlCallbacks();
@@ -688,9 +696,13 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   raw_ptr<views::WebView> library_web_view_ = nullptr;
   std::string library_section_;
 
-  // Boost editor, Space editor, Sidebar popovers, and App Menu.
+  // Boost editor, Space editor, Node icon picker, Sidebar popovers, and App Menu.
   std::unique_ptr<OpenBoostEditorSession> boost_editor_;
   OpenSpaceEditorPopover space_editor_popover_;
+  // Declared in order so the delegate outlives the widget.
+  std::unique_ptr<views::BubbleDialogDelegate> node_icon_picker_delegate_;
+  std::unique_ptr<views::Widget> node_icon_picker_widget_;
+  base::WeakPtrFactory<OpenWindowUi> node_icon_picker_weak_factory_{this};
   OpenPlusPopover plus_popover_;
   OpenToolbarMorePopover more_popover_;
   std::unique_ptr<OpenDownloadsPopover> downloads_popover_;
@@ -795,6 +807,7 @@ class OpenLittleOpenController
   const ProfileID& profile_id() const { return profile_id_; }
   views::Widget* widget() const { return window_ ? window_->widget() : nullptr; }
   void RefreshState();
+  void RefreshAppearance();
   // Automation readback (docs/automation.md little-open-state).
   base::DictValue State() const;
 

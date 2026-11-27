@@ -234,6 +234,11 @@ export function SyncPane(): JSX.Element {
     .map((w) => w[0]?.toUpperCase())
     .join('');
   const live = status.ws_connected;
+  const saveDisplayName = async () => {
+    if (nameDraft === null || busy === 'name') return;
+    const res = await mutate('name', () => rpc('settings.sync.updateDisplayName', { display_name: nameDraft }), 'Name saved.');
+    if (res) setNameDraft(null);
+  };
 
   return (
     <div class="st-pane">
@@ -284,16 +289,8 @@ export function SyncPane(): JSX.Element {
             </div>
           ) : (
             <div class="st-inline-edit">
-              <TextInput value={nameDraft} onInput={setNameDraft} ariaLabel="Display name" autoFocus onEnter={() => undefined} />
-              <Btn
-                small
-                kind="primary"
-                busy={busy === 'name'}
-                onClick={async () => {
-                  const res = await mutate('name', () => rpc('settings.sync.updateDisplayName', { display_name: nameDraft }), 'Name saved.');
-                  if (res) setNameDraft(null);
-                }}
-              >
+              <TextInput value={nameDraft} onInput={setNameDraft} ariaLabel="Display name" autoFocus onEnter={() => void saveDisplayName()} />
+              <Btn small kind="primary" busy={busy === 'name'} onClick={() => void saveDisplayName()}>
                 Save
               </Btn>
               <Btn small onClick={() => setNameDraft(null)}>

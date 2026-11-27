@@ -60,8 +60,9 @@ constexpr double kMaxContrast = 1.5;
 constexpr double kMaxSaturation = 3.0;
 
 // The managed applier, run in world 6 with the generated payload. Keeps one
-// <style> element and re-inserts it when a SPA replaces <head>; runs user JS
-// once per document in the main world through a script element.
+// <style> element and re-inserts it when a SPA replaces <head>. User JS runs
+// separately via RenderFrameHost::ExecuteJavaScriptInIsolatedWorld in world 6
+// so it bypasses page CSP and Trusted Types while keeping full DOM access.
 //
 // Inverted Boosts: `html { filter: ... invert(1) }` inverts what the root
 // element paints. A root with no background of its own leaves the viewport
@@ -76,7 +77,7 @@ constexpr char kApplierTemplate[] = R"JS(
   const KEY = '__openBoostApplier';
   let state = window[KEY];
   if (!state) {
-    state = { style: null, observer: null, scriptsRun: new Set(),
+    state = { style: null, observer: null,
               payload: null, canvas: null, canvasHadBody: false };
     window[KEY] = state;
   }
@@ -132,14 +133,6 @@ constexpr char kApplierTemplate[] = R"JS(
     });
     state.observer.observe(document.documentElement,
                            { childList: true, subtree: false });
-  }
-  for (const item of payload.scripts) {
-    if (state.scriptsRun.has(item.id)) continue;
-    state.scriptsRun.add(item.id);
-    const s = document.createElement('script');
-    s.textContent = item.source;
-    (document.head || document.documentElement).appendChild(s);
-    s.remove();
   }
   return payload.css.length;
 })($1)
@@ -748,17 +741,18 @@ void OpenBoostController::ApplyToContents(const ItemID& tab_id,
   // User JavaScript comes from stored Boosts only (a draft never runs JS).
   // The run-once key is the Boost id plus a hash of its source, so a color,
   // CSS or Zap save does not run the page's Boost JavaScript again; only a
-  // changed script runs (once per document).
-  base::ListValue scripts;
+  // changed script runs (once per document). Scripts execute directly via
+  // ExecuteJavaScriptInIsolatedWorld in world 6 so strict page CSP and
+  // Trusted Types cannot block them.
+  std::vector<std::pair<std::string, std::string>> custom_scripts;
   for (const Boost& boost : boosts) {
     std::optional<Boost> stored = FindBoost(*profile, boost.id);
     if (stored && stored->enabled && !stored->custom_js.empty()) {
-      scripts.Append(
-          base::DictValue()
-              .Set("id", stored->id + ":" +
-                             base::NumberToString(static_cast<uint64_t>(
-                                 std::hash<std::string>()(stored->custom_js))))
-              .Set("source", stored->custom_js));
+      custom_scripts.emplace_back(
+          stored->id + ":" +
+              base::NumberToString(static_cast<uint64_t>(
+                  std::hash<std::string>()(stored->custom_js))),
+          stored->custom_js);
     }
   }
   // Pages without a Boost never get world 6 (no isolated-world cost on
@@ -772,17 +766,38 @@ void OpenBoostController::ApplyToContents(const ItemID& tab_id,
   } else {
     boosted_tabs_.insert(tab_id);
   }
-  if (!contents->GetPrimaryMainFrame()->IsRenderFrameLive()) {
+  content::RenderFrameHost* main_frame = contents->GetPrimaryMainFrame();
+  if (!main_frame || !main_frame->IsRenderFrameLive()) {
     return;
   }
   const BoostColorAdjustment* color = EffectiveColor(boosts);
   base::Value payload(base::DictValue()
                           .Set("css", BuildStylesheet(boosts))
-                          .Set("invert", color && color->invert)
-                          .Set("scripts", std::move(scripts)));
-  contents->GetPrimaryMainFrame()->ExecuteJavaScriptInIsolatedWorld(
+                          .Set("invert", color && color->invert));
+  main_frame->ExecuteJavaScriptInIsolatedWorld(
       FillTemplate(kApplierTemplate, payload), base::NullCallback(),
       kOpenWorldId);
+  for (const auto& [script_id, source] : custom_scripts) {
+    std::string quoted_id;
+    base::EscapeJSONString(script_id, /*put_in_quotes=*/true, &quoted_id);
+    const std::string wrapped =
+        "(function() {\n"
+        "  const ran = (window.__openBoostScriptsRun ||= new Set());\n"
+        "  if (ran.has(" +
+        quoted_id +
+        ")) return;\n"
+        "  ran.add(" +
+        quoted_id +
+        ");\n"
+        "  try {\n" +
+        source +
+        "\n  } catch (e) {\n"
+        "    console.error('[Open Boost]', e);\n"
+        "  }\n"
+        "})();";
+    main_frame->ExecuteJavaScriptInIsolatedWorld(
+        base::UTF8ToUTF16(wrapped), base::NullCallback(), kOpenWorldId);
+  }
   if (!boosts.empty()) {
     ++applied_count_;
   }

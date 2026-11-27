@@ -1145,18 +1145,21 @@ def suite_boosts(ctx: Context):
 
   # Toggle goes through the store (read-modify-write) and the list reads
   # the store, so both reflect the change.
+  ctx.call("select", tab=boosts_tab)
   toggled = ctx.client.webui_rpc(boosts_tab, "boosts.toggle",
                                  {"id": boost["id"], "enabled": False})
   check(toggled["boost"]["enabled"] is False, f"toggle reply {toggled}")
   listed = ctx.client.webui_rpc(boosts_tab, "boosts.list", {})["boosts"]
   check(any(b["id"] == boost["id"] and b["enabled"] is False for b in listed),
         "toggle not stored")
+  ctx.call("select", tab=page)
   ctx.call("navigate", tab=page, url=ctx.fixtures.url("/page/91.html"))
   ctx.call("wait", tab=page)
   ctx.client.wait_until(
       lambda: ctx.client.eval(
           "getComputedStyle(document.body).backgroundColor", tab=page) !=
       BOOST_COLOR, timeout=20, what="disabled Boost not applied")
+  ctx.call("select", tab=boosts_tab)
   ctx.client.webui_rpc(boosts_tab, "boosts.delete", {"id": boost["id"]})
   listed = ctx.client.webui_rpc(boosts_tab, "boosts.list", {})["boosts"]
   check(not any(b["id"] == boost["id"] for b in listed), "Boost not deleted")
@@ -1725,6 +1728,68 @@ def suite_wave3_parity(ctx: Context):
   else:
     check(menu.get("supported") is False,
           f"expected app-menu unsupported on {plat}: {menu}")
+
+  # --- 11. Wave 8 Live Settings Propagation ----------------------------------
+  settings_tab = ctx.call("open", url="open://settings/")["id"]
+  ctx.call("wait", tab=settings_tab, timeout=30)
+  ctx.call("select", tab=settings_tab)
+
+  def _set_pref(key: str, value):
+    res = ctx.client.webui_rpc(
+        settings_tab, "settings.setPreference", {"key": key, "value": value})
+    check(res.get("ok") is True and
+          res.get("preferences", {}).get(key) == value,
+          f"settings.setPreference({key}={value!r}) failed: {res}")
+
+  try:
+    # Sidebar position: right -> snapshot -> left.
+    _set_pref("appearance.sidebarPosition", "right")
+    ctx.client.wait_until(
+        lambda: ctx.call("chrome-state").get("sidebarOnRight") is True,
+        timeout=10, what="chrome-state sidebarOnRight True")
+    time.sleep(0.25)
+    ctx.snapshot("right-sidebar")
+    _set_pref("appearance.sidebarPosition", "left")
+    ctx.client.wait_until(
+        lambda: ctx.call("chrome-state").get("sidebarOnRight") is False,
+        timeout=10, what="chrome-state sidebarOnRight False")
+
+    # Website / chrome appearance: dark -> light -> automatic.
+    _set_pref("appearance.websiteAppearance", "dark")
+    ctx.client.wait_until(
+        lambda: ctx.call("chrome-state").get("darkMode") is True,
+        timeout=10, what="chrome-state darkMode True")
+    _set_pref("appearance.websiteAppearance", "light")
+    ctx.client.wait_until(
+        lambda: ctx.call("chrome-state").get("darkMode") is False,
+        timeout=10, what="chrome-state darkMode False")
+    _set_pref("appearance.websiteAppearance", "automatic")
+
+    # Full URL display: True -> False.
+    _set_pref("appearance.fullUrl", True)
+    ctx.client.wait_until(
+        lambda: ctx.call("chrome-state").get("fullUrl") is True,
+        timeout=10, what="chrome-state fullUrl True")
+    _set_pref("appearance.fullUrl", False)
+    ctx.client.wait_until(
+        lambda: ctx.call("chrome-state").get("fullUrl") is False,
+        timeout=10, what="chrome-state fullUrl False")
+  finally:
+    for pref_key, default_val in (
+        ("appearance.sidebarPosition", "left"),
+        ("appearance.websiteAppearance", "automatic"),
+        ("appearance.fullUrl", False),
+    ):
+      try:
+        ctx.client.webui_rpc(
+            settings_tab, "settings.setPreference",
+            {"key": pref_key, "value": default_val})
+      except Exception:  # noqa: BLE001 - best-effort restore
+        pass
+    try:
+      ctx.call("close", tab=settings_tab)
+    except Exception:  # noqa: BLE001 - best-effort cleanup
+      pass
 
   ctx.notes["wave3_parity_verified"] = True
 

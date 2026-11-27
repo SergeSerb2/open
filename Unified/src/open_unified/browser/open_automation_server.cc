@@ -82,6 +82,9 @@
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/image/image.h"
 #include "ui/snapshot/snapshot.h"
 #include "ui/views/focus/focus_manager.h"
@@ -975,20 +978,38 @@ views::Widget* ResolveSnapshotWidget(const std::string& window_name,
   return IsWidgetCapturable(w) ? w : nullptr;
 }
 
-gfx::Size SnapshotSizeForWidget(views::Widget* w, bool is_main) {
-  gfx::Size size;
+gfx::Rect SnapshotRectForWidget(views::Widget* w, bool is_main) {
   if (is_main) {
     if (BrowserView* bv = MainBrowserView(); bv && !bv->size().IsEmpty()) {
-      size = bv->size();
+      return gfx::Rect(bv->size());
     }
   }
-  if (size.IsEmpty()) {
-    size = w->GetClientAreaBoundsInScreen().size();
+  const gfx::Rect window_bounds = w->GetWindowBoundsInScreen();
+  const gfx::Rect client_bounds = w->GetClientAreaBoundsInScreen();
+#if BUILDFLAG(IS_WIN)
+  // snapshot_win.cc uses PrintWindow(..., PW_CLIENTONLY), so source_rect is
+  // relative to the client area origin (0, 0).
+  if (!client_bounds.IsEmpty()) {
+    return gfx::Rect(client_bounds.size());
   }
-  if (size.IsEmpty()) {
-    size = w->GetWindowBoundsInScreen().size();
+  return gfx::Rect(window_bounds.size());
+#else
+  // On macOS, GrabWindowSnapshot grabs NSWindow.contentView.superview rooted
+  // at GetWindowBoundsInScreen().origin(). Bordered bubbles and titled windows
+  // inset GetClientAreaBoundsInScreen() inside window_bounds, so offset by
+  // (client_origin - window_origin) to avoid top-left offset or bottom-right
+  // cropping.
+  if (!client_bounds.IsEmpty() && !window_bounds.IsEmpty() &&
+      window_bounds.Contains(client_bounds)) {
+    const gfx::Vector2d offset =
+        client_bounds.origin() - window_bounds.origin();
+    return gfx::Rect(gfx::Point() + offset, client_bounds.size());
   }
-  return size;
+  if (!window_bounds.IsEmpty()) {
+    return gfx::Rect(window_bounds.size());
+  }
+  return gfx::Rect(client_bounds.size());
+#endif
 }
 
 void WritePngAndReply(base::FilePath path,
@@ -1065,12 +1086,11 @@ void GrabWidgetSnapshotNow(std::string window_name,
     Err(std::move(reply), "no window " + window_name);
     return;
   }
-  const gfx::Size size = SnapshotSizeForWidget(w, is_main);
-  if (size.IsEmpty()) {
+  const gfx::Rect bounds = SnapshotRectForWidget(w, is_main);
+  if (bounds.IsEmpty()) {
     Err(std::move(reply), "empty window bounds");
     return;
   }
-  const gfx::Rect bounds(size);
   ui::GrabWindowSnapshot(
       w->GetNativeWindow(), bounds,
       base::BindOnce(
@@ -2150,9 +2170,14 @@ void OpenAutomationServer::RegisterCommands() {
           }
         }
         std::optional<ItemID> active_tab = service->tab_bridge()->ActiveTabId();
+        OpenBrowserView* open_view = ui ? ui->open_view() : nullptr;
         Ok(std::move(reply),
            base::DictValue()
                .Set("sidebarHidden", ui && ui->sidebar_hidden())
+               .Set("sidebarOnRight",
+                    open_view && open_view->is_sidebar_on_right())
+               .Set("darkMode", wc && wc->IsSystemDarkMode())
+               .Set("fullUrl", open_view && open_view->shows_full_url())
                .Set("singlePaneToolbar",
                     ui && ui->single_pane_toolbar_visible())
                .Set("splitActive", ui && ui->split_view_active())

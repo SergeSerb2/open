@@ -96,6 +96,7 @@ source_set("open_unified_platform") {
   public_deps = [ "//url" ]
   deps = [
     "//base",
+    "//skia",
     "//ui/views",
   ]
   libs = []
@@ -124,6 +125,7 @@ source_set("open_unified_platform") {
       "AppKit.framework",  # NSWindow, NSVisualEffectView, NSWorkspace
       "Carbon.framework",  # RegisterEventHotKey (global hotkeys)
       "CoreFoundation.framework",
+      "CoreGraphics.framework",
       "Foundation.framework",
       "QuartzCore.framework",  # CALayer wash overlay for macOS vibrancy
       "Security.framework",  # SecItem* (Keychain)

@@ -158,6 +158,34 @@ bool HasPrimaryModifier(int flags) {
   return (flags & kPrimaryModifier) != 0;
 }
 
+std::u16string FormatUrlForDisplay(const std::string& raw_url,
+                                   bool show_full_url) {
+  if (raw_url.empty()) {
+    return std::u16string();
+  }
+  const GURL gurl(raw_url);
+  if (!gurl.is_valid()) {
+    return base::UTF8ToUTF16(raw_url);
+  }
+  if (gurl.SchemeIs("about") || gurl.spec() == "open://newtab/" ||
+      gurl.spec() == "chrome://newtab/") {
+    return std::u16string();
+  }
+  if (show_full_url &&
+      (gurl.SchemeIsHTTPOrHTTPS() || gurl.SchemeIs("open") ||
+       gurl.SchemeIs("chrome") || gurl.SchemeIsFile())) {
+    return base::UTF8ToUTF16(gurl.spec());
+  }
+  std::string host(gurl.host());
+  if (host.starts_with("www.")) {
+    host.erase(0, 4);
+  }
+  if (host.empty()) {
+    return base::UTF8ToUTF16(gurl.spec());
+  }
+  return base::UTF8ToUTF16(host);
+}
+
 SkColor ToSkColor(const RGBAColor& color) {
   return SkColorSetARGB(ToByte(color.a), ToByte(color.r), ToByte(color.g),
                         ToByte(color.b));
@@ -1946,6 +1974,7 @@ class SplitPaneView : public views::View,
     bool focused = false;
     bool show_ring = false;
     bool dark_content = false;
+    bool show_full_url = false;
     size_t pane_count = 1;
     SplitOrientation orientation = SplitOrientation::kHorizontal;
     SkColor fallback_color = SK_ColorWHITE;
@@ -2008,6 +2037,14 @@ class SplitPaneView : public views::View,
     }
     context_.dark_content = dark;
     ring_->SetDarkContent(dark);
+  }
+
+  void SetShowFullUrl(bool full_url) {
+    if (context_.show_full_url == full_url) {
+      return;
+    }
+    context_.show_full_url = full_url;
+    RefreshChrome();
   }
 
   void SetBackgroundOverride(SkColor color) {
@@ -2233,14 +2270,26 @@ class SplitPaneView : public views::View,
   }
 
   std::u16string HostLabel() const {
+    if (context_.show_full_url) {
+      if (spec_.web_contents) {
+        const GURL url = spec_.web_contents->GetLastCommittedURL().is_valid()
+                             ? spec_.web_contents->GetLastCommittedURL()
+                             : spec_.web_contents->GetVisibleURL();
+        if (url.is_valid()) {
+          return secondary::FormatUrlForDisplay(url.spec(),
+                                                /*show_full_url=*/true);
+        }
+      }
+      return spec_.host_label;
+    }
     if (!spec_.host_label.empty() || !spec_.web_contents) {
       return spec_.host_label;
     }
-    std::string host(spec_.web_contents->GetLastCommittedURL().host());
-    if (host.starts_with("www.")) {
-      host.erase(0, 4);
-    }
-    return base::UTF8ToUTF16(host);
+    const GURL url = spec_.web_contents->GetLastCommittedURL().is_valid()
+                         ? spec_.web_contents->GetLastCommittedURL()
+                         : spec_.web_contents->GetVisibleURL();
+    return secondary::FormatUrlForDisplay(url.spec(),
+                                          /*show_full_url=*/false);
   }
 
   void RefreshChrome() {
@@ -2678,6 +2727,7 @@ void OpenSplitContainerView::SetPresentation(SplitPresentation presentation) {
     context.focused = split ? presentation_.panes[i].tab_id == focused : true;
     context.show_ring = split;
     context.dark_content = dark_content;
+    context.show_full_url = show_full_url_;
     context.pane_count = panes_.size();
     context.orientation = presentation_.orientation;
     context.fallback_color = presentation_.fallback_page_color;
@@ -2699,6 +2749,18 @@ void OpenSplitContainerView::SetSinglePaneToolbarVisible(bool shows_toolbar) {
   presentation_.show_single_pane_toolbar = shows_toolbar;
   if (!is_split() && panes_.size() == 1 && panes_[0]) {
     panes_[0]->SetBarVisible(shows_toolbar, OpenPaneChromeView::Role::kToolbar);
+  }
+}
+
+void OpenSplitContainerView::SetShowFullUrl(bool full_url) {
+  if (show_full_url_ == full_url) {
+    return;
+  }
+  show_full_url_ = full_url;
+  for (auto& pane : panes_) {
+    if (pane) {
+      pane->SetShowFullUrl(full_url);
+    }
   }
 }
 

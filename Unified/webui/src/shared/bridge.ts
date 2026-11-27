@@ -49,6 +49,7 @@ export const RPC_METHODS = {
   settingsAddAdBlockExclusion: 'settings.addAdBlockExclusion',
   settingsRemoveAdBlockExclusion: 'settings.removeAdBlockExclusion',
   settingsClearBrowsingData: 'settings.clearBrowsingData',
+  settingsDefaultBrowserGet: 'settings.defaultBrowser.get',
   settingsSetDefaultBrowser: 'settings.setDefaultBrowser',
   settingsGetExtensions: 'settings.getExtensions',
   settingsToggleExtension: 'settings.toggleExtension',
@@ -75,6 +76,7 @@ export const RPC_METHODS = {
   libraryUpdateSpace: 'library.updateSpace',
   libraryDeleteSpace: 'library.deleteSpace',
   libraryGetMedia: 'library.getMedia',
+  libraryPickMediaFolder: 'library.pickMediaFolder',
   libraryGetEasels: 'library.getEasels',
   libraryOpenUrl: 'library.openUrl',
 
@@ -453,7 +455,11 @@ export interface SettingsSnapshot {
 
 // --- RPC Method Type Map ---
 
-export interface RpcRequestMap extends SettingsRpcRequestMap {
+type BaseSettingsRpcRequestMap = Omit<SettingsRpcRequestMap, 'settings.openChromeUrl'>;
+
+export interface RpcRequestMap extends BaseSettingsRpcRequestMap {
+  'settings.openChromeUrl': { url: string; profile_id?: string };
+  'settings.defaultBrowser.get': Record<string, never>;
   'settings.getAll': { profile_id?: string };
   'settings.setPreference': { key: string; value: unknown; profile_id?: string; apply_all_profiles?: boolean };
   'settings.resetPreference': { key: string; profile_id?: string };
@@ -498,6 +504,7 @@ export interface RpcRequestMap extends SettingsRpcRequestMap {
   'library.updateSpace': { id: string; title?: string; icon?: SpaceIcon; style?: SpaceStyle };
   'library.deleteSpace': { id: string };
   'library.getMedia': { profile_id?: string; query?: string };
+  'library.pickMediaFolder': Record<string, never>;
   'library.getEasels': { profile_id?: string; query?: string };
   'library.openUrl': { url: string; new_tab?: boolean };
 
@@ -549,7 +556,8 @@ export interface RpcResponseMap extends SettingsRpcResponseMap {
   'settings.addAdBlockExclusion': AdBlockState;
   'settings.removeAdBlockExclusion': AdBlockState;
   'settings.clearBrowsingData': { ok: boolean; cleared_items: number };
-  'settings.setDefaultBrowser': { status: 'already' | 'success' | 'declined' | 'failed'; is_default: boolean };
+  'settings.defaultBrowser.get': { is_default: boolean; is_default_browser?: boolean };
+  'settings.setDefaultBrowser': { status: 'already' | 'success' | 'prompted' | 'declined' | 'failed'; is_default: boolean };
   'settings.getExtensions': { extensions: ExtensionItem[] };
   'settings.toggleExtension': { extensions: ExtensionItem[] };
 
@@ -573,6 +581,7 @@ export interface RpcResponseMap extends SettingsRpcResponseMap {
   'library.updateSpace': { space: SpaceSummary };
   'library.deleteSpace': { ok: boolean };
   'library.getMedia': { items: MediaCaptureRecord[] };
+  'library.pickMediaFolder': { cancelled?: boolean; canceled?: boolean; path?: string };
   'library.getEasels': { easels: EaselSummary[] };
   'library.openUrl': { ok: boolean };
 
@@ -816,7 +825,7 @@ const DEFAULT_PREFERENCES: Record<string, unknown> = {
   'general.restoreWindows': true,
   'appearance.appIcon': 'open-indigo',
   'appearance.websiteAppearance': 'automatic',
-  'appearance.toolbar': true,
+  'appearance.toolbar': false,
   'appearance.fullUrl': false,
   'tabs.archiveAfter': '12h',
   'tabs.littleOpenArchiveAfter': '6h',
@@ -830,7 +839,7 @@ const DEFAULT_PREFERENCES: Record<string, unknown> = {
   'previews.enabled': true,
   'previews.folders': true,
   'previews.pages': true,
-  'links.littleOpenHotkey': 'Mod+Option+N',
+  'links.littleOpenHotkey': 'Mod+Alt+N',
   'links.optionCommandClick': true,
   'links.externalLinksLittleOpen': true,
   'links.peekShiftClick': true,
@@ -1579,6 +1588,9 @@ async function previewRpc<M extends RpcMethod>(
       return { ok: true, cleared_items: cleared + 12 } as RpcResponseMap[M];
     }
 
+    case 'settings.defaultBrowser.get':
+      return { is_default: st.isDefaultBrowser } as RpcResponseMap[M];
+
     case 'settings.setDefaultBrowser': {
       const wasDefault = st.isDefaultBrowser;
       st.isDefaultBrowser = true;
@@ -1802,6 +1814,11 @@ async function previewRpc<M extends RpcMethod>(
         return true;
       });
       return { items } as RpcResponseMap[M];
+    }
+
+    case 'library.pickMediaFolder': {
+      const path = window.prompt('Media folder path (native folder picker in Open)', '~/Pictures/Screenshots');
+      return (path ? { cancelled: false, path } : { cancelled: true }) as RpcResponseMap[M];
     }
 
     case 'library.getEasels': {

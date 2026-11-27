@@ -100,6 +100,13 @@ std::u16string PrimaryShortcutLabel(char16_t key);
 // True when `flags` holds the primary modifier (Cmd on macOS, Ctrl elsewhere).
 bool HasPrimaryModifier(int flags);
 
+// Shared URL display formatting for the sidebar URL pill, single-pane top
+// toolbar, and Split View pane chrome. When `show_full_url` is true, returns
+// the full URL spec for http/https/open/chrome/file schemes (empty for blank /
+// newtab pages). When false, returns the host without a leading "www.".
+std::u16string FormatUrlForDisplay(const std::string& raw_url,
+                                   bool show_full_url);
+
 // --- Color helpers ---------------------------------------------------------
 SkColor ToSkColor(const RGBAColor& color);
 SkColor WithAlpha(SkColor color, float alpha);
@@ -705,6 +712,10 @@ class OpenSplitContainerView : public views::View {
     return presentation_.show_single_pane_toolbar;
   }
 
+  // Toggles full URL display vs host-only display in split pane chrome bars.
+  void SetShowFullUrl(bool full_url);
+  bool shows_full_url() const { return show_full_url_; }
+
   // Drag-to-split translucent drop-target preview overlay.
   void SetDropZonePreview(
       std::optional<SplitDropZone> zone,
@@ -828,6 +839,7 @@ class OpenSplitContainerView : public views::View {
 
   raw_ptr<OpenSplitContainerDelegate> delegate_;
   SplitPresentation presentation_;
+  bool show_full_url_ = false;
   std::optional<bool> dark_content_override_;
   std::vector<raw_ptr<split_internal::SplitPaneShadowView>> pane_shadows_;
   std::vector<raw_ptr<split_internal::SplitPaneView>> panes_;

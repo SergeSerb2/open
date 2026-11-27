@@ -68,6 +68,10 @@ class OpenPreferences {
                            const std::vector<ProfileID>& profile_ids);
   // Pushes every preference with a runtime effect (startup, profile switch).
   static void ApplyAllEffects();
+  // Pushes app-level Chromium preference effects (website appearance, font
+  // size, default zoom, Do Not Track, HTTPS-Only, extension developer mode)
+  // plus search-suggest state onto a single newly attached Profile.
+  static void ApplyEffectsForProfile(const ProfileID& profile_id);
 
  private:
   friend class base::NoDestructor<OpenPreferences>;
@@ -77,6 +81,7 @@ class OpenPreferences {
 
   bool loading_ = false;
   bool loaded_ = false;
+  bool applying_service_prefs_ = false;
   base::DictValue stored_;
   std::set<std::string> dirty_keys_;
   std::vector<base::OnceClosure> waiters_;
@@ -133,6 +138,7 @@ class OpenSettingsUI : public OpenRpcDomain {
   void AddAdBlockExclusion(const base::DictValue& payload, Reply reply);
   void RemoveAdBlockExclusion(const base::DictValue& payload, Reply reply);
   void ClearBrowsingData(const base::DictValue& payload, Reply reply);
+  void GetDefaultBrowser(const base::DictValue& payload, Reply reply);
   void SetDefaultBrowser(const base::DictValue& payload, Reply reply);
   void GetExtensions(const base::DictValue& payload, Reply reply);
   void ToggleExtension(const base::DictValue& payload, Reply reply);
@@ -245,8 +251,11 @@ class OpenSettingsUI : public OpenRpcDomain {
   base::DictValue ThemeValue() const;
   // The window that shows this page, else the main window.
   WindowID HostWindowId() const;
-  // Opens |url| in a tab of the main browser window and activates it.
-  bool OpenInBrowser(const GURL& url);
+  // Opens |url| in a tab of the main browser window and activates it. When
+  // |profile_id| is given and valid, opens in a Space belonging to that
+  // Profile so the page loads in its Chromium Profile.
+  bool OpenInBrowser(const GURL& url,
+                     const std::optional<ProfileID>& profile_id = std::nullopt);
   // Shows a native file dialog anchored to this page's window. One dialog at
   // a time; |done| gets std::nullopt on cancel or when one is already open.
   void RunFileDialog(int type,

@@ -1,6 +1,7 @@
 import type { JSX } from 'preact';
 import { useContext, useEffect, useState } from 'preact/hooks';
-import { isNativeWebUI } from '../shared/bridge';
+import { rpc } from '../shared/bridge';
+import { shortcutPlatform } from '../shared/shortcuts';
 import { call, errorText } from './api';
 import { CloseGlyph, CopyGlyph, FolderGlyph, MediaGlyph, OpenGlyph, PlayGlyph, PlusGlyph, RevealGlyph, TrashGlyph } from './icons';
 import type { LibMediaItem, MediaSource } from './types';
@@ -35,6 +36,10 @@ const PRESETS: { value: string; label: string }[] = [
   { value: 'downloads', label: 'Downloads' },
   { value: 'pictures', label: 'Pictures' },
 ];
+
+const trashName = () => (shortcutPlatform() === 'windows' ? 'Recycle Bin' : 'Trash');
+const moveToTrashLabel = () => (shortcutPlatform() === 'windows' ? 'Move to Recycle Bin' : 'Move to Trash');
+const folderPlaceholder = () => (shortcutPlatform() === 'windows' ? 'C:\\Users\\you\\Pictures\\Screenshots' : '~/Pictures/Screenshots');
 
 /** Copies decoded pixels as PNG (async clipboard); the C++ fallback writes the file. */
 async function copyImage(item: LibMediaItem): Promise<void> {
@@ -111,7 +116,7 @@ function Lightbox({
             Open Page
           </button>
         )}
-        <IconButton label="Move to Trash" danger onClick={actions.trash}>
+        <IconButton label={moveToTrashLabel()} danger onClick={actions.trash}>
           <TrashGlyph />
         </IconButton>
         <IconButton label="Close" onClick={onClose}>
@@ -131,6 +136,7 @@ export function MediaSection(props: SectionProps): JSX.Element {
   const [tick, setTick] = useState(0);
   const [lightbox, setLightbox] = useState<LibMediaItem | null>(null);
   const [customPath, setCustomPath] = useState<string | null>(null);
+  const [pickingFolder, setPickingFolder] = useState(false);
   const nav = useContext(NavContext);
   const { menu, openMenu, closeMenu } = useMenu();
   const slow = useSlowFlag(loading);
@@ -163,18 +169,18 @@ export function MediaSection(props: SectionProps): JSX.Element {
 
   const trash = (item: LibMediaItem) =>
     confirm({
-      title: `Move “${item.title}” to the Trash?`,
+      title: `Move “${item.title}” to the ${trashName()}?`,
       body: item.source === 'folder' ? 'This file is in one of your own folders.' : undefined,
-      confirm: 'Move to Trash',
+      confirm: moveToTrashLabel(),
       danger: true,
       run: async () => {
         try {
           await call('library.media.delete', { id: item.id });
           setItems((prev) => prev.filter((x) => x.id !== item.id));
           setLightbox(null);
-          toast('Moved to the Trash.');
+          toast(`Moved to the ${trashName()}.`);
         } catch (err) {
-          toast(errorText(err, 'The file could not be moved to the Trash.'));
+          toast(errorText(err, `The file could not be moved to the ${trashName()}.`));
         }
       },
     });
@@ -193,13 +199,34 @@ export function MediaSection(props: SectionProps): JSX.Element {
       toast(errorText(err, 'The page could not be opened.')),
     );
 
-  const addFolder = async (payload: { preset?: string; path?: string }) => {
+  const addFolder = async (payload: { preset?: string; path?: string }): Promise<boolean> => {
     try {
       await call('library.media.addFolder', { ...payload, profile_id: folderProfile });
       toast('Added folder.');
       setTick((t) => t + 1);
+      return true;
     } catch (err) {
       toast(errorText(err, 'The folder could not be added.'));
+      return false;
+    }
+  };
+
+  const pickMediaFolder = async () => {
+    if (pickingFolder) return;
+    setPickingFolder(true);
+    try {
+      const res = await rpc('library.pickMediaFolder', {});
+      if (!res || res.cancelled || res.canceled || !res.path) return;
+      const chosen = res.path.trim();
+      if (!chosen) return;
+      setCustomPath(chosen);
+      if (await addFolder({ path: chosen })) {
+        setCustomPath(null);
+      }
+    } catch (err) {
+      toast(errorText(err, 'Could not open folder picker.'));
+    } finally {
+      setPickingFolder(false);
     }
   };
 
@@ -220,7 +247,8 @@ export function MediaSection(props: SectionProps): JSX.Element {
         checked: folders.some((f) => f.split(/[\\/]/).pop() === p.label),
         onSelect: () => void addFolder({ preset: p.value }),
       })),
-      { label: 'Other Folder…', separatorBefore: true, onSelect: () => setCustomPath('') },
+      { label: 'Choose Folder…', icon: <FolderGlyph size={14} />, separatorBefore: true, onSelect: () => void pickMediaFolder() },
+      { label: 'Other Folder…', onSelect: () => setCustomPath('') },
     ]);
 
   const itemMenu = (e: MouseEvent, item: LibMediaItem) =>
@@ -229,7 +257,7 @@ export function MediaSection(props: SectionProps): JSX.Element {
       { label: 'Open', icon: <OpenGlyph size={14} />, onSelect: () => void act('library.media.open', item) },
       { label: revealLabel(), icon: <RevealGlyph size={14} />, onSelect: () => void act('library.media.reveal', item) },
       ...(item.source_url ? [{ label: 'Open Page', onSelect: () => openSource(item) }] : []),
-      { label: 'Move to Trash', icon: <TrashGlyph size={14} />, danger: true, separatorBefore: true, onSelect: () => trash(item) },
+      { label: moveToTrashLabel(), icon: <TrashGlyph size={14} />, danger: true, separatorBefore: true, onSelect: () => trash(item) },
     ]);
 
   const navRows: NavRow[] = items.map((item) => ({ key: `m:${item.id}`, activate: () => setLightbox(item), remove: () => trash(item) }));
@@ -368,21 +396,27 @@ export function MediaSection(props: SectionProps): JSX.Element {
               </Chip>
             ))}
           </div>
-          <input
-            class="lib-input"
-            data-autofocus
-            placeholder={isNativeWebUI() ? '/Users/you/Pictures/Screenshots' : '/Users/you/Pictures'}
-            value={customPath}
-            spellcheck={false}
-            onInput={(e) => setCustomPath((e.currentTarget as HTMLInputElement).value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && customPath.trim()) {
-                const path = customPath.trim();
-                setCustomPath(null);
-                void addFolder({ path });
-              }
-            }}
-          />
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              class="lib-input"
+              style={{ flex: 1 }}
+              data-autofocus
+              placeholder={folderPlaceholder()}
+              value={customPath}
+              spellcheck={false}
+              onInput={(e) => setCustomPath((e.currentTarget as HTMLInputElement).value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && customPath.trim()) {
+                  const path = customPath.trim();
+                  setCustomPath(null);
+                  void addFolder({ path });
+                }
+              }}
+            />
+            <button type="button" class="lib-btn" disabled={pickingFolder} onClick={() => void pickMediaFolder()}>
+              Choose Folder…
+            </button>
+          </div>
         </Sheet>
       )}
       {menu && <Menu anchor={menu.anchor} items={menu.items} label={menu.label} onClose={closeMenu} />}

@@ -196,14 +196,32 @@ case "${TARGET}" in
       mkdir -p "${STAGE}/icons"
       cp -a "${UNIFIED_DIR}/assets/icons/linux"/product_logo_*.png "${STAGE}/icons/"
     fi
+    if [[ -f "${UNIFIED_DIR}/assets/icons/linux/product_logo_256.png" ]]; then
+      mkdir -p "${STAGE}/share/icons/hicolor/256x256/apps"
+      cp -a "${UNIFIED_DIR}/assets/icons/linux/product_logo_256.png" \
+        "${STAGE}/share/icons/hicolor/256x256/apps/open-browser.png"
+      cp -a "${UNIFIED_DIR}/assets/icons/linux/product_logo_256.png" \
+        "${STAGE}/open-browser.png"
+    else
+      log "WARNING: ${UNIFIED_DIR}/assets/icons/linux/product_logo_256.png is missing" >&2
+    fi
     mv -f "${STAGE}/chrome" "${STAGE}/open"
     ;;
   win-x64)
-    (cd "${out_abs}" && cp -a chrome.exe chrome.dll chrome_elf.dll \
-       chrome_wer.dll *.pak icudtl.dat v8_context_snapshot.bin \
-       libEGL.dll libGLESv2.dll vk_swiftshader.dll vk_swiftshader_icd.json \
-       vulkan-1.dll d3dcompiler_47.dll dxcompiler.dll dxil.dll "${STAGE}/" \
-       2>/dev/null || true)
+    for req in chrome.exe chrome.dll chrome_elf.dll icudtl.dat \
+               v8_context_snapshot.bin resources.pak; do
+      [[ -f "${out_abs}/${req}" ]] ||
+        die "win-x64 stage missing required build artifact: ${out_abs}/${req}"
+      cp -a "${out_abs}/${req}" "${STAGE}/"
+    done
+    for pak in "${out_abs}"/*.pak; do
+      [[ -f "${pak}" ]] && cp -a "${pak}" "${STAGE}/"
+    done
+    for opt in chrome_wer.dll libEGL.dll libGLESv2.dll vk_swiftshader.dll \
+               vk_swiftshader_icd.json vulkan-1.dll d3dcompiler_47.dll \
+               dxcompiler.dll dxil.dll; do
+      [[ -e "${out_abs}/${opt}" ]] && cp -a "${out_abs}/${opt}" "${STAGE}/"
+    done
     cp -a "${out_abs}/locales" "${STAGE}/" 2>/dev/null || true
     if [[ -d "${out_abs}/adblock_resources" ]]; then
       rm -rf "${STAGE}/adblock_resources"

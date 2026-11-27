@@ -26,10 +26,13 @@
 #include "open_unified/ui/design/open_typography.h"
 #include "open_unified/ui/views/open_browser_view.h"
 #include "open_unified/ui/views/open_space_pager_view.h"
+#include "open_unified/ui/views/open_split_container_view.h"
 #include "open_unified/ui/views/open_tab_tree_view.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/clipboard/clipboard_url_info.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -49,10 +52,12 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image_skia_rep.h"
+#include "ui/views/accessibility/ax_virtual_view.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/drag_controller.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/paint_info.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -454,19 +459,19 @@ class OpenSidebarView::ToolbarView : public views::View {
     const bool split = sidebar_->split_view_active_;
     const bool compact = m::chrome::IsCompact(w);
     const bool native_controls =
-        slot_ == WindowControlsSlot::kNativeReserved;
+        slot_ == WindowControlsSlot::kNativeReserved && !sidebar_->on_right_;
     const int b = static_cast<int>(m::chrome::kToolbarButtonSize);
     const int y = static_cast<int>(m::chrome::kToolbarButtonY);
-    // macOS: the system traffic lights (x 12..70) own the leading 77 pt, so
-    // the toggle starts at kSidebarToggleX. Windows and Linux: inside the 32
-    // DIP top strip, starting after leading_controls_inset_ (if any) or at
-    // kSidebarToggleX (8 DIP), aligning 1:1 with HiddenSidebarToggleButton.
+    // macOS (left sidebar): system traffic lights (x 12..70) own the leading
+    // 77 pt, so the toggle starts at kSidebarToggleX. Right-side sidebar on
+    // macOS and Win/Linux have no traffic lights in the sidebar toolbar, so
+    // start after leading_controls_inset_ (if any) or at 8 DIP.
     const int toggle_x =
         native_controls
             ? static_cast<int>(m::chrome::kSidebarToggleX)
             : (leading_controls_inset_ > 0
                    ? leading_controls_inset_
-                   : static_cast<int>(m::chrome::kSidebarToggleX));
+                   : static_cast<int>(m::chrome::kSidebarToggleLeadingInset));
     toggle_->SetBounds(toggle_x, y, b, b);
     const int app_menu_x = toggle_x + b + 2;
     if (app_menu_) {
@@ -598,6 +603,13 @@ class OpenSidebarView::UrlPillView : public views::View,
   }
 
   void Refresh() {
+    const Tab* tab = ActiveTab();
+    if (IsBlankPage(tab)) {
+      GetViewAccessibility().RemoveValue();
+    } else {
+      GetViewAccessibility().SetValue(
+          secondary::FormatUrlForDisplay(tab->url, sidebar_->shows_full_url()));
+    }
     RebuildExtensions();
     InvalidateLayout();
     SchedulePaint();
@@ -743,7 +755,8 @@ class OpenSidebarView::UrlPillView : public views::View,
                    gfx::RectF(10.0f, (height() - 14.0f) * 0.5f, 14.0f, 14.0f),
                    warn);
     }
-    const std::u16string host = DisplayHost(tab->url);
+    const std::u16string host =
+        secondary::FormatUrlForDisplay(tab->url, sidebar_->shows_full_url());
     const gfx::FontList& font = typography::Get(OpenFont::kUrlHost);
     const int x0 = TextLeft(/*page=*/true, insecure);
     const int available = std::max(0, TextRight() - x0);
@@ -758,12 +771,33 @@ class OpenSidebarView::UrlPillView : public views::View,
           gfx::Canvas::NO_ELLIPSIS | gfx::Canvas::NO_SUBPIXEL_RENDERING);
       return;
     }
-    // A long host keeps its end visible; its leading 34 pt fade to clear.
     const gfx::Rect clip(x0, top, available, font.GetHeight());
     cc::PaintCanvas* sk = canvas->sk_canvas();
     sk->saveLayer(gfx::RectToSkRect(clip), cc::PaintFlags());
     canvas->Save();
     canvas->ClipRect(clip);
+    if (sidebar_->shows_full_url()) {
+      // Full-URL mode keeps the scheme/host/path prefix visible and fades out
+      // the trailing edge when longer than the pill.
+      canvas->DrawStringRectWithFlags(
+          host, font, color,
+          gfx::Rect(x0, top, text_w, font.GetHeight()),
+          gfx::Canvas::NO_ELLIPSIS | gfx::Canvas::NO_SUBPIXEL_RENDERING);
+      canvas->Restore();
+      const float fade = std::min(m::url_field::kLongHostFade,
+                                  static_cast<float>(available));
+      const SkPoint points[2] = {SkPoint::Make(x0 + available - fade, 0),
+                                 SkPoint::Make(x0 + available, 0)};
+      const SkColor4f colors[2] = {SkColors::kBlack, SkColors::kTransparent};
+      cc::PaintFlags mask;
+      mask.setShader(cc::PaintShader::MakeLinearGradient(
+          points, colors, nullptr, 2, SkTileMode::kClamp));
+      mask.setBlendMode(SkBlendMode::kDstIn);
+      canvas->DrawRect(gfx::RectF(clip), mask);
+      sk->restore();
+      return;
+    }
+    // A long host keeps its end visible; its leading 34 pt fade to clear.
     canvas->DrawStringRectWithFlags(
         host, font, color,
         gfx::Rect(x0 + available - text_w, top, text_w, font.GetHeight()),
@@ -892,9 +926,11 @@ class OpenSidebarView::FavoriteTileView : public views::View,
  public:
   FavoriteTileView(OpenSidebarView* sidebar, const ItemID& tab_id)
       : sidebar_(sidebar), tab_id_(tab_id) {
+    SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     set_context_menu_controller(this);
     set_drag_controller(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+    GetViewAccessibility().SetName(u"Favorite");
   }
   ~FavoriteTileView() override {
     if (is_dragging_) {
@@ -908,12 +944,22 @@ class OpenSidebarView::FavoriteTileView : public views::View,
 
   void Refresh() {
     if (const Tab* tab = FavoriteTab()) {
-      GetViewAccessibility().SetName(base::UTF8ToUTF16(tab->display_title()));
+      const std::u16string title = base::UTF8ToUTF16(tab->display_title());
+      GetViewAccessibility().SetName(title.empty() ? u"Favorite" : title);
     }
     SchedulePaint();
   }
 
   // views::View:
+  void OnFocus() override {
+    views::View::OnFocus();
+    SchedulePaint();
+  }
+  void OnBlur() override {
+    views::View::OnBlur();
+    SchedulePaint();
+  }
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
   ui::Cursor GetCursor(const ui::MouseEvent& event) override {
     return ui::Cursor(ui::mojom::CursorType::kHand);
   }
@@ -1103,6 +1149,16 @@ class OpenSidebarView::FavoriteTileView : public views::View,
                                  : glyphs::Glyph::kSpeaker,
                    gfx::RectF(bounds.right() - 18, 3, 15, 11),
                    Sk(s.roles.title, speaker_hovered_ ? 0.90f : 0.65f));
+    }
+    if (HasFocus() && !for_drag) {
+      cc::PaintFlags ring;
+      ring.setAntiAlias(true);
+      ring.setStyle(cc::PaintFlags::kStroke_Style);
+      ring.setStrokeWidth(1.5f);
+      ring.setColor(Sk(s.contrast_accent, 0.85f));
+      gfx::RectF inset = bounds;
+      inset.Inset(0.75f);
+      canvas->DrawRoundRect(inset, m::favorites::kCornerRadius - 0.75f, ring);
     }
   }
 
@@ -1362,6 +1418,30 @@ class OpenSidebarView::FavoritesView : public views::View {
 
   int count() const { return static_cast<int>(tiles_.size()); }
 
+  void FocusTileByDelta(FavoriteTileView* from, int delta) {
+    if (tiles_.empty() || !from) {
+      return;
+    }
+    for (size_t i = 0; i < tiles_.size(); ++i) {
+      if (tiles_[i] == from) {
+        const int next = static_cast<int>(i) + delta;
+        if (next >= 0 && next < static_cast<int>(tiles_.size())) {
+          FocusTile(tiles_[static_cast<size_t>(next)]);
+        }
+        return;
+      }
+    }
+  }
+
+  void FocusTileByRowDelta(FavoriteTileView* from, int row_delta) {
+    const int n = count();
+    if (n == 0 || !from) {
+      return;
+    }
+    const int cols = m::favorites::Columns(n, static_cast<float>(width()));
+    FocusTileByDelta(from, row_delta * cols);
+  }
+
   void Rebuild() {
     const Profile* profile = sidebar_->focused_profile();
     std::vector<ItemID> ids;
@@ -1457,32 +1537,44 @@ class OpenSidebarView::FavoritesView : public views::View {
                   Sk(IsDark(s) ? Rgba::White(0.5) : Rgba::Black(0.5)));
   }
 
-  // Drop target: tabs from the tree (add) or tiles (reorder).
+  // Drop target: tabs from the tree (add), tiles (reorder), or external URLs.
   bool GetDropFormats(int* formats,
                       std::set<ui::ClipboardFormatType>* format_types) override {
-    *formats = 0;
+    *formats = ui::OSExchangeData::URL;
     format_types->insert(sidebar_dnd::NodeFormat());
     return true;
   }
   bool CanDrop(const ui::OSExchangeData& data) override {
-    return data.HasCustomFormat(sidebar_dnd::NodeFormat());
+    return data.HasCustomFormat(sidebar_dnd::NodeFormat()) ||
+           data.HasURL(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
   }
   int OnDragUpdated(const ui::DropTargetEvent& event) override {
     const std::optional<ItemID> id = sidebar_dnd::ReadNode(event.data());
-    if (!id) {
-      return ui::DragDropTypes::DRAG_NONE;
-    }
-    // Folders and splits are refused (model rule).
-    const SidebarNode* node = sidebar_->context_->controller()->FindNode(*id);
-    if (node && !node->as_tab()) {
-      drop_index_ = -1;
+    if (id) {
+      // Folders and splits are refused (model rule).
+      const SidebarNode* node = sidebar_->context_->controller()->FindNode(*id);
+      if (node && !node->as_tab()) {
+        drop_index_ = -1;
+        empty_card_->SetDropTarget(false);
+        SchedulePaint();
+        return ui::DragDropTypes::DRAG_NONE;
+      }
+      drop_index_ = IndexAt(event.location());
+      empty_card_->SetDropTarget(true);
       SchedulePaint();
-      return ui::DragDropTypes::DRAG_NONE;
+      return ui::DragDropTypes::DRAG_MOVE;
     }
-    drop_index_ = IndexAt(event.location());
-    empty_card_->SetDropTarget(true);
+    if (!sidebar_->IsIncognito() && sidebar_->focused_profile() != nullptr &&
+        event.data().HasURL(ui::FilenameToURLPolicy::CONVERT_FILENAMES)) {
+      drop_index_ = IndexAt(event.location());
+      empty_card_->SetDropTarget(true);
+      SchedulePaint();
+      return ui::DragDropTypes::DRAG_COPY | ui::DragDropTypes::DRAG_LINK;
+    }
+    drop_index_ = -1;
+    empty_card_->SetDropTarget(false);
     SchedulePaint();
-    return ui::DragDropTypes::DRAG_MOVE;
+    return ui::DragDropTypes::DRAG_NONE;
   }
   void OnDragExited() override {
     drop_index_ = -1;
@@ -1492,18 +1584,40 @@ class OpenSidebarView::FavoritesView : public views::View {
   views::View::DropCallback GetDropCallback(
       const ui::DropTargetEvent& event) override {
     const std::optional<ItemID> id = sidebar_dnd::ReadNode(event.data());
-    const int index = drop_index_;
+    std::string url;
+    if (!id) {
+      const std::vector<ui::ClipboardUrlInfo> urls =
+          event.data().GetURLs(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
+      if (!urls.empty() && urls.front().url.is_valid()) {
+        url = urls.front().url.spec();
+      }
+    }
+    const int index = drop_index_ >= 0 ? drop_index_ : IndexAt(event.location());
     drop_index_ = -1;
     empty_card_->SetDropTarget(false);
     SchedulePaint();
-    if (!id || index < 0) {
+    if (index < 0 || (!id && url.empty())) {
       return base::NullCallback();
     }
-    return base::BindOnce(&FavoritesView::PerformDrop,
-                          weak_factory_.GetWeakPtr(), *id, index);
+    if (id) {
+      return base::BindOnce(&FavoritesView::PerformDrop,
+                            weak_factory_.GetWeakPtr(), *id, index);
+    }
+    return base::BindOnce(&FavoritesView::PerformUrlDrop,
+                          weak_factory_.GetWeakPtr(), std::move(url), index);
   }
 
  private:
+  void FocusTile(FavoriteTileView* target) {
+    if (!target || !target->GetViewAccessibility().IsAccessibilityFocusable()) {
+      return;
+    }
+    if (views::FocusManager* fm = target->GetFocusManager()) {
+      fm->SetFocusedViewWithReason(
+          target, views::FocusManager::FocusChangeReason::kFocusTraversal);
+    }
+  }
+
   void PerformDrop(const ItemID& id,
                    int index,
                    const ui::DropTargetEvent& event,
@@ -1526,6 +1640,26 @@ class OpenSidebarView::FavoritesView : public views::View {
     intent.index = target;
     sidebar_->context_->Send(intent);
     output_drag_op = ui::mojom::DragOperation::kMove;
+  }
+
+  void PerformUrlDrop(
+      const std::string& url,
+      int index,
+      const ui::DropTargetEvent& event,
+      ui::mojom::DragOperation& output_drag_op,
+      std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+    const Profile* profile = sidebar_->focused_profile();
+    if (url.empty() || !profile || sidebar_->IsIncognito()) {
+      output_drag_op = ui::mojom::DragOperation::kNone;
+      return;
+    }
+    OpenIntent intent = OpenIntent::Of(OpenIntentKind::kOpenUrl);
+    intent.text = url;
+    intent.parent = NodeParent{NodeParentKind::kFavorites, profile->id};
+    intent.index = static_cast<size_t>(std::max(0, index));
+    intent.space_id = sidebar_->context_->FocusedSpaceId();
+    sidebar_->context_->Send(intent);
+    output_drag_op = ui::mojom::DragOperation::kCopy;
   }
 
   int IndexAt(const gfx::Point& p) const {
@@ -1611,6 +1745,31 @@ class OpenSidebarView::FavoritesView : public views::View {
 BEGIN_METADATA(OpenSidebarView, FavoritesView)
 END_METADATA
 
+bool OpenSidebarView::FavoriteTileView::OnKeyPressed(
+    const ui::KeyEvent& event) {
+  switch (event.key_code()) {
+    case ui::VKEY_RETURN:
+    case ui::VKEY_SPACE:
+      sidebar_->context_->Send(
+          OpenIntent::ForNode(OpenIntentKind::kSelectFavorite, tab_id_));
+      return true;
+    case ui::VKEY_LEFT:
+      sidebar_->favorites_->FocusTileByDelta(this, -1);
+      return true;
+    case ui::VKEY_RIGHT:
+      sidebar_->favorites_->FocusTileByDelta(this, +1);
+      return true;
+    case ui::VKEY_UP:
+      sidebar_->favorites_->FocusTileByRowDelta(this, -1);
+      return true;
+    case ui::VKEY_DOWN:
+      sidebar_->favorites_->FocusTileByRowDelta(this, +1);
+      return true;
+    default:
+      return views::View::OnKeyPressed(event);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Space switcher strip [42, 0, W - 84, 50]: items 36 x 34 at pitch 34, y 8,
 // centered when they fit, else scrolled with 28 pt edge fades.
@@ -1622,6 +1781,7 @@ class OpenSidebarView::SwitcherStripView : public views::View,
 
  public:
   explicit SwitcherStripView(OpenSidebarView* sidebar) : sidebar_(sidebar) {
+    SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     set_context_menu_controller(this);
     set_drag_controller(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kTabList);
@@ -1631,6 +1791,7 @@ class OpenSidebarView::SwitcherStripView : public views::View,
         base::BindRepeating(
             [](SwitcherStripView* self, double v) {
               self->scroll_x_ = static_cast<float>(v);
+              self->UpdateVirtualBounds();
               self->SchedulePaint();
             },
             base::Unretained(this)));
@@ -1639,19 +1800,32 @@ class OpenSidebarView::SwitcherStripView : public views::View,
   void Refresh() {
     spaces_ = sidebar_->context_->controller()->GetWindowSpaceIds(
         sidebar_->context_->window_id());
+    if (spaces_.empty()) {
+      focused_index_ = -1;
+    } else if (focused_index_ < 0 ||
+               focused_index_ >= static_cast<int>(spaces_.size())) {
+      focused_index_ = std::max(0, IndexOf(sidebar_->context_->FocusedSpaceId()));
+    }
+    RebuildVirtualAccessibility();
     RevealFocused(false);
+    UpdateActiveDescendant();
     SchedulePaint();
   }
 
   void RevealFocused(bool animate) {
+    UpdateVirtualSelection();
+    RevealIndex(IndexOf(sidebar_->context_->FocusedSpaceId()), animate);
+  }
+
+  void RevealIndex(int index, bool animate) {
     const float content = ContentWidth();
     const float w = width();
     if (content <= w) {
       scroll_x_ = 0;
+      UpdateVirtualBounds();
       return;
     }
-    const int index = IndexOf(sidebar_->context_->FocusedSpaceId());
-    if (index < 0) {
+    if (index < 0 || index >= static_cast<int>(spaces_.size())) {
       return;
     }
     const float fade = m::bottom_bar::kSwitcherFadeWidth;
@@ -1672,6 +1846,60 @@ class OpenSidebarView::SwitcherStripView : public views::View,
   }
 
   // views::View:
+  void Layout(PassKey) override { UpdateVirtualBounds(); }
+
+  void OnFocus() override {
+    views::View::OnFocus();
+    if (!spaces_.empty()) {
+      focused_index_ = std::max(0, IndexOf(sidebar_->context_->FocusedSpaceId()));
+      RevealIndex(focused_index_, true);
+    }
+    UpdateActiveDescendant();
+    SchedulePaint();
+  }
+
+  void OnBlur() override {
+    views::View::OnBlur();
+    UpdateActiveDescendant();
+    SchedulePaint();
+  }
+
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    if (spaces_.empty()) {
+      return views::View::OnKeyPressed(event);
+    }
+    if (focused_index_ < 0 ||
+        focused_index_ >= static_cast<int>(spaces_.size())) {
+      focused_index_ = std::max(0, IndexOf(sidebar_->context_->FocusedSpaceId()));
+    }
+    switch (event.key_code()) {
+      case ui::VKEY_LEFT:
+        if (focused_index_ > 0) {
+          --focused_index_;
+        }
+        RevealIndex(focused_index_, true);
+        UpdateActiveDescendant();
+        SchedulePaint();
+        return true;
+      case ui::VKEY_RIGHT:
+        if (focused_index_ + 1 < static_cast<int>(spaces_.size())) {
+          ++focused_index_;
+        }
+        RevealIndex(focused_index_, true);
+        UpdateActiveDescendant();
+        SchedulePaint();
+        return true;
+      case ui::VKEY_RETURN:
+      case ui::VKEY_SPACE:
+        sidebar_->context_->Send(OpenIntent::ForSpace(
+            OpenIntentKind::kSwitchSpace,
+            spaces_[static_cast<size_t>(focused_index_)]));
+        return true;
+      default:
+        return views::View::OnKeyPressed(event);
+    }
+  }
+
   void RemovedFromWidget() override {
     // The widget's compositor may die after this view leaves it.
     reveal_->SetCompositor(nullptr);
@@ -1712,6 +1940,16 @@ class OpenSidebarView::SwitcherStripView : public views::View,
       if (static_cast<int>(i) == hovered_) {
         FillRoundRect(canvas, plate, m::bottom_bar::kPlateRadius,
                       Sk(pressed_ ? ButtonPressed(focused) : ButtonHover(focused)));
+      }
+      if (HasFocus() && static_cast<int>(i) == focused_index_) {
+        cc::PaintFlags ring;
+        ring.setAntiAlias(true);
+        ring.setStyle(cc::PaintFlags::kStroke_Style);
+        ring.setStrokeWidth(1.5f);
+        ring.setColor(Sk(focused.contrast_accent, 0.85f));
+        gfx::RectF inset = plate;
+        inset.Inset(0.75f);
+        canvas->DrawRoundRect(inset, m::bottom_bar::kPlateRadius - 0.75f, ring);
       }
       const bool current = space->id == focused_id;
       // Current Space in color, others gray at 0.55 (F0001).
@@ -1982,6 +2220,59 @@ class OpenSidebarView::SwitcherStripView : public views::View,
         std::lround(rel / m::bottom_bar::kSwitcherPitch));
     return std::clamp(slot, 0, static_cast<int>(spaces_.size()));
   }
+  gfx::RectF ItemRect(size_t index) const {
+    const float w = width();
+    const float content = ContentWidth();
+    const float x0 = content <= w ? (w - content) / 2 - 1 : -1 - scroll_x_;
+    return gfx::RectF(x0 + index * m::bottom_bar::kSwitcherPitch,
+                      m::bottom_bar::kSwitcherItemY,
+                      m::bottom_bar::kSwitcherItemSize.w,
+                      m::bottom_bar::kSwitcherItemSize.h);
+  }
+  void RebuildVirtualAccessibility() {
+    auto& a11y = GetViewAccessibility();
+    a11y.ClearActiveDescendant();
+    a11y.RemoveAllVirtualChildViews();
+    const SpaceID focused_id = sidebar_->context_->FocusedSpaceId();
+    for (size_t i = 0; i < spaces_.size(); ++i) {
+      auto item = std::make_unique<views::AXVirtualView>();
+      item->SetRole(ax::mojom::Role::kTab);
+      const Space* space = sidebar_->context_->controller()->GetSpace(spaces_[i]);
+      const std::u16string title =
+          space && space->title && !space->title->empty()
+              ? base::UTF8ToUTF16(*space->title)
+              : std::u16string(u"Space");
+      item->SetName(title);
+      item->SetIsSelected(spaces_[i] == focused_id);
+      item->SetPosInSet(static_cast<int>(i) + 1);
+      item->SetSetSize(static_cast<int>(spaces_.size()));
+      item->SetBounds(ItemRect(i));
+      a11y.AddVirtualChildView(std::move(item));
+    }
+  }
+  void UpdateVirtualBounds() {
+    const auto& children = GetViewAccessibility().virtual_children();
+    for (size_t i = 0; i < children.size() && i < spaces_.size(); ++i) {
+      children[i]->SetBounds(ItemRect(i));
+    }
+  }
+  void UpdateVirtualSelection() {
+    const SpaceID focused_id = sidebar_->context_->FocusedSpaceId();
+    const auto& children = GetViewAccessibility().virtual_children();
+    for (size_t i = 0; i < children.size() && i < spaces_.size(); ++i) {
+      children[i]->SetIsSelected(spaces_[i] == focused_id);
+    }
+  }
+  void UpdateActiveDescendant() {
+    auto& a11y = GetViewAccessibility();
+    const auto& children = a11y.virtual_children();
+    if (HasFocus() && focused_index_ >= 0 &&
+        static_cast<size_t>(focused_index_) < children.size()) {
+      a11y.SetActiveDescendant(*children[static_cast<size_t>(focused_index_)]);
+    } else {
+      a11y.ClearActiveDescendant();
+    }
+  }
   void SetHovered(int i) {
     if (i != hovered_) {
       hovered_ = i;
@@ -1992,6 +2283,7 @@ class OpenSidebarView::SwitcherStripView : public views::View,
   raw_ptr<OpenSidebarView> sidebar_;
   std::vector<SpaceID> spaces_;
   int hovered_ = -1;
+  int focused_index_ = -1;
   int pressed_index_ = -1;
   int reorder_drop_index_ = -1;
   bool pressed_ = false;
@@ -2135,6 +2427,29 @@ void OpenSidebarView::SetPresentation(Presentation presentation) {
   }
   presentation_ = presentation;
   SchedulePaint();
+}
+
+void OpenSidebarView::SetOnRight(bool on_right) {
+  if (on_right_ == on_right) {
+    return;
+  }
+  on_right_ = on_right;
+  if (toolbar_) {
+    toolbar_->InvalidateLayout();
+    toolbar_->SchedulePaint();
+  }
+  InvalidateLayout();
+  SchedulePaint();
+}
+
+void OpenSidebarView::SetShowFullUrl(bool full_url) {
+  if (show_full_url_ == full_url) {
+    return;
+  }
+  show_full_url_ = full_url;
+  if (url_pill_) {
+    url_pill_->Refresh();
+  }
 }
 
 void OpenSidebarView::SetWindowControlsSlot(WindowControlsSlot slot) {
@@ -2486,15 +2801,15 @@ void OpenSidebarView::Layout(PassKey) {
 }
 
 void OpenSidebarView::OnPaint(gfx::Canvas* canvas) {
-  // Light content: the last 3 pt at the right edge, black 0.07 (anchored).
+  // Light content: the 3 pt seam band facing the web panel (anchored).
   if (presentation_ != Presentation::kAnchored) {
     return;
   }
   const OpenSpaceThemeState& s = context_->ThemeStateFor(context_->FocusedSpaceId());
   if (s.roles.edge_band) {
     const float band = theme::SidebarRoles::kEdgeBandWidth;
-    canvas->FillRect(gfx::ToEnclosingRect(gfx::RectF(width() - band, 0, band,
-                                                     height())),
+    const float x = on_right_ ? 0.0f : (width() - band);
+    canvas->FillRect(gfx::ToEnclosingRect(gfx::RectF(x, 0, band, height())),
                      Sk(*s.roles.edge_band));
   }
 }

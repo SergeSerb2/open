@@ -13,6 +13,7 @@
 #include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/json/json_reader.h"
@@ -92,6 +93,25 @@ constexpr char kKeybindingsFile[] = "keybindings.json";
 constexpr char kPendingWipeFile[] = ".pending-wipe.json";
 constexpr char kLittleOpenGlobalHotkeyId[] = "little-open-global";
 constexpr base::TimeDelta kAutoArchiveSweepInterval = base::Seconds(60);
+constexpr base::TimeDelta kAutoUpdateCheckInterval = base::Hours(6);
+
+bool IsAutomationModeEnabled() {
+  if (const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess()) {
+    if (cmd->HasSwitch(switches::kAutomationSocket) ||
+        cmd->HasSwitch(switches::kAutomationPort) ||
+        cmd->HasSwitch("open-automation-socket") ||
+        cmd->HasSwitch("open-automation-port")) {
+      return true;
+    }
+  }
+  if (std::unique_ptr<base::Environment> env = base::Environment::Create()) {
+    if (auto val = env->GetVar(switches::kAutomationSocketEnv);
+        val && !val->empty()) {
+      return true;
+    }
+  }
+  return false;
+}
 
 bool IsSafeProfileDirectoryName(std::string_view name) {
   if (name.empty() || name.size() > 255) {
@@ -878,6 +898,7 @@ void OpenBrowserService::Shutdown() {
   }
   started_ = false;
   auto_archive_timer_.Stop();
+  auto_update_timer_.Stop();
   little_open_last_active_.clear();
   if (power_observer_registered_) {
     if (base::PowerMonitor* pm = base::PowerMonitor::GetInstance()) {
@@ -1060,6 +1081,7 @@ ProfileServices* OpenBrowserService::ProfileServicesFor(const ProfileID& id) {
   auto services = CreateProfileServices(*profile, chrome_profile);
   ProfileServices* raw = services.get();
   profiles_.emplace(id, std::move(services));
+  webui::OpenPreferences::ApplyEffectsForProfile(id);
   return raw;
 }
 
@@ -1503,6 +1525,7 @@ void OpenBrowserService::OnNewChromeProfileReady(
   const Profile* profile = model_->FindProfile(id);
   if (chrome_profile && profile && !profiles_.contains(id)) {
     profiles_.emplace(id, CreateProfileServices(*profile, chrome_profile));
+    webui::OpenPreferences::ApplyEffectsForProfile(id);
   }
   std::move(done).Run(chrome_profile ? id : ProfileID());
 }
@@ -1891,30 +1914,36 @@ void OpenBrowserService::MaybeStartAutomationServer() {
 #endif
 }
 
-void OpenBrowserService::ApplyPreferencesNow() {
+void OpenBrowserService::ApplyPreferencesNow(std::string_view key) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  ApplyPreferencesInternal(/*schedule_sync_push=*/true);
+  ApplyPreferencesInternal(/*schedule_sync_push=*/true, key);
 }
 
-void OpenBrowserService::ApplyPreferencesInternal(bool schedule_sync_push) {
+void OpenBrowserService::ApplyPreferencesInternal(bool schedule_sync_push,
+                                                  std::string_view key) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!started_) {
+  if (!started_ || applying_preferences_) {
     return;
   }
+  base::AutoReset<bool> applying(&applying_preferences_, true);
   webui::OpenPreferences* prefs = webui::OpenPreferences::Get();
+  const bool all = key.empty();
 
   // 1. Download location + prompt toggle per attached Profile.
-  for (const auto& [id, services] : profiles_) {
-    const Profile* profile = model_->FindProfile(id);
-    if (profile && services && services->chrome_profile) {
-      OpenDownloadBridge::ApplyDownloadPreferences(
-          services->chrome_profile, profile->settings.download_directory,
-          profile->settings.ask_where_to_save_each_file);
+  if (all || key == "downloads.location" || key == "downloads.askEachTime") {
+    for (const auto& [id, services] : profiles_) {
+      const Profile* profile = model_->FindProfile(id);
+      if (profile && services && services->chrome_profile) {
+        OpenDownloadBridge::ApplyDownloadPreferences(
+            services->chrome_profile, profile->settings.download_directory,
+            profile->settings.ask_where_to_save_each_file);
+      }
     }
   }
 
   // 2. Auto Picture-in-Picture enabled & disabled hosts.
-  if (media_bridge_) {
+  if (media_bridge_ && (all || key == "advanced.pictureInPicture" ||
+                        key == "advanced.pipExcludedHosts")) {
     const base::Value pip_enabled = prefs->GetValue("advanced.pictureInPicture");
     if (pip_enabled.is_bool()) {
       media_bridge_->SetAutoPiPEnabled(pip_enabled.GetBool());
@@ -1931,42 +1960,67 @@ void OpenBrowserService::ApplyPreferencesInternal(bool schedule_sync_push) {
     }
   }
 
-  // 3. Offer Translate toggle (general.offerTranslate && advanced.translateOffer).
-  if (translate_controller_) {
+  // 3. Offer Translate toggle (general.offerTranslate).
+  if (translate_controller_ && (all || key == "general.offerTranslate")) {
     const base::Value gen = prefs->GetValue("general.offerTranslate");
-    const base::Value adv = prefs->GetValue("advanced.translateOffer");
-    const bool offer_translate =
-        (!gen.is_bool() || gen.GetBool()) && (!adv.is_bool() || adv.GetBool());
+    const bool offer_translate = !gen.is_bool() || gen.GetBool();
     content::WebContents* active_wc =
         tab_bridge_ ? tab_bridge_->ActiveWebContents() : nullptr;
     translate_controller_->SetOfferTranslateEnabled(offer_translate, active_wc);
   }
 
   // 4. App Icon.
-  if (OpenPlatform* platform = OpenPlatform::Get()) {
-    if (schedule_sync_push || prefs->stored().Find("appearance.appIcon")) {
-      const base::Value icon_val = prefs->GetValue("appearance.appIcon");
-      if (icon_val.is_string()) {
-        const std::string& id = icon_val.GetString();
-        platform->SetAppIcon(id == "open-indigo" ? std::string() : id);
+  if (all || key == "appearance.appIcon") {
+    if (OpenPlatform* platform = OpenPlatform::Get()) {
+      if (schedule_sync_push || prefs->stored().Find("appearance.appIcon")) {
+        const base::Value icon_val = prefs->GetValue("appearance.appIcon");
+        if (icon_val.is_string()) {
+          const std::string& id = icon_val.GetString();
+          platform->SetAppIcon(id == "open-indigo" ? std::string() : id);
+        }
       }
     }
   }
 
   // 5. Boosts enabled toggle.
-  if (boost_controller_) {
+  if (boost_controller_ && (all || key == "advanced.enableBoosts")) {
     boost_controller_->OnBoostsPreferenceChanged();
   }
 
   // 5b. LiveData calendar ICS feeds & GitHub bearer token.
-  if (livedata_) {
+  if (livedata_ &&
+      (all || key.starts_with("previews.") || key.starts_with("calendar."))) {
     ScheduleLiveDataPreferencesAndAuth(
         weak_factory_.GetWeakPtr(), user_data_dir_.AppendASCII(kStateDirName),
         livedata_.get());
   }
 
   // 6. Global Little Open hotkey.
-  ReloadGlobalHotkeys();
+  if (all || key == "links.littleOpenHotkey") {
+    ReloadGlobalHotkeys();
+  }
+
+  // 6b. Periodic automatic update checks (suppressed in E2E automation mode).
+  if (all || key == "general.automaticUpdates") {
+    const base::Value auto_updates_val =
+        prefs->GetValue("general.automaticUpdates");
+    const bool auto_updates_enabled =
+        !auto_updates_val.is_bool() || auto_updates_val.GetBool();
+    bool automation_active = IsAutomationModeEnabled();
+#if BUILDFLAG(OPEN_ENABLE_AUTOMATION)
+    automation_active = automation_active || (automation_server_ != nullptr);
+#endif
+    if (auto_updates_enabled && updater_ && !automation_active) {
+      if (!auto_update_timer_.IsRunning()) {
+        auto_update_timer_.Start(
+            FROM_HERE, kAutoUpdateCheckInterval,
+            base::BindRepeating(&OpenBrowserService::RunScheduledUpdateCheck,
+                                weak_factory_.GetWeakPtr()));
+      }
+    } else {
+      auto_update_timer_.Stop();
+    }
+  }
 
   // 7. Debounced Sync push for portable preferences.
   if (schedule_sync_push && sync_ && sync_->is_signed_in() &&
@@ -1974,6 +2028,14 @@ void OpenBrowserService::ApplyPreferencesInternal(bool schedule_sync_push) {
     sync_->ScheduleCollectionPush(
         SyncCollectionToString(SyncCollection::kSettingsPreferences));
   }
+}
+
+void OpenBrowserService::RunScheduledUpdateCheck() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!started_ || !updater_) {
+    return;
+  }
+  updater_->CheckForUpdates(/*user_initiated=*/false, base::DoNothing());
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>

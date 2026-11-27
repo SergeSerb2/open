@@ -57,6 +57,7 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/drag_controller.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/paint_info.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -803,6 +804,7 @@ class OpenTabTreeView::RowView : public views::View,
     selection_.SetSlideDuration(motion::Seconds(motion::kSelectionFade));
     set_context_menu_controller(this);
     set_drag_controller(this);
+    UpdateFocusBehavior();
     UpdateAccessibility();
   }
 
@@ -819,6 +821,7 @@ class OpenTabTreeView::RowView : public views::View,
       return;
     }
     descriptor_ = d;
+    UpdateFocusBehavior();
     UpdateAccessibility();
     SchedulePaint();
   }
@@ -828,6 +831,9 @@ class OpenTabTreeView::RowView : public views::View,
       return;
     }
     selected_ = selected;
+    if (descriptor_.kind == RowKind::kNode) {
+      GetViewAccessibility().SetIsSelected(selected_);
+    }
     if (animate) {
       selected ? selection_.Show() : selection_.Hide();
     } else {
@@ -879,6 +885,76 @@ class OpenTabTreeView::RowView : public views::View,
   }
 
   // views::View:
+  void OnFocus() override {
+    views::View::OnFocus();
+    ScrollViewToVisible();
+    SchedulePaint();
+  }
+
+  void OnBlur() override {
+    views::View::OnBlur();
+    SchedulePaint();
+  }
+
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    if (rename_) {
+      return views::View::OnKeyPressed(event);
+    }
+    switch (event.key_code()) {
+      case ui::VKEY_RETURN:
+      case ui::VKEY_SPACE:
+        if (descriptor_.kind == RowKind::kNode ||
+            descriptor_.kind == RowKind::kNewTab) {
+          Activate(Part::kBody, gfx::Point(), event.flags());
+          return true;
+        }
+        break;
+      case ui::VKEY_UP:
+        tree_->FocusAdjacentRow(this, -1);
+        return true;
+      case ui::VKEY_DOWN:
+        tree_->FocusAdjacentRow(this, +1);
+        return true;
+      case ui::VKEY_RIGHT:
+        if (descriptor_.kind == RowKind::kNode) {
+          if (const SidebarNode* n = node()) {
+            if (const Folder* f = n->as_folder()) {
+              if (!f->is_expanded) {
+                OpenIntent intent = OpenIntent::ForNode(
+                    OpenIntentKind::kSetFolderExpanded, descriptor_.node_id);
+                intent.flag = true;
+                Send(intent);
+              } else {
+                tree_->FocusAdjacentRow(this, +1);
+              }
+              return true;
+            }
+          }
+        }
+        break;
+      case ui::VKEY_LEFT:
+        if (descriptor_.kind == RowKind::kNode) {
+          if (const SidebarNode* n = node()) {
+            if (const Folder* f = n->as_folder(); f && f->is_expanded) {
+              OpenIntent intent = OpenIntent::ForNode(
+                  OpenIntentKind::kSetFolderExpanded, descriptor_.node_id);
+              intent.flag = false;
+              Send(intent);
+              return true;
+            }
+          }
+          if (descriptor_.parent.kind == NodeParentKind::kFolder) {
+            tree_->FocusRowByNodeId(descriptor_.parent.owner_id);
+            return true;
+          }
+        }
+        break;
+      default:
+        break;
+    }
+    return views::View::OnKeyPressed(event);
+  }
+
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
     return gfx::Size(0, static_cast<int>(RowHeight(descriptor_.kind)));
@@ -1248,6 +1324,13 @@ class OpenTabTreeView::RowView : public views::View,
     Send(OpenIntent::Select(descriptor_.node_id, space_id));
   }
 
+  void UpdateFocusBehavior() {
+    const bool focusable = descriptor_.kind == RowKind::kNode ||
+                           descriptor_.kind == RowKind::kNewTab;
+    SetFocusBehavior(focusable ? FocusBehavior::ACCESSIBLE_ONLY
+                               : FocusBehavior::NEVER);
+  }
+
   void UpdateAccessibility() {
     auto& a11y = GetViewAccessibility();
     switch (descriptor_.kind) {
@@ -1266,16 +1349,31 @@ class OpenTabTreeView::RowView : public views::View,
         break;
     }
     a11y.SetRole(ax::mojom::Role::kTreeItem);
+    a11y.SetIsSelected(selected_);
+    a11y.SetHierarchicalLevel(descriptor_.depth + 1);
     const SidebarNode* n = node();
     if (!n) {
+      a11y.SetName(u"Tab");
+      a11y.RemoveExpandCollapseState();
       return;
     }
     if (const Tab* tab = n->as_tab()) {
-      a11y.SetName(base::UTF8ToUTF16(tab->display_title()));
+      const std::u16string title = base::UTF8ToUTF16(tab->display_title());
+      a11y.SetName(title.empty() ? u"Tab" : title);
+      a11y.RemoveExpandCollapseState();
     } else if (const Folder* f = n->as_folder()) {
-      a11y.SetName(base::UTF8ToUTF16(f->title));
+      const std::u16string title = base::UTF8ToUTF16(f->title);
+      a11y.SetName(title.empty() ? u"Folder" : title);
+      if (f->is_expanded) {
+        a11y.SetIsExpanded();
+      } else {
+        a11y.SetIsCollapsed();
+      }
     } else if (const Split* s = n->as_split()) {
-      a11y.SetName(base::UTF8ToUTF16(s->custom_title.value_or("Split View")));
+      const std::u16string title =
+          base::UTF8ToUTF16(s->custom_title.value_or("Split View"));
+      a11y.SetName(title.empty() ? u"Split View" : title);
+      a11y.RemoveExpandCollapseState();
     }
   }
 
@@ -1409,6 +1507,16 @@ class OpenTabTreeView::RowView : public views::View,
                    AccessoryIsUnload() ? glyphs::Glyph::kMinus
                                        : glyphs::Glyph::kClose,
                    acc, Sk(roles.title, hovered_part_ == Part::kAccessory ? 0.85f : 0.6f));
+    }
+    if (HasFocus() && !for_drag && !rename_) {
+      cc::PaintFlags ring;
+      ring.setAntiAlias(true);
+      ring.setStyle(cc::PaintFlags::kStroke_Style);
+      ring.setStrokeWidth(1.5f);
+      ring.setColor(Sk(state.contrast_accent, 0.85f));
+      gfx::RectF inset = fill;
+      inset.Inset(0.75f);
+      canvas->DrawRoundRect(inset, sl::kRowFillCornerRadius - 0.75f, ring);
     }
   }
 
@@ -1732,6 +1840,16 @@ class OpenTabTreeView::RowView : public views::View,
     DrawTitle(canvas, u"New Tab", typography::Get(OpenFont::kNewTab),
               open ? Sk(roles.title) : Sk(roles.new_tab_label), sl::kTitleX,
               w - sl::kTitleTrailingInset);
+    if (HasFocus()) {
+      cc::PaintFlags ring;
+      ring.setAntiAlias(true);
+      ring.setStyle(cc::PaintFlags::kStroke_Style);
+      ring.setStrokeWidth(1.5f);
+      ring.setColor(Sk(tree_->theme_state().contrast_accent, 0.85f));
+      gfx::RectF inset = fill;
+      inset.Inset(0.75f);
+      canvas->DrawRoundRect(inset, sl::kRowFillCornerRadius - 0.75f, ring);
+    }
   }
 
   raw_ptr<OpenTabTreeView> tree_;
@@ -1764,6 +1882,7 @@ class OpenTabTreeView::ListView : public views::View,
     bounds_animator_.SetAnimationDuration(motion::Seconds(motion::kRowStructure));
     set_context_menu_controller(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kTree);
+    GetViewAccessibility().SetName(u"Tabs");
   }
 
   float TotalHeight() const {
@@ -2471,6 +2590,52 @@ std::optional<gfx::Rect> OpenTabTreeView::GetRowBoundsInScreen(
 OpenTabTreeView::RowView* OpenTabTreeView::FindRow(const ItemID& node_id) const {
   auto it = row_views_.find(node_id);
   return it == row_views_.end() ? nullptr : it->second.get();
+}
+
+void OpenTabTreeView::FocusRowView(RowView* target) {
+  if (!target || !target->GetViewAccessibility().IsAccessibilityFocusable()) {
+    return;
+  }
+  target->ScrollViewToVisible();
+  if (views::FocusManager* fm = target->GetFocusManager()) {
+    fm->SetFocusedViewWithReason(
+        target, views::FocusManager::FocusChangeReason::kFocusTraversal);
+  }
+}
+
+void OpenTabTreeView::FocusAdjacentRow(RowView* from, int delta) {
+  if (!from || delta == 0 || rows_.empty()) {
+    return;
+  }
+  int idx = -1;
+  for (size_t i = 0; i < rows_.size(); ++i) {
+    auto it = row_views_.find(rows_[i].key);
+    if (it != row_views_.end() && it->second == from) {
+      idx = static_cast<int>(i);
+      break;
+    }
+  }
+  if (idx < 0) {
+    return;
+  }
+  for (int i = idx + delta; i >= 0 && i < static_cast<int>(rows_.size());
+       i += delta) {
+    const RowDescriptor& d = rows_[static_cast<size_t>(i)];
+    if (d.kind != RowKind::kNode && d.kind != RowKind::kNewTab) {
+      continue;
+    }
+    auto it = row_views_.find(d.key);
+    if (it != row_views_.end() && it->second) {
+      FocusRowView(it->second.get());
+      return;
+    }
+  }
+}
+
+void OpenTabTreeView::FocusRowByNodeId(const ItemID& node_id) {
+  if (RowView* row = FindRow(node_id)) {
+    FocusRowView(row);
+  }
 }
 
 void OpenTabTreeView::Layout(PassKey) {

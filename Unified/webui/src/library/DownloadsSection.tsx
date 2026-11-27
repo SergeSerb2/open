@@ -1,6 +1,7 @@
 import type { JSX } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { RPC_EVENTS } from '../shared/bridge';
+import { shortcutPlatform } from '../shared/shortcuts';
 import { call, errorText, onEvent } from './api';
 import {
   CancelGlyph,
@@ -38,6 +39,8 @@ type StateFilter = 'all' | 'active' | 'completed' | 'failed';
 
 const isActive = (d: LibDownload) => d.state === 'in_progress' || d.state === 'paused';
 const isFailed = (d: LibDownload) => d.state === 'interrupted' || d.state === 'cancelled';
+const trashName = () => (shortcutPlatform() === 'windows' ? 'Recycle Bin' : 'Trash');
+const moveToTrashLabel = () => (shortcutPlatform() === 'windows' ? 'Move to Recycle Bin' : 'Move to Trash');
 
 function Ring({ progress, paused }: { progress: number; paused: boolean }): JSX.Element {
   const r = 9;
@@ -190,11 +193,11 @@ export function DownloadsSection(props: SectionProps): JSX.Element {
 
   const trash = (d: LibDownload) =>
     confirm({
-      title: `Move “${d.filename}” to the Trash?`,
+      title: `Move “${d.filename}” to the ${trashName()}?`,
       body: 'The file is removed from your Downloads list too.',
-      confirm: 'Move to Trash',
+      confirm: moveToTrashLabel(),
       danger: true,
-      run: () => act('library.downloads.trash', d, 'Moved to the Trash.'),
+      run: () => act('library.downloads.trash', d, `Moved to the ${trashName()}.`),
     });
 
   const primary = (d: LibDownload) => {
@@ -216,7 +219,7 @@ export function DownloadsSection(props: SectionProps): JSX.Element {
       ...(isFailed(d)
         ? [{ label: 'Retry', icon: <RetryGlyph size={14} />, onSelect: () => void act('library.downloads.retry', d, 'Retrying download.') }]
         : []),
-      { label: 'Move to Trash', icon: <TrashGlyph size={14} />, separatorBefore: true, danger: true, disabled: d.state !== 'completed' || !d.fileExists, onSelect: () => trash(d) },
+      { label: moveToTrashLabel(), icon: <TrashGlyph size={14} />, separatorBefore: true, danger: true, disabled: d.state !== 'completed' || !d.fileExists, onSelect: () => trash(d) },
       { label: 'Remove from List', disabled: isActive(d), onSelect: () => void act('library.downloads.remove', d) },
     ]);
 

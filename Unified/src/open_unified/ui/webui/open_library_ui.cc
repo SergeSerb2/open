@@ -13,6 +13,7 @@
 #include "base/barrier_callback.h"
 #include "base/base64url.h"
 #include "base/base_paths.h"
+#include "base/environment.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -28,6 +29,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -50,6 +52,10 @@
 #include "open_unified/core/store/sqlite_stores.h"
 #include "ui/base/clipboard/file_info.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/gfx/native_ui_types.h"
+#include "ui/shell_dialogs/select_file_dialog.h"   // nogncheck
+#include "ui/shell_dialogs/select_file_policy.h"   // nogncheck
+#include "ui/shell_dialogs/selected_file_info.h"   // nogncheck
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -57,9 +63,12 @@
 
 #include <shellapi.h>
 
-// winuser.h defines FindWindow -> FindWindowW, colliding with
-// BrowserModel::FindWindow.
+// Guard against Win32 macro collision with BrowserModel::FindWindow (keep
+// base/win/windows_types.h's file_util.h macros intact so base::CreateDirectory
+// resolves to its *W export).
+#ifdef FindWindow
 #undef FindWindow
+#endif
 #endif
 
 namespace open_unified::webui {
@@ -88,6 +97,7 @@ constexpr const char* kDownloadActions[] = {"pause",  "resume", "cancel",
 constexpr char kMediaList[] = "library.media.list";
 constexpr char kMediaAddFolder[] = "library.media.addFolder";
 constexpr char kMediaRemoveFolder[] = "library.media.removeFolder";
+constexpr char kMediaPickFolder[] = "library.pickMediaFolder";
 constexpr const char* kMediaActions[] = {"open", "reveal", "copyImage",
                                          "delete"};
 constexpr char kSpacesList[] = "library.spaces.list";
@@ -278,6 +288,25 @@ base::FilePath UniqueIn(const base::FilePath& dir,
 }
 #endif
 
+#if !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_MAC)
+std::string PercentEncodeTrashPath(std::string_view raw) {
+  std::string encoded;
+  encoded.reserve(raw.size());
+  for (unsigned char c : raw) {
+    const bool unreserved =
+        (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' ||
+        c == '~' || c == '/';
+    if (unreserved) {
+      encoded.push_back(static_cast<char>(c));
+    } else {
+      base::StringAppendF(&encoded, "%%%02X", static_cast<unsigned int>(c));
+    }
+  }
+  return encoded;
+}
+#endif
+
 // Moves a regular file to the user's Trash (recoverable). Blocking.
 bool MoveFileToTrash(const base::FilePath& path) {
   if (path.empty() || !base::PathExists(path) ||
@@ -293,12 +322,11 @@ bool MoveFileToTrash(const base::FilePath& path) {
   op.pFrom = from.c_str();
   op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI;
   return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted;
-#else
+#elif BUILDFLAG(IS_MAC)
   base::FilePath home;
   if (!base::PathService::Get(base::DIR_HOME, &home) || home.empty()) {
     return false;
   }
-#if BUILDFLAG(IS_MAC)
   const base::FilePath trash = home.AppendASCII(".Trash");
   if (!base::DirectoryExists(trash) && !base::CreateDirectory(trash)) {
     return false;
@@ -306,8 +334,20 @@ bool MoveFileToTrash(const base::FilePath& path) {
   return base::Move(path, UniqueIn(trash, path.BaseName()));
 #else
   // freedesktop.org Trash: files/<name> plus info/<name>.trashinfo.
-  const base::FilePath trash =
-      home.AppendASCII(".local").AppendASCII("share").AppendASCII("Trash");
+  base::FilePath trash;
+  if (auto env = base::Environment::Create()) {
+    if (auto xdg = env->GetVar("XDG_DATA_HOME"); xdg && !xdg->empty()) {
+      trash = base::FilePath::FromUTF8Unsafe(*xdg).AppendASCII("Trash");
+    }
+  }
+  if (trash.empty()) {
+    base::FilePath home;
+    if (!base::PathService::Get(base::DIR_HOME, &home) || home.empty()) {
+      return false;
+    }
+    trash =
+        home.AppendASCII(".local").AppendASCII("share").AppendASCII("Trash");
+  }
   const base::FilePath files = trash.AppendASCII("files");
   const base::FilePath info = trash.AppendASCII("info");
   if (!base::CreateDirectory(files) || !base::CreateDirectory(info)) {
@@ -318,14 +358,30 @@ bool MoveFileToTrash(const base::FilePath& path) {
   base::Time::Now().LocalExplode(&now);
   const std::string info_text = base::StringPrintf(
       "[Trash Info]\nPath=%s\nDeletionDate=%04d-%02d-%02dT%02d:%02d:%02d\n",
-      path.value().c_str(), now.year, now.month, now.day_of_month, now.hour,
-      now.minute, now.second);
-  if (!base::WriteFile(info.Append(dest.BaseName().value() + ".trashinfo"),
-                       info_text)) {
+      PercentEncodeTrashPath(path.value()).c_str(), now.year, now.month,
+      now.day_of_month, now.hour, now.minute, now.second);
+  const base::FilePath info_file =
+      info.Append(dest.BaseName().AddExtensionASCII("trashinfo"));
+  if (!base::WriteFile(info_file, info_text)) {
     return false;
   }
-  return base::Move(path, dest);
-#endif
+  if (base::Move(path, dest)) {
+    return true;
+  }
+  const bool copied = base::DirectoryExists(path)
+                          ? base::CopyDirectory(path, dest, /*recursive=*/true)
+                          : base::CopyFile(path, dest);
+  if (copied) {
+    if (base::DeletePathRecursively(path)) {
+      return true;
+    }
+    base::DeletePathRecursively(dest);
+    base::DeleteFile(info_file);
+    return false;
+  }
+  base::DeletePathRecursively(dest);
+  base::DeleteFile(info_file);
+  return false;
 #endif
 }
 
@@ -599,6 +655,128 @@ base::FilePath CanonicalizePath(const base::FilePath& path) {
 #else
   return base::MakeAbsoluteFilePath(path);
 #endif
+}
+
+// Validates that |real| (already canonicalized) is an existing directory safe
+// to scan for Library media. Allows non-home drives on Windows and external
+// volumes on POSIX while rejecting drive/filesystem roots, OS system trees,
+// and Open's own user-data directory. Blocking.
+bool ValidateMediaFolder(const base::FilePath& real,
+                         const base::FilePath& real_data,
+                         std::string* error) {
+  if (real.empty() || !base::DirectoryExists(real)) {
+    if (error) {
+      *error = "that folder does not exist";
+    }
+    return false;
+  }
+  if (!real_data.empty() &&
+      (real_data == real || real_data.IsParent(real) ||
+       real.IsParent(real_data))) {
+    if (error) {
+      *error = "choose a folder outside Open's data directory";
+    }
+    return false;
+  }
+  if (real == real.DirName()) {
+    if (error) {
+      *error = "choose a subfolder instead of a drive or filesystem root";
+    }
+    return false;
+  }
+#if BUILDFLAG(IS_WIN)
+  std::string lower = base::ToLowerASCII(real.AsUTF8Unsafe());
+  std::replace(lower.begin(), lower.end(), '/', '\\');
+  while (lower.size() > 3 && lower.back() == '\\') {
+    lower.pop_back();
+  }
+  std::vector<std::string> blocked_roots = {
+      "c:\\windows",
+      "c:\\program files",
+      "c:\\program files (x86)",
+      "c:\\programdata",
+  };
+  if (std::unique_ptr<base::Environment> env = base::Environment::Create()) {
+    for (const char* var : {"SystemRoot", "WINDIR"}) {
+      if (auto val = env->GetVar(var); val && !val->empty()) {
+        std::string b = base::ToLowerASCII(*val);
+        std::replace(b.begin(), b.end(), '/', '\\');
+        while (b.size() > 3 && b.back() == '\\') {
+          b.pop_back();
+        }
+        blocked_roots.push_back(std::move(b));
+      }
+    }
+  }
+  for (const std::string& blocked : blocked_roots) {
+    if (lower == blocked || base::StartsWith(lower, blocked + "\\")) {
+      if (error) {
+        *error = "system folders cannot be added";
+      }
+      return false;
+    }
+  }
+#else
+  static constexpr const char* kBlockedPosixRoots[] = {
+      "/System",      "/usr", "/etc", "/private/etc", "/bin",
+      "/sbin",        "/var", "/private/var",         "/proc",
+      "/sys",
+  };
+  for (const char* raw_root : kBlockedPosixRoots) {
+    const base::FilePath blocked(raw_root);
+    if (real == blocked || blocked.IsParent(real)) {
+      if (error) {
+        *error = "system folders cannot be added";
+      }
+      return false;
+    }
+  }
+#endif
+  return true;
+}
+
+// Returns candidate filesystem paths for a built-in media folder id
+// ("screenshots", "desktop", "downloads", "documents", "pictures"). Safe on
+// the UI thread (no disk stat); the blocking store sequence picks the first
+// existing directory.
+std::vector<base::FilePath> ResolveBuiltinMediaFolderCandidates(
+    std::string_view folder_id) {
+  std::vector<base::FilePath> candidates;
+  auto add_key = [&](int key) {
+    base::FilePath p;
+    if (base::PathService::Get(key, &p) && !p.empty()) {
+      candidates.push_back(std::move(p));
+    }
+  };
+  if (folder_id == "desktop") {
+    add_key(base::DIR_USER_DESKTOP);
+  } else if (folder_id == "documents") {
+    add_key(chrome::DIR_USER_DOCUMENTS);
+  } else if (folder_id == "downloads") {
+    add_key(chrome::DIR_DEFAULT_DOWNLOADS);
+    base::FilePath home;
+    if (base::PathService::Get(base::DIR_HOME, &home) && !home.empty()) {
+      candidates.push_back(home.AppendASCII("Downloads"));
+    }
+  } else if (folder_id == "pictures") {
+    add_key(chrome::DIR_USER_PICTURES);
+  } else if (folder_id == "screenshots") {
+    base::FilePath pictures;
+    if (base::PathService::Get(chrome::DIR_USER_PICTURES, &pictures) &&
+        !pictures.empty()) {
+      candidates.push_back(pictures.AppendASCII("Screenshots"));
+    }
+#if BUILDFLAG(IS_MAC)
+    // macOS stores screenshots on Desktop by default when no custom location
+    // is configured.
+    add_key(base::DIR_USER_DESKTOP);
+#else
+    if (!pictures.empty()) {
+      candidates.push_back(pictures);
+    }
+#endif
+  }
+  return candidates;
 }
 
 // |path| resolved (symlinks and junctions too) to a regular file inside |root|.
@@ -1283,6 +1461,72 @@ base::DictValue OpenLibraryUI::SpaceSummary(const Space& space) {
 }
 
 // static
+bool OpenLibraryUI::ToggleMediaFolderSource(const std::string& folder_id) {
+  OpenBrowserService* service = OpenBrowserService::Get();
+  if (!service) {
+    return false;
+  }
+  ProfileServices* ps = service->ProfileServicesFor(service->ActiveProfileId());
+  if (!ps) {
+    return false;
+  }
+  std::vector<base::FilePath> candidates =
+      ResolveBuiltinMediaFolderCandidates(folder_id);
+  if (candidates.empty()) {
+    return false;
+  }
+  RunOnStore(
+      ps->downloads,
+      base::BindOnce(
+          [](std::vector<base::FilePath> candidates, MediaRoots roots,
+             DownloadHistoryStore*) -> bool {
+            std::vector<base::FilePath> folders =
+                ReadFolderSources(roots.folders_file);
+            // If any canonical candidate is already enabled, remove it.
+            bool removed = false;
+            for (const base::FilePath& candidate : candidates) {
+              const base::FilePath real = CanonicalizePath(candidate);
+              const size_t before = folders.size();
+              std::erase_if(folders, [&](const base::FilePath& existing) {
+                return existing == candidate ||
+                       (!real.empty() &&
+                        (existing == real || CanonicalizePath(existing) == real));
+              });
+              if (folders.size() != before) {
+                removed = true;
+              }
+            }
+            if (removed) {
+              return WriteFolderSources(roots.folders_file, folders);
+            }
+            // Otherwise add the first existing valid candidate folder.
+            if (folders.size() >= kMaxFolderSources) {
+              return false;
+            }
+            const base::FilePath real_data =
+                CanonicalizePath(roots.user_data_dir);
+            for (const base::FilePath& candidate : candidates) {
+              const base::FilePath real = CanonicalizePath(candidate);
+              if (ValidateMediaFolder(real, real_data, nullptr)) {
+                folders.push_back(real);
+                return WriteFolderSources(roots.folders_file, folders);
+              }
+            }
+            return false;
+          },
+          std::move(candidates), RootsFor(*ps)),
+      base::BindOnce([](bool changed) {
+        if (changed) {
+          if (OpenBrowserService* svc = OpenBrowserService::Get()) {
+            svc->BroadcastEvent(kEventStateChanged,
+                                base::Value(base::DictValue()));
+          }
+        }
+      }));
+  return true;
+}
+
+// static
 bool OpenLibraryUI::ShouldHandleResource(const std::string& path) {
   return base::StartsWith(path, "thumb/") ||
          base::StartsWith(path, "media-file/") ||
@@ -1380,6 +1624,49 @@ void OpenLibraryUI::HandleResource(
              std::move(callback));
 }
 
+// --- OpenLibraryUI::FolderDialog ---------------------------------------------
+
+class OpenLibraryUI::FolderDialog : public ui::SelectFileDialog::Listener {
+ public:
+  using Done = base::OnceCallback<void(std::optional<base::FilePath>)>;
+
+  explicit FolderDialog(Done done) : done_(std::move(done)) {}
+  ~FolderDialog() override {
+    if (dialog_) {
+      dialog_->ListenerDestroyed();
+    }
+  }
+
+  void Show(const std::u16string& title,
+            const base::FilePath& default_path,
+            gfx::NativeWindow owner) {
+    dialog_ = ui::SelectFileDialog::Create(this, /*policy=*/nullptr);
+    if (!dialog_) {
+      Finish(std::nullopt);
+      return;
+    }
+    dialog_->SelectFile(ui::SelectFileDialog::SELECT_FOLDER, title,
+                        default_path, /*file_types=*/nullptr, 0,
+                        base::FilePath::StringType(), owner);
+  }
+
+  // ui::SelectFileDialog::Listener:
+  void FileSelected(const ui::SelectedFileInfo& file, int index) override {
+    Finish(file.path());
+  }
+  void FileSelectionCanceled() override { Finish(std::nullopt); }
+
+ private:
+  void Finish(std::optional<base::FilePath> path) {
+    if (done_) {
+      std::move(done_).Run(std::move(path));
+    }
+  }
+
+  Done done_;
+  scoped_refptr<ui::SelectFileDialog> dialog_;
+};
+
 // --- OpenLibraryUI -----------------------------------------------------------
 
 OpenLibraryUI::OpenLibraryUI(OpenWebUIMessageHandler* handler)
@@ -1424,6 +1711,7 @@ void OpenLibraryUI::RegisterMethods() {
   Register(kMediaList, bind(&OpenLibraryUI::ListMedia));
   Register(kMediaAddFolder, bind(&OpenLibraryUI::AddMediaFolder));
   Register(kMediaRemoveFolder, bind(&OpenLibraryUI::RemoveMediaFolder));
+  Register(kMediaPickFolder, bind(&OpenLibraryUI::PickMediaFolder));
   for (const char* action : kMediaActions) {
     Register(base::StrCat({"library.media.", action}),
              base::BindRepeating(&OpenLibraryUI::MediaAction,
@@ -2167,65 +2455,62 @@ void OpenLibraryUI::AddMediaFolder(const base::DictValue& payload,
     return;
   }
   // A preset resolves in the browser; a custom path comes from the user's
-  // own typing in the page and is validated below.
+  // own typing or native folder picker and is validated below.
   const std::string preset = json::GetString(payload, "preset");
-  base::FilePath folder;
+  std::vector<base::FilePath> candidates;
   if (!preset.empty()) {
-    const int key = preset == "desktop"     ? base::DIR_USER_DESKTOP
-                    : preset == "documents" ? chrome::DIR_USER_DOCUMENTS
-                    : preset == "downloads" ? chrome::DIR_DEFAULT_DOWNLOADS
-                    : preset == "pictures"  ? chrome::DIR_USER_PICTURES
-                                            : -1;
-    if (key < 0 || !base::PathService::Get(key, &folder)) {
+    candidates = ResolveBuiltinMediaFolderCandidates(preset);
+    if (candidates.empty()) {
       ReplyError(std::move(reply), "unknown folder");
       return;
     }
   } else {
-    folder = base::FilePath::FromUTF8Unsafe(json::GetString(payload, "path"));
-  }
-  if (folder.empty() || !folder.IsAbsolute() || folder.ReferencesParent()) {
-    ReplyError(std::move(reply), "choose a full folder path");
-    return;
+    const base::FilePath folder =
+        base::FilePath::FromUTF8Unsafe(json::GetString(payload, "path"));
+    if (folder.empty() || !folder.IsAbsolute() || folder.ReferencesParent()) {
+      ReplyError(std::move(reply), "choose a full folder path");
+      return;
+    }
+    candidates.push_back(folder);
   }
   RunOnStore(
       ps->downloads,
       base::BindOnce(
-          [](base::FilePath folder, MediaRoots roots,
+          [](std::vector<base::FilePath> candidates, MediaRoots roots,
              DownloadHistoryStore*) -> std::string {
-            base::FilePath home;
-            base::PathService::Get(base::DIR_HOME, &home);
-            const base::FilePath real = CanonicalizePath(folder);
-            const base::FilePath real_home = CanonicalizePath(home);
             const base::FilePath real_data =
                 CanonicalizePath(roots.user_data_dir);
-            if (real.empty() || !base::DirectoryExists(real)) {
-              return "that folder does not exist";
+            base::FilePath chosen;
+            std::string last_error = "that folder does not exist";
+            for (const base::FilePath& candidate : candidates) {
+              const base::FilePath real = CanonicalizePath(candidate);
+              std::string err;
+              if (ValidateMediaFolder(real, real_data, &err)) {
+                chosen = real;
+                break;
+              }
+              if (!err.empty()) {
+                last_error = std::move(err);
+              }
             }
-            // The user's own files only: inside the home folder, never Open's
-            // data directory.
-            if (real_home.empty() ||
-                !(real_home == real || real_home.IsParent(real)) ||
-                real == real_home ||
-                (!real_data.empty() &&
-                 (real_data == real || real_data.IsParent(real) ||
-                  real.IsParent(real_data)))) {
-              return "choose a folder inside your home folder";
+            if (chosen.empty()) {
+              return last_error;
             }
             std::vector<base::FilePath> folders =
                 ReadFolderSources(roots.folders_file);
-            if (std::find(folders.begin(), folders.end(), real) !=
+            if (std::find(folders.begin(), folders.end(), chosen) !=
                 folders.end()) {
               return std::string();
             }
             if (folders.size() >= kMaxFolderSources) {
               return "too many folders";
             }
-            folders.push_back(real);
+            folders.push_back(chosen);
             return WriteFolderSources(roots.folders_file, folders)
                        ? std::string()
                        : "the folder list could not be saved";
           },
-          folder, RootsFor(*ps)),
+          std::move(candidates), RootsFor(*ps)),
       base::BindOnce(
           [](Reply reply, std::string error) {
             if (!error.empty()) {
@@ -2252,7 +2537,13 @@ void OpenLibraryUI::RemoveMediaFolder(const base::DictValue& payload,
                     DownloadHistoryStore*) {
                    std::vector<base::FilePath> folders =
                        ReadFolderSources(roots.folders_file);
-                   std::erase(folders, folder);
+                   const base::FilePath real = CanonicalizePath(folder);
+                   std::erase_if(folders, [&](const base::FilePath& existing) {
+                     return existing == folder ||
+                            (!real.empty() &&
+                             (existing == real ||
+                              CanonicalizePath(existing) == real));
+                   });
                    return WriteFolderSources(roots.folders_file, folders);
                  },
                  folder, RootsFor(*ps)),
@@ -2261,6 +2552,40 @@ void OpenLibraryUI::RemoveMediaFolder(const base::DictValue& payload,
                    ReplyOk(std::move(reply), base::DictValue().Set("ok", ok));
                  },
                  std::move(reply)));
+}
+
+void OpenLibraryUI::PickMediaFolder(const base::DictValue& payload,
+                                    Reply reply) {
+  content::WebContents* contents =
+      web_ui() ? web_ui()->GetWebContents() : nullptr;
+  if (folder_dialog_ || !contents) {
+    ReplyOk(std::move(reply), base::DictValue().Set("cancelled", true));
+    return;
+  }
+  const std::string title =
+      json::GetString(payload, "title", "Choose Media Folder");
+  const base::FilePath default_path =
+      base::FilePath::FromUTF8Unsafe(json::GetString(payload, "default_path"));
+  folder_dialog_ = std::make_unique<FolderDialog>(
+      base::BindOnce(&OpenLibraryUI::OnFolderDialogDone,
+                     weak_factory_.GetWeakPtr(), std::move(reply)));
+  folder_dialog_->Show(base::UTF8ToUTF16(title), default_path,
+                       contents->GetTopLevelNativeWindow());
+}
+
+void OpenLibraryUI::OnFolderDialogDone(Reply reply,
+                                       std::optional<base::FilePath> path) {
+  // The listener is still on the stack: delete it after this task.
+  if (folder_dialog_) {
+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(folder_dialog_));
+  }
+  base::DictValue result;
+  result.Set("cancelled", !path.has_value());
+  if (path) {
+    result.Set("path", path->AsUTF8Unsafe());
+  }
+  ReplyOk(std::move(reply), std::move(result));
 }
 
 void OpenLibraryUI::MediaAction(const std::string& action,

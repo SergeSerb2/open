@@ -699,7 +699,9 @@ class OpenBrowserView::ResizeHandle : public views::View {
   float Proposed(const ui::MouseEvent& event) const {
     gfx::Point p = event.location();
     views::View::ConvertPointToScreen(this, &p);
-    return owner_->drag_start_width_ + static_cast<float>(p.x() - start_x_);
+    const float delta = static_cast<float>(p.x() - start_x_);
+    return owner_->sidebar_on_right_ ? (owner_->drag_start_width_ - delta)
+                                     : (owner_->drag_start_width_ + delta);
   }
 
   raw_ptr<OpenBrowserView> owner_;
@@ -1767,6 +1769,10 @@ views::View* OpenBrowserView::SetSplitContainer(
   if (container) {
     split_container_ = panel_host_->AddChildView(std::move(container));
     split_slide_client_ = slide_client;
+    if (auto* split = views::AsViewClass<OpenSplitContainerView>(
+            split_container_.get())) {
+      split->SetShowFullUrl(show_full_url_);
+    }
     SyncWindowControlsState();
   }
   UpdatePanelChildren();
@@ -1850,15 +1856,10 @@ void OpenBrowserView::SyncSinglePaneToolbarFromActiveTab() {
     state.is_loading = tab->live_state.is_loading;
     state.url = tab->url;
     const GURL gurl(tab->url);
+    state.host = secondary::FormatUrlForDisplay(tab->url, show_full_url_);
     if (gurl.is_valid()) {
-      std::string host(gurl.host());
-      if (host.starts_with("www.")) {
-        host.erase(0, 4);
-      }
-      state.host = base::UTF8ToUTF16(host.empty() ? gurl.spec() : host);
       state.hides_copy = gurl.SchemeIs("open") && gurl.host() == "note";
-    } else {
-      state.host = base::UTF8ToUTF16(tab->url);
+      state.site_controls_available = gurl.SchemeIsHTTPOrHTTPS();
     }
     if (tab->live_state.page_background_color.has_value()) {
       state.background =
@@ -2010,6 +2011,15 @@ void OpenBrowserView::RequestToggleSidebar() {
   Send(OpenIntent::Of(OpenIntentKind::kToggleSidebar));
 }
 
+double OpenBrowserView::HiddenSidebarOffset() const {
+  return sidebar_on_right_ ? sidebar_width_ : -sidebar_width_;
+}
+
+double OpenBrowserView::HiddenCardOffset() const {
+  const double distance = sidebar_width_ + m::window::kRevealCardInset * 2;
+  return sidebar_on_right_ ? distance : -distance;
+}
+
 void OpenBrowserView::SetSidebarHidden(bool hidden, bool animate) {
   if (hidden == sidebar_hidden_) {
     return;
@@ -2018,9 +2028,83 @@ void OpenBrowserView::SetSidebarHidden(bool hidden, bool animate) {
   if (animate && AnimationsEnabled() && !motion::PrefersReducedMotion()) {
     AnimateSidebar(hidden);
   } else {
-    sidebar_slide_->JumpTo(hidden ? -sidebar_width_ : 0);
+    sidebar_slide_->JumpTo(hidden ? HiddenSidebarOffset() : 0);
     OnSidebarSlideSettled();
   }
+}
+
+void OpenBrowserView::SetSidebarOnRight(bool on_right) {
+  if (sidebar_on_right_ == on_right) {
+    return;
+  }
+  if (sliding_) {
+    sidebar_slide_->Stop();
+    EndPanelSlide();
+    sliding_ = false;
+  } else if (sidebar_slide_) {
+    sidebar_slide_->Stop();
+  }
+  reveal_dwell_timer_.Stop();
+  reveal_exit_timer_.Stop();
+  reveal_suppressed_by_velocity_ = false;
+  prev_reveal_point_.reset();
+  prev_reveal_time_ = base::TimeTicks();
+  if (card_state_ != CardState::kOff) {
+    if (card_motion_) {
+      card_motion_->Stop();
+    }
+    card_state_ = CardState::kOff;
+    if (reveal_card_) {
+      reveal_card_->SetVisible(false);
+      if (reveal_card_->layer()) {
+        reveal_card_->layer()->SetTransform(gfx::Transform());
+      }
+    }
+    if (card_shadow_) {
+      card_shadow_->SetVisible(false);
+      if (card_shadow_->layer()) {
+        card_shadow_->layer()->SetTransform(gfx::Transform());
+      }
+    }
+    if (sidebar_ && reveal_card_ && sidebar_->parent() == reveal_card_.get()) {
+      ReparentSidebar(false);
+    }
+  }
+  sidebar_on_right_ = on_right;
+  sidebar_offset_ = sidebar_hidden_ ? HiddenSidebarOffset() : 0.0;
+  if (sidebar_) {
+    sidebar_->SetOnRight(on_right);
+    if (sidebar_->parent() == this) {
+      if (sidebar_->layer()) {
+        sidebar_->layer()->SetTransform(gfx::Transform());
+      }
+      sidebar_->SetVisible(!sidebar_hidden_);
+    }
+  }
+  if (sidebar_hidden_ && !tab_fullscreen_applied_) {
+    StartRevealMonitor();
+  }
+  InvalidateLayout();
+  if (!bounds().IsEmpty()) {
+    DeprecatedLayoutImmediately();
+  }
+  SchedulePaint();
+  NotifyTrafficLights();
+}
+
+void OpenBrowserView::SetShowFullUrl(bool full_url) {
+  if (show_full_url_ == full_url) {
+    return;
+  }
+  show_full_url_ = full_url;
+  if (sidebar_) {
+    sidebar_->SetShowFullUrl(full_url);
+  }
+  if (auto* split = views::AsViewClass<OpenSplitContainerView>(
+          split_container_.get())) {
+    split->SetShowFullUrl(full_url);
+  }
+  SyncSinglePaneToolbarFromActiveTab();
 }
 
 bool OpenBrowserView::IsRevealCardShown() const {
@@ -2138,15 +2222,19 @@ void OpenBrowserView::SyncWindowControlsState() {
 }
 
 gfx::Rect OpenBrowserView::PanelBoundsFor(bool hidden, float width) const {
-  const float top_inset =
-      tab_fullscreen_applied_
-          ? 0.0f
-          : (HasCaptionStrip()
-                 ? static_cast<float>(m::win_controls::kStripHeight)
-                 : m::panel::kInset);
+  float top_inset = m::panel::kInset;
+  if (tab_fullscreen_applied_) {
+    top_inset = 0.0f;
+  } else if (HasCaptionStrip()) {
+    top_inset = static_cast<float>(m::win_controls::kStripHeight);
+  } else if (sidebar_on_right_ &&
+             window_controls_ == WindowControls::kNativeMac &&
+             !(GetWidget() && GetWidget()->IsFullscreen())) {
+    top_inset = m::chrome::kTrafficLightStripHeight;
+  }
   const m::Frame f = m::panel::PanelFrame(
       {static_cast<float>(this->width()), static_cast<float>(height())}, width,
-      hidden, top_inset);
+      hidden, top_inset, sidebar_on_right_);
   return gfx::ToEnclosingRect(gfx::RectF(f.x, f.y, std::max(0.0f, f.w),
                                          std::max(0.0f, f.h)));
 }
@@ -2216,7 +2304,7 @@ void OpenBrowserView::AnimateSidebar(bool hidden) {
   } else {
     sidebar_slide_->SetSpring(motion::kSidebarToggle);
     sidebar_slide_->AnimateFromTo(
-        sidebar_offset_, -sidebar_width_,
+        sidebar_offset_, HiddenSidebarOffset(),
         sidebar_slide_->is_animating() ? sidebar_slide_->velocity() : 0.0);
   }
 }
@@ -2227,9 +2315,13 @@ void OpenBrowserView::ApplySidebarOffset(double offset) {
     sidebar_->layer()->SetTransform(
         gfx::Transform::MakeTranslation(static_cast<float>(offset), 0));
   }
+  const double signed_ratio =
+      sidebar_width_ > 0
+          ? (sidebar_on_right_ ? -offset / sidebar_width_
+                               : offset / sidebar_width_)
+          : 0.0;
   const double shown_fraction =
-      sidebar_width_ > 0 ? std::clamp(1.0 + offset / sidebar_width_, 0.0, 1.0)
-                         : 1.0;
+      sidebar_width_ > 0 ? std::clamp(1.0 + signed_ratio, 0.0, 1.0) : 1.0;
   ApplyPanelSlide(shown_fraction);
   NotifyTrafficLights();
 }
@@ -2265,7 +2357,7 @@ void OpenBrowserView::SetLiveSidebarWidth(float width) {
   }
   sidebar_width_ = width;
   if (sidebar_hidden_ && !sliding_) {
-    sidebar_offset_ = -sidebar_width_;
+    sidebar_offset_ = HiddenSidebarOffset();
   }
   InvalidateLayout();
 }
@@ -2372,34 +2464,55 @@ void OpenBrowserView::ReleaseMenuRevealLock() {
 gfx::Rect OpenBrowserView::RevealCardBounds() const {
 #if !BUILDFLAG(IS_MAC)
   if (HasCaptionStrip()) {
+    const int inset = static_cast<int>(m::window::kRevealCardInset);
+    const int w = static_cast<int>(std::lround(sidebar_width_));
+    if (sidebar_on_right_) {
+      // On Win/Linux right-sidebar mode, start below the 32 DIP caption strip
+      // so the floating card never covers the - [] x window buttons.
+      const int y = m::win_controls::kStripHeight;
+      return gfx::Rect(std::max(0, width() - w - inset), y, w,
+                       std::max(0, height() - y - inset));
+    }
     // Align RevealCardView at y = 0 on Win/Linux so its internal sidebar
     // toolbar at y = 2 lines up vertically with HiddenSidebarToggleButton
     // (y = 2) and OpenWindowControlsView (y = 0..32).
-    const int inset = static_cast<int>(m::window::kRevealCardInset);
-    return gfx::Rect(inset, 0, static_cast<int>(std::lround(sidebar_width_)),
-                     std::max(0, height() - inset));
+    return gfx::Rect(inset, 0, w, std::max(0, height() - inset));
   }
 #endif
   const m::Frame f = m::window::RevealCardFrame(
       {static_cast<float>(width()), static_cast<float>(height())},
-      sidebar_width_);
+      sidebar_width_, sidebar_on_right_);
   return gfx::ToEnclosingRect(gfx::RectF(f.x, f.y, f.w, f.h));
 }
 
 bool OpenBrowserView::PointInRevealZone(const gfx::Point& p) const {
 #if !BUILDFLAG(IS_MAC)
   // Exclude HiddenSidebarToggleButton and the 32 DIP caption strip so hovering
-  // the explicit toggle button or Linux leading controls never collides with
+  // the explicit toggle button or window controls never collides with
   // hover-reveal.
   if (hidden_sidebar_toggle_ && hidden_sidebar_toggle_->GetVisible() &&
       hidden_sidebar_toggle_->bounds().Contains(p)) {
     return false;
   }
   if (HasCaptionStrip()) {
+    if (sidebar_on_right_) {
+      return p.x() >= width() - m::reveal::kInnerEdgeWidth &&
+             p.x() <= width() && p.y() >= m::win_controls::kStripHeight &&
+             p.y() < height();
+    }
     return p.x() >= 0 && p.x() < m::reveal::kInnerEdgeWidth &&
            p.y() >= m::win_controls::kStripHeight && p.y() < height();
   }
 #endif
+  if (sidebar_on_right_) {
+    const bool inner = p.x() >= width() - m::reveal::kInnerEdgeWidth &&
+                       p.x() <= width() && p.y() >= 0 && p.y() < height();
+    const bool top_right = p.x() >= width() - m::reveal::kTopLeftWidth &&
+                           p.x() <= width() &&
+                           p.y() >= m::reveal::kTopLeftMin &&
+                           p.y() < m::reveal::kTopLeftMax;
+    return inner || top_right;
+  }
   // Inner left edge (0 .. 0.6 u) and the top-left corner.
   const bool inner = p.x() >= 0 && p.x() < m::reveal::kInnerEdgeWidth &&
                      p.y() >= 0 && p.y() < height();
@@ -2411,6 +2524,16 @@ bool OpenBrowserView::PointInRevealZone(const gfx::Point& p) const {
 
 bool OpenBrowserView::PointInHoldZone(const gfx::Point& p) const {
   gfx::Rect card_hold = RevealCardBounds();
+  if (sidebar_on_right_) {
+    const int margin = static_cast<int>(m::reveal::kHoldRightMargin);
+    const int inset = static_cast<int>(m::window::kRevealCardInset);
+    card_hold.Inset(gfx::Insets::TLBR(0, -margin, 0, -inset));
+    if (card_hold.Contains(p)) {
+      return true;
+    }
+    return p.x() >= width() - m::reveal::kInnerEdgeHeldMax &&
+           p.x() <= width() - m::reveal::kInnerEdgeHeldMin;
+  }
   card_hold.set_width(card_hold.width() +
                       static_cast<int>(m::reveal::kHoldRightMargin));
   if (card_hold.Contains(p)) {
@@ -2436,10 +2559,13 @@ void OpenBrowserView::OnRevealEvent(const ui::Event& event) {
     return;
   }
   if (event.type() == ui::EventType::kMouseExited) {
-    // Leaving through the left edge stays in the held outer-edge zone.
-    const bool left_edge =
-        last_reveal_point_ && last_reveal_point_->x() < m::reveal::kInnerEdgeHeldMax;
-    if (IsRevealCardShown() && !left_edge && !IsRevealHoldLocked() &&
+    // Leaving through the sidebar's outer edge stays in the held zone.
+    const bool outer_edge =
+        last_reveal_point_ &&
+        (sidebar_on_right_
+             ? last_reveal_point_->x() >= width() - m::reveal::kInnerEdgeHeldMax
+             : last_reveal_point_->x() < m::reveal::kInnerEdgeHeldMax);
+    if (IsRevealCardShown() && !outer_edge && !IsRevealHoldLocked() &&
         !reveal_exit_timer_.IsRunning()) {
       reveal_exit_timer_.Start(FROM_HERE, motion::Seconds(m::reveal::kExitDelay),
                                base::BindOnce(&OpenBrowserView::HideRevealCard,
@@ -2464,7 +2590,10 @@ void OpenBrowserView::OnRevealEvent(const ui::Event& event) {
       const double dy = static_cast<double>(p.y() - prev_reveal_point_->y());
       const double vx = dx / dt;
       const double speed = std::hypot(dx, dy) / dt;
-      if (in_reveal && vx < -m::reveal::kPassThroughVelocity) {
+      const bool pass_through =
+          sidebar_on_right_ ? (vx > m::reveal::kPassThroughVelocity)
+                            : (vx < -m::reveal::kPassThroughVelocity);
+      if (in_reveal && pass_through) {
         reveal_suppressed_by_velocity_ = true;
         reveal_dwell_timer_.Stop();
       } else if (reveal_suppressed_by_velocity_ && speed < 400.0) {
@@ -2528,7 +2657,7 @@ void OpenBrowserView::ShowRevealCard() {
   InvalidateLayout();
   const double from = card_motion_->is_animating()
                           ? card_motion_->value()
-                          : -(sidebar_width_ + m::window::kRevealCardInset * 2);
+                          : HiddenCardOffset();
   card_motion_->SetSpring(motion::kRevealCardIn);
   card_motion_->SetCompositor(AnimationCompositor());
   card_motion_->AnimateFromTo(from, 0,
@@ -2544,7 +2673,7 @@ void OpenBrowserView::HideRevealCard() {
   card_state_ = CardState::kHiding;
   card_motion_->SetCompositor(AnimationCompositor());
   card_motion_->AnimateTimed(card_motion_->value(),
-                             -(sidebar_width_ + m::window::kRevealCardInset * 2),
+                             HiddenCardOffset(),
                              motion::Seconds(motion::kRevealCardOut),
                              motion::CubicCurve{0, 0, 1, 1});
 }
@@ -2572,7 +2701,12 @@ void OpenBrowserView::NotifyTrafficLights() {
   // Offset of the group from Arc's resting centers (x 20 / 43 / 66, y 24).
   gfx::Vector2d offset;
   bool visible = !sidebar_hidden_ || sliding_;
-  if (sidebar_->parent() == reveal_card_.get()) {
+  if (sidebar_on_right_) {
+    // Right-side sidebar: macOS traffic lights stay anchored in the top-left
+    // strip above the web panel and never ride on the right sidebar or card.
+    visible = true;
+    offset = gfx::Vector2d();
+  } else if (sidebar_->parent() == reveal_card_.get()) {
     // The lights ride on the card, 5 pt further in: AX close [17, 21].
     visible = card_state_ != CardState::kOff;
     offset = gfx::Vector2d(
@@ -2876,9 +3010,12 @@ int OpenBrowserView::NonClientHitTest(const gfx::Point& point) const {
     constexpr int kEdge = 6;
     constexpr int kHiddenLeftEdge = 4;
     constexpr int kCorner = 14;
-    const int left_edge = sidebar_hidden_ ? kHiddenLeftEdge : kEdge;
+    const int left_edge =
+        (!sidebar_on_right_ && sidebar_hidden_) ? kHiddenLeftEdge : kEdge;
+    const int right_edge =
+        (sidebar_on_right_ && sidebar_hidden_) ? kHiddenLeftEdge : kEdge;
     const bool left = point.x() < left_edge;
-    const bool right = point.x() >= width() - kEdge;
+    const bool right = point.x() >= width() - right_edge;
     const bool top = point.y() < kEdge;
     const bool bottom = point.y() >= height() - kEdge;
     const bool near_left = point.x() < kCorner;
@@ -3067,16 +3204,25 @@ void OpenBrowserView::Layout(PassKey) {
       leading_controls_inset = leading_window_controls_view_->bounds().right() + 8;
     }
   }
-  sidebar_->SetLeadingControlsInset(leading_controls_inset);
+  sidebar_->SetLeadingControlsInset(sidebar_on_right_ ? 0
+                                                      : leading_controls_inset);
   if (hidden_sidebar_toggle_) {
     const bool show_toggle = show_caption_strip && sidebar_hidden_ && !sliding_;
     hidden_sidebar_toggle_->SetVisible(show_toggle);
     if (show_toggle) {
-      const int toggle_x = leading_controls_inset > 0
-                               ? leading_controls_inset
-                               : static_cast<int>(m::chrome::kSidebarToggleX);
       const int toggle_size = static_cast<int>(m::chrome::kToolbarButtonSize);
       const int toggle_y = static_cast<int>(m::chrome::kToolbarButtonY);
+      int toggle_x = leading_controls_inset > 0
+                         ? leading_controls_inset
+                         : static_cast<int>(m::chrome::kSidebarToggleX);
+      if (sidebar_on_right_) {
+        const int right_anchor =
+            (window_controls_view_ && window_controls_view_->GetVisible())
+                ? window_controls_view_->x()
+                : width();
+        toggle_x = std::max(leading_controls_inset,
+                            right_anchor - toggle_size - 8);
+      }
       hidden_sidebar_toggle_->SetBounds(toggle_x, toggle_y, toggle_size,
                                         toggle_size);
     }
@@ -3085,11 +3231,19 @@ void OpenBrowserView::Layout(PassKey) {
   if (!sliding_) {
     LayoutPanel(PanelBoundsFor(sidebar_hidden_, sidebar_width_));
   }
-  // Keep sidebar_top = 0 even when Linux leading window buttons are visible;
-  // OpenSidebarView shifts its toolbar row right by leading_controls_inset so
-  // its toolbar stays harmonized inside the 32 DIP caption strip.
+  // Left sidebar stays at y = 0 (toolbar harmonized inside the 32 DIP caption
+  // strip on Win/Linux). Right sidebar starts below the 32 DIP caption strip
+  // on Win/Linux so it never collides with - [] x, and starts at y = 0 full
+  // height on macOS where traffic lights live at top-left.
   if (sidebar_->parent() == this) {
-    sidebar_->SetBounds(0, 0, w, height());
+    if (sidebar_on_right_) {
+      const int sidebar_y =
+          show_caption_strip ? m::win_controls::kStripHeight : 0;
+      sidebar_->SetBounds(width() - w, sidebar_y, w,
+                          std::max(0, height() - sidebar_y));
+    } else {
+      sidebar_->SetBounds(0, 0, w, height());
+    }
     if (!sliding_) {
       sidebar_->layer()->SetTransform(gfx::Transform());
       sidebar_->SetVisible(!sidebar_hidden_);
@@ -3097,7 +3251,8 @@ void OpenBrowserView::Layout(PassKey) {
   }
   const int handle = static_cast<int>(m::window::kResizeHandleWidth);
   const gfx::Rect panel = panel_host_->bounds();
-  resize_handle_->SetBounds(w - handle, panel.y(), handle, panel.height());
+  const int handle_x = sidebar_on_right_ ? (width() - w) : (w - handle);
+  resize_handle_->SetBounds(handle_x, panel.y(), handle, panel.height());
   resize_handle_->SetVisible(!sliding_ && (!sidebar_hidden_ || resizing_));
   const gfx::Rect card = RevealCardBounds();
   reveal_card_->SetBoundsRect(card);
@@ -3256,7 +3411,7 @@ void OpenBrowserView::ApplyTabFullscreen(bool fullscreen) {
       }
     }
     if (sliding_) {
-      sidebar_slide_->JumpTo(sidebar_hidden_ ? -sidebar_width_ : 0);
+      sidebar_slide_->JumpTo(sidebar_hidden_ ? HiddenSidebarOffset() : 0);
       OnSidebarSlideSettled();
     }
     StopRevealMonitor();

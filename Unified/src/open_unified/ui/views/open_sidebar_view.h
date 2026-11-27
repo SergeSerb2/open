@@ -71,6 +71,10 @@ class OpenSidebarView : public views::View {
 
   void SetPresentation(Presentation presentation);
   Presentation presentation() const { return presentation_; }
+  void SetOnRight(bool on_right);
+  bool is_on_right() const { return on_right_; }
+  void SetShowFullUrl(bool full_url);
+  bool shows_full_url() const { return show_full_url_; }
   void SetWindowControlsSlot(WindowControlsSlot slot);
   // On Linux with leading window buttons (close/min/max on the left), the
   // sidebar stays at y = 0 and shifts its toolbar buttons right of the cluster.
@@ -189,6 +193,8 @@ class OpenSidebarView : public views::View {
   bool has_open_popover_ = false;
   bool split_view_active_ = false;
   bool peek_dimmed_ = false;
+  bool on_right_ = false;
+  bool show_full_url_ = false;
 };
 
 }  // namespace open_unified

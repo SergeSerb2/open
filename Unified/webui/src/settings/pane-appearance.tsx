@@ -80,7 +80,9 @@ export function AppearancePane(): JSX.Element {
           ]}
         />
         <PrefToggle id="appearance/sidebar-autohide" label="Hide the sidebar automatically" help="Show it when the pointer reaches the edge of the window." prefKey="appearance.sidebarAutoHide" />
-        <PrefToggle id="appearance/translucency" label="Translucent window" help="Let the desktop show through the sidebar." prefKey="appearance.translucency" />
+        {isMacPlatform() && (
+          <PrefToggle id="appearance/translucency" label="Translucent window" help="Let the desktop show through the sidebar." prefKey="appearance.translucency" />
+        )}
         <PrefToggle id="appearance/contrast" label="Increase contrast" help="Stronger borders and text in the sidebar." prefKey="appearance.increaseContrast" />
       </Group>
 

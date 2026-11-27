@@ -48,6 +48,7 @@
 #include "open_unified/browser/open_sleep_controller.h"
 #include "open_unified/core/adblock/open_adblock_profile_service.h"
 #include "open_unified/core/store/sqlite_stores.h"
+#include "open_unified/ui/webui/open_settings_ui.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/base_window.h"
@@ -198,6 +199,37 @@ void EnsureActiveContentsVisible(BrowserWindowInterface* browser,
   BrowserView* bv = BrowserView::GetBrowserViewForBrowser(browser);
   if (bv && bv->GetWidget() && bv->GetWidget()->IsVisible()) {
     contents->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
+  }
+}
+
+SplitOrientation PreferredSplitOrientation() {
+  webui::OpenPreferences* prefs = webui::OpenPreferences::Get();
+  if (!prefs) {
+    return SplitOrientation::kHorizontal;
+  }
+  const base::Value v = prefs->GetValue("tabs.splitOrientation");
+  return (v.is_string() && v.GetString() == "vertical")
+             ? SplitOrientation::kVertical
+             : SplitOrientation::kHorizontal;
+}
+
+void ApplyNewWindowAppearanceDefaults(BrowserModel& model,
+                                      const WindowID& window_id) {
+  if (window_id.empty()) {
+    return;
+  }
+  webui::OpenPreferences* prefs = webui::OpenPreferences::Get();
+  if (!prefs) {
+    return;
+  }
+  const base::Value toolbar = prefs->GetValue("appearance.toolbar");
+  if (toolbar.is_bool() && toolbar.GetBool()) {
+    model.SetWindowShowsToolbar(window_id, true);
+  }
+  const base::Value auto_hide = prefs->GetValue("appearance.sidebarAutoHide");
+  if (auto_hide.is_bool() && auto_hide.GetBool()) {
+    model.SetSidebarMode(window_id, SidebarMode::kHidden,
+                         /*register_undo=*/false);
   }
 }
 
@@ -532,6 +564,7 @@ void OpenTabBridge::AdoptStartupBrowsers() {
             base::AutoReset<bool> applying(&applying_, true);
             assigned_window = model.CreateWindow(
                 target_space, WindowStyle::kStandard, /*register_undo=*/false);
+            ApplyNewWindowAppearanceDefaults(model, assigned_window);
           }
         }
         if (assigned_window.empty()) {
@@ -1453,7 +1486,7 @@ std::optional<ItemID> OpenTabBridge::ToggleSplit(const ItemID& tab_id) {
     return std::nullopt;
   }
   const ItemID split =
-      model.MakeSplit({tab_id, next}, SplitOrientation::kHorizontal);
+      model.MakeSplit({tab_id, next}, PreferredSplitOrientation());
   if (split.empty()) {
     return std::nullopt;
   }
@@ -1551,6 +1584,7 @@ WindowID OpenTabBridge::OpenNewWindow(const std::optional<SpaceID>& space_id) {
     base::AutoReset<bool> applying(&applying_, true);
     window_id = model.CreateWindow(target_space, WindowStyle::kStandard,
                                    /*register_undo=*/false);
+    ApplyNewWindowAppearanceDefaults(model, window_id);
   }
   if (window_id.empty()) {
     return WindowID();
@@ -2096,6 +2130,7 @@ void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
       } else if (!target_space.empty()) {
         window_id = model.CreateWindow(target_space, WindowStyle::kStandard,
                                        /*register_undo=*/false);
+        ApplyNewWindowAppearanceDefaults(model, window_id);
       }
     }
   }

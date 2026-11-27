@@ -70,6 +70,7 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/controls/scroll_view.h"
+#include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -1083,6 +1084,8 @@ OpenSiteControlView::OpenSiteControlView(
   scroll->SetBackgroundColor(std::nullopt);
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
+  scroll->SetVerticalScrollBar(std::make_unique<views::OverlayScrollBar>(
+      views::ScrollBar::Orientation::kVertical));
   scroll->SetDrawOverflowIndicator(false);
   scroll->GetViewAccessibility().SetName(u"Site settings and Boosts");
   body_ = scroll->SetContents(std::make_unique<views::View>());

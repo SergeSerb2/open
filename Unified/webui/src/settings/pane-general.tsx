@@ -50,15 +50,43 @@ export function GeneralPane(): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => setIsDefault(ctx.snapshot?.is_default_browser === true), [ctx.snapshot?.is_default_browser]);
 
+  useEffect(() => {
+    let alive = true;
+    const refreshDefault = () => {
+      void rpc('settings.defaultBrowser.get', {})
+        .then((res) => {
+          if (!alive) return;
+          const next = typeof res.is_default === 'boolean' ? res.is_default : res.is_default_browser === true;
+          setIsDefault(next);
+        })
+        .catch(() => undefined);
+    };
+    window.addEventListener('focus', refreshDefault);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', refreshDefault);
+    };
+  }, []);
+
   const makeDefault = async () => {
     setBusy('default');
     const res = await ctx.run(() => rpc('settings.setDefaultBrowser', {}));
     setBusy(null);
     if (!res) return;
     setIsDefault(res.is_default);
-    if (res.status === 'declined') ctx.toast('Open was not set as the default browser.');
-    else if (res.status === 'failed') ctx.toast('Your system did not let Open become the default browser.', 'danger');
-    else ctx.toast('Open is now your default browser.', 'success');
+    if (res.status === 'declined') {
+      ctx.toast('Open was not set as the default browser.');
+    } else if (res.status === 'failed') {
+      ctx.toast('Your system did not let Open become the default browser.', 'danger');
+    } else if (res.status === 'prompted' && !res.is_default) {
+      ctx.toast(
+        isMacPlatform()
+          ? 'Confirm Open in the system prompt to set it as your default browser.'
+          : 'Select Open in Default Apps to finish setting it as your default browser.',
+      );
+    } else {
+      ctx.toast('Open is now your default browser.', 'success');
+    }
   };
 
   const rawLocation = ctx.prefs['downloads.location'];
@@ -176,7 +204,7 @@ export function GeneralPane(): JSX.Element {
       </Group>
 
       <Group title="Move in">
-        <Row id="general/import" label="Import from Arc" help="Bring your Spaces, tabs, bookmarks, and passwords into Open.">
+        <Row id="general/import" label="Import from Arc" help="Bring your Spaces, tabs, and bookmarks into Open.">
           <Btn onClick={() => ctx.navigate('import')}>Import…</Btn>
         </Row>
         <Row id="general/export" label="Export your Open data" help="A JSON snapshot of Spaces, Favorites, settings, shortcuts, and rules.">

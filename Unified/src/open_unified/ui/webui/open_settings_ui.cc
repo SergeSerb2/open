@@ -9,14 +9,17 @@
 #include <set>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/scoped_observation.h"
@@ -81,6 +84,17 @@
 #include "ui/shell_dialogs/selected_file_info.h"   // nogncheck
 #include "url/gurl.h"
 
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+
+// Guard against Win32 macro collision with BrowserModel::FindWindow (keep
+// base/win/windows_types.h's file_util.h macros intact so base::CreateDirectory
+// and base::ReplaceFile resolve to their *W exports).
+#ifdef FindWindow
+#undef FindWindow
+#endif
+#endif
+
 namespace open_unified::webui {
 
 namespace {
@@ -93,6 +107,7 @@ constexpr char kSettingsOpenChromeUrl[] = "settings.openChromeUrl";
 constexpr char kSettingsPickFolder[] = "settings.pickFolder";
 constexpr char kSettingsPickDownloadFolder[] = "settings.pickDownloadFolder";
 constexpr char kSettingsExportSnapshot[] = "settings.exportSnapshot";
+constexpr char kSettingsDefaultBrowserGet[] = "settings.defaultBrowser.get";
 
 constexpr char kProfilesList[] = "settings.profiles.list";
 constexpr char kProfilesSwitch[] = "settings.profiles.switch";
@@ -508,6 +523,56 @@ std::optional<ShortcutPriority> ParsePriority(std::string_view s) {
   return std::nullopt;
 }
 
+// Matches OpenWindowController's platform command support filter so Settings ->
+// Shortcuts hides unsupported and macOS-only commands on Windows and Linux.
+bool IsCommandSupportedOnPlatform(CommandId id) {
+  switch (id) {
+    case CommandId::kUnknown:
+    case CommandId::kImportArcNotes:
+    case CommandId::kRecordTrace:
+    case CommandId::kCancelTrace:
+    case CommandId::kReservedNewChatGptMessage:
+    case CommandId::kReservedSendToDia:
+    case CommandId::kReservedShareArc:
+    case CommandId::kReservedSignOut:
+      return false;
+#if !BUILDFLAG(IS_MAC)
+    // macOS-only AppKit responder / text-submenu commands.
+    case CommandId::kHideOpen:
+    case CommandId::kHideOthers:
+    case CommandId::kShowAll:
+    case CommandId::kBringAllToFront:
+    case CommandId::kAllowJsAppleEvents:
+    case CommandId::kEmojiAndSymbols:
+    case CommandId::kJumpToSelection:
+    case CommandId::kShowSpelling:
+    case CommandId::kCheckSpelling:
+    case CommandId::kCheckSpellingWhileTyping:
+    case CommandId::kCheckGrammar:
+    case CommandId::kCorrectSpellingAutomatically:
+    case CommandId::kShowSubstitutions:
+    case CommandId::kSmartCopyPaste:
+    case CommandId::kSmartQuotes:
+    case CommandId::kSmartDashes:
+    case CommandId::kSmartLinks:
+    case CommandId::kTextReplacement:
+    case CommandId::kDataDetectors:
+    case CommandId::kMakeUpperCase:
+    case CommandId::kMakeLowerCase:
+    case CommandId::kCapitalize:
+    case CommandId::kStartSpeaking:
+    case CommandId::kStopSpeaking:
+    case CommandId::kFontBold:
+    case CommandId::kFontItalic:
+    case CommandId::kFontUnderline:
+    case CommandId::kShowFonts:
+      return false;
+#endif
+    default:
+      return true;
+  }
+}
+
 // bridge.ts categories from the command's menu path.
 std::string ShortcutCategory(const CommandDefinition& command) {
   const std::string menu =
@@ -864,8 +929,116 @@ void CountNodes(const std::vector<ImportedBookmarkNode>& nodes,
   }
 }
 
-// Macintosh apps for the Air Traffic Control source picker: bundle id and
-// name of every .app in the standard folders (Info.plist, binary or XML).
+#if BUILDFLAG(IS_WIN)
+std::string FriendlyWindowsAppName(const std::string& lower_exe,
+                                   const base::FilePath& exe_path) {
+  static constexpr std::pair<const char*, const char*> kKnownApps[] = {
+      {"slack.exe", "Slack"},
+      {"discord.exe", "Discord"},
+      {"ms-teams.exe", "Microsoft Teams"},
+      {"teams.exe", "Microsoft Teams"},
+      {"outlook.exe", "Outlook"},
+      {"olk.exe", "Outlook"},
+      {"thunderbird.exe", "Thunderbird"},
+      {"code.exe", "Visual Studio Code"},
+      {"telegram.exe", "Telegram"},
+      {"signal.exe", "Signal"},
+      {"whatsapp.exe", "WhatsApp"},
+      {"notion.exe", "Notion"},
+      {"obsidian.exe", "Obsidian"},
+      {"zoom.exe", "Zoom"},
+      {"linear.exe", "Linear"},
+      {"figma.exe", "Figma"},
+      {"spotify.exe", "Spotify"},
+      {"windowsterminal.exe", "Windows Terminal"},
+      {"explorer.exe", "File Explorer"},
+      {"chrome.exe", "Google Chrome"},
+      {"msedge.exe", "Microsoft Edge"},
+      {"firefox.exe", "Firefox"},
+      {"brave.exe", "Brave"},
+      {"notepad.exe", "Notepad"},
+      {"notepad++.exe", "Notepad++"},
+  };
+  for (const auto& [exe, label] : kKnownApps) {
+    if (lower_exe == exe) {
+      return label;
+    }
+  }
+  std::string stem =
+      base::WideToUTF8(exe_path.BaseName().RemoveExtension().value());
+  if (stem.empty()) {
+    stem = lower_exe;
+  }
+  if (!stem.empty() && stem[0] >= 'a' && stem[0] <= 'z') {
+    stem[0] = base::ToUpperASCII(stem[0]);
+  }
+  return stem;
+}
+
+bool IsIgnoredWindowsHostProcess(std::string_view lower_exe) {
+  static constexpr std::string_view kIgnored[] = {
+      "applicationframehost.exe", "shellexperiencehost.exe",
+      "searchhost.exe",           "startmenuexperiencehost.exe",
+      "textinputhost.exe",        "lockapp.exe",
+      "systemsettings.exe",       "runtimebroker.exe",
+  };
+  for (std::string_view ignored : kIgnored) {
+    if (lower_exe == ignored) {
+      return true;
+    }
+  }
+  return false;
+}
+
+struct WinAppEnumContext {
+  DWORD current_pid = 0;
+  std::set<DWORD> seen_pids;
+  raw_ptr<std::map<std::string, std::string>> by_id = nullptr;
+};
+
+BOOL CALLBACK EnumVisibleWindowsForAppsProc(HWND hwnd, LPARAM lparam) {
+  auto* ctx = reinterpret_cast<WinAppEnumContext*>(lparam);
+  if (!ctx || !ctx->by_id || ctx->by_id->size() >= 600) {
+    return FALSE;
+  }
+  if (!IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != nullptr ||
+      GetWindowTextLengthW(hwnd) <= 0) {
+    return TRUE;
+  }
+  DWORD pid = 0;
+  GetWindowThreadProcessId(hwnd, &pid);
+  if (pid == 0 || pid == ctx->current_pid || !ctx->seen_pids.insert(pid).second) {
+    return TRUE;
+  }
+  HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (!process) {
+    return TRUE;
+  }
+  std::wstring image_path(1024, L'\0');
+  DWORD length = static_cast<DWORD>(image_path.size());
+  const BOOL ok =
+      QueryFullProcessImageNameW(process, 0, image_path.data(), &length);
+  CloseHandle(process);
+  if (!ok || length == 0) {
+    return TRUE;
+  }
+  image_path.resize(length);
+  const base::FilePath exe_path(image_path);
+  const std::string lower_exe =
+      base::ToLowerASCII(base::WideToUTF8(exe_path.BaseName().value()));
+  if (lower_exe.empty() || lower_exe.size() > 255 ||
+      IsIgnoredWindowsHostProcess(lower_exe)) {
+    return TRUE;
+  }
+  ctx->by_id->emplace(lower_exe, FriendlyWindowsAppName(lower_exe, exe_path));
+  return TRUE;
+}
+#endif  // BUILDFLAG(IS_WIN)
+
+// Apps for the Air Traffic Control source picker: on macOS, bundle id and name
+// of every .app in the standard folders; on Windows, lowercase .exe basenames
+// matching OpenPlatformWin::ResolveExternalUrlSourceApp() from visible running
+// windows plus common installed mail/chat/dev/browser apps.
 base::ListValue ListApplicationsBlocking() {
   base::ListValue apps;
 #if BUILDFLAG(IS_MAC)
@@ -912,6 +1085,67 @@ base::ListValue ListApplicationsBlocking() {
                              : app.BaseName().RemoveExtension().AsUTF8Unsafe());
     }
   }
+  std::vector<std::pair<std::string, std::string>> sorted(by_id.begin(),
+                                                          by_id.end());
+  std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
+    return base::CompareCaseInsensitiveASCII(a.second, b.second) < 0;
+  });
+  for (const auto& [id, name] : sorted) {
+    apps.Append(base::DictValue().Set("id", id).Set("name", name));
+  }
+#elif BUILDFLAG(IS_WIN)
+  std::map<std::string, std::string> by_id;  // lowercase .exe -> friendly name
+  WinAppEnumContext ctx;
+  ctx.current_pid = GetCurrentProcessId();
+  ctx.by_id = &by_id;
+  EnumWindows(&EnumVisibleWindowsForAppsProc, reinterpret_cast<LPARAM>(&ctx));
+
+  // Add common Windows mail/chat/dev/browser apps if installed in standard
+  // directories (bounded O(1) existence checks, never recursive).
+  if (std::unique_ptr<base::Environment> env = base::Environment::Create()) {
+    auto probe = [&](const char* env_var, const wchar_t* rel_path,
+                     const char* exe_id, const char* label) {
+      if (by_id.size() >= 600 || by_id.contains(exe_id)) {
+        return;
+      }
+      if (auto root = env->GetVar(env_var); root && !root->empty()) {
+        const base::FilePath candidate =
+            base::FilePath::FromUTF8Unsafe(*root).Append(rel_path);
+        if (base::PathExists(candidate)) {
+          by_id.emplace(exe_id, label);
+        }
+      }
+    };
+    probe("LOCALAPPDATA", L"slack\\slack.exe", "slack.exe", "Slack");
+    probe("LOCALAPPDATA", L"Discord\\Update.exe", "discord.exe", "Discord");
+    probe("LOCALAPPDATA", L"Programs\\Microsoft VS Code\\Code.exe", "code.exe",
+          "Visual Studio Code");
+    probe("LOCALAPPDATA", L"Programs\\Notion\\Notion.exe", "notion.exe",
+          "Notion");
+    probe("LOCALAPPDATA", L"Programs\\Obsidian\\Obsidian.exe", "obsidian.exe",
+          "Obsidian");
+    probe("LOCALAPPDATA", L"Programs\\signal-desktop\\Signal.exe", "signal.exe",
+          "Signal");
+    probe("LOCALAPPDATA", L"Figma\\Figma.exe", "figma.exe", "Figma");
+    probe("LOCALAPPDATA", L"Microsoft\\Teams\\current\\Teams.exe", "teams.exe",
+          "Microsoft Teams");
+    probe("APPDATA", L"Telegram Desktop\\Telegram.exe", "telegram.exe",
+          "Telegram");
+    probe("APPDATA", L"Zoom\\bin\\Zoom.exe", "zoom.exe", "Zoom");
+    probe("PROGRAMFILES", L"Mozilla Thunderbird\\thunderbird.exe",
+          "thunderbird.exe", "Thunderbird");
+    probe("PROGRAMFILES", L"Microsoft Office\\root\\Office16\\OUTLOOK.EXE",
+          "outlook.exe", "Outlook");
+    probe("PROGRAMFILES(X86)", L"Microsoft Office\\root\\Office16\\OUTLOOK.EXE",
+          "outlook.exe", "Outlook");
+    probe("PROGRAMFILES", L"Google\\Chrome\\Application\\chrome.exe",
+          "chrome.exe", "Google Chrome");
+    probe("PROGRAMFILES(X86)", L"Microsoft\\Edge\\Application\\msedge.exe",
+          "msedge.exe", "Microsoft Edge");
+    probe("PROGRAMFILES", L"Mozilla Firefox\\firefox.exe", "firefox.exe",
+          "Firefox");
+  }
+
   std::vector<std::pair<std::string, std::string>> sorted(by_id.begin(),
                                                           by_id.end());
   std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
@@ -1066,6 +1300,7 @@ const base::DictValue& OpenPreferences::Defaults() {
           .Set("general.restoreWindows", true)
           .Set("general.userName", "")
           .Set("general.offerTranslate", true)
+          .Set("general.searchSuggestNoticeDismissed", false)
           .Set("appearance.appIcon", "open-indigo")
           .Set("appearance.websiteAppearance", "automatic")
           .Set("appearance.toolbar", false)
@@ -1274,6 +1509,10 @@ bool OpenPreferences::Set(const std::string& key,
       service->model().UpdateProfileSettings(id, settings);
     }
     ApplyEffects(key, targets);
+    if (!applying_service_prefs_) {
+      base::AutoReset<bool> applying(&applying_service_prefs_, true);
+      service->ApplyPreferencesNow(key);
+    }
     return true;
   }
   if (key == "links.littleOpenHotkey" && value.is_string()) {
@@ -1288,6 +1527,12 @@ bool OpenPreferences::Set(const std::string& key,
     Save();
   }
   ApplyEffects(key, {});
+  if (!applying_service_prefs_) {
+    if (OpenBrowserService* service = OpenBrowserService::Get()) {
+      base::AutoReset<bool> applying(&applying_service_prefs_, true);
+      service->ApplyPreferencesNow(key);
+    }
+  }
   return true;
 }
 
@@ -1310,6 +1555,12 @@ void OpenPreferences::Reset(const std::string& key,
     Save();
   }
   ApplyEffects(key, {});
+  if (!applying_service_prefs_) {
+    if (OpenBrowserService* service = OpenBrowserService::Get()) {
+      base::AutoReset<bool> applying(&applying_service_prefs_, true);
+      service->ApplyPreferencesNow(key);
+    }
+  }
 }
 
 void OpenPreferences::Save() {
@@ -1332,6 +1583,67 @@ void OpenPreferences::Save() {
           },
           path, std::move(*json)));
 }
+
+namespace {
+
+void ApplyProfileChromePrefEffect(const std::string& key,
+                                  const std::vector<ProfileID>& profile_ids) {
+  OpenPreferences* open_prefs = OpenPreferences::Get();
+  if (key == "appearance.websiteAppearance") {
+    const std::string mode = StringPref(key);
+    const ThemeService::BrowserColorScheme scheme =
+        mode == "light"  ? ThemeService::BrowserColorScheme::kLight
+        : mode == "dark" ? ThemeService::BrowserColorScheme::kDark
+                         : ThemeService::BrowserColorScheme::kSystem;
+    for (::Profile* profile : ChromeProfiles(profile_ids)) {
+      if (ThemeService* theme = ThemeServiceFactory::GetForProfile(profile)) {
+        theme->SetBrowserColorScheme(scheme);
+      }
+    }
+  } else if (key == "appearance.fontSize") {
+    const std::string size = StringPref(key);
+    const int px = size == "small"        ? 12
+                   : size == "large"      ? 20
+                   : size == "very-large" ? 24
+                                          : 16;
+    for (::Profile* profile : ChromeProfiles(profile_ids)) {
+      profile->GetPrefs()->SetInteger(prefs::kWebKitDefaultFontSize, px);
+    }
+  } else if (key == "appearance.defaultZoom") {
+    const base::Value v = open_prefs->GetValue(key);
+    int pct = 100;
+    if (v.is_int()) {
+      pct = v.GetInt();
+    } else if (v.is_double()) {
+      pct = static_cast<int>(std::lround(v.GetDouble()));
+    }
+    pct = std::clamp(pct, 50, 300);
+    const double level = blink::ZoomFactorToZoomLevel(pct / 100.0);
+    for (::Profile* profile : ChromeProfiles(profile_ids)) {
+      if (content::HostZoomMap* map =
+              content::HostZoomMap::GetDefaultForBrowserContext(profile)) {
+        map->SetDefaultZoomLevel(level);
+      }
+    }
+  } else if (key == "privacy.doNotTrack") {
+    for (::Profile* profile : ChromeProfiles(profile_ids)) {
+      profile->GetPrefs()->SetBoolean(prefs::kEnableDoNotTrack,
+                                      BoolPref(key));
+    }
+  } else if (key == "privacy.httpsOnly") {
+    for (::Profile* profile : ChromeProfiles(profile_ids)) {
+      profile->GetPrefs()->SetBoolean(prefs::kHttpsOnlyModeEnabled,
+                                      BoolPref(key));
+    }
+  } else if (key == "advanced.developerMode") {
+    for (::Profile* profile : ChromeProfiles(profile_ids)) {
+      profile->GetPrefs()->SetBoolean(prefs::kExtensionsUIDeveloperMode,
+                                      BoolPref(key));
+    }
+  }
+}
+
+}  // namespace
 
 // static
 void OpenPreferences::ApplyEffects(const std::string& key,
@@ -1393,57 +1705,13 @@ void OpenPreferences::ApplyEffects(const std::string& key,
     }
   } else if (key == "links.littleOpenHotkey") {
     service->ReloadGlobalHotkeys();
-  } else if (key == "appearance.websiteAppearance") {
-    const std::string mode = StringPref(key);
-    const ThemeService::BrowserColorScheme scheme =
-        mode == "light"  ? ThemeService::BrowserColorScheme::kLight
-        : mode == "dark" ? ThemeService::BrowserColorScheme::kDark
-                         : ThemeService::BrowserColorScheme::kSystem;
-    for (::Profile* profile : ChromeProfiles({})) {
-      if (ThemeService* theme = ThemeServiceFactory::GetForProfile(profile)) {
-        theme->SetBrowserColorScheme(scheme);
-      }
-    }
-  } else if (key == "appearance.fontSize") {
-    const std::string size = StringPref(key);
-    const int px = size == "small"        ? 12
-                   : size == "large"      ? 20
-                   : size == "very-large" ? 24
-                                          : 16;
-    for (::Profile* profile : ChromeProfiles({})) {
-      profile->GetPrefs()->SetInteger(prefs::kWebKitDefaultFontSize, px);
-    }
-  } else if (key == "appearance.defaultZoom") {
-    const base::Value v = open_prefs->GetValue(key);
-    int pct = 100;
-    if (v.is_int()) {
-      pct = v.GetInt();
-    } else if (v.is_double()) {
-      pct = static_cast<int>(std::lround(v.GetDouble()));
-    }
-    pct = std::clamp(pct, 50, 300);
-    const double level = blink::ZoomFactorToZoomLevel(pct / 100.0);
-    for (::Profile* profile : ChromeProfiles({})) {
-      if (content::HostZoomMap* map =
-              content::HostZoomMap::GetDefaultForBrowserContext(profile)) {
-        map->SetDefaultZoomLevel(level);
-      }
-    }
-  } else if (key == "privacy.doNotTrack") {
-    for (::Profile* profile : ChromeProfiles({})) {
-      profile->GetPrefs()->SetBoolean(prefs::kEnableDoNotTrack,
-                                      BoolPref(key));
-    }
-  } else if (key == "privacy.httpsOnly") {
-    for (::Profile* profile : ChromeProfiles({})) {
-      profile->GetPrefs()->SetBoolean(prefs::kHttpsOnlyModeEnabled,
-                                      BoolPref(key));
-    }
-  } else if (key == "advanced.developerMode") {
-    for (::Profile* profile : ChromeProfiles({})) {
-      profile->GetPrefs()->SetBoolean(prefs::kExtensionsUIDeveloperMode,
-                                      BoolPref(key));
-    }
+  } else if (key == "appearance.websiteAppearance" ||
+             key == "appearance.fontSize" ||
+             key == "appearance.defaultZoom" ||
+             key == "privacy.doNotTrack" ||
+             key == "privacy.httpsOnly" ||
+             key == "advanced.developerMode") {
+    ApplyProfileChromePrefEffect(key, profile_ids);
   } else if (key == "advanced.hardwareAcceleration") {
     // Read by Chromium at the next launch.
     if (PrefService* local_state = g_browser_process->local_state()) {
@@ -1478,6 +1746,38 @@ void OpenPreferences::ApplyAllEffects() {
                           base::Value(base::DictValue().Set("key", "")));
 }
 
+// static
+void OpenPreferences::ApplyEffectsForProfile(const ProfileID& profile_id) {
+  if (profile_id.empty()) {
+    return;
+  }
+  OpenBrowserService* service = OpenBrowserService::Get();
+  if (!service) {
+    return;
+  }
+  if (const Profile* profile = service->model().FindProfile(profile_id)) {
+    if (ProfileServices* ps = service->ProfileServicesFor(profile_id);
+        ps && ps->chrome_profile) {
+      ps->chrome_profile->GetPrefs()->SetBoolean(
+          prefs::kSearchSuggestEnabled,
+          profile->settings.search_suggest_enabled);
+    }
+  }
+  OpenPreferences* prefs = Get();
+  if (!prefs->loaded_) {
+    return;
+  }
+  const std::vector<ProfileID> targets = {profile_id};
+  for (const char* key :
+       {"appearance.websiteAppearance", "appearance.fontSize",
+        "appearance.defaultZoom", "privacy.doNotTrack", "privacy.httpsOnly",
+        "advanced.developerMode"}) {
+    if (prefs->stored_.Find(key)) {
+      ApplyProfileChromePrefEffect(key, targets);
+    }
+  }
+}
+
 // ===========================================================================
 // OpenSettingsUI::FileDialog
 // ===========================================================================
@@ -1500,6 +1800,10 @@ class OpenSettingsUI::FileDialog : public ui::SelectFileDialog::Listener {
             const std::vector<std::string>& extensions,
             gfx::NativeWindow owner) {
     dialog_ = ui::SelectFileDialog::Create(this, /*policy=*/nullptr);
+    if (!dialog_) {
+      Finish(std::nullopt);
+      return;
+    }
     ui::SelectFileDialog::FileTypeInfo types;
     for (const std::string& ext : extensions) {
 #if BUILDFLAG(IS_WIN)
@@ -1613,6 +1917,8 @@ void OpenSettingsUI::RegisterMethods() {
            bind(&OpenSettingsUI::RemoveAdBlockExclusion));
   Register(kSettingsClearBrowsingData,
            bind(&OpenSettingsUI::ClearBrowsingData));
+  Register(kSettingsDefaultBrowserGet,
+           bind(&OpenSettingsUI::GetDefaultBrowser));
   Register(kSettingsSetDefaultBrowser,
            bind(&OpenSettingsUI::SetDefaultBrowser));
   Register(kSettingsGetExtensions, bind(&OpenSettingsUI::GetExtensions));
@@ -2071,7 +2377,9 @@ void OpenSettingsUI::GetTheme(const base::DictValue& payload, Reply reply) {
   ReplyOk(std::move(reply), ThemeValue());
 }
 
-bool OpenSettingsUI::OpenInBrowser(const GURL& url) {
+bool OpenSettingsUI::OpenInBrowser(
+    const GURL& url,
+    const std::optional<ProfileID>& profile_id) {
   OpenBrowserService* s = service();
   OpenTabBridge* bridge = s ? s->tab_bridge() : nullptr;
   if (!bridge || !url.is_valid()) {
@@ -2090,9 +2398,38 @@ bool OpenSettingsUI::OpenInBrowser(const GURL& url) {
   if (!standard) {
     window = s->MainWindowId();
   }
-  const ItemID tab = window.empty()
-                         ? bridge->OpenTab(url, /*background=*/false)
+
+  std::optional<SpaceID> target_space;
+  if (profile_id && !profile_id->empty() &&
+      s->model().FindProfile(*profile_id)) {
+    if (const BrowserWindowState* state = s->model().FindWindow(window)) {
+      if (const Space* focused = s->model().FindSpace(state->focused_space_id);
+          focused && focused->profile_id == *profile_id) {
+        target_space = focused->id;
+      }
+    }
+    if (!target_space) {
+      target_space = s->model().MostRecentlyFocusedSpace(*profile_id);
+    }
+    if (!target_space) {
+      for (const Space& space : s->model().spaces()) {
+        if (space.profile_id == *profile_id) {
+          target_space = space.id;
+          break;
+        }
+      }
+    }
+  }
+
+  ItemID tab;
+  if (target_space && !target_space->empty()) {
+    tab = bridge->OpenTabInSpace(
+        url, *target_space, /*background=*/false,
+        window.empty() ? std::nullopt : std::optional<WindowID>(window));
+  } else {
+    tab = window.empty() ? bridge->OpenTab(url, /*background=*/false)
                          : bridge->OpenTab(url, /*background=*/false, window);
+  }
   if (!window.empty()) {
     if (BrowserWindowInterface* browser = bridge->BrowserForWindow(window)) {
       if (ui::BaseWindow* base_window = browser->GetWindow()) {
@@ -2119,7 +2456,13 @@ void OpenSettingsUI::OpenChromeUrl(const base::DictValue& payload,
     ReplyError(std::move(reply), "that page cannot be opened from Settings");
     return;
   }
-  ReplyOk(std::move(reply), base::DictValue().Set("ok", OpenInBrowser(url)));
+  std::optional<ProfileID> target_profile;
+  if (const std::string* pid = payload.FindString("profile_id");
+      pid && !pid->empty() && service()->model().FindProfile(*pid)) {
+    target_profile = *pid;
+  }
+  ReplyOk(std::move(reply),
+          base::DictValue().Set("ok", OpenInBrowser(url, target_profile)));
 }
 
 void OpenSettingsUI::RunFileDialog(
@@ -2729,18 +3072,33 @@ void OpenSettingsUI::SpacesSetProfile(const base::DictValue& payload,
 
 base::DictValue OpenSettingsUI::ShortcutsValue() const {
   CommandRegistry& registry = service()->commands();
+  auto is_visible = [&](const std::string& id) {
+    const CommandDefinition* def = registry.FindByStringId(id);
+    return def && !def->is_reserved &&
+           IsCommandSupportedOnPlatform(def->command_id);
+  };
   // Duplicate bindings: command id -> the other command using its keys.
   std::map<std::string, std::string> conflicts;
   for (const ShortcutConflict& conflict : registry.DetectConflicts()) {
     if (conflict.command_ids.size() < 2 || conflict.is_known_arc_duplicate) {
       continue;
     }
-    conflicts[conflict.command_ids[0]] = conflict.command_ids[1];
-    conflicts[conflict.command_ids[1]] = conflict.command_ids[0];
+    std::vector<std::string> visible_ids;
+    for (const std::string& id : conflict.command_ids) {
+      if (is_visible(id)) {
+        visible_ids.push_back(id);
+      }
+    }
+    if (visible_ids.size() < 2) {
+      continue;
+    }
+    conflicts[visible_ids[0]] = visible_ids[1];
+    conflicts[visible_ids[1]] = visible_ids[0];
   }
   base::ListValue shortcuts;
   for (const CommandDefinition& command : registry.all_commands()) {
-    if (command.is_reserved) {
+    if (command.is_reserved ||
+        !IsCommandSupportedOnPlatform(command.command_id)) {
       continue;
     }
     base::DictValue d;
@@ -2767,13 +3125,27 @@ base::DictValue OpenSettingsUI::ShortcutsValue() const {
 
 base::DictValue OpenSettingsUI::ShortcutsDetailedValue() const {
   CommandRegistry& registry = service()->commands();
+  auto is_visible = [&](const std::string& id) {
+    const CommandDefinition* def = registry.FindByStringId(id);
+    return def && !def->is_reserved &&
+           IsCommandSupportedOnPlatform(def->command_id);
+  };
   std::map<std::string, std::string> conflicts;
   for (const ShortcutConflict& conflict : registry.DetectConflicts()) {
     if (conflict.command_ids.size() < 2 || conflict.is_known_arc_duplicate) {
       continue;
     }
+    std::vector<std::string> visible_ids;
     for (const std::string& id : conflict.command_ids) {
-      for (const std::string& other : conflict.command_ids) {
+      if (is_visible(id)) {
+        visible_ids.push_back(id);
+      }
+    }
+    if (visible_ids.size() < 2) {
+      continue;
+    }
+    for (const std::string& id : visible_ids) {
+      for (const std::string& other : visible_ids) {
         if (other != id) {
           conflicts[id] = other;
         }
@@ -2785,7 +3157,8 @@ base::DictValue OpenSettingsUI::ShortcutsDetailedValue() const {
   int conflict_count = 0;
   base::ListValue shortcuts;
   for (const CommandDefinition& command : registry.all_commands()) {
-    if (command.is_reserved) {
+    if (command.is_reserved ||
+        !IsCommandSupportedOnPlatform(command.command_id)) {
       continue;
     }
     const std::vector<KeyboardShortcut> keys =
@@ -3129,7 +3502,7 @@ base::DictValue OpenSettingsUI::AtcValue() const {
                          model.default_destination().space_id));
   d.Set("external_links_little_open",
         BoolPref("links.externalLinksLittleOpen"));
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   d.Set("source_apps_supported", true);
 #else
   d.Set("source_apps_supported", false);
@@ -3387,7 +3760,7 @@ void OpenSettingsUI::AtcListRunningApps(const base::DictValue& payload,
       base::BindOnce(&ListApplicationsBlocking),
       base::BindOnce(
           [](Reply reply, base::ListValue apps) {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
             const bool supported = true;
 #else
             const bool supported = false;
@@ -3852,6 +4225,32 @@ void OpenSettingsUI::ClearBrowsingData(const base::DictValue& payload,
                              begin, mask, std::move(done));
 }
 
+void OpenSettingsUI::GetDefaultBrowser(const base::DictValue& payload,
+                                       Reply reply) {
+#if BUILDFLAG(IS_MAC)
+  OpenPlatform* platform = OpenPlatform::Get();
+  const bool is_default = platform && platform->IsDefaultBrowser();
+  ReplyOk(std::move(reply), base::DictValue()
+                                .Set("is_default", is_default)
+                                .Set("is_default_browser", is_default));
+#else
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce([]() -> bool {
+        OpenPlatform* platform = OpenPlatform::Get();
+        return platform && platform->IsDefaultBrowser();
+      }),
+      base::BindOnce(
+          [](Reply reply, bool is_default) {
+            ReplyOk(std::move(reply),
+                    base::DictValue()
+                        .Set("is_default", is_default)
+                        .Set("is_default_browser", is_default));
+          },
+          std::move(reply)));
+#endif
+}
+
 void OpenSettingsUI::SetDefaultBrowser(const base::DictValue& payload,
                                        Reply reply) {
 #if BUILDFLAG(IS_MAC)
@@ -3963,8 +4362,8 @@ void OpenSettingsUI::ExtensionsRemove(const base::DictValue& payload,
 
 void OpenSettingsUI::ExtensionsOpenOptions(const base::DictValue& payload,
                                            Reply reply) {
-  ProfileServices* ps =
-      service()->ProfileServicesFor(ProfileFromPayload(payload));
+  const ProfileID target_profile = ProfileFromPayload(payload);
+  ProfileServices* ps = service()->ProfileServicesFor(target_profile);
   const std::string id = json::GetString(payload, "id");
   const extensions::Extension* extension =
       ps && ps->chrome_profile
@@ -3979,7 +4378,8 @@ void OpenSettingsUI::ExtensionsOpenOptions(const base::DictValue& payload,
       extensions::OptionsPageInfo::HasOptionsPage(extension)
           ? extensions::OptionsPageInfo::GetOptionsPage(extension)
           : GURL("chrome://extensions/?id=" + id);
-  ReplyOk(std::move(reply), base::DictValue().Set("ok", OpenInBrowser(url)));
+  ReplyOk(std::move(reply),
+          base::DictValue().Set("ok", OpenInBrowser(url, target_profile)));
 }
 
 // --- Account & Sync (legacy sync.* shape) --------------------------------------

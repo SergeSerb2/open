@@ -121,6 +121,8 @@ class OpenMediaBridge::TabSessionObserver
 
   const OpenMediaSessionState& state() const { return state_; }
   OpenMediaSessionState& mutable_state() { return state_; }
+  bool in_auto_pip() const { return in_auto_pip_; }
+  void SetAutoPiPActive(bool active) { in_auto_pip_ = active; }
 
   content::MediaSession* GetMediaSession() const {
     content::WebContents* wc = web_contents();
@@ -184,6 +186,16 @@ class OpenMediaBridge::TabSessionObserver
 
   void MediaPictureInPictureChanged(bool is_picture_in_picture) override {
     state_.in_pip = is_picture_in_picture;
+    if (is_picture_in_picture) {
+      if (bridge_->active_pip_tab_id_ == tab_id_ &&
+          bridge_->active_pip_is_automatic_) {
+        in_auto_pip_ = true;
+      }
+    } else if (in_auto_pip_ || (bridge_->active_pip_tab_id_ == tab_id_ &&
+                                bridge_->active_pip_is_automatic_)) {
+      in_auto_pip_ = false;
+      bridge_->SnoozeAutoPiP(tab_id_);
+    }
     bridge_->OnTabStateUpdated(tab_id_);
   }
 
@@ -403,6 +415,7 @@ class OpenMediaBridge::TabSessionObserver
   ItemID tab_id_;
   std::string metadata_title_;
   OpenMediaSessionState state_;
+  bool in_auto_pip_ = false;
   mojo::Receiver<media_session::mojom::MediaSessionObserver> observer_receiver_{
       this};
   base::WeakPtrFactory<TabSessionObserver> weak_factory_{this};
@@ -575,6 +588,10 @@ bool OpenMediaBridge::TogglePictureInPicture(const ItemID& tab_id) {
     return false;
   }
   if (it->second->state().in_pip) {
+    if (active_pip_tab_id_ == tab_id && active_pip_is_automatic_) {
+      SnoozeAutoPiP(tab_id);
+    }
+    it->second->SetAutoPiPActive(false);
     session->ExitPictureInPicture();
     auto* pip_mgr = PictureInPictureWindowManager::GetInstance();
     if (pip_mgr && pip_mgr->GetWebContents() == wc) {
@@ -775,6 +792,7 @@ void OpenMediaBridge::OnTabSelected(const ItemID& tab_id) {
   if (active_pip_tab_id_ == tab_id && active_pip_is_automatic_) {
     auto it = tabs_.find(tab_id);
     if (it != tabs_.end()) {
+      it->second->SetAutoPiPActive(false);
       if (content::MediaSession* session = it->second->GetMediaSession()) {
         session->ExitPictureInPicture();
       }
@@ -851,13 +869,18 @@ void OpenMediaBridge::OnTabStateUpdated(const ItemID& tab_id) {
       if (active_pip_tab_id_ != tab_id) {
         active_pip_tab_id_ = tab_id;
         active_pip_is_automatic_ = false;
+      } else if (active_pip_is_automatic_) {
+        it->second->SetAutoPiPActive(true);
       }
     } else if (active_pip_tab_id_ == tab_id) {
-      // If an automatic PiP closed while paused, snooze auto-PiP for this tab
+      // If an automatic PiP closed without the user returning to the tab
+      // (dismissed while playing or paused), snooze auto-PiP for this tab
       // until the user returns to it (matches MediaCoordinator.swift §4.5.5).
-      if (active_pip_is_automatic_ && !s.is_playing) {
+      if (active_pip_is_automatic_ &&
+          (it->second->in_auto_pip() || !s.is_playing)) {
         snoozed_tabs_.insert(tab_id);
       }
+      it->second->SetAutoPiPActive(false);
       active_pip_tab_id_.reset();
       active_pip_is_automatic_ = false;
     }

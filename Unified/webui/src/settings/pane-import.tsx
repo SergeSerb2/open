@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { type ImportKind, type ImportReceiptInfo, type ImportSource, RPC_EVENTS, rpc, subscribeEvent } from '../shared/bridge';
 import { Modal } from '../shared/components';
 import { ImportIcon } from '../shared/icons';
+import { isMacPlatform } from '../shared/shortcuts';
 import { formatCount, relativeTime, useSettings } from './context';
 import { Banner, Btn, Checkbox, EmptyRow, Field, Group, PaneHeader, Pill, Select, Spinner } from './ui';
 
@@ -170,7 +171,9 @@ export function ImportPane(): JSX.Element {
               <div class="st-row-help">
                 {s.profile_name !== s.browser_name ? `${s.profile_name} · ` : ''}
                 {s.access_denied
-                  ? 'Open needs Full Disk Access to read it.'
+                  ? isMacPlatform()
+                    ? 'Open needs Full Disk Access to read it.'
+                    : s.access_error || 'Open cannot read this browser profile.'
                   : `${formatCount(s.bookmarks_count)} ${s.kind === 'arc' || s.kind === 'open_legacy' ? 'tabs' : 'bookmarks'} · ${formatCount(s.history_count)} history entries`}
               </div>
             </div>
@@ -259,16 +262,21 @@ export function ImportPane(): JSX.Element {
             Open reads your old Open data and never changes or deletes it.
           </Banner>
         )}
-        {phase === 'denied' && (
-          <Banner tone="warning" title="Open needs Full Disk Access">
-            <ol class="st-steps">
-              <li>Open System Settings, then Privacy & Security.</li>
-              <li>Choose Full Disk Access.</li>
-              <li>Turn on Open. Add it with the + button if it is not in the list.</li>
-              <li>Quit and reopen Open, then try again.</li>
-            </ol>
-          </Banner>
-        )}
+        {phase === 'denied' &&
+          (isMacPlatform() ? (
+            <Banner tone="warning" title="Open needs Full Disk Access">
+              <ol class="st-steps">
+                <li>Open System Settings, then Privacy & Security.</li>
+                <li>Choose Full Disk Access.</li>
+                <li>Turn on Open. Add it with the + button if it is not in the list.</li>
+                <li>Quit and reopen Open, then try again.</li>
+              </ol>
+            </Banner>
+          ) : (
+            <Banner tone="warning" title="Cannot read browser data">
+              {active?.access_error || error || 'Close the other browser or check file permissions for its profile folder, then try again.'}
+            </Banner>
+          ))}
         {phase === 'idle' && active && (
           <>
             {active.kind === 'html' ? (

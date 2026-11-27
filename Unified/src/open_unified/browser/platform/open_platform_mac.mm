@@ -16,9 +16,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <array>
 #include <map>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -50,6 +53,163 @@ NSString* const kOpenWindowMaterialId = @"org.openbrowser.unified.vibrancy";
 NSString* const kOpenWindowControlsId = @"org.openbrowser.unified.window-controls";
 // Chromium's glass-frame background views (macOS 26 GlassFrame feature).
 NSString* const kChromiumOpaqueFrameBackgroundId = @"OpaqueFrameBackgroundView";
+
+struct MacAppIconPalette {
+  std::string_view id;
+  SkColor stops[3];
+  CGFloat positions[3];
+  size_t count;
+};
+
+constexpr std::array<MacAppIconPalette, 6> kMacAppIconPalettes = {{
+    {"open-indigo",
+     {SkColorSetRGB(0x3B, 0x3F, 0xD8), SkColorSetRGB(0x64, 0x57, 0xF0),
+      SkColorSetRGB(0xF2, 0xA3, 0x5E)},
+     {0.0, 0.55, 1.0},
+     3},
+    {"open-obsidian",
+     {SkColorSetRGB(0x17, 0x17, 0x1F), SkColorSetRGB(0x34, 0x36, 0x4A), 0},
+     {0.0, 1.0, 1.0},
+     2},
+    {"open-sunburst",
+     {SkColorSetRGB(0xF7, 0xB4, 0x55), SkColorSetRGB(0xEF, 0x5D, 0x3B), 0},
+     {0.0, 1.0, 1.0},
+     2},
+    {"open-sage",
+     {SkColorSetRGB(0x3F, 0xB6, 0x8B), SkColorSetRGB(0x14, 0x6B, 0x52), 0},
+     {0.0, 1.0, 1.0},
+     2},
+    {"open-slate",
+     {SkColorSetRGB(0x83, 0x90, 0xA6), SkColorSetRGB(0x3A, 0x44, 0x56), 0},
+     {0.0, 1.0, 1.0},
+     2},
+    {"open-dawn",
+     {SkColorSetRGB(0xF0, 0x8D, 0xB4), SkColorSetRGB(0x8C, 0x63, 0xE6), 0},
+     {0.0, 1.0, 1.0},
+     2},
+}};
+
+const MacAppIconPalette* FindMacAppIconPalette(std::string_view icon_id) {
+  std::string_view target = icon_id.empty() ? "open-indigo" : icon_id;
+  for (const MacAppIconPalette& palette : kMacAppIconPalettes) {
+    if (palette.id == target) {
+      return &palette;
+    }
+  }
+  return nullptr;
+}
+
+NSImage* RenderMacAppIcon(const MacAppIconPalette& palette, CGFloat size) {
+  if (size <= 0.0) {
+    return nil;
+  }
+  const MacAppIconPalette* palette_ptr = &palette;
+  return [NSImage
+      imageWithSize:NSMakeSize(size, size)
+            flipped:YES
+     drawingHandler:^BOOL(NSRect dstRect) {
+       CGContextRef ctx = NSGraphicsContext.currentContext.CGContext;
+       if (!ctx) {
+         return NO;
+       }
+       const CGFloat s = std::min(dstRect.size.width, dstRect.size.height);
+       if (s <= 0.0) {
+         return NO;
+       }
+       const CGFloat radius = s * 0.22;
+
+       CGContextSaveGState(ctx);
+       CGContextTranslateCTM(ctx, dstRect.origin.x, dstRect.origin.y);
+
+       // Rounded squircle background with 140deg CSS linear gradient.
+       base::apple::ScopedCFTypeRef<CGPathRef> rounded_rect(
+           CGPathCreateWithRoundedRect(CGRectMake(0.0, 0.0, s, s), radius,
+                                       radius, nullptr));
+       base::apple::ScopedCFTypeRef<CGColorSpaceRef> srgb(
+           CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
+       if (rounded_rect && srgb) {
+         CGFloat components[3 * 4] = {};
+         CGFloat locations[3] = {};
+         for (size_t i = 0; i < palette_ptr->count; ++i) {
+           const SkColor c = palette_ptr->stops[i];
+           components[i * 4 + 0] =
+               static_cast<CGFloat>(SkColorGetR(c)) / 255.0;
+           components[i * 4 + 1] =
+               static_cast<CGFloat>(SkColorGetG(c)) / 255.0;
+           components[i * 4 + 2] =
+               static_cast<CGFloat>(SkColorGetB(c)) / 255.0;
+           components[i * 4 + 3] = 1.0;
+           locations[i] = palette_ptr->positions[i];
+         }
+         base::apple::ScopedCFTypeRef<CGGradientRef> gradient(
+             CGGradientCreateWithColorComponents(srgb.get(), components,
+                                                 locations,
+                                                 palette_ptr->count));
+         if (gradient) {
+           constexpr CGFloat kDx = 0.6427876;
+           constexpr CGFloat kDy = 0.7660444;
+           const CGFloat half_len = s * 0.5 * (kDx + kDy);
+           const CGPoint start = CGPointMake(s * 0.5 - kDx * half_len,
+                                             s * 0.5 - kDy * half_len);
+           const CGPoint end = CGPointMake(s * 0.5 + kDx * half_len,
+                                           s * 0.5 + kDy * half_len);
+           CGContextSaveGState(ctx);
+           CGContextAddPath(ctx, rounded_rect.get());
+           CGContextClip(ctx);
+           CGContextDrawLinearGradient(
+               ctx, gradient.get(), start, end,
+               kCGGradientDrawsBeforeStartLocation |
+                   kCGGradientDrawsAfterEndLocation);
+           CGContextRestoreGState(ctx);
+         }
+       }
+
+       // Open doorway-and-sun mark scaled from the 40x40 Settings artwork.
+       const CGFloat scale = s / 40.0;
+       base::apple::ScopedCFTypeRef<CGMutablePathRef> doorway(
+           CGPathCreateMutable());
+       if (doorway) {
+         CGPathMoveToPoint(doorway.get(), nullptr, 12.0 * scale, 33.0 * scale);
+         CGPathAddLineToPoint(doorway.get(), nullptr, 12.0 * scale,
+                              18.5 * scale);
+         CGPathAddCurveToPoint(doorway.get(), nullptr, 12.0 * scale,
+                               13.8 * scale, 15.6 * scale, 10.0 * scale,
+                               20.0 * scale, 10.0 * scale);
+         CGPathAddCurveToPoint(doorway.get(), nullptr, 24.4 * scale,
+                               10.0 * scale, 28.0 * scale, 13.8 * scale,
+                               28.0 * scale, 18.5 * scale);
+         CGPathAddLineToPoint(doorway.get(), nullptr, 28.0 * scale,
+                              33.0 * scale);
+         CGPathCloseSubpath(doorway.get());
+
+         base::apple::ScopedCFTypeRef<CGColorRef> doorway_fill(
+             CGColorCreateSRGB(1.0, 1.0, 1.0, 46.0 / 255.0));
+         CGContextSetFillColorWithColor(ctx, doorway_fill.get());
+         CGContextAddPath(ctx, doorway.get());
+         CGContextFillPath(ctx);
+
+         base::apple::ScopedCFTypeRef<CGColorRef> doorway_stroke(
+             CGColorCreateSRGB(1.0, 1.0, 1.0, 1.0));
+         CGContextSetStrokeColorWithColor(ctx, doorway_stroke.get());
+         CGContextSetLineWidth(ctx, std::max<CGFloat>(1.25, 2.0 * scale));
+         CGContextSetLineJoin(ctx, kCGLineJoinRound);
+         CGContextSetLineCap(ctx, kCGLineCapRound);
+         CGContextAddPath(ctx, doorway.get());
+         CGContextStrokePath(ctx);
+       }
+
+       base::apple::ScopedCFTypeRef<CGColorRef> sun_fill(
+           CGColorCreateSRGB(1.0, 0xE9 / 255.0, 0xB8 / 255.0, 1.0));
+       const CGFloat sun_r = 3.6 * scale;
+       CGContextSetFillColorWithColor(ctx, sun_fill.get());
+       CGContextFillEllipseInRect(
+           ctx, CGRectMake(20.0 * scale - sun_r, 23.0 * scale - sun_r,
+                           sun_r * 2.0, sun_r * 2.0));
+
+       CGContextRestoreGState(ctx);
+       return YES;
+     }];
+}
 }  // namespace
 
 @interface OpenWindowMaterialView : NSVisualEffectView
@@ -970,17 +1130,25 @@ class OpenPlatformMac final : public OpenPlatform {
 
   bool SetAppIcon(const std::string& icon_id) override {
     @autoreleasepool {
-      if (icon_id.empty()) {
-        // nil restores the bundle's icon.
-        NSApplication.sharedApplication.applicationIconImage = nil;
+      const MacAppIconPalette* palette = FindMacAppIconPalette(icon_id);
+      if (!palette) {
+        return false;
+      }
+      if (icon_id.empty() || icon_id == "open-indigo") {
+        // nil restores the bundle's default icon.
+        [NSApp setApplicationIconImage:nil];
         return true;
       }
-      // Alternate icons ship as named bundle resources (Open's own art).
+      // Prefer a bundled resource if present; otherwise procedurally draw the
+      // matching Open brand variant (256x256).
       NSImage* image = [NSImage imageNamed:base::SysUTF8ToNSString(icon_id)];
+      if (!image) {
+        image = RenderMacAppIcon(*palette, 256.0);
+      }
       if (!image) {
         return false;
       }
-      NSApplication.sharedApplication.applicationIconImage = image;
+      [NSApp setApplicationIconImage:image];
       return true;
     }
   }
