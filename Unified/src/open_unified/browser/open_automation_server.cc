@@ -993,12 +993,16 @@ gfx::Rect SnapshotRectForWidget(views::Widget* w, bool is_main) {
     return gfx::Rect(client_bounds.size());
   }
   return gfx::Rect(window_bounds.size());
+#elif BUILDFLAG(IS_MAC)
+  // On macOS, ScreenCaptureKit captures the full NSWindow frame rooted at
+  // (0, 0) with ignoreShadowsSingleWindow=YES. Returning the full window size
+  // avoids clipping bordered bubbles (such as OpenSiteControlBubble) whose
+  // shadow padding lives inside the NSWindow frame.
+  if (!window_bounds.IsEmpty()) {
+    return gfx::Rect(window_bounds.size());
+  }
+  return gfx::Rect(client_bounds.size());
 #else
-  // On macOS, GrabWindowSnapshot grabs NSWindow.contentView.superview rooted
-  // at GetWindowBoundsInScreen().origin(). Bordered bubbles and titled windows
-  // inset GetClientAreaBoundsInScreen() inside window_bounds, so offset by
-  // (client_origin - window_origin) to avoid top-left offset or bottom-right
-  // cropping.
   if (!client_bounds.IsEmpty() && !window_bounds.IsEmpty() &&
       window_bounds.Contains(client_bounds)) {
     const gfx::Vector2d offset =

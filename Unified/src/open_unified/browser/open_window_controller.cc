@@ -5973,26 +5973,9 @@ void OpenWindowUi::ShowNodeIconPicker(const ItemID& node_id) {
               return;
             }
             BrowserModel& m = self->service()->model();
-            SidebarNode* target = m.FindNode(id);
-            if (!target) {
-              self->CloseNodeIconPicker(/*synchronous=*/false);
-              return;
+            if (m.SetNodeIconOverride(id, icon)) {
+              self->service()->ScheduleSave();
             }
-            if (Tab* tab = target->as_tab()) {
-              tab->icon_override = icon;
-            } else if (Folder* folder = target->as_folder()) {
-              folder->icon_override = icon;
-            } else if (Split* split = target->as_split()) {
-              split->icon_override = icon;
-            }
-            TreeChange change;
-            change.kind = TreeChange::Kind::kUpdate;
-            change.node_id = id;
-            if (auto parent = m.GetParent(id)) {
-              change.parent = *parent;
-            }
-            self->controller_->OnTreeChanged(change);
-            self->service()->ScheduleSave();
             self->CloseNodeIconPicker(/*synchronous=*/false);
           },
           weak_factory_.GetWeakPtr(), node_id));

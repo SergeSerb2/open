@@ -2001,6 +2001,60 @@ bool BrowserModel::RenameNode(const ItemID& id, const std::string& title) {
   return false;
 }
 
+bool BrowserModel::SetNodeIconOverride(const ItemID& id,
+                                       std::optional<SpaceIcon> icon) {
+  auto apply = [](BrowserModel& m, const ItemID& target_id,
+                  const std::optional<SpaceIcon>& val) -> bool {
+    SidebarNode* node = m.FindNode(target_id);
+    if (!node) {
+      return false;
+    }
+    if (Tab* tab = node->as_tab()) {
+      tab->icon_override = val;
+    } else if (Folder* folder = node->as_folder()) {
+      folder->icon_override = val;
+    } else if (Split* split = node->as_split()) {
+      split->icon_override = val;
+    } else {
+      return false;
+    }
+    TreeChange c;
+    c.kind = TreeChange::Kind::kUpdate;
+    c.node_id = target_id;
+    if (auto p = m.GetParent(target_id)) {
+      c.parent = *p;
+    }
+    m.Emit(c);
+    return true;
+  };
+
+  SidebarNode* node = FindNode(id);
+  if (!node) {
+    return false;
+  }
+  std::optional<SpaceIcon> old_val;
+  if (const Tab* tab = node->as_tab()) {
+    old_val = tab->icon_override;
+  } else if (const Folder* folder = node->as_folder()) {
+    old_val = folder->icon_override;
+  } else if (const Split* split = node->as_split()) {
+    old_val = split->icon_override;
+  } else {
+    return false;
+  }
+  if (old_val == icon) {
+    return false;
+  }
+  if (!apply(*this, id, icon)) {
+    return false;
+  }
+  PushUndo(
+      "Change Icon",
+      [id, old_val, apply](BrowserModel& m) { return apply(m, id, old_val); },
+      [id, icon, apply](BrowserModel& m) { return apply(m, id, icon); });
+  return true;
+}
+
 bool BrowserModel::SetFolderExpanded(const ItemID& folder_id, bool expanded) {
   Folder* folder = FindFolder(folder_id);
   if (!folder || folder->is_expanded == expanded) {

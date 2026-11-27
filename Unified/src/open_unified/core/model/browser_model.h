@@ -203,6 +203,7 @@ class BrowserModel {
                       std::optional<size_t> position = std::nullopt,
                       const std::vector<ItemID>& node_ids = {});
   bool RenameNode(const ItemID& id, const std::string& title);
+  bool SetNodeIconOverride(const ItemID& id, std::optional<SpaceIcon> icon);
   bool SetFolderExpanded(const ItemID& folder_id, bool expanded);
   bool SetPinnedCollapsed(const SpaceID& space_id, bool collapsed);
   bool SetMuted(const ItemID& tab_id, bool muted);

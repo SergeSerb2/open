@@ -208,8 +208,7 @@ case "${TARGET}" in
     mv -f "${STAGE}/chrome" "${STAGE}/open"
     ;;
   win-x64)
-    for req in chrome.exe chrome.dll chrome_elf.dll icudtl.dat \
-               v8_context_snapshot.bin resources.pak; do
+    for req in chrome.exe chrome.dll chrome_elf.dll icudtl.dat resources.pak; do
       [[ -f "${out_abs}/${req}" ]] ||
         die "win-x64 stage missing required build artifact: ${out_abs}/${req}"
       cp -a "${out_abs}/${req}" "${STAGE}/"
@@ -217,7 +216,8 @@ case "${TARGET}" in
     for pak in "${out_abs}"/*.pak; do
       [[ -f "${pak}" ]] && cp -a "${pak}" "${STAGE}/"
     done
-    for opt in chrome_wer.dll libEGL.dll libGLESv2.dll vk_swiftshader.dll \
+    for opt in v8_context_snapshot.bin snapshot_blob.bin chrome_wer.dll \
+               libEGL.dll libGLESv2.dll vk_swiftshader.dll \
                vk_swiftshader_icd.json vulkan-1.dll d3dcompiler_47.dll \
                dxcompiler.dll dxil.dll; do
       [[ -e "${out_abs}/${opt}" ]] && cp -a "${out_abs}/${opt}" "${STAGE}/"

@@ -1528,6 +1528,14 @@ class OpenTabTreeView::RowView : public views::View,
     const float ink = sl::kFaviconInk;
     const gfx::RectF ink_rect(frame.x() + (frame.width() - ink) / 2,
                               frame.y() + (frame.height() - ink) / 2, ink, ink);
+    if (tab.icon_override.has_value()) {
+      glyphs::DrawSpaceIcon(canvas, &*tab.icon_override,
+                            base::UTF8ToUTF16(tab.display_title()), ink_rect,
+                            typography::Get(OpenFont::kTabTitle),
+                            Sk(roles.title, opacity), opacity,
+                            /*desaturate=*/false);
+      return;
+    }
     const gfx::ImageSkia image = tree_->context_->FaviconFor(tab);
     if (!image.isNull()) {
       cc::PaintFlags flags;
@@ -1635,10 +1643,17 @@ class OpenTabTreeView::RowView : public views::View,
     const float x0 = indent();
     const gfx::RectF icon(sl::kFaviconX + x0, sl::kFaviconY, sl::kFaviconSize,
                           sl::kFaviconSize);
-    glyphs::Draw(canvas,
-                 folder.is_expanded ? glyphs::Glyph::kFolderOpen
-                                    : glyphs::Glyph::kFolderClosed,
-                 icon, FolderTint(state));
+    if (folder.icon_override.has_value()) {
+      glyphs::DrawSpaceIcon(canvas, &*folder.icon_override,
+                            base::UTF8ToUTF16(folder.title), icon,
+                            typography::Get(OpenFont::kFolderTitle),
+                            FolderTint(state), 1.0f, /*desaturate=*/false);
+    } else {
+      glyphs::Draw(canvas,
+                   folder.is_expanded ? glyphs::Glyph::kFolderOpen
+                                      : glyphs::Glyph::kFolderClosed,
+                   icon, FolderTint(state));
+    }
     if (folder.live.has_value() &&
         (folder.is_expanded || !folder.peeked_child_id.has_value())) {
       const gfx::SizeF ink_size = glyphs::InkSize(glyphs::Glyph::kFolderClosed);

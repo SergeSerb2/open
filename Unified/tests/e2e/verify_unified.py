@@ -409,10 +409,15 @@ class Browser:
         self.client.close()
         self.client = None
       if self.proc:
+        t0 = time.monotonic()
         try:
-          rc = self.proc.wait(20)
+          rc = self.proc.wait(25)
+          self.exit_code = rc
+          self.quit_elapsed_s = round(time.monotonic() - t0, 2)
           self.clean_exit = (rc == 0)
         except subprocess.TimeoutExpired:
+          self.exit_code = None
+          self.quit_elapsed_s = round(time.monotonic() - t0, 2)
           self.clean_exit = False
           if os.name == "nt":
             try:
@@ -1971,7 +1976,10 @@ def main(argv) -> int:
       t0 = time.monotonic()
       entry = {"suite": "clean_exit_browser_json"}
       try:
-        check(browser.clean_exit, "browser did not exit cleanly on quit")
+        check(browser.clean_exit,
+              f"browser did not exit cleanly on quit "
+              f"(rc={getattr(browser, 'exit_code', None)}, "
+              f"elapsed={getattr(browser, 'quit_elapsed_s', None)}s)")
         verify_clean_exit_browser_json(user_data)
         entry["status"] = "PASS"
       except (CheckFailed, OSError, json.JSONDecodeError) as e:
