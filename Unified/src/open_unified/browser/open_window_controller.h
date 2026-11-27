@@ -192,6 +192,7 @@ class OpenWindowController : public OpenViewController,
   bool IsSystemDarkMode() const override;
   WindowID WindowIdForBrowserView(BrowserView* browser_view) override;
   bool IsIncreaseContrastEnabled() const override;
+  bool IsTranslucencyEnabled() const override;
   bool IsIncognitoWindow(const WindowID& window_id) const override;
   std::optional<ItemID> GetPeekSourceNode(
       const WindowID& window_id) const override;

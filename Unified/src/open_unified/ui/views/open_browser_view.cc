@@ -182,6 +182,9 @@ gfx::ImageSkia OpenViewController::GetFavicon(const ItemID&) const {
 bool OpenViewController::IsDeveloperModeEnabled() const {
   return false;
 }
+bool OpenViewController::IsTranslucencyEnabled() const {
+  return true;
+}
 std::unique_ptr<ui::MenuModel> OpenViewController::CreateMenuModel(
     const WindowID&,
     const OpenMenuTarget&) {
@@ -3312,7 +3315,7 @@ void OpenBrowserView::UpdateWindowMaterial() {
 #endif
   const theme::ThemeStyle& style = state.style;
   WindowMaterialSpec spec;
-  spec.vibrant = style.is_vibrant;
+  spec.vibrant = style.is_vibrant && controller_->IsTranslucencyEnabled();
   spec.dark_translucency = style.translucency == theme::Translucency::kDark;
   // Imported JSON keeps its stored translucency when the system appearance
   // changes: the material follows it, the wash follows the window

@@ -2159,7 +2159,7 @@ void OpenWindowController::OnPreferencesChanged(std::string_view key) {
   if (!started_) {
     return;
   }
-  if ((key.empty() || key == "appearance.toolbar") && !syncing_toolbar_pref_) {
+  if (key == "appearance.toolbar" && !syncing_toolbar_pref_) {
     const bool shows_toolbar = PrefBool("appearance.toolbar", false);
     for (auto& [browser_view, ui] : windows_) {
       const BrowserWindowState* win =
@@ -2172,7 +2172,21 @@ void OpenWindowController::OnPreferencesChanged(std::string_view key) {
       }
     }
   }
+  if (key == "appearance.sidebarAutoHide") {
+    const SidebarMode mode = PrefBool("appearance.sidebarAutoHide", false)
+                                 ? SidebarMode::kHidden
+                                 : SidebarMode::kAnchored;
+    for (auto& [browser_view, ui] : windows_) {
+      const BrowserWindowState* win =
+          service_->model().FindWindow(ui->window_id());
+      if (win && win->style == WindowStyle::kStandard && !win->is_incognito &&
+          win->sidebar_mode != mode) {
+        service_->model().SetSidebarMode(ui->window_id(), mode);
+      }
+    }
+  }
   if (key.empty() || key == "appearance.increaseContrast" ||
+      key == "appearance.translucency" ||
       key == "appearance.websiteAppearance") {
     for (OpenViewObserver& observer : view_observers_) {
       observer.OnSystemAppearanceChanged();
@@ -2455,6 +2469,10 @@ bool OpenWindowController::IsIncreaseContrastEnabled() const {
   }
   OpenPlatform* platform = OpenPlatform::Get();
   return platform && platform->IsIncreaseContrastEnabled();
+}
+
+bool OpenWindowController::IsTranslucencyEnabled() const {
+  return PrefBool("appearance.translucency", true);
 }
 
 bool OpenWindowController::IsIncognitoWindow(const WindowID& window_id) const {

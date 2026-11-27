@@ -42,6 +42,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browsing_data_remover.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_registrar.h"
@@ -69,6 +70,7 @@
 #include "open_unified/core/sync/sync_engine.h"
 #include "open_unified/ui/webui/open_library_ui.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"  // nogncheck
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/base_window.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -1066,7 +1068,7 @@ const base::DictValue& OpenPreferences::Defaults() {
           .Set("general.offerTranslate", true)
           .Set("appearance.appIcon", "open-indigo")
           .Set("appearance.websiteAppearance", "automatic")
-          .Set("appearance.toolbar", true)
+          .Set("appearance.toolbar", false)
           .Set("appearance.fullUrl", false)
           .Set("appearance.sidebarPosition", "left")
           .Set("appearance.sidebarAutoHide", false)
@@ -1402,6 +1404,31 @@ void OpenPreferences::ApplyEffects(const std::string& key,
         theme->SetBrowserColorScheme(scheme);
       }
     }
+  } else if (key == "appearance.fontSize") {
+    const std::string size = StringPref(key);
+    const int px = size == "small"        ? 12
+                   : size == "large"      ? 20
+                   : size == "very-large" ? 24
+                                          : 16;
+    for (::Profile* profile : ChromeProfiles({})) {
+      profile->GetPrefs()->SetInteger(prefs::kWebKitDefaultFontSize, px);
+    }
+  } else if (key == "appearance.defaultZoom") {
+    const base::Value v = open_prefs->GetValue(key);
+    int pct = 100;
+    if (v.is_int()) {
+      pct = v.GetInt();
+    } else if (v.is_double()) {
+      pct = static_cast<int>(std::lround(v.GetDouble()));
+    }
+    pct = std::clamp(pct, 50, 300);
+    const double level = blink::ZoomFactorToZoomLevel(pct / 100.0);
+    for (::Profile* profile : ChromeProfiles({})) {
+      if (content::HostZoomMap* map =
+              content::HostZoomMap::GetDefaultForBrowserContext(profile)) {
+        map->SetDefaultZoomLevel(level);
+      }
+    }
   } else if (key == "privacy.doNotTrack") {
     for (::Profile* profile : ChromeProfiles({})) {
       profile->GetPrefs()->SetBoolean(prefs::kEnableDoNotTrack,
@@ -1439,6 +1466,7 @@ void OpenPreferences::ApplyAllEffects() {
   for (const char* key :
        {"advanced.pictureInPicture", "advanced.pipExcludedHosts",
         "appearance.appIcon", "appearance.websiteAppearance",
+        "appearance.fontSize", "appearance.defaultZoom",
         "privacy.doNotTrack", "privacy.httpsOnly", "advanced.developerMode"}) {
     if (Get()->stored_.Find(key)) {
       ApplyEffects(key, {});

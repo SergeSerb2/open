@@ -229,6 +229,7 @@ class OpenViewController {
 
   // --- Optional state --------------------------------------------------------
   virtual bool IsIncreaseContrastEnabled() const;
+  virtual bool IsTranslucencyEnabled() const;
   virtual bool IsIncognitoWindow(const WindowID& window_id) const;
   virtual std::optional<ItemID> GetPeekSourceNode(
       const WindowID& window_id) const;
