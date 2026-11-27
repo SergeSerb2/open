@@ -23,6 +23,7 @@
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/scoped_observation.h"
+#include "base/strings/cstring_view.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -1103,7 +1104,7 @@ base::ListValue ListApplicationsBlocking() {
   // Add common Windows mail/chat/dev/browser apps if installed in standard
   // directories (bounded O(1) existence checks, never recursive).
   if (std::unique_ptr<base::Environment> env = base::Environment::Create()) {
-    auto probe = [&](const char* env_var, const wchar_t* rel_path,
+    auto probe = [&](base::cstring_view env_var, const wchar_t* rel_path,
                      const char* exe_id, const char* label) {
       if (by_id.size() >= 600 || by_id.contains(exe_id)) {
         return;

@@ -697,7 +697,8 @@ bool ValidateMediaFolder(const base::FilePath& real,
       "c:\\programdata",
   };
   if (std::unique_ptr<base::Environment> env = base::Environment::Create()) {
-    for (const char* var : {"SystemRoot", "WINDIR"}) {
+    for (base::cstring_view var :
+         {base::cstring_view("SystemRoot"), base::cstring_view("WINDIR")}) {
       if (auto val = env->GetVar(var); val && !val->empty()) {
         std::string b = base::ToLowerASCII(*val);
         std::replace(b.begin(), b.end(), '/', '\\');

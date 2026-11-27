@@ -702,7 +702,6 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   // Declared in order so the delegate outlives the widget.
   std::unique_ptr<views::BubbleDialogDelegate> node_icon_picker_delegate_;
   std::unique_ptr<views::Widget> node_icon_picker_widget_;
-  base::WeakPtrFactory<OpenWindowUi> node_icon_picker_weak_factory_{this};
   OpenPlusPopover plus_popover_;
   OpenToolbarMorePopover more_popover_;
   std::unique_ptr<OpenDownloadsPopover> downloads_popover_;
@@ -767,6 +766,7 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   std::optional<KeyboardShortcut> last_global_site_shortcut_;
   TimestampSec last_global_site_press_at_ = 0.0;
 
+  base::WeakPtrFactory<OpenWindowUi> node_icon_picker_weak_factory_{this};
   base::WeakPtrFactory<OpenWindowUi> weak_factory_{this};
 };
 

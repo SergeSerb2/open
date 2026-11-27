@@ -878,7 +878,8 @@ void OpenBrowserService::Start() {
   // App Icon, Boosts, Global Little Open hotkey) once loaded.
   webui::OpenPreferences::Get()->WhenLoaded(base::BindOnce(
       &OpenBrowserService::ApplyPreferencesInternal,
-      weak_factory_.GetWeakPtr(), /*schedule_sync_push=*/false));
+      weak_factory_.GetWeakPtr(), /*schedule_sync_push=*/false,
+      std::string_view{}));
 
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
