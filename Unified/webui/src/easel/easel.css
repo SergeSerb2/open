@@ -40,6 +40,10 @@
   }
 }
 
+:root[data-theme='dark'] .easel-topbar {
+  background: rgba(16, 13, 24, 0.86);
+}
+
 .easel-topbar-group {
   display: flex;
   align-items: center;
@@ -464,6 +468,12 @@
   }
 }
 
+:root[data-theme='dark'] .easel-dock {
+  background: #050627;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.52);
+}
+
 .easel-dock-btn {
   position: relative;
   border: none;
@@ -484,6 +494,10 @@
   }
 }
 
+:root[data-theme='dark'] .easel-dock-btn {
+  color: #ffffff;
+}
+
 .easel-dock-btn:hover {
   background: rgba(41, 48, 251, 0.08);
 }
@@ -492,6 +506,10 @@
   :root:not([data-theme='light']) .easel-dock-btn:hover {
     background: rgba(255, 255, 255, 0.1);
   }
+}
+
+:root[data-theme='dark'] .easel-dock-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .easel-dock-btn.is-active {

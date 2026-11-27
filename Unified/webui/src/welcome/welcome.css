@@ -431,13 +431,20 @@ body {
   --wel-sheet-cap: #f1f1f6;
 }
 @media (prefers-color-scheme: dark) {
-  .wel {
+  :root:not([data-theme='light']) .wel {
     --wel-sheet-bg: #1b1b25;
     --wel-sheet-text: #f2f2f7;
     --wel-sheet-text-2: #a6a9bb;
     --wel-sheet-line: rgba(255, 255, 255, 0.09);
     --wel-sheet-cap: #2a2a36;
   }
+}
+:root[data-theme='dark'] .wel {
+  --wel-sheet-bg: #1b1b25;
+  --wel-sheet-text: #f2f2f7;
+  --wel-sheet-text-2: #a6a9bb;
+  --wel-sheet-line: rgba(255, 255, 255, 0.09);
+  --wel-sheet-cap: #2a2a36;
 }
 .wel-sheet-scrim {
   position: fixed;

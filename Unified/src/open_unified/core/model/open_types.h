@@ -407,7 +407,7 @@ struct BrowserWindowState {
   double frame_height = 800.0;
   WindowStyle style = WindowStyle::kStandard;
   bool stay_on_top = false;
-  bool shows_toolbar = true;
+  bool shows_toolbar = false;
   std::optional<TimestampSec> last_focused_at;
   // Ephemeral in-memory Incognito window (never persisted to browser.json).
   bool is_incognito = false;

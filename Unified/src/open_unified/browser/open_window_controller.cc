@@ -9,6 +9,7 @@
 #include <set>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/command_line.h"
 #include "base/environment.h"
@@ -357,6 +358,7 @@ std::optional<CommandId> MapMenuOrChromiumCommandToOpen(int command_id) {
     case IDC_ZOOM_NORMAL:
       return CommandId::kZoomActualSize;
     case IDC_DEV_TOOLS:
+    case IDC_DEV_TOOLS_TOGGLE:
       return CommandId::kDeveloperTools;
     case IDC_DEV_TOOLS_CONSOLE:
       return CommandId::kJavaScriptConsole;
@@ -491,6 +493,213 @@ std::optional<ui::Accelerator> ToAccelerator(const KeyboardShortcut& shortcut) {
   return ui::Accelerator(code, flags);
 }
 
+std::optional<KeyboardShortcut> FromAccelerator(
+    const ui::Accelerator& accelerator) {
+  const ui::KeyboardCode code = accelerator.key_code();
+  std::string key;
+  if (code >= ui::VKEY_A && code <= ui::VKEY_Z) {
+    key.assign(1, static_cast<char>('a' + (code - ui::VKEY_A)));
+  } else if (code >= ui::VKEY_0 && code <= ui::VKEY_9) {
+    key.assign(1, static_cast<char>('0' + (code - ui::VKEY_0)));
+  } else if (code >= ui::VKEY_F1 && code <= ui::VKEY_F24) {
+    key = "f" + std::to_string(1 + (code - ui::VKEY_F1));
+  } else {
+    switch (code) {
+      case ui::VKEY_OEM_4:
+        key = "[";
+        break;
+      case ui::VKEY_OEM_6:
+        key = "]";
+        break;
+      case ui::VKEY_OEM_COMMA:
+        key = ",";
+        break;
+      case ui::VKEY_OEM_PERIOD:
+        key = ".";
+        break;
+      case ui::VKEY_OEM_2:
+        key = "/";
+        break;
+      case ui::VKEY_OEM_MINUS:
+        key = "-";
+        break;
+      case ui::VKEY_OEM_PLUS:
+        key = "=";
+        break;
+      case ui::VKEY_OEM_1:
+        key = ";";
+        break;
+      case ui::VKEY_OEM_7:
+        key = "'";
+        break;
+      case ui::VKEY_OEM_5:
+        key = "\\";
+        break;
+      case ui::VKEY_OEM_3:
+        key = "`";
+        break;
+      case ui::VKEY_TAB:
+        key = "tab";
+        break;
+      case ui::VKEY_ESCAPE:
+        key = "escape";
+        break;
+      case ui::VKEY_RETURN:
+        key = "return";
+        break;
+      case ui::VKEY_SPACE:
+        key = "space";
+        break;
+      case ui::VKEY_LEFT:
+        key = "left";
+        break;
+      case ui::VKEY_RIGHT:
+        key = "right";
+        break;
+      case ui::VKEY_UP:
+        key = "up";
+        break;
+      case ui::VKEY_DOWN:
+        key = "down";
+        break;
+      case ui::VKEY_DELETE:
+        key = "delete";
+        break;
+      case ui::VKEY_BACK:
+        key = "backspace";
+        break;
+      case ui::VKEY_HOME:
+        key = "home";
+        break;
+      case ui::VKEY_END:
+        key = "end";
+        break;
+      case ui::VKEY_PRIOR:
+        key = "pageup";
+        break;
+      case ui::VKEY_NEXT:
+        key = "pagedown";
+        break;
+      default:
+        return std::nullopt;
+    }
+  }
+  uint32_t mods = kModNone;
+  if (accelerator.IsCtrlDown()) {
+    mods |= kModCtrl;
+  }
+  if (accelerator.IsAltDown()) {
+    mods |= kModAlt;
+  }
+  if (accelerator.IsShiftDown()) {
+    mods |= kModShift;
+  }
+  if (accelerator.IsCmdDown()) {
+    mods |= kModMeta;
+  }
+  return KeyboardShortcut{std::move(key), mods}.Normalized();
+}
+
+bool IsCommandSupportedOnPlatform(CommandId id) {
+  switch (id) {
+    case CommandId::kUnknown:
+    case CommandId::kImportArcNotes:
+    case CommandId::kRecordTrace:
+    case CommandId::kCancelTrace:
+    case CommandId::kReservedNewChatGptMessage:
+    case CommandId::kReservedSendToDia:
+    case CommandId::kReservedShareArc:
+    case CommandId::kReservedSignOut:
+      return false;
+#if !BUILDFLAG(IS_MAC)
+    // macOS-only AppKit responder / text-submenu commands.
+    case CommandId::kHideOpen:
+    case CommandId::kHideOthers:
+    case CommandId::kShowAll:
+    case CommandId::kBringAllToFront:
+    case CommandId::kAllowJsAppleEvents:
+    case CommandId::kEmojiAndSymbols:
+    case CommandId::kJumpToSelection:
+    case CommandId::kShowSpelling:
+    case CommandId::kCheckSpelling:
+    case CommandId::kCheckSpellingWhileTyping:
+    case CommandId::kCheckGrammar:
+    case CommandId::kCorrectSpellingAutomatically:
+    case CommandId::kShowSubstitutions:
+    case CommandId::kSmartCopyPaste:
+    case CommandId::kSmartQuotes:
+    case CommandId::kSmartDashes:
+    case CommandId::kSmartLinks:
+    case CommandId::kTextReplacement:
+    case CommandId::kDataDetectors:
+    case CommandId::kMakeUpperCase:
+    case CommandId::kMakeLowerCase:
+    case CommandId::kCapitalize:
+    case CommandId::kStartSpeaking:
+    case CommandId::kStopSpeaking:
+    case CommandId::kFontBold:
+    case CommandId::kFontItalic:
+    case CommandId::kFontUnderline:
+    case CommandId::kShowFonts:
+      return false;
+#endif
+    default:
+      return true;
+  }
+}
+
+struct CommandAvailabilityState {
+  bool has_tab = false;
+  bool has_web_page = false;
+  bool can_go_back = false;
+  bool can_go_forward = false;
+  bool is_pinned = false;
+  bool in_today = false;
+  bool has_pinned_url = false;
+  bool is_favorite = false;
+  bool in_split = false;
+  bool has_multiple_spaces = false;
+};
+
+bool EvaluateCommandAvailability(const CommandAvailabilityState& state,
+                                 const CommandDefinition& def) {
+  if (def.is_reserved || !IsCommandSupportedOnPlatform(def.command_id)) {
+    return false;
+  }
+  switch (def.availability_predicate) {
+    case AvailabilityPredicate::kAlways:
+    case AvailabilityPredicate::kHasHistory:
+    case AvailabilityPredicate::kNotTracing:
+      return true;
+    case AvailabilityPredicate::kIsTracing:
+    case AvailabilityPredicate::kTextFieldFocused:
+      return false;
+    case AvailabilityPredicate::kHasCurrentTab:
+      return state.has_tab;
+    case AvailabilityPredicate::kHasWebPage:
+      return state.has_web_page;
+    case AvailabilityPredicate::kCanGoBack:
+      return state.can_go_back;
+    case AvailabilityPredicate::kCanGoForward:
+      return state.can_go_forward;
+    case AvailabilityPredicate::kCurrentTabPinned:
+      return state.is_pinned;
+    case AvailabilityPredicate::kCurrentTabInToday:
+      return state.in_today;
+    case AvailabilityPredicate::kCurrentTabHasPinnedUrl:
+      return state.has_pinned_url;
+    case AvailabilityPredicate::kCurrentTabIsFavorite:
+      return state.is_favorite;
+    case AvailabilityPredicate::kCurrentTabNotFavorite:
+      return state.has_tab && !state.is_favorite;
+    case AvailabilityPredicate::kCurrentTabInSplit:
+      return state.in_split;
+    case AvailabilityPredicate::kHasMultipleSpaces:
+      return state.has_multiple_spaces;
+  }
+  return true;
+}
+
 std::string HostWithoutWww(const GURL& url) {
   std::string host(url.host());
   if (base::StartsWith(host, "www.")) {
@@ -579,7 +788,8 @@ SuggestContext BuildSuggestContext(OpenBrowserService* s,
                                    const ProfileID& profile_id,
                                    const std::optional<SpaceID>& space_id,
                                    const std::optional<ItemID>& current_tab,
-                                   bool is_incognito) {
+                                   bool is_incognito,
+                                   const OpenWindowUi* ui) {
   SuggestContext context;
   context.mode = ToSuggestMode(query.mode);
   context.scope = ToSuggestScope(query.scope, query.site_search_id);
@@ -598,6 +808,37 @@ SuggestContext BuildSuggestContext(OpenBrowserService* s,
   context.allows_remote_suggestions =
       ProfileAllowsRemoteSuggest(s, profile_id, is_incognito);
   context.max_results = command_bar_metrics::kMaxRows;
+
+  CommandAvailabilityState avail;
+  const BrowserModel& model = s->model();
+  content::WebContents* peek_wc =
+      (ui && ui->peek_shown()) ? ui->PeekWebContents() : nullptr;
+  content::WebContents* active_wc =
+      peek_wc ? peek_wc : (ui ? ui->ActiveWebContents() : nullptr);
+  if (!active_wc && current_tab && s->tab_bridge()) {
+    active_wc = s->tab_bridge()->WebContentsForTab(*current_tab);
+  }
+  const Tab* active_tab = current_tab ? model.FindTab(*current_tab) : nullptr;
+  avail.has_tab = current_tab.has_value() || peek_wc != nullptr;
+  avail.has_web_page = active_wc != nullptr;
+  avail.can_go_back = active_wc && active_wc->GetController().CanGoBack();
+  avail.can_go_forward = active_wc && active_wc->GetController().CanGoForward();
+  avail.is_pinned = current_tab.has_value() && model.IsPinned(*current_tab);
+  avail.in_today = current_tab.has_value() &&
+                   model_util::SectionOfNode(model, *current_tab) ==
+                       NodeParentKind::kSpaceToday;
+  avail.has_pinned_url = active_tab && active_tab->pinned_url.has_value() &&
+                         !active_tab->pinned_url->empty();
+  avail.is_favorite = current_tab.has_value() && model.IsFavorite(*current_tab);
+  avail.in_split = ui && ui->split_active();
+  if (!avail.in_split && current_tab) {
+    if (std::optional<NodeParent> parent = model.GetParent(*current_tab)) {
+      avail.in_split = parent->kind == NodeParentKind::kSplitPane;
+    }
+  }
+  avail.has_multiple_spaces = !is_incognito && model.spaces().size() > 1;
+  context.is_command_available =
+      base::BindRepeating(&EvaluateCommandAvailability, avail);
   return context;
 }
 
@@ -608,9 +849,10 @@ CommandBarResults QueryCommandBar(OpenBrowserService* s,
                                   const ProfileID& profile_id,
                                   const std::optional<SpaceID>& space_id,
                                   const std::optional<ItemID>& current_tab,
-                                  bool is_incognito) {
+                                  bool is_incognito,
+                                  const OpenWindowUi* ui) {
   const SuggestContext context = BuildSuggestContext(
-      s, query, profile_id, space_id, current_tab, is_incognito);
+      s, query, profile_id, space_id, current_tab, is_incognito, ui);
   const SuggestionResult result =
       s->suggest().Query(base::UTF16ToUTF8(query.text), context);
 
@@ -1110,7 +1352,8 @@ class FramelessWebFrameView : public views::FrameView {
     }
     OpenPlatform* platform = OpenPlatform::Get();
     const bool high_contrast =
-        platform && platform->IsIncreaseContrastEnabled();
+        PrefBool("appearance.increaseContrast", false) ||
+        (platform && platform->IsIncreaseContrastEnabled());
     const bool active = ShouldPaintAsActive();
     if (leading_controls_) {
       leading_controls_->SetThemeState(/*dark_content=*/true, active,
@@ -1888,6 +2131,78 @@ void OpenWindowController::ReloadShortcuts() {
   }
 }
 
+void OpenWindowController::SyncToolbarPreference(bool visible) {
+  if (syncing_toolbar_pref_) {
+    return;
+  }
+  base::AutoReset<bool> guard(&syncing_toolbar_pref_, true);
+  if (webui::OpenPreferences* prefs = webui::OpenPreferences::Get()) {
+    std::string err;
+    prefs->Set("appearance.toolbar", base::Value(visible),
+               service_->ActiveProfileId(), /*all_profiles=*/true, &err);
+  }
+}
+
+void OpenWindowController::OnPreferencesChanged(std::string_view key) {
+  if (!started_) {
+    return;
+  }
+  if ((key.empty() || key == "appearance.toolbar") && !syncing_toolbar_pref_) {
+    const bool shows_toolbar = PrefBool("appearance.toolbar", false);
+    for (auto& [browser_view, ui] : windows_) {
+      const BrowserWindowState* win =
+          service_->model().FindWindow(ui->window_id());
+      if (win && (win->style != WindowStyle::kStandard || win->is_incognito)) {
+        continue;
+      }
+      if (ui->single_pane_toolbar_visible() != shows_toolbar) {
+        ui->SetSinglePaneToolbarVisible(shows_toolbar, /*sync_pref=*/false);
+      }
+    }
+  }
+  if (key.empty() || key == "appearance.increaseContrast" ||
+      key == "appearance.websiteAppearance") {
+    for (OpenViewObserver& observer : view_observers_) {
+      observer.OnSystemAppearanceChanged();
+    }
+    for (auto& [browser_view, ui] : windows_) {
+      ui->UpdateThemeForLiveSurfaces();
+    }
+  }
+  if (key.empty() || key == "appearance.fullUrl") {
+    for (auto& [browser_view, ui] : windows_) {
+      ui->SyncSinglePaneToolbar();
+    }
+    NotifyWindowStateChanged();
+  }
+  if (key.empty() || key == "shortcuts.priority") {
+    ReloadShortcuts();
+  }
+  if (key.empty() || key == "previews.enabled" || key == "previews.calendar" ||
+      key == "previews.gmail") {
+    const bool previews_on = PrefBool("previews.enabled", true);
+    const bool cal_on = previews_on && PrefBool("previews.calendar", true);
+    const bool mail_on = previews_on && PrefBool("previews.gmail", true);
+    if (!cal_on || !mail_on) {
+      for (const Profile& profile : service_->model().profiles()) {
+        for (const Tab& fav : profile.favorites) {
+          for (auto& [browser_view, ui] : windows_) {
+            if (!ui->open_view() || !ui->open_view()->sidebar()) {
+              continue;
+            }
+            if (!cal_on) {
+              ui->open_view()->sidebar()->SetFavoriteSubtitle(fav.id, u"");
+            }
+            if (!mail_on) {
+              ui->open_view()->sidebar()->SetFavoriteBadge(fav.id, u"");
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 void OpenWindowController::OnTabsArchivedByUser(
     std::vector<ArchivedTabRecord> records) {
   OpenWindowUi* ui = MainWindowUi();
@@ -2123,6 +2438,9 @@ WindowID OpenWindowController::WindowIdForBrowserView(
 }
 
 bool OpenWindowController::IsIncreaseContrastEnabled() const {
+  if (PrefBool("appearance.increaseContrast", false)) {
+    return true;
+  }
   OpenPlatform* platform = OpenPlatform::Get();
   return platform && platform->IsIncreaseContrastEnabled();
 }
@@ -2567,8 +2885,10 @@ OpenWindowController::BuildMenuModelForTarget(const WindowID& window_id,
   if (target.kind == OpenMenuTarget::Kind::kFavorite) {
     if (const Tab* tab = model.FindTab(target.node_id)) {
       SidebarFavoriteTileInfo fav;
+      const bool previews_on = PrefBool("previews.enabled", true);
       fav.is_calendar = OpenLiveDataService::IsCalendarFavoriteUrl(tab->url);
-      fav.live_calendar_enabled = PrefBool("previews.calendar", true);
+      fav.live_calendar_enabled =
+          previews_on && PrefBool("previews.calendar", true);
       fav.shows_time_to_next_meeting = fav.live_calendar_enabled;
       if (fav.is_calendar && service_->livedata()) {
         if (auto meeting = service_->livedata()->NextUpcomingMeeting()) {
@@ -2578,7 +2898,7 @@ OpenWindowController::BuildMenuModelForTarget(const WindowID& window_id,
         }
       }
       fav.supports_unread_badge = IsMailUrl(tab->url);
-      fav.shows_unread_badge = PrefBool("previews.gmail", true);
+      fav.shows_unread_badge = previews_on && PrefBool("previews.gmail", true);
       ctx.favorite_tile = std::move(fav);
     }
   }
@@ -3633,6 +3953,14 @@ void OpenWindowController::OnOpenEvent(const std::string& event_name,
     }
     return;
   }
+  if (event_name == "open.preferencesChanged") {
+    std::string key;
+    if (const base::DictValue* dict = payload.GetIfDict()) {
+      key = json::GetString(*dict, "key");
+    }
+    OnPreferencesChanged(key);
+    return;
+  }
 }
 
 void OpenWindowController::OnDownloadUpdatedForProfile(
@@ -3668,7 +3996,11 @@ void OpenWindowController::OnMediaSessionsChanged() {
 void OpenWindowController::OnFavoriteSubtitleChanged(
     const ItemID& tab_id,
     const std::string& subtitle) {
-  const std::u16string text = base::UTF8ToUTF16(subtitle);
+  const std::u16string text =
+      (PrefBool("previews.enabled", true) &&
+       PrefBool("previews.calendar", true))
+          ? base::UTF8ToUTF16(subtitle)
+          : std::u16string();
   for (auto& [browser_view, ui] : windows_) {
     if (ui->open_view() && ui->open_view()->sidebar()) {
       ui->open_view()->sidebar()->SetFavoriteSubtitle(tab_id, text);
@@ -3679,7 +4011,10 @@ void OpenWindowController::OnFavoriteSubtitleChanged(
 void OpenWindowController::OnFavoriteBadgeChanged(
     const ItemID& tab_id,
     const std::string& badge_text) {
-  const std::u16string text = base::UTF8ToUTF16(badge_text);
+  const std::u16string text =
+      (PrefBool("previews.enabled", true) && PrefBool("previews.gmail", true))
+          ? base::UTF8ToUTF16(badge_text)
+          : std::u16string();
   for (auto& [browser_view, ui] : windows_) {
     if (ui->open_view() && ui->open_view()->sidebar()) {
       ui->open_view()->sidebar()->SetFavoriteBadge(tab_id, text);
@@ -3860,7 +4195,8 @@ std::optional<bool> OpenWindowController::IsBrowserCommandEnabled(
     return std::nullopt;
   }
   const CommandDefinition* def = service_->commands().FindById(*cid);
-  if (!def || def->is_reserved) {
+  if (!def || def->is_reserved ||
+      !IsCommandSupportedOnPlatform(def->command_id)) {
     return false;
   }
   OpenWindowUi* ui = WindowUiForBrowser(browser);
@@ -4289,6 +4625,7 @@ OpenWindowUi::OpenWindowUi(OpenWindowController* controller,
   if (const Tab* active = controller_->GetActiveTab(window_id_)) {
     mru_.push_back(active->id);
   }
+  SyncWindowChromeFromModel();
   RegisterAccelerators();
   ApplyWindowEffects();
   UpdatePanel();
@@ -4373,6 +4710,49 @@ OpenWindowUi::~OpenWindowUi() {
   panel_tracker_ = nullptr;
 }
 
+void OpenWindowUi::SyncWindowChromeFromModel() {
+  const BrowserWindowState* win =
+      service() ? service()->model().FindWindow(window_id_) : nullptr;
+  single_pane_toolbar_visible_ =
+      win ? win->shows_toolbar : PrefBool("appearance.toolbar", false);
+  if (split_) {
+    split_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
+  }
+  if (open_view_) {
+    open_view_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
+    SyncSinglePaneToolbar();
+  }
+  const bool prev_stay_on_top = stay_on_top_;
+  stay_on_top_ = win ? win->stay_on_top : false;
+  if (stay_on_top_ || prev_stay_on_top) {
+    if (views::Widget* w = widget()) {
+      w->SetZOrderLevel(stay_on_top_ ? ui::ZOrderLevel::kFloatingWindow
+                                     : ui::ZOrderLevel::kNormal);
+    }
+  }
+}
+
+void OpenWindowUi::SetSinglePaneToolbarVisible(bool visible, bool sync_pref) {
+  single_pane_toolbar_visible_ = visible;
+  if (split_) {
+    split_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
+  }
+  if (open_view_) {
+    open_view_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
+    SyncSinglePaneToolbar();
+  }
+  UpdateOverlayAnchors();
+  OpenBrowserService* s = service();
+  if (!s) {
+    return;
+  }
+  s->model().SetWindowShowsToolbar(window_id_, single_pane_toolbar_visible_);
+  if (sync_pref && controller_) {
+    controller_->SyncToolbarPreference(single_pane_toolbar_visible_);
+  }
+  s->ScheduleSave();
+}
+
 void OpenWindowUi::RebindWindowId(const WindowID& window_id) {
   if (window_id.empty() || window_id_ == window_id) {
     return;
@@ -4380,7 +4760,9 @@ void OpenWindowUi::RebindWindowId(const WindowID& window_id) {
   window_id_ = window_id;
   last_focused_space_ =
       model_util::FocusedSpace(service()->model(), window_id_);
+  SyncWindowChromeFromModel();
   UpdateThemeForLiveSurfaces();
+  UpdateOverlayAnchors();
   UpdatePanel();
 }
 
@@ -4507,8 +4889,38 @@ void OpenWindowUi::RefreshDownloadsPopover() {
 }
 
 void OpenWindowUi::UpdateThemeForLiveSurfaces() {
+  const secondary::Appearance appearance = CurrentAppearance();
   ApplyWindowEffects();
   SyncSinglePaneToolbar();
+  if (command_bar_) {
+    command_bar_->SetAppearance(appearance);
+  }
+  if (find_bar_) {
+    find_bar_->SetAppearance(appearance);
+  }
+  if (toasts_) {
+    toasts_->SetAppearance(appearance);
+  }
+  if (switcher_) {
+    switcher_->SetAppearance(appearance);
+  }
+  if (peek_) {
+    peek_->SetAppearance(appearance);
+  }
+  if (boost_editor_ && boost_editor_->view()) {
+    boost_editor_->view()->SetDark(appearance.dark);
+  }
+  if (site_controls_) {
+    site_controls_->SetAppearance(appearance);
+  }
+  if (split_) {
+    split_->SetDarkContent(appearance.dark);
+  }
+  if (link_status_ && open_view_ && link_status_->IsShowing() &&
+      !link_status_->text().empty()) {
+    link_status_->SetStatusText(link_status_->text(),
+                                open_view_->FocusedThemeState());
+  }
   if (media_stack_ && open_view_) {
     media_stack_->SetTheme(open_view_->FocusedThemeState());
   }
@@ -4913,7 +5325,7 @@ CommandBarResults OpenWindowUi::QuerySuggestions(const CommandBarQuery& query) {
   return QueryCommandBar(s, query, s->ActiveProfileId(),
                          model_util::FocusedSpace(s->model(), window_id_),
                          ActiveTabId(),
-                         controller_->IsIncognitoWindow(window_id_));
+                         controller_->IsIncognitoWindow(window_id_), this);
 }
 
 void OpenWindowUi::OnCommandBarRemoteQuery(const CommandBarQuery& query) {
@@ -4925,7 +5337,7 @@ void OpenWindowUi::OnCommandBarRemoteQuery(const CommandBarQuery& query) {
   const ProfileID profile_id = s->ActiveProfileId();
   const SuggestContext context = BuildSuggestContext(
       s, query, profile_id, model_util::FocusedSpace(s->model(), window_id_),
-      ActiveTabId(), controller_->IsIncognitoWindow(window_id_));
+      ActiveTabId(), controller_->IsIncognitoWindow(window_id_), this);
   scoped_refptr<network::SharedURLLoaderFactory> factory =
       URLLoaderFactoryForProfile(s, profile_id);
   if (!factory) {
@@ -5681,9 +6093,13 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
   };
 
   if (const int index = GoToTabIndex(command); index >= 0) {
-    const std::vector<ItemID> ids =
+    std::vector<ItemID> ids =
         focused ? model_util::OrderedTabIds(model, *focused)
                 : std::vector<ItemID>();
+    if (!PrefBool("tabs.includeFavoritesInSwitcher", true)) {
+      std::erase_if(ids,
+                    [&](const ItemID& id) { return model.IsFavorite(id); });
+    }
     if (ids.empty()) {
       return true;
     }
@@ -5696,9 +6112,13 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
     return true;
   }
   if (command == CommandId::kGoToLastTab) {
-    const std::vector<ItemID> ids =
+    std::vector<ItemID> ids =
         focused ? model_util::OrderedTabIds(model, *focused)
                 : std::vector<ItemID>();
+    if (!PrefBool("tabs.includeFavoritesInSwitcher", true)) {
+      std::erase_if(ids,
+                    [&](const ItemID& id) { return model.IsFavorite(id); });
+    }
     if (!ids.empty()) {
       bridge->SelectNode(ids.back(), window_id_);
     }
@@ -5820,10 +6240,19 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
                      std::nullopt);
       return true;
     case CommandId::kReload:
+      if (peek_shown()) {
+        if (content::WebContents* pwc = PeekWebContents()) {
+          pwc->GetController().Reload(content::ReloadType::NORMAL,
+                                      /*check_for_repost=*/true);
+          return true;
+        }
+      }
       intent(OpenIntentKind::kReload);
       return true;
     case CommandId::kForceReload:
-      if (content::WebContents* wc = ActiveWebContents()) {
+      if (content::WebContents* wc =
+              (peek_shown() && PeekWebContents()) ? PeekWebContents()
+                                                  : ActiveWebContents()) {
         wc->GetController().Reload(content::ReloadType::BYPASSING_CACHE, true);
       }
       return true;
@@ -5896,6 +6325,8 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
         stay_on_top_ = !stay_on_top_;
         w->SetZOrderLevel(stay_on_top_ ? ui::ZOrderLevel::kFloatingWindow
                                        : ui::ZOrderLevel::kNormal);
+        model.SetWindowStayOnTop(window_id_, stay_on_top_);
+        s->ScheduleSave();
         ShowToast(ToastSpec::Info(stay_on_top_ ? u"Window pinned on top"
                                                : u"Window unpinned"));
         return true;
@@ -6128,6 +6559,12 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
       bridge->SelectNode(ids[next], window_id_);
       return true;
     }
+    case CommandId::kTabSwitcherForward:
+      TabSwitcherStep(/*reverse=*/false);
+      return true;
+    case CommandId::kTabSwitcherBackward:
+      TabSwitcherStep(/*reverse=*/true);
+      return true;
     case CommandId::kRevealCurrentTab:
     case CommandId::kRevealTabInSidebar:
       if (active && focused && open_view_) {
@@ -6159,15 +6596,8 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
       intent(OpenIntentKind::kToggleSidebar);
       return true;
     case CommandId::kToggleToolbar:
-      single_pane_toolbar_visible_ = !single_pane_toolbar_visible_;
-      if (split_) {
-        split_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
-      }
-      if (open_view_) {
-        open_view_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
-        SyncSinglePaneToolbar();
-      }
-      UpdateOverlayAnchors();
+      SetSinglePaneToolbarVisible(!single_pane_toolbar_visible_,
+                                  /*sync_pref=*/true);
       return true;
     case CommandId::kCollapsePinnedSection:
       if (focused) {
@@ -6340,6 +6770,15 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
       }
       return true;
     case CommandId::kCopyUrl:
+      if (peek_shown()) {
+        if (content::WebContents* pwc = PeekWebContents()) {
+          const GURL url = pwc->GetVisibleURL().is_valid()
+                               ? pwc->GetVisibleURL()
+                               : pwc->GetLastCommittedURL();
+          CopyUrl(url);
+          return true;
+        }
+      }
       if (content::WebContents* contents = ActiveWebContents()) {
         CopyUrl(contents->GetLastCommittedURL());
       }
@@ -6398,7 +6837,9 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
       ShowFindBar();
       return true;
     case CommandId::kExitModal:
-      if (command_bar_shown()) {
+      if (tab_switcher_active()) {
+        TabSwitcherCancel();
+      } else if (command_bar_shown()) {
         HideCommandBar();
       } else if (peek_shown()) {
         ClosePeek();
@@ -6659,9 +7100,9 @@ void OpenWindowUi::OpenPeekWithContents(
   if (!peek_->is_showing()) {
     peek_source_ = source_node;
     if (toasts_) {
-      toasts_->DismissKind(OpenToastKind::kTabArchived);
-      toasts_->DismissKind(OpenToastKind::kPeekPromoted);
-      toasts_->DismissKind(OpenToastKind::kPeekClosed);
+      toasts_->DismissKindImmediate(OpenToastKind::kTabArchived);
+      toasts_->DismissKindImmediate(OpenToastKind::kPeekPromoted);
+      toasts_->DismissKindImmediate(OpenToastKind::kPeekClosed);
     }
   }
   PopulatePeekSpaceChoices();
@@ -7487,6 +7928,10 @@ void OpenWindowUi::OnSinglePaneHostClicked(views::View* anchor) {
   ShowCommandBar(CommandBarMode::kEditCurrentUrl, initial_text, anchor_rect);
 }
 
+void OpenWindowUi::OnSystemThemeChanged() {
+  UpdateThemeForLiveSurfaces();
+}
+
 // --- Split View --------------------------------------------------------------
 
 void OpenWindowUi::UpdatePanel() {
@@ -8027,7 +8472,48 @@ void OpenWindowUi::OnWidgetActivationChanged(views::Widget* widget,
   ApplyWindowEffects();
 }
 
+void OpenWindowUi::PersistWindowBounds(views::Widget* w,
+                                       const gfx::Rect& bounds) {
+  if (!w || w != widget() || window_id_.empty()) {
+    return;
+  }
+  if (w->IsMinimized() || w->IsMaximized() || w->IsFullscreen()) {
+    return;
+  }
+  if (bounds.width() <= 0 || bounds.height() <= 0) {
+    return;
+  }
+  OpenBrowserService* s = service();
+  if (!s) {
+    return;
+  }
+  const BrowserWindowState* win = s->model().FindWindow(window_id_);
+  if (!win || win->is_incognito) {
+    return;
+  }
+  const double x = static_cast<double>(bounds.x());
+  const double y = static_cast<double>(bounds.y());
+  const double width = static_cast<double>(bounds.width());
+  const double height = static_cast<double>(bounds.height());
+  if (win->frame_x == x && win->frame_y == y && win->frame_width == width &&
+      win->frame_height == height) {
+    return;
+  }
+  if (s->model().SetWindowFrame(window_id_, x, y, width, height)) {
+    s->ScheduleSave();
+  }
+}
+
+void OpenWindowUi::OnWidgetBoundsChanged(views::Widget* widget,
+                                         const gfx::Rect& new_bounds) {
+  PersistWindowBounds(widget, new_bounds);
+}
+
 void OpenWindowUi::OnWidgetDestroying(views::Widget* widget) {
+  if (widget) {
+    PersistWindowBounds(widget, widget->GetWindowBoundsInScreen());
+  }
+  UnregisterSwitcherAccelerators();
   modifier_monitor_.reset();
   switcher_monitor_.reset();
   widget_observation_.Reset();
@@ -8222,8 +8708,13 @@ std::vector<TabSwitcherItem> OpenWindowUi::BuildSwitcherItems() const {
   OpenTabBridge* bridge = service()->tab_bridge();
   const std::optional<SpaceID> focused_space =
       model_util::FocusedSpace(model, window_id_);
+  const bool include_favorites =
+      PrefBool("tabs.includeFavoritesInSwitcher", true);
   std::vector<ItemID> ids;
   auto add = [&](const ItemID& id) {
+    if (!include_favorites && model.IsFavorite(id)) {
+      return;
+    }
     if (ids.size() < kSwitcherItemLimit && model.FindTab(id) &&
         std::find(ids.begin(), ids.end(), id) == ids.end()) {
       ids.push_back(id);
@@ -8318,6 +8809,10 @@ void OpenWindowUi::TabSwitcherStep(bool reverse) {
   switcher_->SetAppearance(CurrentAppearance());
   UpdateOverlayAnchors();
   switcher_->Begin(std::move(items), reverse);
+  UpdateEscapeRegistration();
+  if (switcher_->is_active()) {
+    RegisterSwitcherAccelerators();
+  }
   if (!switcher_->is_active() || switcher_monitor_ || !widget()) {
     return;
   }
@@ -8336,6 +8831,14 @@ void OpenWindowUi::TabSwitcherCancel() {
   if (switcher_) {
     switcher_->Cancel();
   }
+  if (switcher_host_ && switcher_host_->IsVisible()) {
+    switcher_host_->Hide();
+  }
+  StopSwitcherMonitor();
+  if (suppressed_switcher_key_ == ui::VKEY_UNKNOWN) {
+    UnregisterSwitcherAccelerators();
+    UpdateEscapeRegistration();
+  }
 }
 
 void OpenWindowUi::OnEvent(const ui::Event& event) {
@@ -8343,12 +8846,51 @@ void OpenWindowUi::OnEvent(const ui::Event& event) {
     return;
   }
   const ui::KeyEvent& key = *event.AsKeyEvent();
-  const bool release = key.type() == ui::EventType::kKeyReleased;
-  const bool early_escape = key.type() == ui::EventType::kKeyPressed &&
-                            key.key_code() == ui::VKEY_ESCAPE &&
-                            !switcher_->is_shown();
-  if (release || early_escape) {
+  if (key.type() == ui::EventType::kKeyReleased) {
     switcher_->HandleKeyEvent(key);
+    return;
+  }
+  if (key.type() != ui::EventType::kKeyPressed) {
+    return;
+  }
+  if ((key.flags() &
+       (ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN)) != 0) {
+    return;
+  }
+  auto arm_suppress = [&](ui::KeyboardCode code) {
+    suppressed_switcher_key_ = code;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<OpenWindowUi> self,
+                          ui::KeyboardCode expected) {
+                         if (self &&
+                             self->suppressed_switcher_key_ == expected) {
+                           self->suppressed_switcher_key_ = ui::VKEY_UNKNOWN;
+                         }
+                       },
+                       weak_factory_.GetWeakPtr(), code));
+  };
+  switch (key.key_code()) {
+    case ui::VKEY_ESCAPE:
+      arm_suppress(ui::VKEY_ESCAPE);
+      TabSwitcherCancel();
+      return;
+    case ui::VKEY_LEFT:
+    case ui::VKEY_UP:
+      arm_suppress(key.key_code());
+      switcher_->Advance(/*reverse=*/true);
+      return;
+    case ui::VKEY_RIGHT:
+    case ui::VKEY_DOWN:
+      arm_suppress(key.key_code());
+      switcher_->Advance(/*reverse=*/false);
+      return;
+    case ui::VKEY_RETURN:
+      arm_suppress(ui::VKEY_RETURN);
+      TabSwitcherCommit();
+      return;
+    default:
+      return;
   }
 }
 
@@ -8358,6 +8900,8 @@ void OpenWindowUi::StopSwitcherMonitor() {
                      [](base::WeakPtr<OpenWindowUi> self) {
                        if (self && !self->tab_switcher_active()) {
                          self->switcher_monitor_.reset();
+                         self->UnregisterSwitcherAccelerators();
+                         self->UpdateEscapeRegistration();
                        }
                      },
                      weak_factory_.GetWeakPtr()));
@@ -8374,10 +8918,17 @@ void OpenWindowUi::OnTabSwitcherVisibilityChanged(bool visible) {
   } else {
     switcher_host_->Hide();
   }
+  if (suppressed_switcher_key_ == ui::VKEY_UNKNOWN) {
+    UpdateEscapeRegistration();
+  }
 }
 
 void OpenWindowUi::OnTabSwitcherCommit(const ItemID& tab_id) {
   StopSwitcherMonitor();
+  if (suppressed_switcher_key_ == ui::VKEY_UNKNOWN) {
+    UnregisterSwitcherAccelerators();
+    UpdateEscapeRegistration();
+  }
   if (OpenTabBridge* bridge = service()->tab_bridge()) {
     bridge->SelectNode(tab_id, window_id_);
   }
@@ -8386,6 +8937,10 @@ void OpenWindowUi::OnTabSwitcherCommit(const ItemID& tab_id) {
 
 void OpenWindowUi::OnTabSwitcherCancel() {
   StopSwitcherMonitor();
+  if (suppressed_switcher_key_ == ui::VKEY_UNKNOWN) {
+    UnregisterSwitcherAccelerators();
+    UpdateEscapeRegistration();
+  }
   FocusPage();
 }
 
@@ -8398,12 +8953,33 @@ void OpenWindowUi::RegisterAccelerators() {
   }
   focus_manager->UnregisterAccelerators(this);
   accelerator_commands_.clear();
+  switcher_accelerators_.clear();
   escape_priority_ = EscapePriority::kNone;
   const CommandRegistry& commands = service()->commands();
+  bool global_website_priority = false;
+  if (webui::OpenPreferences* prefs = webui::OpenPreferences::Get()) {
+    const base::Value pref_val = prefs->GetValue("shortcuts.priority");
+    global_website_priority =
+        pref_val.is_string() && pref_val.GetString() == "website";
+  }
   for (const CommandDefinition* def : commands.WindowAcceleratorCommands()) {
     if (!def || def->is_reserved) {
       continue;
     }
+    const ShortcutPriority effective_priority =
+        commands.EffectivePriority(def->command_id);
+    bool has_explicit_priority = false;
+    if (auto ov = commands.overrides().find(def->id);
+        ov != commands.overrides().end()) {
+      has_explicit_priority = ov->second.priority.has_value();
+    }
+    const bool defer_to_site =
+        effective_priority == ShortcutPriority::kSite ||
+        effective_priority == ShortcutPriority::kSiteThenBrowser ||
+        (global_website_priority && !has_explicit_priority);
+    const ui::AcceleratorManager::HandlerPriority handler_priority =
+        defer_to_site ? ui::AcceleratorManager::kNormalPriority
+                      : ui::AcceleratorManager::kHighPriority;
     for (const KeyboardShortcut& shortcut :
          commands.EffectiveShortcuts(def->command_id)) {
       std::optional<ui::Accelerator> accelerator = ToAccelerator(shortcut);
@@ -8412,9 +8988,11 @@ void OpenWindowUi::RegisterAccelerators() {
            accelerator->modifiers() == ui::EF_NONE)) {
         continue;
       }
+      // Remove any overlapping BrowserView accelerator so deferred site/modal
+      // chords never fall through into Chromium's default command handler.
+      focus_manager->UnregisterAccelerator(*accelerator, browser_view_);
       accelerator_commands_.emplace(*accelerator, def->command_id);
-      focus_manager->RegisterAccelerator(
-          *accelerator, ui::AcceleratorManager::kHighPriority, this);
+      focus_manager->RegisterAccelerator(*accelerator, handler_priority, this);
     }
   }
 #if !BUILDFLAG(IS_MAC)
@@ -8430,6 +9008,54 @@ void OpenWindowUi::RegisterAccelerators() {
   }
 #endif
   UpdateEscapeRegistration();
+  if (tab_switcher_active()) {
+    RegisterSwitcherAccelerators();
+  }
+}
+
+void OpenWindowUi::RegisterSwitcherAccelerators() {
+  if (!switcher_accelerators_.empty()) {
+    return;
+  }
+  views::FocusManager* focus_manager =
+      browser_view_ ? browser_view_->GetFocusManager() : nullptr;
+  if (!focus_manager) {
+    return;
+  }
+  const ui::Accelerator kCandidates[] = {
+      ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_CONTROL_DOWN),
+      ui::Accelerator(ui::VKEY_LEFT, ui::EF_NONE),
+      ui::Accelerator(ui::VKEY_LEFT, ui::EF_CONTROL_DOWN),
+      ui::Accelerator(ui::VKEY_RIGHT, ui::EF_NONE),
+      ui::Accelerator(ui::VKEY_RIGHT, ui::EF_CONTROL_DOWN),
+      ui::Accelerator(ui::VKEY_UP, ui::EF_NONE),
+      ui::Accelerator(ui::VKEY_UP, ui::EF_CONTROL_DOWN),
+      ui::Accelerator(ui::VKEY_DOWN, ui::EF_NONE),
+      ui::Accelerator(ui::VKEY_DOWN, ui::EF_CONTROL_DOWN),
+      ui::Accelerator(ui::VKEY_RETURN, ui::EF_NONE),
+      ui::Accelerator(ui::VKEY_RETURN, ui::EF_CONTROL_DOWN),
+  };
+  for (const ui::Accelerator& accel : kCandidates) {
+    if (accelerator_commands_.contains(accel)) {
+      continue;
+    }
+    focus_manager->RegisterAccelerator(
+        accel, ui::AcceleratorManager::kHighPriority, this);
+    switcher_accelerators_.push_back(accel);
+  }
+}
+
+void OpenWindowUi::UnregisterSwitcherAccelerators() {
+  if (switcher_accelerators_.empty()) {
+    return;
+  }
+  if (views::FocusManager* focus_manager =
+          browser_view_ ? browser_view_->GetFocusManager() : nullptr) {
+    for (const ui::Accelerator& accel : switcher_accelerators_) {
+      focus_manager->UnregisterAccelerator(accel, this);
+    }
+  }
+  switcher_accelerators_.clear();
 }
 
 void OpenWindowUi::SetEscapePriority(EscapePriority priority) {
@@ -8453,7 +9079,7 @@ void OpenWindowUi::SetEscapePriority(EscapePriority priority) {
 
 void OpenWindowUi::UpdateEscapeRegistration() {
   if (command_bar_shown() || peek_shown() || boost_editor_shown() ||
-      find_bar_shown()) {
+      find_bar_shown() || tab_switcher_active()) {
     SetEscapePriority(EscapePriority::kHigh);
   } else if (library_drawer_shown()) {
     // Normal priority lets the Library WebUI consume Escape first for layered
@@ -8504,6 +9130,10 @@ bool OpenWindowUi::RunShortcut(CommandId command) {
     case CommandId::kCopyUrl:
     case CommandId::kCopyUrlMarkdown:
     case CommandId::kCopyUrlQuote:
+      if (!ActiveWebContents() && !(peek_shown() && PeekWebContents())) {
+        return false;
+      }
+      return RunCommandId(command);
     case CommandId::kPinUnpinTab:
     case CommandId::kAddSplitView:
     case CommandId::kClearCacheAndRefresh:
@@ -8539,6 +9169,36 @@ bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
     }
   }
 
+  const bool plain_or_ctrl_modifiers =
+      (accelerator.modifiers() &
+       (ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN)) == 0;
+  if (plain_or_ctrl_modifiers &&
+      suppressed_switcher_key_ != ui::VKEY_UNKNOWN &&
+      accelerator.key_code() == suppressed_switcher_key_) {
+    suppressed_switcher_key_ = ui::VKEY_UNKNOWN;
+    return true;
+  }
+  if (plain_or_ctrl_modifiers && tab_switcher_active()) {
+    switch (accelerator.key_code()) {
+      case ui::VKEY_ESCAPE:
+        TabSwitcherCancel();
+        return true;
+      case ui::VKEY_LEFT:
+      case ui::VKEY_UP:
+        switcher_->Advance(/*reverse=*/true);
+        return true;
+      case ui::VKEY_RIGHT:
+      case ui::VKEY_DOWN:
+        switcher_->Advance(/*reverse=*/false);
+        return true;
+      case ui::VKEY_RETURN:
+        TabSwitcherCommit();
+        return true;
+      default:
+        break;
+    }
+  }
+
   if (accelerator.key_code() == ui::VKEY_ESCAPE &&
       accelerator.modifiers() == ui::EF_NONE &&
       escape_priority_ != EscapePriority::kNone) {
@@ -8570,7 +9230,97 @@ bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
   }
   auto it = accelerator_commands_.find(accelerator);
   if (it != accelerator_commands_.end()) {
-    return RunShortcut(it->second);
+    if (command_bar_shown() && it->second == CommandId::kArchiveTab) {
+      return RunShortcut(CommandId::kArchiveTab);
+    }
+    CommandId resolved_command = it->second;
+    if (std::optional<KeyboardShortcut> sc = FromAccelerator(accelerator)) {
+      views::FocusManager* focus_manager =
+          browser_view_ ? browser_view_->GetFocusManager() : nullptr;
+      views::View* focused_view =
+          focus_manager ? focus_manager->GetFocusedView() : nullptr;
+
+      KeyRoutingContext ctx;
+      ctx.is_app_active = true;
+      ctx.is_command_bar_open = command_bar_shown();
+      ctx.is_sidebar_focused = focused_view && open_view_ &&
+                               open_view_->sidebar() &&
+                               open_view_->sidebar()->Contains(focused_view);
+      ctx.is_text_focused =
+          focused_view && views::IsViewClass<views::Textfield>(focused_view);
+      const bool web_view_focused =
+          focused_view &&
+          ((open_view_ && open_view_->web_contents_host() &&
+            open_view_->web_contents_host()->Contains(focused_view)) ||
+           (split_ && split_->Contains(focused_view)) ||
+           views::IsViewClass<views::WebView>(focused_view));
+      ctx.is_web_content_focused =
+          !ctx.is_command_bar_open && !ctx.is_sidebar_focused &&
+          !ctx.is_text_focused && !peek_shown() && !library_drawer_shown() &&
+          !find_bar_shown() && !boost_editor_shown() &&
+          (web_view_focused ||
+           (focused_view == nullptr && ActiveWebContents() != nullptr));
+
+      const TimestampSec now = base::Time::Now().InSecondsFSinceUnixEpoch();
+      CommandRegistry& commands = service()->commands();
+      KeyboardShortcut effective_sc = sc->Normalized();
+      if (effective_sc.key == "=") {
+        const auto bound = commands.EffectiveShortcuts(it->second);
+        const bool has_eq = std::any_of(bound.begin(), bound.end(),
+                                        [&](const KeyboardShortcut& b) {
+                                          return b.Normalized() == effective_sc;
+                                        });
+        if (!has_eq) {
+          KeyboardShortcut plus_alias = effective_sc;
+          plus_alias.key = "+";
+          const bool has_plus = std::any_of(
+              bound.begin(), bound.end(), [&](const KeyboardShortcut& b) {
+                return b.Normalized() == plus_alias;
+              });
+          if (has_plus) {
+            effective_sc = plus_alias;
+          }
+        }
+      }
+      KeyRoutingDecision decision =
+          commands.RouteShortcut(effective_sc, ctx, now);
+      if (decision.target != KeyRoutingDecision::Target::kBrowserCommand ||
+          decision.command_id == CommandId::kUnknown) {
+        return false;
+      }
+      resolved_command = decision.command_id;
+
+      // Apply the app-wide "website" shortcut priority when the command has no
+      // explicit per-command priority override and web content is focused.
+      if (ctx.is_web_content_focused) {
+        if (webui::OpenPreferences* prefs = webui::OpenPreferences::Get()) {
+          const base::Value pref_val = prefs->GetValue("shortcuts.priority");
+          if (pref_val.is_string() && pref_val.GetString() == "website") {
+            const CommandDefinition* def = commands.FindById(resolved_command);
+            bool has_explicit_priority = false;
+            if (def) {
+              auto ov = commands.overrides().find(def->id);
+              has_explicit_priority = ov != commands.overrides().end() &&
+                                      ov->second.priority.has_value();
+            }
+            if (!has_explicit_priority) {
+              const KeyboardShortcut normalized = sc->Normalized();
+              if (last_global_site_shortcut_.has_value() &&
+                  *last_global_site_shortcut_ == normalized &&
+                  (now - last_global_site_press_at_) <=
+                      CommandRegistry::kDoublePressIntervalSec) {
+                last_global_site_shortcut_.reset();
+              } else {
+                last_global_site_shortcut_ = normalized;
+                last_global_site_press_at_ = now;
+                return false;
+              }
+            }
+          }
+        }
+      }
+    }
+    return RunShortcut(resolved_command);
   }
 #if !BUILDFLAG(IS_MAC)
   if ((accelerator.key_code() == ui::VKEY_F &&
@@ -9348,7 +10098,8 @@ void OpenLittleOpenController::OnLittleOpenClosed() {
 CommandBarResults OpenLittleOpenController::QuerySuggestions(
     const CommandBarQuery& query) {
   return QueryCommandBar(service(), query, profile_id_, DefaultTargetSpace(),
-                         /*current_tab=*/std::nullopt, /*is_incognito=*/false);
+                         /*current_tab=*/std::nullopt, /*is_incognito=*/false,
+                         /*ui=*/nullptr);
 }
 
 void OpenLittleOpenController::OnCommandBarRemoteQuery(
@@ -9360,7 +10111,7 @@ void OpenLittleOpenController::OnCommandBarRemoteQuery(
   }
   const SuggestContext context = BuildSuggestContext(
       s, query, profile_id_, DefaultTargetSpace(),
-      /*current_tab=*/std::nullopt, /*is_incognito=*/false);
+      /*current_tab=*/std::nullopt, /*is_incognito=*/false, /*ui=*/nullptr);
   scoped_refptr<network::SharedURLLoaderFactory> factory =
       URLLoaderFactoryForProfile(s, profile_id_);
   if (!factory) {

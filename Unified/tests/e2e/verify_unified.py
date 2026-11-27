@@ -534,6 +534,7 @@ def suite_spaces(ctx: Context):
   spaces = {s["id"]: s for s in ctx.call("spaces")}
   key = spaces[created["id"]]["theme"]["style"]["key_color"]
   check(abs(key["r"] - 0.92) < 1e-6, "theme not stored in the model")
+  time.sleep(0.30)  # Let 210ms kThemeCrossfade settle before snapshot.
   ctx.snapshot("spaces-themed")
   # Back to the first Space for the following suites.
   ctx.call("space", space=focused_before)
@@ -649,6 +650,7 @@ def suite_peek(ctx: Context):
   state = ctx.call("peek-open", url=ctx.fixtures.url("/page/31.html"))
   check(state["shown"], "Peek not shown")
   wait_peek_loaded(ctx, "/page/31.html")
+  time.sleep(0.20)  # Let 100ms kPeekOpen opacity animation settle.
   ctx.snapshot("peek")
   state = ctx.call("peek-expand")
   check(not state["shown"], "Peek still shown after expand")
@@ -968,6 +970,19 @@ def suite_tab_switcher(ctx: Context):
   ctx.call("tab-switcher", action="cancel")
   check(not ctx.call("tab-switcher")["active"], "cancel left it active")
   check(selected_tab(ctx) == a, "cancel changed the selection")
+  # Wait for the delayed HUD to appear (is_shown), then press Escape to cancel.
+  state = ctx.call("tab-switcher", action="forward")
+  check(state["active"], f"switcher not active for escape test: {state}")
+  time.sleep(0.18)
+  ctx.client.wait_until(
+      lambda: ctx.call("tab-switcher").get("shown") is True,
+      timeout=5, what="tab switcher HUD shown")
+  ctx.call("key", key="escape")
+  ctx.client.wait_until(
+      lambda: (lambda s: not s.get("active") and not s.get("shown"))(
+          ctx.call("tab-switcher")),
+      timeout=5, what="Escape cancels shown tab switcher")
+  check(selected_tab(ctx) == a, "Escape cancel changed the selection")
 
 
 def live_little_opens(ctx: Context) -> List[Dict]:
@@ -1344,6 +1359,7 @@ def suite_regression_core_and_chrome(ctx: Context):
         abs(stored_style["key_color"]["b"] - 0.55) < 1e-6 and
         stored_style["appearance"] == "dark",
         f"updated Space theme stale in spaces readback: {stored_style}")
+  time.sleep(0.30)  # Let 210ms kThemeCrossfade settle before snapshot.
   ctx.snapshot("regression-space-theme")
 
   # --- 4. Overlay non-blocking visibility (OverlayWidgetHost) ----------------
@@ -1498,6 +1514,19 @@ def suite_wave3_parity(ctx: Context):
       lambda: ctx.call("chrome-state").get("singlePaneToolbar") is True,
       timeout=10, what="singlePaneToolbar True")
   ctx.snapshot("single-pane-toolbar")
+
+  def _toolbar_persisted():
+    try:
+      data = _load_browser_json(ctx.browser.user_data)
+    except (OSError, json.JSONDecodeError, CheckFailed):
+      return None
+    wins = data.get("windows") or []
+    return any(isinstance(w, dict) and w.get("showsToolbar") is True
+               for w in wins) or None
+
+  ctx.client.wait_until(
+      _toolbar_persisted, timeout=15, interval=0.25,
+      what="showsToolbar: true persisted to State/browser.json")
   res = ctx.call("run-command", name="toggle-toolbar")
   check(res.get("ok") is True, f"toggle-toolbar restore failed: {res}")
   ctx.client.wait_until(
@@ -1587,7 +1616,8 @@ def suite_wave3_parity(ctx: Context):
     ctx.client.wait_until(
         lambda: ctx.call("chrome-state").get("firstRunOpen") is True,
         timeout=15, what="firstRunOpen True")
-    time.sleep(0.6)
+    time.sleep(0.60)  # Let onboarding WebUI mount.
+    time.sleep(0.45)  # Let 450ms doorway intro animation settle.
     ctx.snapshot("onboarding", window="onboarding")
   finally:
     ctx.call("run-command", name="close-first-run-window")

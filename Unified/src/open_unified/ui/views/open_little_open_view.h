@@ -297,6 +297,7 @@ class OpenLittleOpenView : public views::View,
   void OnPaint(gfx::Canvas* canvas) override;
   void Layout(PassKey) override;
   gfx::Size GetMinimumSize() const override;
+  bool CanHandleAccelerators() const override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
   // content::WebContentsObserver:
@@ -312,6 +313,7 @@ class OpenLittleOpenView : public views::View,
   void OnWidgetDestroying(views::Widget* widget) override;
 
  private:
+  content::WebContents* ActiveWebContents() const;
   void LayoutTitleBar();
   void UpdateWindowTitle();
   void SyncWindowControlsState();

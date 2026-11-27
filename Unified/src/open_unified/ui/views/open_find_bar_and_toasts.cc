@@ -1667,6 +1667,28 @@ void OpenToastStackView::DismissKind(OpenToastKind kind) {
   }
 }
 
+void OpenToastStackView::DismissKindImmediate(OpenToastKind kind) {
+  bool removed_any = false;
+  for (auto it = toasts_.begin(); it != toasts_.end();) {
+    if ((*it)->kind() == kind) {
+      toast_internal::ToastView* toast = it->get();
+      it = toasts_.erase(it);
+      RemoveChildViewT(toast);
+      removed_any = true;
+    } else {
+      ++it;
+    }
+  }
+  if (!removed_any) {
+    return;
+  }
+  PreferredSizeChanged();
+  InvalidateLayout();
+  if (toasts_.empty() && visibility_callback_) {
+    visibility_callback_.Run(false);
+  }
+}
+
 bool OpenToastStackView::PerformAction(size_t index) {
   size_t visible = 0;
   for (auto& toast : toasts_) {
@@ -1998,9 +2020,11 @@ bool OpenTabSwitcherView::HandleKeyEvent(const ui::KeyEvent& event) {
       Advance(event.IsShiftDown());
       return true;
     case ui::VKEY_RIGHT:
+    case ui::VKEY_DOWN:
       Advance(false);
       return true;
     case ui::VKEY_LEFT:
+    case ui::VKEY_UP:
       Advance(true);
       return true;
     case ui::VKEY_ESCAPE:

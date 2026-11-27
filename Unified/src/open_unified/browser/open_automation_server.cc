@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstring>
 #include <list>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -45,10 +46,12 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "components/input/native_web_keyboard_event.h"
+#include "components/viz/common/frame_timing_details.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "open/adblock/open_adblock_service.h"
@@ -864,6 +867,9 @@ void ClickAt(content::WebContents* contents, double x, double y) {
   if (!view) {
     return;
   }
+  if (contents->GetVisibility() != content::Visibility::VISIBLE) {
+    contents->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
+  }
   contents->Focus();
   content::RenderWidgetHost* host = view->GetRenderWidgetHost();
   const float fx = static_cast<float>(x);
@@ -1037,7 +1043,20 @@ void WritePngAndReply(base::FilePath path,
 void GrabWidgetSnapshotAttempt(std::string window_name,
                                base::FilePath path,
                                int attempt,
-                               Reply reply) {
+                               Reply reply);
+
+struct SnapshotPresentationGate {
+  bool fired = false;
+  std::string window_name;
+  base::FilePath path;
+  int attempt = 0;
+  Reply reply;
+};
+
+void GrabWidgetSnapshotNow(std::string window_name,
+                           base::FilePath path,
+                           int attempt,
+                           Reply reply) {
   bool is_main = false;
   views::Widget* w = ResolveSnapshotWidget(window_name, &is_main);
   if (!w) {
@@ -1055,27 +1074,13 @@ void GrabWidgetSnapshotAttempt(std::string window_name,
       base::BindOnce(
           [](std::string window_name, base::FilePath path, int attempt,
              Reply reply, gfx::Image image) {
-            if ((image.IsEmpty() || IsImageSolidBlack(image)) && attempt < 4) {
-              bool retry_main = false;
-              views::Widget* retry_w =
-                  ResolveSnapshotWidget(window_name, &retry_main);
-              if (!retry_w) {
-                Err(std::move(reply), "no window " + window_name);
-                return;
-              }
-              if (views::View* root = retry_w->GetRootView()) {
-                root->SchedulePaint();
-              }
-              retry_w->LayoutRootViewIfNecessary();
-              if (ui::Compositor* compositor = retry_w->GetCompositor()) {
-                compositor->ScheduleFullRedraw();
-              }
+            if ((image.IsEmpty() || IsImageSolidBlack(image)) && attempt < 10) {
               base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
                   FROM_HERE,
                   base::BindOnce(&GrabWidgetSnapshotAttempt,
                                  std::move(window_name), std::move(path),
                                  attempt + 1, std::move(reply)),
-                  base::Milliseconds(180));
+                  base::Milliseconds(200));
               return;
             }
             if (image.IsEmpty()) {
@@ -1087,6 +1092,52 @@ void GrabWidgetSnapshotAttempt(std::string window_name,
                              image.Height(), std::move(reply));
           },
           std::move(window_name), std::move(path), attempt, std::move(reply)));
+}
+
+void RunSnapshotPresentationGate(
+    std::shared_ptr<SnapshotPresentationGate> gate) {
+  if (!gate || gate->fired) {
+    return;
+  }
+  gate->fired = true;
+  GrabWidgetSnapshotNow(std::move(gate->window_name), std::move(gate->path),
+                        gate->attempt, std::move(gate->reply));
+}
+
+void GrabWidgetSnapshotAttempt(std::string window_name,
+                               base::FilePath path,
+                               int attempt,
+                               Reply reply) {
+  bool is_main = false;
+  views::Widget* w = ResolveSnapshotWidget(window_name, &is_main);
+  if (!w) {
+    Err(std::move(reply), "no window " + window_name);
+    return;
+  }
+  if (views::View* root = w->GetRootView()) {
+    root->SchedulePaint();
+  }
+  w->LayoutRootViewIfNecessary();
+  if (ui::Compositor* compositor = w->GetCompositor()) {
+    compositor->ScheduleFullRedraw();
+    auto gate = std::make_shared<SnapshotPresentationGate>();
+    gate->window_name = std::move(window_name);
+    gate->path = std::move(path);
+    gate->attempt = attempt;
+    gate->reply = std::move(reply);
+    compositor->RequestSuccessfulPresentationTimeForNextFrame(base::BindOnce(
+        [](std::shared_ptr<SnapshotPresentationGate> gate,
+           const viz::FrameTimingDetails&) {
+          RunSnapshotPresentationGate(std::move(gate));
+        },
+        gate));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(&RunSnapshotPresentationGate, gate),
+        base::Milliseconds(250));
+    return;
+  }
+  GrabWidgetSnapshotNow(std::move(window_name), std::move(path), attempt,
+                        std::move(reply));
 }
 
 base::DictValue AdBlockStateFor(const ProfileID& profile_id) {

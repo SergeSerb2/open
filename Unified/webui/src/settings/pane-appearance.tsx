@@ -1,5 +1,6 @@
 import type { JSX } from 'preact';
 import { SegmentedControl } from '../shared/components';
+import { isMacPlatform } from '../shared/shortcuts';
 import { useSettings } from './context';
 import { Group, PaneHeader, PrefSelect, PrefToggle, Row } from './ui';
 
@@ -16,14 +17,17 @@ function MiniWindow(): JSX.Element {
   const mode = pref === 'automatic' ? (ctx.theme?.mode ?? 'light') : pref;
   const right = ctx.prefs['appearance.sidebarPosition'] === 'right';
   const toolbar = ctx.prefs['appearance.toolbar'] === true;
+  const mac = isMacPlatform();
   return (
-    <div class={`st-mini is-${mode}${right ? ' is-right' : ''}`} aria-hidden="true">
+    <div class={`st-mini is-${mode}${right ? ' is-right' : ''}${mac ? '' : ' is-win'}`} aria-hidden="true">
       <div class="st-mini-sidebar">
-        <span class="st-mini-lights">
-          <i />
-          <i />
-          <i />
-        </span>
+        {mac && (
+          <span class="st-mini-lights">
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
         <span class="st-mini-pill" />
         <span class="st-mini-tab is-active" />
         <span class="st-mini-tab" />
@@ -35,6 +39,15 @@ function MiniWindow(): JSX.Element {
         <span class="st-mini-line w90" />
         <span class="st-mini-line w50" />
       </div>
+      {!mac && (
+        <span class="st-mini-win-controls">
+          <svg viewBox="0 0 38 10" width="38" height="10" aria-hidden="true">
+            <line x1="2" y1="5" x2="8" y2="5" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" />
+            <rect x="16" y="2.2" width="5.6" height="5.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.1" />
+            <path d="M29.5 2.2l5.6 5.6M35.1 2.2l-5.6 5.6" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" />
+          </svg>
+        </span>
+      )}
     </div>
   );
 }

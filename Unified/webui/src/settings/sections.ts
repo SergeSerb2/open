@@ -19,6 +19,7 @@ import {
   SpacesIcon,
   TabsIcon,
 } from '../shared/icons';
+import { isMacPlatform } from '../shared/shortcuts';
 
 export type SectionId =
   | 'general'
@@ -112,7 +113,7 @@ const e = (section: SectionId, row: string, label: string, help = '', aliases = 
 export const SEARCH_INDEX: readonly SearchEntry[] = [
   e('general', 'default-browser', 'Make Open your default browser', 'Links from other apps will open here.', 'default app handler'),
   e('general', 'restore-windows', 'Restore windows from the previous session', '', 'startup reopen session', 'general.restoreWindows'),
-  e('general', 'warn-before-quitting', 'Warn before quitting', 'Ask before quitting with downloads in progress.', 'quit confirm', 'general.warnBeforeQuitting'),
+  e('general', 'warn-before-quitting', 'Warn before quitting', 'Ask for confirmation before quitting Open.', 'quit confirm', 'general.warnBeforeQuitting'),
   e('general', 'automatic-updates', 'Update Open automatically', 'Keep Open up to date.', 'updates sparkle', 'general.automaticUpdates'),
   e('general', 'download-location', 'Download location', 'Where this Profile saves your files.', 'downloads folder save', 'downloads.location'),
   e('general', 'ask-each-file', 'Ask where to save each file', '', 'downloads prompt', 'downloads.askEachTime'),
@@ -131,7 +132,14 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   e('spaces', 'new', 'New Space', '', 'create space'),
 
   e('links', 'little-open-hotkey', 'Open Little Open in any app', 'A global shortcut for a quick window.', 'Little Arc global hotkey', 'links.littleOpenHotkey'),
-  e('links', 'option-command-click', 'Open Little Open with Option-Command-click', '', 'Little Arc modifier click', 'links.optionCommandClick'),
+  e(
+    'links',
+    'option-command-click',
+    isMacPlatform() ? 'Open Little Open with Option-Command-click' : 'Open Little Open with Ctrl+Alt-click',
+    '',
+    'Little Arc modifier click Option-Command-click Ctrl+Alt-click',
+    'links.optionCommandClick',
+  ),
   e('links', 'external-links', 'Links from other apps open in Little Open', '', 'Little Arc external', 'links.externalLinksLittleOpen'),
   e('links', 'peek-shift-click', 'Open Peek with Shift-click', '', 'preview overlay', 'links.peekShiftClick'),
   e('links', 'peek-other-sites', 'Open Peek for links to other sites', 'Applies to Favorites and Pinned tabs.', 'preview overlay', 'links.peekOtherSites'),
@@ -196,7 +204,9 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   e('advanced', 'pip', 'Picture in Picture when you leave a video tab', '', 'auto pip video', 'advanced.pictureInPicture'),
   e('advanced', 'pip-hosts', 'Sites without automatic Picture in Picture', '', 'pip exclusions', 'advanced.pipExcludedHosts'),
   e('advanced', 'sound', 'Play Open sound effects', '', 'audio', 'advanced.soundEffects'),
-  e('advanced', 'haptics', 'Haptic feedback when reordering tabs', '', 'trackpad', 'advanced.haptics'),
+  ...(isMacPlatform()
+    ? [e('advanced', 'haptics', 'Haptic feedback when reordering tabs', '', 'trackpad', 'advanced.haptics')]
+    : []),
   e('advanced', 'window-dragging', 'Allow window dragging from the top of webpages', '', '', 'advanced.windowDragging'),
   e('advanced', 'shared-quotes', 'Enable Shared Quotes when highlighting text', '', '', 'advanced.sharedQuotes'),
   e('advanced', 'theme-data', 'Allow websites to get your theme data', '', '', 'advanced.themeData'),

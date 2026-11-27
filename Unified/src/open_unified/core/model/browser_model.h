@@ -291,6 +291,8 @@ class BrowserModel {
   bool SetSidebarMode(const WindowID& window_id,
                       SidebarMode mode,
                       bool register_undo = true);
+  bool SetWindowShowsToolbar(const WindowID& window_id, bool shows_toolbar);
+  bool SetWindowStayOnTop(const WindowID& window_id, bool stay_on_top);
 
   // --- Runtime Live State (Non-Persisted, Non-Undoable) ---
   bool UpdateTabLiveState(const ItemID& tab_id,

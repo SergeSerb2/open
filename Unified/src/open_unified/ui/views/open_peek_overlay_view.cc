@@ -11,6 +11,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
@@ -176,31 +177,45 @@ class OpenPeekOverlayView::StackEntryDelegate
     const auto type = event.GetType();
     if (type == blink::WebInputEvent::Type::kRawKeyDown ||
         type == blink::WebInputEvent::Type::kKeyDown) {
-      if (event.windows_key_code == ui::VKEY_ESCAPE) {
+      const int mods = event.GetModifiers() & blink::WebInputEvent::kKeyModifiers;
+      if (mods == 0 && event.windows_key_code == ui::VKEY_ESCAPE) {
         owner_->DismissSmooth(PeekDismissReason::kEscape);
         return true;
       }
-      const bool primary =
-          (event.GetModifiers() &
+      constexpr int kPrimaryMod =
 #if BUILDFLAG(IS_MAC)
-           blink::WebInputEvent::kMetaKey
+          blink::WebInputEvent::kMetaKey;
 #else
-           blink::WebInputEvent::kControlKey
+          blink::WebInputEvent::kControlKey;
 #endif
-           ) != 0;
-      if (primary && event.windows_key_code == ui::VKEY_O) {
+      const bool primary_only = mods == kPrimaryMod;
+      if (primary_only && event.windows_key_code == ui::VKEY_O) {
         owner_->PressButton(OpenPeekOverlayView::kExpandButton);
         return true;
       }
-      if (primary && event.windows_key_code == ui::VKEY_OEM_4) {
+      if (primary_only && event.windows_key_code == ui::VKEY_OEM_4) {
         owner_->GoBack();
         return true;
       }
-      if (primary && event.windows_key_code == ui::VKEY_OEM_6) {
+      if (primary_only && event.windows_key_code == ui::VKEY_OEM_6) {
         owner_->GoForward();
         return true;
       }
-#if !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC)
+      const bool cmd_only =
+          (event.GetModifiers() & blink::WebInputEvent::kMetaKey) != 0 &&
+          (event.GetModifiers() & (blink::WebInputEvent::kControlKey |
+                                   blink::WebInputEvent::kAltKey |
+                                   blink::WebInputEvent::kShiftKey)) == 0;
+      if (cmd_only && event.windows_key_code == ui::VKEY_LEFT) {
+        owner_->GoBack();
+        return true;
+      }
+      if (cmd_only && event.windows_key_code == ui::VKEY_RIGHT) {
+        owner_->GoForward();
+        return true;
+      }
+#else
       const bool alt_only =
           (event.GetModifiers() & blink::WebInputEvent::kAltKey) != 0 &&
           (event.GetModifiers() & (blink::WebInputEvent::kControlKey |
@@ -345,7 +360,10 @@ OpenPeekOverlayView::OpenPeekOverlayView(PeekDelegate* delegate)
   AddAccelerator(ui::Accelerator(ui::VKEY_O, secondary::kPrimaryModifier));
   AddAccelerator(ui::Accelerator(ui::VKEY_OEM_4, secondary::kPrimaryModifier));
   AddAccelerator(ui::Accelerator(ui::VKEY_OEM_6, secondary::kPrimaryModifier));
-#if !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC)
+  AddAccelerator(ui::Accelerator(ui::VKEY_LEFT, ui::EF_COMMAND_DOWN));
+  AddAccelerator(ui::Accelerator(ui::VKEY_RIGHT, ui::EF_COMMAND_DOWN));
+#else
   AddAccelerator(ui::Accelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN));
   AddAccelerator(ui::Accelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN));
 #endif
@@ -962,7 +980,18 @@ bool OpenPeekOverlayView::AcceleratorPressed(
     GoForward();
     return true;
   }
-#if !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC)
+  if (accelerator.key_code() == ui::VKEY_LEFT &&
+      (accelerator.modifiers() & ui::EF_COMMAND_DOWN) != 0) {
+    GoBack();
+    return true;
+  }
+  if (accelerator.key_code() == ui::VKEY_RIGHT &&
+      (accelerator.modifiers() & ui::EF_COMMAND_DOWN) != 0) {
+    GoForward();
+    return true;
+  }
+#else
   if (accelerator.key_code() == ui::VKEY_LEFT && accelerator.IsAltDown()) {
     GoBack();
     return true;

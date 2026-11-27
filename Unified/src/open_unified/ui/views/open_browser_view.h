@@ -315,6 +315,8 @@ class OpenBrowserView : public views::View,
     virtual void OnSinglePaneToolbarCommand(PaneCommand command,
                                             views::View* anchor) {}
     virtual void OnSinglePaneHostClicked(views::View* anchor) {}
+    // OS native theme / dark-light appearance changed.
+    virtual void OnSystemThemeChanged() {}
   };
 
   struct SinglePaneToolbarState {

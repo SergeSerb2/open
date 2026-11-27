@@ -4,6 +4,7 @@ import { Modal, Toast } from '../shared/components';
 import { OpenDoorwayMark, RedoIcon, UndoIcon } from '../shared/icons';
 import { replacePageRoute } from '../shared/route';
 import { formatShortcut } from '../shared/shortcuts';
+import { subscribeDocumentTheme } from '../shared/theme';
 import {
   duplicateNote,
   exportNoteHtml,
@@ -165,6 +166,9 @@ export function NoteApp(): JSX.Element {
         .catch(() => setSaveState('saved'));
     }, 450);
   }, []);
+
+  // Sync explicit light/dark theme preference.
+  useEffect(() => subscribeDocumentTheme(), []);
 
   // Load note using fixed [0] path parser.
   useEffect(() => {

@@ -28,6 +28,7 @@
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -53,6 +54,7 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
+#include "ui/views/widget/widget.h"
 
 namespace open_unified {
 
@@ -184,6 +186,18 @@ void ReloadDiscardedIfNeeded(content::WebContents* wc) {
        !wc->GetPrimaryMainFrame()->IsRenderFrameLive())) {
     controller.SetNeedsReload();
     controller.LoadIfNecessary();
+  }
+}
+
+void EnsureActiveContentsVisible(BrowserWindowInterface* browser,
+                                 content::WebContents* contents) {
+  if (!browser || !contents ||
+      contents->GetVisibility() == content::Visibility::VISIBLE) {
+    return;
+  }
+  BrowserView* bv = BrowserView::GetBrowserViewForBrowser(browser);
+  if (bv && bv->GetWidget() && bv->GetWidget()->IsVisible()) {
+    contents->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
   }
 }
 
@@ -1012,6 +1026,7 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
   }
 
   ItemID to_activate;
+  std::vector<ItemID> visible_split_panes;
   if (const Tab* tab = node->as_tab()) {
     to_activate = tab->id;
   } else if (const Split* split = node->as_split()) {
@@ -1019,6 +1034,7 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
     // Chromium tab (keyboard focus, extensions' "active tab").
     for (const Tab& pane : split->panes) {
       EnsureLoaded(pane.id, window_id);
+      visible_split_panes.push_back(pane.id);
     }
     to_activate = split->focused_pane_id.value_or(
         split->panes.empty() ? ItemID() : split->panes.front().id);
@@ -1047,6 +1063,16 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
   }
   for (Observer& observer : observers_) {
     observer.OnTabActivated(to_activate);
+  }
+  // On occluded or locked displays (e.g., macOS with an empty initial Space
+  // hiding browser_contents_container_), WebContents can remain stuck in
+  // Visibility::HIDDEN after activation; promote it once the panel is shown.
+  EnsureActiveContentsVisible(browser, wc);
+  for (const ItemID& pane_id : visible_split_panes) {
+    if (pane_id != to_activate) {
+      EnsureActiveContentsVisible(BrowserForTab(pane_id),
+                                  WebContentsForTab(pane_id));
+    }
   }
 }
 
@@ -1484,13 +1510,27 @@ bool OpenTabBridge::FocusSpace(const SpaceID& space_id,
 
 WindowID OpenTabBridge::OpenNewWindow(const std::optional<SpaceID>& space_id) {
   BrowserModel& model = service_->model();
+  // Rebind to an existing preserved standard window that has no live OS
+  // Browser (e.g., after closing the last window on macOS) so reopening via
+  // Dock click or Cmd+N preserves sidebar/tab state without duplicating rows.
+  WindowID preserved_window_id;
+  for (const BrowserWindowState& window : model.windows()) {
+    if (window.style == WindowStyle::kStandard && !window.is_incognito &&
+        !BrowserForWindow(window.id)) {
+      preserved_window_id = window.id;
+      break;
+    }
+  }
   SpaceID target_space = space_id.value_or(SpaceID());
   if (target_space.empty() || !model.FindSpace(target_space) ||
       model.IsIncognitoSpace(target_space)) {
-    const BrowserWindowState* focused = model.FindWindow(FocusedWindowId());
-    if (focused && !focused->is_incognito &&
-        model.FindSpace(focused->focused_space_id)) {
-      target_space = focused->focused_space_id;
+    const BrowserWindowState* base_window =
+        !preserved_window_id.empty() ? model.FindWindow(preserved_window_id)
+                                     : model.FindWindow(FocusedWindowId());
+    if (base_window && !base_window->is_incognito &&
+        model.FindSpace(base_window->focused_space_id) &&
+        !model.IsIncognitoSpace(base_window->focused_space_id)) {
+      target_space = base_window->focused_space_id;
     } else if (!model.spaces().empty()) {
       target_space = model.spaces().front().id;
     }
@@ -1499,7 +1539,15 @@ WindowID OpenTabBridge::OpenNewWindow(const std::optional<SpaceID>& space_id) {
     return WindowID();
   }
   WindowID window_id;
-  {
+  if (!preserved_window_id.empty()) {
+    window_id = preserved_window_id;
+    base::AutoReset<bool> applying(&applying_, true);
+    if (const BrowserWindowState* preserved = model.FindWindow(window_id);
+        preserved && preserved->focused_space_id != target_space) {
+      model.FocusSpace(window_id, target_space);
+    }
+    model.TouchWindowFocus(window_id);
+  } else {
     base::AutoReset<bool> applying(&applying_, true);
     window_id = model.CreateWindow(target_space, WindowStyle::kStandard,
                                    /*register_undo=*/false);
@@ -1896,6 +1944,7 @@ void OpenTabBridge::OnTabStripModelChanged(
       for (Observer& observer : observers_) {
         observer.OnTabActivated(*id);
       }
+      EnsureActiveContentsVisible(browser, selection.new_contents);
     }
   }
 }
@@ -1986,11 +2035,33 @@ void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
   BrowserModel& model = service_->model();
   const bool is_otr = browser->GetProfile()->IsOffTheRecord();
   WindowID window_id;
+  bool reused_preserved = false;
   {
     base::AutoReset<bool> applying(&applying_, true);
     if (is_otr) {
       window_id = model.CreateIncognitoWindow(*profile);
     } else {
+      // Reuse an unbound preserved standard window (e.g., after closing the
+      // last window on macOS) instead of creating a duplicate BrowserWindowState.
+      WindowID unbound_any;
+      for (const BrowserWindowState& w : model.windows()) {
+        if (w.style != WindowStyle::kStandard || w.is_incognito ||
+            BrowserForWindow(w.id)) {
+          continue;
+        }
+        const Space* sp = model.FindSpace(w.focused_space_id);
+        if (sp && sp->profile_id == *profile && !model.IsIncognitoSpace(sp->id)) {
+          window_id = w.id;
+          break;
+        }
+        if (unbound_any.empty()) {
+          unbound_any = w.id;
+        }
+      }
+      if (window_id.empty() && !unbound_any.empty()) {
+        window_id = unbound_any;
+      }
+
       SpaceID target_space;
       if (const BrowserWindowState* focused =
               model.FindWindow(FocusedWindowId());
@@ -2011,7 +2082,18 @@ void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
       if (target_space.empty() && !model.spaces().empty()) {
         target_space = model.spaces().front().id;
       }
-      if (!target_space.empty()) {
+
+      if (!window_id.empty()) {
+        reused_preserved = true;
+        const BrowserWindowState* w = model.FindWindow(window_id);
+        const Space* sp = w ? model.FindSpace(w->focused_space_id) : nullptr;
+        if ((!sp || sp->profile_id != *profile ||
+             model.IsIncognitoSpace(sp->id)) &&
+            !target_space.empty()) {
+          model.FocusSpace(window_id, target_space);
+        }
+        model.TouchWindowFocus(window_id);
+      } else if (!target_space.empty()) {
         window_id = model.CreateWindow(target_space, WindowStyle::kStandard,
                                        /*register_undo=*/false);
       }
@@ -2028,6 +2110,7 @@ void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
   // fresh OS window opens on Open's clean empty Space canvas.
   TabStripModel* strip = browser->GetTabStripModel();
   bool has_ntp = false;
+  bool adopted_any_tab = false;
   for (int i = 0; i < strip->count(); ++i) {
     content::WebContents* wc = strip->GetWebContentsAt(i);
     if (IsEmptyState(wc) || TabIdForWebContents(wc)) {
@@ -2038,7 +2121,11 @@ void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
       has_ntp = true;
     } else {
       AdoptChromiumTab(browser, wc, i);
+      adopted_any_tab = true;
     }
+  }
+  if (reused_preserved && !adopted_any_tab) {
+    ApplySelectionFromModel(window_id);
   }
   if (has_ntp) {
     ScrubNewTabPagesLater(browser);
@@ -2095,18 +2182,21 @@ void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
       // sidebar_width, sidebar_mode, focused_space_id, and
       // selected_node_by_space for the next launch.
       if (started_ && service_ && service_->started()) {
-        // Preserve standard windows in model_.windows_ during app-wide quit on
-        // all platforms (and on Windows/Linux when the last standard window
-        // closes, since closing the last window exits the app) so browser.json
-        // retains window geometry, sidebar_width, sidebar_mode, focused Space,
-        // and selected_node_by_space for the next launch.
+        // Preserve standard windows in model_.windows_ during app-wide quit and
+        // whenever the last standard window closes on any platform (including
+        // macOS red-close / Cmd+Shift+W before Cmd+Q) so browser.json never
+        // serializes `"windows": []` and always retains window geometry,
+        // sidebar_width, sidebar_mode, shows_toolbar, stay_on_top, focused
+        // Space, and selected_node_by_space for the next launch or reopen.
+        size_t standard_windows = 0;
+        for (const BrowserWindowState& w : service_->model().windows()) {
+          if (w.style == WindowStyle::kStandard && !w.is_incognito) {
+            ++standard_windows;
+          }
+        }
         const bool preserve_standard_window =
             !closed_info->incognito &&
-            (browser_shutdown::IsTryingToQuit()
-#if !BUILDFLAG(IS_MAC)
-             || service_->model().windows().size() <= 1
-#endif
-            );
+            (browser_shutdown::IsTryingToQuit() || standard_windows <= 1);
         if (!preserve_standard_window) {
           base::AutoReset<bool> applying(&applying_, true);
           service_->model().CloseWindow(closed_info->window);

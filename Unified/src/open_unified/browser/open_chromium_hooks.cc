@@ -791,7 +791,10 @@ bool IsOpenMenuCommandEnabled(BrowserWindowInterface* browser, int command_id) {
     return true;
   }
   const CommandDefinition* def = service->commands().FindById(*cid);
-  if (!def || def->is_reserved) {
+  if (!def || def->is_reserved ||
+      def->command_id == CommandId::kImportArcNotes ||
+      def->command_id == CommandId::kRecordTrace ||
+      def->command_id == CommandId::kCancelTrace) {
     return false;
   }
   OpenWindowUi* ui = WindowUiForBrowser(browser);
@@ -901,13 +904,15 @@ int FallbackChromiumCommandForOpen(CommandId cid) {
     case CommandId::kCast:
       return IDC_ROUTE_MEDIA;
     case CommandId::kDeveloperTools:
+    case CommandId::kNetworkInspector:
+      // Chromium has no dedicated IDC_* command for the DevTools Network panel;
+      // fall back cleanly to toggling DevTools rather than Inspect Element mode.
       return IDC_DEV_TOOLS;
     case CommandId::kJavaScriptConsole:
       return IDC_DEV_TOOLS_CONSOLE;
     case CommandId::kViewSource:
       return IDC_VIEW_SOURCE;
     case CommandId::kInspectElements:
-    case CommandId::kNetworkInspector:
       return IDC_DEV_TOOLS_INSPECT;
     case CommandId::kAllowJsAppleEvents:
       return IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS;

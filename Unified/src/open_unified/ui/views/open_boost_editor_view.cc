@@ -18,6 +18,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_shader.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
@@ -371,6 +372,7 @@ const std::vector<BoostEditorFont>& BoostEditorFonts() {
       const char* name;
       const char* generic;
     };
+#if BUILDFLAG(IS_MAC)
     static constexpr Family kFamilies[] = {
         {"Helvetica Neue", "sans-serif"},
         {"Avenir", "sans-serif"},
@@ -392,11 +394,55 @@ const std::vector<BoostEditorFont>& BoostEditorFonts() {
         {"Luminari", "fantasy"},
         {"Wingdings", "fantasy"},
     };
+#elif BUILDFLAG(IS_WIN)
+    static constexpr Family kFamilies[] = {
+        {"Segoe UI", "sans-serif"},
+        {"Cascadia Code", "monospace"},
+        {"Consolas", "monospace"},
+        {"Georgia", "serif"},
+        {"Cambria", "serif"},
+        {"Calibri", "sans-serif"},
+        {"Bahnschrift", "sans-serif"},
+        {"Trebuchet MS", "sans-serif"},
+        {"Verdana", "sans-serif"},
+        {"Comic Sans MS", "cursive"},
+        {"Impact", "fantasy"},
+        {"Courier New", "monospace"},
+        {"Times New Roman", "serif"},
+        {"Arial", "sans-serif"},
+        {"Tahoma", "sans-serif"},
+        {"Palatino Linotype", "serif"},
+        {"Segoe Script", "cursive"},
+        {"Lucida Console", "monospace"},
+        {"Franklin Gothic Medium", "sans-serif"},
+    };
+#else
+    static constexpr Family kFamilies[] = {
+        {"Ubuntu", "sans-serif"},
+        {"Noto Sans", "sans-serif"},
+        {"Liberation Sans", "sans-serif"},
+        {"DejaVu Sans", "sans-serif"},
+        {"DejaVu Serif", "serif"},
+        {"JetBrains Mono", "monospace"},
+        {"Liberation Mono", "monospace"},
+        {"Noto Serif", "serif"},
+        {"Ubuntu Mono", "monospace"},
+        {"Cantarell", "sans-serif"},
+        {"FreeSans", "sans-serif"},
+        {"FreeSerif", "serif"},
+        {"FreeMono", "monospace"},
+        {"Monospace", nullptr},
+        {"Serif", nullptr},
+        {"Sans-Serif", nullptr},
+    };
+#endif
     std::vector<BoostEditorFont> list;
     list.push_back({u"System", std::string(), std::string()});
     for (const Family& family : kFamilies) {
-      list.push_back({base::UTF8ToUTF16(family.name),
-                      std::string(family.name) + ", " + family.generic,
+      std::string css = family.generic
+                            ? std::string(family.name) + ", " + family.generic
+                            : base::ToLowerASCII(family.name);
+      list.push_back({base::UTF8ToUTF16(family.name), std::move(css),
                       family.name});
     }
     return list;

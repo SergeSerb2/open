@@ -453,6 +453,7 @@ class OpenSiteControlView : public views::View,
 
   void SetState(const SiteControlState& state);
   const SiteControlState& state() const { return state_; }
+  void SetAppearance(const secondary::Appearance& appearance);
   void SetCallbacks(const SiteControlCallbacks& callbacks);
   // The tab the panel reads from and acts on (may be null).
   void SetWebContents(content::WebContents* tab);
@@ -480,6 +481,7 @@ class OpenSiteControlView : public views::View,
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
   void OnPaint(gfx::Canvas* canvas) override;
+  void OnThemeChanged() override;
   bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
 
   // ui::SimpleMenuModel::Delegate:
@@ -501,6 +503,7 @@ class OpenSiteControlView : public views::View,
   };
 
   void Rebuild();
+  void RepaintAll();
   void BuildBody();
   void BuildCertificatePage();
   void NormalizeState();
@@ -673,6 +676,7 @@ class OpenSiteControlBubble {
   bool IsShowing() const;
 
   void UpdateState(const SiteControlState& state);
+  void SetAppearance(const secondary::Appearance& appearance);
   void SetAdBlockState(bool enabled, int blocked_count);
   void SetCallbacks(const SiteControlCallbacks& callbacks);
   // Switches the observed tab (a tab switch while the panel is open).
@@ -699,6 +703,7 @@ class OpenSiteControlBubble {
   void OnBlockedCountChanged(int count);
 
   raw_ptr<SiteControlDelegate> delegate_;
+  secondary::Appearance appearance_;
   SiteControlCallbacks callbacks_;
   std::unique_ptr<LiveObserver> live_observer_;
   std::unique_ptr<views::BubbleDialogDelegate> bubble_delegate_;

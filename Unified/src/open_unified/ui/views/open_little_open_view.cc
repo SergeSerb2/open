@@ -15,11 +15,15 @@
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents.h"
 #include "open_unified/browser/platform/open_platform.h"
 #include "open_unified/ui/design/open_glyphs.h"
 #include "open_unified/ui/design/open_metrics.h"
 #include "open_unified/ui/views/open_window_controls_view.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -42,6 +46,7 @@
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -77,15 +82,20 @@ void DrawIconInBadge(gfx::Canvas* canvas,
                      const gfx::Rect& badge_rect,
                      SkColor color,
                      int font_size) {
-  if (icon && (icon->kind == SpaceIconKind::kSymbol ||
-               icon->kind == SpaceIconKind::kNamed)) {
+  if (icon && !icon->value.empty() &&
+      (icon->kind == SpaceIconKind::kSymbol ||
+       icon->kind == SpaceIconKind::kNamed)) {
     const std::string_view symbol =
         icon->kind == SpaceIconKind::kNamed
             ? glyphs::NamedSpaceIconSymbol(icon->value)
             : std::string_view(icon->value);
+    const gfx::RectF bounds(badge_rect);
     if (glyphs::DrawSystemSymbol(canvas, symbol, static_cast<float>(font_size),
-                                 glyphs::SymbolWeight::kMedium,
-                                 gfx::RectF(badge_rect), color)) {
+                                 glyphs::SymbolWeight::kMedium, bounds,
+                                 color)) {
+      return;
+    }
+    if (glyphs::DrawNamedSpaceIcon(canvas, icon->value, bounds, color)) {
       return;
     }
   }
@@ -93,6 +103,36 @@ void DrawIconInBadge(gfx::Canvas* canvas,
                       secondary::FontOfSize(font_size), color, badge_rect,
                       gfx::Canvas::TEXT_ALIGN_CENTER);
 }
+
+// WebView subclass so unhandled page keyboard events still route to the
+// Little Open widget's FocusManager when this WebView acts as delegate.
+class LittleOpenWebView : public views::WebView {
+  METADATA_HEADER(LittleOpenWebView, views::WebView)
+
+ public:
+  LittleOpenWebView() = default;
+  LittleOpenWebView(const LittleOpenWebView&) = delete;
+  LittleOpenWebView& operator=(const LittleOpenWebView&) = delete;
+  ~LittleOpenWebView() override = default;
+
+  bool HandleKeyboardEvent(
+      content::WebContents* source,
+      const input::NativeWebKeyboardEvent& event) override {
+    if (views::FocusManager* focus_manager = GetFocusManager()) {
+      if (unhandled_keyboard_event_handler_.HandleKeyboardEvent(
+              event, focus_manager)) {
+        return true;
+      }
+    }
+    return views::WebView::HandleKeyboardEvent(source, event);
+  }
+
+ private:
+  views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
+};
+
+BEGIN_METADATA(LittleOpenWebView)
+END_METADATA
 
 // --- Frameless frame: drag from the title bar, resize from the edges. ------
 
@@ -729,10 +769,25 @@ OpenLittleOpenView::OpenLittleOpenView(LittleOpenDelegate* delegate)
                           base::Unretained(this)),
       u"Open in Space"));
 
-  web_view_ = AddChildView(std::make_unique<views::WebView>());
+  web_view_ = AddChildView(std::make_unique<LittleOpenWebView>());
   web_view_->SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
 
   AddAccelerator(ui::Accelerator(ui::VKEY_O, secondary::kPrimaryModifier));
+  AddAccelerator(ui::Accelerator(ui::VKEY_W, secondary::kPrimaryModifier));
+  AddAccelerator(ui::Accelerator(ui::VKEY_L, secondary::kPrimaryModifier));
+  AddAccelerator(ui::Accelerator(
+      ui::VKEY_C, secondary::kPrimaryModifier | ui::EF_SHIFT_DOWN));
+  AddAccelerator(ui::Accelerator(ui::VKEY_R, secondary::kPrimaryModifier));
+  AddAccelerator(ui::Accelerator(ui::VKEY_OEM_4, secondary::kPrimaryModifier));
+  AddAccelerator(ui::Accelerator(ui::VKEY_OEM_6, secondary::kPrimaryModifier));
+#if BUILDFLAG(IS_MAC)
+  AddAccelerator(ui::Accelerator(ui::VKEY_LEFT, ui::EF_COMMAND_DOWN));
+  AddAccelerator(ui::Accelerator(ui::VKEY_RIGHT, ui::EF_COMMAND_DOWN));
+#else
+  AddAccelerator(ui::Accelerator(ui::VKEY_F5, ui::EF_NONE));
+  AddAccelerator(ui::Accelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN));
+  AddAccelerator(ui::Accelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN));
+#endif
   SyncWindowControlsState();
   SetMode(Mode::kBar);
 }
@@ -1299,11 +1354,99 @@ gfx::Size OpenLittleOpenView::GetMinimumSize() const {
              : m::kBarSize;
 }
 
+content::WebContents* OpenLittleOpenView::ActiveWebContents() const {
+  if (owned_contents_) {
+    return owned_contents_.get();
+  }
+  return web_view_ ? web_view_->web_contents() : nullptr;
+}
+
+bool OpenLittleOpenView::CanHandleAccelerators() const {
+  return mode_ == Mode::kPage && views::View::CanHandleAccelerators();
+}
+
 bool OpenLittleOpenView::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
-  if (accelerator.key_code() == ui::VKEY_O && mode_ == Mode::kPage &&
-      state_.space_title) {
-    TriggerOpenInSpace(state_.target_space_id);
+  if (mode_ != Mode::kPage) {
+    return false;
+  }
+  const ui::KeyboardCode key = accelerator.key_code();
+  const int mods = accelerator.modifiers() &
+                   (ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
+                    ui::EF_COMMAND_DOWN);
+  const bool primary_only = mods == secondary::kPrimaryModifier;
+  const bool primary_shift =
+      mods == (secondary::kPrimaryModifier | ui::EF_SHIFT_DOWN);
+
+  if (primary_only && key == ui::VKEY_O) {
+    if (state_.space_title) {
+      TriggerOpenInSpace(state_.target_space_id);
+      return true;
+    }
+    return false;
+  }
+  if (primary_only && key == ui::VKEY_W) {
+    if (views::Widget* widget = GetWidget()) {
+      widget->Close();
+    }
+    return true;
+  }
+  if (primary_only && key == ui::VKEY_L) {
+    if (delegate_) {
+      delegate_->OnLittleOpenEditUrl();
+    } else if (host_button_) {
+      host_button_->RequestFocus();
+    }
+    return true;
+  }
+  if (primary_shift && key == ui::VKEY_C) {
+    if (delegate_) {
+      delegate_->OnLittleOpenCopyUrl();
+    }
+    return true;
+  }
+  if (primary_only && key == ui::VKEY_R) {
+    if (content::WebContents* contents = ActiveWebContents()) {
+      contents->GetController().Reload(content::ReloadType::NORMAL,
+                                       /*check_for_repost=*/true);
+    }
+    return true;
+  }
+#if !BUILDFLAG(IS_MAC)
+  if (mods == ui::EF_NONE && key == ui::VKEY_F5) {
+    if (content::WebContents* contents = ActiveWebContents()) {
+      contents->GetController().Reload(content::ReloadType::NORMAL,
+                                       /*check_for_repost=*/true);
+    }
+    return true;
+  }
+#endif
+  const bool go_back =
+      (primary_only && key == ui::VKEY_OEM_4) ||
+#if BUILDFLAG(IS_MAC)
+      (mods == ui::EF_COMMAND_DOWN && key == ui::VKEY_LEFT);
+#else
+      (mods == ui::EF_ALT_DOWN && key == ui::VKEY_LEFT);
+#endif
+  if (go_back) {
+    if (content::WebContents* contents = ActiveWebContents();
+        contents && contents->GetController().CanGoBack()) {
+      contents->GetController().GoBack();
+    }
+    return true;
+  }
+  const bool go_forward =
+      (primary_only && key == ui::VKEY_OEM_6) ||
+#if BUILDFLAG(IS_MAC)
+      (mods == ui::EF_COMMAND_DOWN && key == ui::VKEY_RIGHT);
+#else
+      (mods == ui::EF_ALT_DOWN && key == ui::VKEY_RIGHT);
+#endif
+  if (go_forward) {
+    if (content::WebContents* contents = ActiveWebContents();
+        contents && contents->GetController().CanGoForward()) {
+      contents->GetController().GoForward();
+    }
     return true;
   }
   return false;

@@ -7,6 +7,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useMemo } from 'preact/hooks';
 import type { SpaceStyle } from '../shared/bridge';
 import { computeSpaceGradientCss, isLightSpaceStyle } from '../shared/components';
+import { isMacPlatform } from '../shared/shortcuts';
 
 let gradientSeq = 0;
 function useIds(prefix: string): (name: string) => string {
@@ -220,17 +221,20 @@ export function MiniBrowser({
   class?: string;
 }): JSX.Element {
   const light = isLightSpaceStyle(style);
+  const mac = isMacPlatform();
   return (
     <div class={`mini ${className ?? ''}`.trim()} aria-hidden={ariaHidden ? 'true' : undefined}>
       <div
         class={`mini-sidebar${light ? ' is-light' : ' is-dark'}`}
         style={{ background: computeSpaceGradientCss(style) }}
       >
-        <div class="mini-lights" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </div>
+        {mac && (
+          <div class="mini-lights" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+        )}
         <div class="mini-url">open://welcome</div>
         <div class="mini-favs">
           {favorites.slice(0, 8).map((f) => (
@@ -255,7 +259,18 @@ export function MiniBrowser({
           </div>
         ))}
       </div>
-      <div class="mini-page">{children}</div>
+      <div class="mini-page">
+        {!mac && (
+          <div class="mini-win-controls" aria-hidden="true">
+            <svg viewBox="0 0 38 10" width="38" height="10">
+              <line x1="2" y1="5" x2="8" y2="5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+              <rect x="16" y="2.2" width="5.6" height="5.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.15" />
+              <path d="M29.5 2.2l5.6 5.6M35.1 2.2l-5.6 5.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            </svg>
+          </div>
+        )}
+        {children}
+      </div>
     </div>
   );
 }

@@ -4,23 +4,34 @@
 // tab runs no animation. Drawn here; no recorded clips or external assets.
 
 import type { JSX } from 'preact';
+import { type ShortcutPlatform, shortcutPlatform } from '../shared/shortcuts';
 
 export type DemoId = 'command-bar' | 'sidebar' | 'spaces' | 'peek-split' | 'boosts' | 'library';
 
 interface DemoProps {
   tint: string;
+  mac: boolean;
 }
 
-function Frame({ tint, children, sidebar = true }: DemoProps & { children?: JSX.Element | JSX.Element[]; sidebar?: boolean }): JSX.Element {
+function Frame({
+  tint,
+  mac,
+  children,
+  sidebar = true,
+}: DemoProps & { children?: JSX.Element | JSX.Element[]; sidebar?: boolean }): JSX.Element {
   return (
     <>
       <rect x="0" y="0" width="320" height="200" rx="14" fill="rgba(255,255,255,0.06)" />
       {sidebar && (
         <g class="demo-side">
           <rect x="8" y="8" width="84" height="184" rx="9" fill={tint} opacity="0.9" />
-          <circle cx="19" cy="19" r="2.6" fill="#ff5f57" />
-          <circle cx="27" cy="19" r="2.6" fill="#febc2e" />
-          <circle cx="35" cy="19" r="2.6" fill="rgba(255,255,255,0.5)" />
+          {mac && (
+            <>
+              <circle cx="19" cy="19" r="2.6" fill="#ff5f57" />
+              <circle cx="27" cy="19" r="2.6" fill="#febc2e" />
+              <circle cx="35" cy="19" r="2.6" fill="rgba(255,255,255,0.5)" />
+            </>
+          )}
           <rect x="15" y="30" width="70" height="11" rx="4" fill="rgba(255,255,255,0.2)" />
           <rect x="15" y="48" width="15" height="13" rx="3.5" fill="rgba(255,255,255,0.26)" />
           <rect x="33" y="48" width="15" height="13" rx="3.5" fill="rgba(255,255,255,0.26)" />
@@ -34,6 +45,19 @@ function Frame({ tint, children, sidebar = true }: DemoProps & { children?: JSX.
         </g>
       )}
       {children}
+      {!mac && (
+        <g
+          class="demo-win-controls"
+          stroke="rgba(20,22,36,0.45)"
+          stroke-width="1.2"
+          stroke-linecap="round"
+          fill="none"
+        >
+          <line x1="270" y1="17" x2="276" y2="17" />
+          <rect x="283" y="14.2" width="5.6" height="5.6" rx="0.8" />
+          <path d="M296.5 14.2l5.6 5.6M302.1 14.2l-5.6 5.6" />
+        </g>
+      )}
     </>
   );
 }
@@ -65,10 +89,10 @@ function Defs(): JSX.Element {
   );
 }
 
-function CommandBarDemo({ tint }: DemoProps): JSX.Element {
+function CommandBarDemo({ tint, mac }: DemoProps): JSX.Element {
   return (
     <>
-      <Frame tint={tint}>
+      <Frame tint={tint} mac={mac}>
         <Page />
       </Frame>
       <rect class="cb-scrim" x="0" y="0" width="320" height="200" rx="14" fill="rgba(6,6,14,0.55)" />
@@ -85,10 +109,10 @@ function CommandBarDemo({ tint }: DemoProps): JSX.Element {
   );
 }
 
-function SidebarDemo({ tint }: DemoProps): JSX.Element {
+function SidebarDemo({ tint, mac }: DemoProps): JSX.Element {
   return (
     <>
-      <Frame tint={tint}>
+      <Frame tint={tint} mac={mac}>
         <g class="sb-page">
           <Page />
         </g>
@@ -97,10 +121,10 @@ function SidebarDemo({ tint }: DemoProps): JSX.Element {
   );
 }
 
-function SpacesDemo({ tint }: DemoProps): JSX.Element {
+function SpacesDemo({ tint, mac }: DemoProps): JSX.Element {
   return (
     <>
-      <Frame tint={tint}>
+      <Frame tint={tint} mac={mac}>
         <Page />
       </Frame>
       <rect class="sp-second" x="8" y="8" width="84" height="184" rx="9" fill="#e0457b" />
@@ -119,10 +143,10 @@ function SpacesDemo({ tint }: DemoProps): JSX.Element {
   );
 }
 
-function PeekSplitDemo({ tint }: DemoProps): JSX.Element {
+function PeekSplitDemo({ tint, mac }: DemoProps): JSX.Element {
   return (
     <>
-      <Frame tint={tint}>
+      <Frame tint={tint} mac={mac}>
         <Page />
       </Frame>
       <rect class="pk-link" x="112" y="104" width="78" height="8" rx="3" fill="#4f46e5" />
@@ -149,10 +173,10 @@ function PeekSplitDemo({ tint }: DemoProps): JSX.Element {
   );
 }
 
-function BoostsDemo({ tint }: DemoProps): JSX.Element {
+function BoostsDemo({ tint, mac }: DemoProps): JSX.Element {
   return (
     <>
-      <Frame tint={tint}>
+      <Frame tint={tint} mac={mac}>
         <g class="bo-page">
           <Page />
         </g>
@@ -166,10 +190,10 @@ function BoostsDemo({ tint }: DemoProps): JSX.Element {
   );
 }
 
-function LibraryDemo({ tint }: DemoProps): JSX.Element {
+function LibraryDemo({ tint, mac }: DemoProps): JSX.Element {
   return (
     <>
-      <Frame tint={tint}>
+      <Frame tint={tint} mac={mac}>
         <g class="lb-page">
           <Page />
         </g>
@@ -202,8 +226,19 @@ const DEMOS: Record<DemoId, (props: DemoProps) => JSX.Element> = {
   library: LibraryDemo,
 };
 
-export function FeatureDemo({ id, tint, playing }: { id: DemoId; tint: string; playing: boolean }): JSX.Element {
+export function FeatureDemo({
+  id,
+  tint,
+  playing,
+  platform,
+}: {
+  id: DemoId;
+  tint: string;
+  playing: boolean;
+  platform?: ShortcutPlatform;
+}): JSX.Element {
   const Demo = DEMOS[id];
+  const mac = (platform ?? shortcutPlatform()) === 'mac';
   return (
     <svg
       class={`demo demo-${id}${playing ? ' is-playing' : ''}`}
@@ -213,7 +248,7 @@ export function FeatureDemo({ id, tint, playing }: { id: DemoId; tint: string; p
       aria-hidden="true"
     >
       <Defs />
-      <Demo tint={tint} />
+      <Demo tint={tint} mac={mac} />
     </svg>
   );
 }

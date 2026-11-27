@@ -32,6 +32,19 @@
   }
 }
 
+:root[data-theme='dark'] {
+  --onb-accent: #7c74ff;
+  --onb-accent-hover: #8f88ff;
+  --onb-accent-soft: rgba(124, 116, 255, 0.18);
+  --onb-form-bg: #17171f;
+  --onb-text: #f2f2f7;
+  --onb-text-2: #a6a9bb;
+  --onb-text-3: #7b7f93;
+  --onb-line: rgba(255, 255, 255, 0.1);
+  --onb-surface: #1f1f29;
+  --onb-surface-hover: #272733;
+}
+
 html,
 body,
 #app {

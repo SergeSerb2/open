@@ -8,6 +8,7 @@ import { type Boost, type ProfileSummary, rpc } from '../shared/bridge';
 import { Modal, ProfilePill, Toast, Toggle } from '../shared/components';
 import { PlusIcon } from '../shared/icons';
 import { currentPageRoute, replacePageRoute } from '../shared/route';
+import { subscribeSettingsTheme } from '../shared/theme';
 import { DoorwayEmblem } from '../onboarding/art';
 import { BoostEditor } from './Editor';
 import { type BoostShareCard, downloadShareCard, editOnSite, parseShareCard } from './rpc';
@@ -135,6 +136,8 @@ export function BoostsApp(): JSX.Element {
     setGlobalEnabled(res.global_enabled);
     return res.boosts;
   }, []);
+
+  useEffect(() => subscribeSettingsTheme(), []);
 
   useEffect(() => {
     let active = true;

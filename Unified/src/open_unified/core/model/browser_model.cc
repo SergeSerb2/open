@@ -4292,6 +4292,44 @@ bool BrowserModel::SetSidebarMode(const WindowID& window_id,
   return true;
 }
 
+bool BrowserModel::SetWindowShowsToolbar(const WindowID& window_id,
+                                         bool shows_toolbar) {
+  BrowserWindowState* window = FindWindow(window_id);
+  if (!window) {
+    return false;
+  }
+  if (shows_toolbar && window->style == WindowStyle::kLittleOpen) {
+    return false;
+  }
+  if (window->shows_toolbar == shows_toolbar) {
+    return false;
+  }
+  window->shows_toolbar = shows_toolbar;
+  TreeChange c;
+  c.kind = TreeChange::Kind::kUpdate;
+  if (window->is_incognito) {
+    c.space_id = window->focused_space_id;
+  }
+  Emit(c);
+  return true;
+}
+
+bool BrowserModel::SetWindowStayOnTop(const WindowID& window_id,
+                                      bool stay_on_top) {
+  BrowserWindowState* window = FindWindow(window_id);
+  if (!window || window->stay_on_top == stay_on_top) {
+    return false;
+  }
+  window->stay_on_top = stay_on_top;
+  TreeChange c;
+  c.kind = TreeChange::Kind::kUpdate;
+  if (window->is_incognito) {
+    c.space_id = window->focused_space_id;
+  }
+  Emit(c);
+  return true;
+}
+
 // --- Runtime Live State ---
 
 bool BrowserModel::UpdateTabLiveState(const ItemID& tab_id,

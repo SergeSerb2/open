@@ -432,6 +432,9 @@ class OpenToastStackView : public views::View {
   void Update(int toast_id, ToastSpec spec);
   void Dismiss(int toast_id);
   void DismissKind(OpenToastKind kind);
+  // Synchronously removes matching toasts (stopping timers/animations, removing
+  // child views, updating layout, and hiding the overlay host if empty).
+  void DismissKindImmediate(OpenToastKind kind);
   void DismissAll();
   // Clicks the button of the visible toast at `index` (newest first).
   bool PerformAction(size_t index);

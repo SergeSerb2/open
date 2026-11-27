@@ -167,6 +167,13 @@ class OpenWindowController : public OpenViewController,
   // A shortcut changed (Settings): every window re-registers its Open
   // accelerators from CommandRegistry.
   void ReloadShortcuts();
+  // Live Settings preference update (e.g. appearance.toolbar,
+  // appearance.increaseContrast, appearance.fullUrl, shortcuts.priority,
+  // previews.enabled). Empty |key| refreshes all live preference effects.
+  void OnPreferencesChanged(std::string_view key = "");
+  // Syncs appearance.toolbar back to OpenPreferences without recursing into
+  // OnPreferencesChanged().
+  void SyncToolbarPreference(bool visible);
   // User closes archived these tabs (ArchiveSink, reason "closed"): the
   // main window shows "Tab Archived" with Undo.
   void OnTabsArchivedByUser(std::vector<ArchivedTabRecord> records);
@@ -313,6 +320,7 @@ class OpenWindowController : public OpenViewController,
   raw_ptr<OpenBrowserService> service_;
   bool started_ = false;
   bool service_observers_attached_ = false;
+  bool syncing_toolbar_pref_ = false;
   raw_ptr<BrowserView> hidden_main_browser_view_for_first_run_ = nullptr;
   std::map<raw_ptr<BrowserView>, std::unique_ptr<OpenWindowUi>> windows_;
   std::vector<std::unique_ptr<OpenLittleOpenController>> little_opens_;
@@ -416,6 +424,7 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   void SetExtensionPopupOpen(bool open);
   bool is_alt_down() const { return alt_down_; }
   void SyncSinglePaneToolbar();
+  void SetSinglePaneToolbarVisible(bool visible, bool sync_pref = true);
 
   // Page translate popover anchored to the URL pill / Site Control anchor.
   void ShowTranslatePagePopover(views::View* anchor = nullptr);
@@ -532,6 +541,7 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   void OnSinglePaneToolbarCommand(PaneCommand command,
                                   views::View* anchor) override;
   void OnSinglePaneHostClicked(views::View* anchor) override;
+  void OnSystemThemeChanged() override;
 
   // OpenSplitContainerDelegate:
   void OnSplitFractionsCommitted(const ItemID& split_id,
@@ -583,6 +593,8 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
 
   // views::WidgetObserver (top-level browser widget):
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override;
   void OnWidgetDestroying(views::Widget* widget) override;
 
   // ui::EventObserver (key releases while the switcher is active):
@@ -603,6 +615,8 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   class ModifierEventObserver;
 
   void ApplyWindowEffects();
+  void SyncWindowChromeFromModel();
+  void PersistWindowBounds(views::Widget* w, const gfx::Rect& bounds);
   void UpdateSidebarPopoverState();
   void OnAppMenuClosed();
   open_unified::SiteControlState BuildSiteControlState() const;
@@ -643,6 +657,8 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   void SetEscapePriority(EscapePriority priority);
   // Esc is a window accelerator only while an Open overlay shows.
   void UpdateEscapeRegistration();
+  void RegisterSwitcherAccelerators();
+  void UnregisterSwitcherAccelerators();
   bool RunShortcut(CommandId command);
   std::vector<TabSwitcherItem> BuildSwitcherItems() const;
   void StopSwitcherMonitor();
@@ -725,6 +741,16 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
 
   // Registered accelerators -> Open command.
   std::map<ui::Accelerator, CommandId> accelerator_commands_;
+  // Temporary high-priority accelerators registered while the Ctrl+Tab
+  // switcher is active so Esc/arrows/Enter are swallowed before WebContents.
+  std::vector<ui::Accelerator> switcher_accelerators_;
+  // Suppresses a duplicate FocusManager accelerator fired on the same keypress
+  // already handled by OnEvent() while the tab switcher was active.
+  ui::KeyboardCode suppressed_switcher_key_ = ui::VKEY_UNKNOWN;
+  // Double-press tracking for app-wide "website" shortcut priority when a
+  // command has no explicit per-command priority override.
+  std::optional<KeyboardShortcut> last_global_site_shortcut_;
+  TimestampSec last_global_site_press_at_ = 0.0;
 
   base::WeakPtrFactory<OpenWindowUi> weak_factory_{this};
 };

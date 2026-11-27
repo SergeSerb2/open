@@ -213,14 +213,14 @@ constexpr std::array<SymSpec, static_cast<size_t>(Sym::kCount)> kSyms = {{
     {"doc.on.clipboard.fill", Glyph::kCopy},         // kClipboard
     {"pianokeys", Glyph::kMidi},                     // kMidi
     {"rectangle.on.rectangle", Glyph::kSplit},       // kScreenCapture
-    {"arrow.down.circle.fill", Glyph::kChevronDown}, // kDownloads
-    {"externaldrive.fill", Glyph::kSquare},          // kStorage
+    {"arrow.down.circle.fill", Glyph::kDownload},    // kDownloads
+    {"externaldrive.fill", Glyph::kStack},           // kStorage
     {"macwindow.on.rectangle", Glyph::kPopup},       // kWindows
     {"textformat", Glyph::kFonts},                   // kFonts
     {"moon.zzz.fill", Glyph::kIdle},                 // kIdle
     {"gyroscope", Glyph::kSensors},                  // kSensors
     {"curlybraces", Glyph::kJavaScript},             // kJavaScript
-    {"photo.fill", Glyph::kSquare},                  // kImages
+    {"photo.fill", Glyph::kCapture},                 // kImages
     {"macwindow.badge.plus", Glyph::kPopup},         // kPopups
     {"rectangle.slash.fill", Glyph::kShield},        // kAds
     {"arrow.triangle.2.circlepath", Glyph::kReload}, // kSync
@@ -1112,6 +1112,41 @@ OpenSiteControlView::~OpenSiteControlView() = default;
 SkColor OpenSiteControlView::panel_color() const {
   return state_.panel_color.value_or(appearance_.dark ? kPanelDark
                                                       : kPanelLight);
+}
+
+void OpenSiteControlView::SetAppearance(
+    const secondary::Appearance& appearance) {
+  appearance_ = appearance;
+  RepaintAll();
+}
+
+void OpenSiteControlView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  RepaintAll();
+}
+
+void OpenSiteControlView::RepaintAll() {
+  SchedulePaint();
+  for (auto& tile : action_tiles_) {
+    if (tile) {
+      tile->SchedulePaint();
+    }
+  }
+  if (pill_) {
+    pill_->SchedulePaint();
+  }
+  if (more_) {
+    more_->SchedulePaint();
+  }
+  if (scroll_view_) {
+    scroll_view_->SchedulePaint();
+  }
+  if (body_) {
+    body_->SchedulePaint();
+    for (views::View* child : body_->children()) {
+      child->SchedulePaint();
+    }
+  }
 }
 
 content::WebContents* OpenSiteControlView::web_contents() const {
@@ -3130,6 +3165,7 @@ void OpenSiteControlBubble::Show(views::View* anchor,
   // closed callback) before the members are reassigned.
   DiscardBubble(/*synchronous=*/false);
   live_observer_.reset();
+  appearance_ = appearance;
   callbacks_ = callbacks;
   bubble_delegate_ = std::make_unique<views::BubbleDialogDelegate>(
       anchor, views::BubbleBorder::TOP_LEFT, views::BubbleBorder::DIALOG_SHADOW,
@@ -3173,6 +3209,25 @@ bool OpenSiteControlBubble::IsShowing() const {
 void OpenSiteControlBubble::UpdateState(const SiteControlState& state) {
   if (contents_) {
     contents_->SetState(state);
+    if (bubble_delegate_) {
+      bubble_delegate_->SetBackgroundColor(contents_->panel_color());
+    }
+  }
+}
+
+void OpenSiteControlBubble::SetAppearance(
+    const secondary::Appearance& appearance) {
+  appearance_ = appearance;
+  if (contents_) {
+    contents_->SetAppearance(appearance_);
+    if (bubble_delegate_) {
+      bubble_delegate_->SetBackgroundColor(contents_->panel_color());
+    }
+  }
+  if (widget_) {
+    if (views::View* root = widget_->GetRootView()) {
+      root->SchedulePaint();
+    }
   }
 }
 

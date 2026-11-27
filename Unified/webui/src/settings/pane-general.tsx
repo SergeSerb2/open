@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { rpc } from '../shared/bridge';
 import { Toggle } from '../shared/components';
 import { CheckIcon, DoorwayLineMark, FolderIcon } from '../shared/icons';
-import { isMacPlatform } from '../shared/shortcuts';
+import { isMacPlatform, shortcutPlatform } from '../shared/shortcuts';
 import { useSettings } from './context';
 import { Btn, Group, PaneHeader, PrefToggle, Row } from './ui';
 
@@ -61,7 +61,15 @@ export function GeneralPane(): JSX.Element {
     else ctx.toast('Open is now your default browser.', 'success');
   };
 
-  const location = String(ctx.prefs['downloads.location'] ?? '~/Downloads');
+  const rawLocation = ctx.prefs['downloads.location'];
+  const location =
+    typeof rawLocation === 'string' && rawLocation.length > 0
+      ? rawLocation
+      : ctx.snapshot
+        ? shortcutPlatform() === 'windows'
+          ? 'Downloads'
+          : '~/Downloads'
+        : '';
 
   return (
     <div class="st-pane">
@@ -96,7 +104,7 @@ export function GeneralPane(): JSX.Element {
         <PrefToggle
           id="general/warn-before-quitting"
           label="Warn before quitting"
-          help="Ask before quitting with downloads in progress."
+          help="Ask for confirmation before quitting Open."
           prefKey="general.warnBeforeQuitting"
         />
       </Group>

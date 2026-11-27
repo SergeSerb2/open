@@ -12,6 +12,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "open_unified/browser/open_browser_service.h"
 #include "open_unified/browser/open_model_util.h"
 #include "open_unified/core/model/browser_model.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -1313,20 +1314,123 @@ class AppMenuModel : public ui::SimpleMenuModel::Delegate,
   int next_id_ = 1;
 };
 
+ui::KeyboardCode KeyCodeForShortcutToken(std::string_view token) {
+  if (token.size() == 1) {
+    const char c = token[0];
+    if (c >= 'a' && c <= 'z') {
+      return static_cast<ui::KeyboardCode>(ui::VKEY_A + (c - 'a'));
+    }
+    if (c >= '0' && c <= '9') {
+      return static_cast<ui::KeyboardCode>(ui::VKEY_0 + (c - '0'));
+    }
+    switch (c) {
+      case '[':
+        return ui::VKEY_OEM_4;
+      case ']':
+        return ui::VKEY_OEM_6;
+      case ',':
+        return ui::VKEY_OEM_COMMA;
+      case '.':
+        return ui::VKEY_OEM_PERIOD;
+      case '/':
+        return ui::VKEY_OEM_2;
+      case '-':
+        return ui::VKEY_OEM_MINUS;
+      case '=':
+      case '+':
+        return ui::VKEY_OEM_PLUS;
+      case ';':
+        return ui::VKEY_OEM_1;
+      case '\'':
+        return ui::VKEY_OEM_7;
+      case '\\':
+        return ui::VKEY_OEM_5;
+      case '`':
+        return ui::VKEY_OEM_3;
+      default:
+        return ui::VKEY_UNKNOWN;
+    }
+  }
+  static constexpr struct {
+    std::string_view name;
+    ui::KeyboardCode code;
+  } kNamed[] = {
+      {"tab", ui::VKEY_TAB},       {"escape", ui::VKEY_ESCAPE},
+      {"esc", ui::VKEY_ESCAPE},    {"return", ui::VKEY_RETURN},
+      {"enter", ui::VKEY_RETURN},  {"space", ui::VKEY_SPACE},
+      {"left", ui::VKEY_LEFT},     {"right", ui::VKEY_RIGHT},
+      {"up", ui::VKEY_UP},         {"down", ui::VKEY_DOWN},
+      {"delete", ui::VKEY_DELETE}, {"backspace", ui::VKEY_BACK},
+      {"home", ui::VKEY_HOME},     {"end", ui::VKEY_END},
+      {"pageup", ui::VKEY_PRIOR},  {"pagedown", ui::VKEY_NEXT},
+  };
+  for (const auto& named : kNamed) {
+    if (named.name == token) {
+      return named.code;
+    }
+  }
+  if (token.size() >= 2 && token.size() <= 3 && token[0] == 'f') {
+    int n = 0;
+    for (char c : token.substr(1)) {
+      if (c < '0' || c > '9') {
+        return ui::VKEY_UNKNOWN;
+      }
+      n = n * 10 + (c - '0');
+    }
+    if (n >= 1 && n <= 24) {
+      return static_cast<ui::KeyboardCode>(ui::VKEY_F1 + (n - 1));
+    }
+  }
+  return ui::VKEY_UNKNOWN;
+}
+
+std::optional<ui::Accelerator> AcceleratorForCommand(
+    const CommandRegistry& registry,
+    CommandId command) {
+  const std::vector<KeyboardShortcut> shortcuts =
+      registry.EffectiveShortcuts(command);
+  if (shortcuts.empty()) {
+    return std::nullopt;
+  }
+  const KeyboardShortcut& sc = shortcuts.front();
+  const ui::KeyboardCode code =
+      KeyCodeForShortcutToken(base::ToLowerASCII(sc.key));
+  if (code == ui::VKEY_UNKNOWN) {
+    return std::nullopt;
+  }
+  int flags = ui::EF_NONE;
+  if (sc.modifiers & kModCtrl) {
+    flags |= ui::EF_CONTROL_DOWN;
+  }
+  if (sc.modifiers & kModAlt) {
+    flags |= ui::EF_ALT_DOWN;
+  }
+  if (sc.modifiers & kModShift) {
+    flags |= ui::EF_SHIFT_DOWN;
+  }
+  if (sc.modifiers & kModMeta) {
+    flags |= ui::EF_COMMAND_DOWN;
+  }
+  return ui::Accelerator(code, flags);
+}
+
 }  // namespace
 
 std::unique_ptr<ui::SimpleMenuModel> BuildAppMenuModel(
     const AppMenuContext& ctx,
     AppMenuCommandCallback on_command) {
   auto root = std::make_unique<AppMenuModel>(std::move(on_command));
+  static const CommandRegistry kDefaultRegistry;
+  const CommandRegistry& registry =
+      OpenBrowserService::Get() ? OpenBrowserService::Get()->commands()
+                                : kDefaultRegistry;
 
   auto add = [&](ui::SimpleMenuModel* menu, std::u16string title,
-                 CommandId command, bool enabled = true,
-                 std::optional<ui::Accelerator> accelerator = std::nullopt) {
+                 CommandId command, bool enabled = true) {
     AppMenuModel::Entry entry;
     entry.command = command;
     entry.enabled = enabled;
-    entry.accelerator = accelerator;
+    entry.accelerator = AcceleratorForCommand(registry, command);
     menu->AddItem(root->NewEntry(std::move(entry)), std::move(title));
   };
   auto sep = [](ui::SimpleMenuModel* menu) {
@@ -1342,15 +1446,11 @@ std::unique_ptr<ui::SimpleMenuModel> BuildAppMenuModel(
   };
 
   // --- Window & Tab Creation ---
-  add(root.get(), u"New Tab", CommandId::kNewTab, true,
-      ui::Accelerator(ui::VKEY_T, kPrimary));
-  add(root.get(), u"New Window", CommandId::kNewWindow, true,
-      ui::Accelerator(ui::VKEY_N, kPrimary));
-  add(root.get(), u"New Incognito Window", CommandId::kNewIncognitoWindow, true,
-      ui::Accelerator(ui::VKEY_N, kPrimary | ui::EF_SHIFT_DOWN));
+  add(root.get(), u"New Tab", CommandId::kNewTab);
+  add(root.get(), u"New Window", CommandId::kNewWindow);
+  add(root.get(), u"New Incognito Window", CommandId::kNewIncognitoWindow);
   add(root.get(), u"New Blank Window", CommandId::kBlankWindow);
-  add(root.get(), u"New Little Open", CommandId::kNewLittleOpenWindow, true,
-      ui::Accelerator(ui::VKEY_N, kPrimary | ui::EF_ALT_DOWN));
+  add(root.get(), u"New Little Open", CommandId::kNewLittleOpenWindow);
 
   sep(root.get());
 
@@ -1367,32 +1467,25 @@ std::unique_ptr<ui::SimpleMenuModel> BuildAppMenuModel(
   // --- View Submenu ---
   ui::SimpleMenuModel* view_menu = sub(root.get(), u"View");
   add(view_menu, ctx.sidebar_hidden ? u"Show Sidebar" : u"Hide Sidebar",
-      CommandId::kToggleSidebar, true, ui::Accelerator(ui::VKEY_S, kPrimary));
+      CommandId::kToggleSidebar);
   add(view_menu, ctx.toolbar_visible ? u"Hide Toolbar" : u"Show Toolbar",
-      CommandId::kToggleToolbar, true,
-      ui::Accelerator(ui::VKEY_D, kPrimary | ui::EF_SHIFT_DOWN));
+      CommandId::kToggleToolbar);
   add(view_menu, ctx.is_fullscreen ? u"Exit Fullscreen" : u"Fullscreen",
-      CommandId::kToggleFullScreen, true,
-#if BUILDFLAG(IS_MAC)
-      ui::Accelerator(ui::VKEY_F, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN));
-#else
-      ui::Accelerator(ui::VKEY_F11, ui::EF_NONE));
-#endif
+      CommandId::kToggleFullScreen);
   sep(view_menu);
-  add(view_menu, u"Zoom In", CommandId::kZoomIn, ctx.has_active_tab,
-      ui::Accelerator(ui::VKEY_OEM_PLUS, kPrimary));
-  add(view_menu, u"Zoom Out", CommandId::kZoomOut, ctx.has_active_tab,
-      ui::Accelerator(ui::VKEY_OEM_MINUS, kPrimary));
-  add(view_menu, u"Actual Size", CommandId::kZoomActualSize, ctx.has_active_tab,
-      ui::Accelerator(ui::VKEY_0, kPrimary));
+  add(view_menu, u"Zoom In", CommandId::kZoomIn, ctx.has_active_tab);
+  add(view_menu, u"Zoom Out", CommandId::kZoomOut, ctx.has_active_tab);
+  add(view_menu, u"Actual Size", CommandId::kZoomActualSize,
+      ctx.has_active_tab);
 
   // --- Library Submenu ---
   ui::SimpleMenuModel* library_menu =
       sub(root.get(), u"Library", !ctx.is_incognito);
   add(library_menu, u"Downloads", CommandId::kViewDownloads, !ctx.is_incognito);
-  add(library_menu, u"History", CommandId::kViewHistory, !ctx.is_incognito,
-      ui::Accelerator(ui::VKEY_H, kPrimary));
+  add(library_menu, u"History", CommandId::kViewHistory, !ctx.is_incognito);
   add(library_menu, u"Archive", CommandId::kViewArchive, !ctx.is_incognito);
+  add(library_menu, u"Easels & Notes", CommandId::kViewEaselsNotes,
+      !ctx.is_incognito);
   add(library_menu, u"Media", CommandId::kViewMedia, !ctx.is_incognito);
   add(library_menu, u"Spaces", CommandId::kManageSpaces, !ctx.is_incognito);
   add(library_menu, u"Boosts", CommandId::kViewBoosts, !ctx.is_incognito);
@@ -1400,16 +1493,14 @@ std::unique_ptr<ui::SimpleMenuModel> BuildAppMenuModel(
   // --- Developer Submenu ---
   ui::SimpleMenuModel* dev_menu = sub(root.get(), u"Developer");
   add(dev_menu, u"Developer Tools", CommandId::kDeveloperTools,
-      ctx.has_active_tab, ui::Accelerator(ui::VKEY_F12, ui::EF_NONE));
+      ctx.has_active_tab);
   add(dev_menu, u"Inspect Elements", CommandId::kInspectElements,
-      ctx.has_active_tab,
-      ui::Accelerator(ui::VKEY_I, ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN));
+      ctx.has_active_tab);
   add(dev_menu, u"JavaScript Console", CommandId::kJavaScriptConsole,
       ctx.has_active_tab);
-  add(dev_menu, u"View Page Source", CommandId::kViewSource, ctx.has_active_tab,
-      ui::Accelerator(ui::VKEY_U, kPrimary));
-  add(dev_menu, u"Task Manager", CommandId::kTaskManager, true,
-      ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN));
+  add(dev_menu, u"View Page Source", CommandId::kViewSource,
+      ctx.has_active_tab);
+  add(dev_menu, u"Task Manager", CommandId::kTaskManager);
 
   sep(root.get());
 
@@ -1417,19 +1508,15 @@ std::unique_ptr<ui::SimpleMenuModel> BuildAppMenuModel(
   add(root.get(), u"Extensions", CommandId::kManageExtensions);
   add(root.get(), u"Import from Another Browser…",
       CommandId::kImportFromBrowser);
-  add(root.get(), u"Print…", CommandId::kPrint, ctx.has_active_tab,
-      ui::Accelerator(ui::VKEY_P, kPrimary));
-  add(root.get(), u"Save Page As…", CommandId::kSavePageAs, ctx.has_active_tab,
-      ui::Accelerator(ui::VKEY_S, kPrimary | ui::EF_SHIFT_DOWN));
+  add(root.get(), u"Print…", CommandId::kPrint, ctx.has_active_tab);
+  add(root.get(), u"Save Page As…", CommandId::kSavePageAs, ctx.has_active_tab);
 
   sep(root.get());
 
   // --- Settings & App ---
-  add(root.get(), u"Settings", CommandId::kSettings, true,
-      ui::Accelerator(ui::VKEY_OEM_COMMA, kPrimary));
+  add(root.get(), u"Settings", CommandId::kSettings);
   add(root.get(), u"About Open", CommandId::kAboutOpen);
-  add(root.get(), u"Quit Open", CommandId::kQuitOpen, true,
-      ui::Accelerator(ui::VKEY_Q, kPrimary));
+  add(root.get(), u"Quit Open", CommandId::kQuitOpen);
 
   return root;
 }

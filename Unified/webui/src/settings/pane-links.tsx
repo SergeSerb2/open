@@ -10,7 +10,7 @@ import {
 } from '../shared/bridge';
 import { Modal, Toggle } from '../shared/components';
 import { ArrowDownIcon, ArrowUpIcon, DragHandleIcon, PencilIcon, PlusIcon, TrashIcon } from '../shared/icons';
-import { formatShortcut, isMacPlatform } from '../shared/shortcuts';
+import { formatShortcut, isMacPlatform, shortcutPlatform } from '../shared/shortcuts';
 import { relativeTime, useSettings } from './context';
 import { Banner, Btn, EmptyRow, Field, Group, KeyRecorder, PaneHeader, Pill, PrefToggle, Row, Select, TextInput } from './ui';
 
@@ -178,7 +178,13 @@ export function LinksPane(): JSX.Element {
     }
   };
 
-  const clickLabel = isMacPlatform() ? 'Option-Command-click' : 'Ctrl+Alt+click';
+  const clickLabel = isMacPlatform() ? 'Option-Command-click' : 'Ctrl+Alt-click';
+  const formattedHotkey = formatShortcut(hotkey.replace(/Option/g, 'Alt'));
+  const hotkeyHelp = !hotkeyOn
+    ? 'The global shortcut is off.'
+    : shortcutPlatform() === 'linux'
+      ? `Press ${formattedHotkey} inside Open, or bind a desktop shortcut in your window manager to launch Little Open from other apps.`
+      : `Press ${formattedHotkey} from any app.`;
 
   return (
     <div class="st-pane">
@@ -188,7 +194,7 @@ export function LinksPane(): JSX.Element {
         <Row
           id="links/little-open-hotkey"
           label="Open Little Open in any app"
-          help={hotkeyOn ? `Press ${formatShortcut(hotkey.replace(/Option/g, 'Alt'))} from any app.` : 'The global shortcut is off.'}
+          help={hotkeyHelp}
           prefKey="links.littleOpenHotkey"
         >
           {recording ? (

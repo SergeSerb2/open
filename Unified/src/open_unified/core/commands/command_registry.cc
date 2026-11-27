@@ -166,9 +166,9 @@ bool IsSystemOrAppKitOnlyCommand(CommandId cid) {
 #if BUILDFLAG(IS_MAC)
     case CommandId::kQuitOpen:
     case CommandId::kCloseWindow:
-    case CommandId::kMinimizeWindow:
     case CommandId::kToggleFullScreen:
 #endif
+    case CommandId::kMinimizeWindow:
     case CommandId::kZoomWindow:
     case CommandId::kBringAllToFront:
     case CommandId::kExitModal:
@@ -239,7 +239,13 @@ std::string KeyboardShortcut::DisplayString() const {
   if (modifiers & kModCtrl) parts.push_back("Ctrl");
   if (modifiers & kModAlt) parts.push_back("Alt");
   if (modifiers & kModShift) parts.push_back("Shift");
-  if (modifiers & kModMeta) parts.push_back("Win");
+  if (modifiers & kModMeta) {
+#if BUILDFLAG(IS_LINUX)
+    parts.push_back("Super");
+#else
+    parts.push_back("Win");
+#endif
+  }
   parts.push_back(DisplayKeyName(key));
   return base::JoinString(parts, "+");
 #endif
@@ -661,8 +667,12 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kStopLoading, "stop-loading", "Stop Loading", {"View"},
       {Primary(".")}, CommandScope::kWindow, false, "hasCurrentTab");
   add(CommandId::kZoomIn, "zoom-in", "Zoom In", {"View"},
-      {Primary("+"), Primary("=")}, CommandScope::kWindow, true,
-      "hasCurrentTab");
+#if BUILDFLAG(IS_MAC)
+      {Primary("+"), Primary("=")},
+#else
+      {Primary("+"), Primary("="), PrimaryShift("=")},
+#endif
+      CommandScope::kWindow, true, "hasCurrentTab");
   add(CommandId::kZoomOut, "zoom-out", "Zoom Out", {"View"},
 #if BUILDFLAG(IS_MAC)
       {Primary("-"), PrimaryShift("-")},
@@ -674,7 +684,12 @@ CommandRegistry::CommandRegistry() {
       {"View"}, {Primary("0")}, CommandScope::kWindow, false, "hasCurrentTab",
       {"Reset Zoom"});
   add(CommandId::kAddSplitView, "add-split-view", "Add Split View", {"View"},
-      {CtrlShift("=")}, CommandScope::kWindow, true, "hasCurrentTab",
+#if BUILDFLAG(IS_MAC)
+      {CtrlShift("=")},
+#else
+      {KeyboardShortcut{"=", kModAlt | kModShift}.Normalized()},
+#endif
+      CommandScope::kWindow, true, "hasCurrentTab",
       {"Split View", "Split", "Create Split View Pane"});
   add(CommandId::kCloseSplitPane, "close-split-pane", "Close this Split Pane",
       {"View"}, {CtrlShift("-")}, CommandScope::kWindow, true,
@@ -841,7 +856,7 @@ CommandRegistry::CommandRegistry() {
 #if BUILDFLAG(IS_MAC)
       {Primary("y")},
 #else
-      {Primary("h"), Primary("y")},
+      {Primary("h")},
 #endif
       CommandScope::kWindow, false, "always",
       {"Show History", "History"});
@@ -879,7 +894,12 @@ CommandRegistry::CommandRegistry() {
       {"Window"}, {}, CommandScope::kWindow, false, "always",
       {"Easels", "Notes"});
   add(CommandId::kMinimizeWindow, "minimize-window", "Minimize", {"Window"},
-      {Primary("m")});
+#if BUILDFLAG(IS_MAC)
+      {Primary("m")}
+#else
+      {}
+#endif
+  );
   add(CommandId::kZoomWindow, "zoom-window", "Zoom", {"Window"}, {});
 #if BUILDFLAG(IS_MAC)
   add(CommandId::kBringAllToFront, "bring-all-to-front", "Bring All to Front",

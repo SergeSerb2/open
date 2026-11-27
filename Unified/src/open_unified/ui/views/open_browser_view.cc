@@ -3139,6 +3139,9 @@ void OpenBrowserView::OnThemeChanged() {
   // Native theme changes (e.g. high contrast) can change roles.
   InvalidateThemeCache();
   InvalidateLayout();
+  if (delegate_) {
+    delegate_->OnSystemThemeChanged();
+  }
 }
 
 void OpenBrowserView::OnDeviceScaleFactorChanged(
@@ -3444,6 +3447,8 @@ void OpenBrowserView::OnToolbarActionsChanged(const WindowID& window_id) {
 
 void OpenBrowserView::OnSystemAppearanceChanged() {
   InvalidateThemeCache();
+  InvalidateLayout();
+  SchedulePaint();
 }
 
 BEGIN_METADATA(OpenBrowserView)

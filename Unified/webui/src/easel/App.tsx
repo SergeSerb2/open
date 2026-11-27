@@ -4,6 +4,7 @@ import { Modal, SegmentedControl, Toast } from '../shared/components';
 import { OpenDoorwayMark, RedoIcon, TrashIcon, UndoIcon } from '../shared/icons';
 import { replacePageRoute } from '../shared/route';
 import { formatShortcut, isMacPlatform } from '../shared/shortcuts';
+import { subscribeDocumentTheme } from '../shared/theme';
 import {
   captureLiveUrl,
   deleteDocumentAsset,
@@ -308,6 +309,9 @@ export function EaselApp(): JSX.Element {
   const pendingImagePosRef = useRef<{ x: number; y: number } | null>(null);
   const clipboardRef = useRef<EaselItem[]>([]);
   const saveTimerRef = useRef<number | null>(null);
+
+  // Sync explicit light/dark theme preference.
+  useEffect(() => subscribeDocumentTheme(), []);
   const docRef = useRef<RichEaselDocument | null>(null);
   const viewportRef = useRef<EaselViewport>(viewport);
 

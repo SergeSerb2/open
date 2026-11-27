@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { type AboutInfo, type UpdateCheckResult, rpc } from '../shared/bridge';
 import { OpenDoorwayMark } from '../shared/icons';
 import { CloseIcon, CopyIcon, FolderIcon } from '../shared/icons';
+import { isMacPlatform } from '../shared/shortcuts';
 import { useSettings } from './context';
 import { ChromeLinkButton } from './pane-privacy';
 import { Banner, Btn, Group, PaneHeader, Pill, PrefToggle, Row, TextInput } from './ui';
@@ -74,7 +75,9 @@ export function AdvancedPane(): JSX.Element {
 
       <Group title="Feedback">
         <PrefToggle id="advanced/sound" label="Play Open sound effects" prefKey="advanced.soundEffects" />
-        <PrefToggle id="advanced/haptics" label="Haptic feedback when reordering tabs" prefKey="advanced.haptics" />
+        {isMacPlatform() && (
+          <PrefToggle id="advanced/haptics" label="Haptic feedback when reordering tabs" prefKey="advanced.haptics" />
+        )}
       </Group>
 
       <Group title="Media">

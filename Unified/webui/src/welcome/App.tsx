@@ -11,6 +11,7 @@ import { isNativeWebUI } from '../shared/bridge';
 import { rgbaToHex } from '../shared/components';
 import { currentPageRoute, replacePageRoute } from '../shared/route';
 import { type ShortcutPlatform, shortcutKeycaps } from '../shared/shortcuts';
+import { subscribeSettingsTheme } from '../shared/theme';
 import { DoorwayArch, DoorwayEmblem, Room } from '../onboarding/art';
 import {
   type EssentialShortcut,
@@ -240,6 +241,8 @@ export function WelcomeApp(): JSX.Element {
     window.setTimeout(() => setToast((current) => (current === message ? null : current)), 2600);
   }, []);
 
+  useEffect(() => subscribeSettingsTheme(), []);
+
   useEffect(() => {
     void getWelcomeState()
       .then((st) => {
@@ -433,7 +436,12 @@ export function WelcomeApp(): JSX.Element {
                   }}
                 >
                   <div class="wel-card-demo">
-                    <FeatureDemo id={card.id} tint={tint} playing={reduceMotion || playing.has(card.id)} />
+                    <FeatureDemo
+                      id={card.id}
+                      tint={tint}
+                      playing={reduceMotion || playing.has(card.id)}
+                      platform={platform}
+                    />
                     <button
                       type="button"
                       class="wel-replay"

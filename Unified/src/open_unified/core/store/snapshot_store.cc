@@ -3,8 +3,11 @@
 #include "open_unified/core/store/snapshot_store.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <functional>
+#include <map>
+#include <memory>
 #include <set>
 #include <unordered_map>
 #include <utility>
@@ -16,8 +19,10 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/synchronization/lock.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "content/public/browser/browser_thread.h"
@@ -663,8 +668,51 @@ void RepairDuplicateIds(std::vector<Profile>* profiles,
   }
 }
 
+struct PathWriteState {
+  std::atomic<uint64_t> latest_generation{0};
+  base::Lock io_lock;
+};
+
+PathWriteState& GetPathWriteState(const base::FilePath& file_path) {
+  static base::NoDestructor<base::Lock> map_lock;
+  static base::NoDestructor<
+      std::map<base::FilePath, std::unique_ptr<PathWriteState>>>
+      states;
+  base::AutoLock lock(*map_lock);
+  auto& slot = (*states)[file_path];
+  if (!slot) {
+    slot = std::make_unique<PathWriteState>();
+  }
+  return *slot;
+}
+
+uint64_t NextWriteGeneration(const base::FilePath& file_path) {
+  return GetPathWriteState(file_path)
+             .latest_generation.fetch_add(1, std::memory_order_acq_rel) +
+         1;
+}
+
+base::Lock& InlineIoStoresLock() {
+  static base::NoDestructor<base::Lock> lock;
+  return *lock;
+}
+
+std::set<const SnapshotStore*>& InlineIoStores() {
+  static base::NoDestructor<std::set<const SnapshotStore*>> stores;
+  return *stores;
+}
+
 std::string WriteSnapshotOnIoSequence(base::FilePath file_path,
-                                      std::string encoded) {
+                                      std::string encoded,
+                                      uint64_t generation) {
+  PathWriteState& state = GetPathWriteState(file_path);
+  if (generation < state.latest_generation.load(std::memory_order_acquire)) {
+    return {};  // Superseded by a newer snapshot (e.g., shutdown flush).
+  }
+  base::AutoLock lock(state.io_lock);
+  if (generation < state.latest_generation.load(std::memory_order_acquire)) {
+    return {};
+  }
   if (!base::CreateDirectory(file_path.DirName())) {
     return "SnapshotStore: failed to create State directory";
   }
@@ -805,6 +853,8 @@ SnapshotStore::SnapshotStore(base::FilePath data_root)
 SnapshotStore::~SnapshotStore() {
   save_timer_.Stop();
   weak_factory_.InvalidateWeakPtrs();
+  base::AutoLock lock(InlineIoStoresLock());
+  InlineIoStores().erase(this);
 }
 
 void SnapshotStore::SetSaveFailureCallback(
@@ -814,11 +864,27 @@ void SnapshotStore::SetSaveFailureCallback(
 
 void SnapshotStore::SetIoTaskRunner(
     scoped_refptr<base::SequencedTaskRunner> runner) {
+  {
+    base::AutoLock lock(InlineIoStoresLock());
+    if (runner) {
+      InlineIoStores().erase(this);
+    } else {
+      // Explicit nullptr switches this store to synchronous inline writes
+      // (used during shutdown flush so browser.json lands on disk before exit).
+      InlineIoStores().insert(this);
+    }
+  }
   io_runner_ = std::move(runner);
 }
 
 scoped_refptr<base::SequencedTaskRunner>
 SnapshotStore::GetOrCreateIoTaskRunner() {
+  {
+    base::AutoLock lock(InlineIoStoresLock());
+    if (InlineIoStores().contains(this)) {
+      return nullptr;
+    }
+  }
   if (!io_runner_ && base::ThreadPoolInstance::Get()) {
     io_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
         {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
@@ -906,17 +972,19 @@ void SnapshotStore::FlushAsync(
     return;
   }
 
+  const uint64_t generation = NextWriteGeneration(file_path_);
   if (auto runner = GetOrCreateIoTaskRunner()) {
     runner->PostTaskAndReplyWithResult(
         FROM_HERE,
         base::BindOnce(&WriteSnapshotOnIoSequence, file_path_,
-                       std::move(encoded)),
+                       std::move(encoded), generation),
         base::BindOnce(&SnapshotStore::OnAsyncWriteComplete,
                        weak_factory_.GetWeakPtr(), std::move(done)));
     return;
   }
 
-  std::string err = WriteSnapshotOnIoSequence(file_path_, std::move(encoded));
+  std::string err =
+      WriteSnapshotOnIoSequence(file_path_, std::move(encoded), generation);
   OnAsyncWriteComplete(std::move(done), std::move(err));
 }
 
@@ -934,17 +1002,18 @@ bool SnapshotStore::SaveNow(const BrowserModel& model, std::string* error_out) {
     return false;
   }
 
+  const uint64_t generation = NextWriteGeneration(file_path_);
   const bool on_ui_thread =
       content::BrowserThread::IsThreadInitialized(content::BrowserThread::UI) &&
       content::BrowserThread::CurrentlyOn(content::BrowserThread::UI);
   if (on_ui_thread) {
     if (auto runner = GetOrCreateIoTaskRunner()) {
-      // Never perform blocking disk I/O on BrowserThread::UI; the runner uses
-      // BLOCK_SHUTDOWN so writes finish cleanly before exit.
+      // Never perform blocking disk I/O on BrowserThread::UI during normal
+      // operation; the runner uses BLOCK_SHUTDOWN so writes finish cleanly.
       runner->PostTaskAndReplyWithResult(
           FROM_HERE,
           base::BindOnce(&WriteSnapshotOnIoSequence, file_path_,
-                         std::move(encoded)),
+                         std::move(encoded), generation),
           base::BindOnce(&SnapshotStore::OnAsyncWriteComplete,
                          weak_factory_.GetWeakPtr(),
                          base::OnceCallback<void(bool, std::string)>()));
@@ -952,7 +1021,8 @@ bool SnapshotStore::SaveNow(const BrowserModel& model, std::string* error_out) {
     }
   }
 
-  std::string err = WriteSnapshotOnIoSequence(file_path_, std::move(encoded));
+  std::string err =
+      WriteSnapshotOnIoSequence(file_path_, std::move(encoded), generation);
   if (!err.empty()) {
     if (error_out) {
       *error_out = std::move(err);

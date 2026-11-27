@@ -894,8 +894,13 @@ void OpenBrowserService::Shutdown() {
   if (sleep_controller_) {
     sleep_controller_->Shutdown();
   }
-  // Serialized here, written on |file_runner_| (BLOCK_SHUTDOWN: the write
-  // completes before the process exits; the UI thread does not wait).
+  // Flush browser.json synchronously before destroying snapshot_store_ or
+  // tearing down services. PostMainMessageLoopRun() has already allowed
+  // blocking I/O on BrowserThread::UI; disabling the async runner forces
+  // SaveNow() to write atomically inline while SnapshotStore's generation
+  // guard and per-path lock prevent any queued task on |file_runner_| from
+  // racing or overwriting this final snapshot with stale state.
+  snapshot_store_->SetIoTaskRunner(nullptr);
   std::string error;
   if (!snapshot_store_->SaveNow(*model_, &error)) {
     LOG(ERROR) << "Open: browser.json not saved at shutdown: " << error;
@@ -1194,6 +1199,22 @@ WindowID OpenBrowserService::ActiveWindowId() const {
 
 WindowID OpenBrowserService::ReopenLastClosedWindow() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // If the last standard window was closed on macOS, its BrowserWindowState
+  // remained preserved in model_->windows_ with no live Browser; rebind and
+  // show it directly so reopening never duplicates model_->windows_.
+  if (tab_bridge_) {
+    for (const BrowserWindowState& window : model_->windows()) {
+      if (window.style == WindowStyle::kStandard && !window.is_incognito &&
+          !tab_bridge_->BrowserForWindow(window.id)) {
+        const WindowID reopened = tab_bridge_->OpenNewWindow();
+        if (!reopened.empty()) {
+          ScheduleSave();
+          return reopened;
+        }
+        break;
+      }
+    }
+  }
   WindowID restored = model_->RestoreLastClosedWindow();
   if (restored.empty()) {
     return tab_bridge_ ? tab_bridge_->OpenNewWindow() : WindowID();
@@ -1793,8 +1814,9 @@ void OpenBrowserService::OnTreeChanged(const TreeChange& change) {
        model_->IsIncognitoSpace(change.parent.owner_id));
   // Ephemeral Incognito state NEVER dirties browser.json.
   if (!is_incognito_change) {
-    // Title/URL updates take the snapshot store's slower metadata path.
-    if (change.kind == TreeChange::Kind::kUpdate) {
+    // Tab title/URL/live-state updates take the snapshot store's slower
+    // metadata path; window- and space-level updates use the 1s debounce path.
+    if (change.kind == TreeChange::Kind::kUpdate && !change.node_id.empty()) {
       snapshot_store_->ScheduleMetadataSave(model_.get());
     } else {
       ScheduleSave();

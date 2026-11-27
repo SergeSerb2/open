@@ -1160,6 +1160,7 @@ body {
 }
 
 .st-mini {
+  position: relative;
   display: flex;
   width: 260px;
   height: 150px;
@@ -1208,6 +1209,33 @@ body {
 
 .st-mini-lights i:nth-child(3) {
   background: #61c554;
+}
+
+.st-mini-win-controls {
+  position: absolute;
+  top: 9px;
+  right: 11px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  color: rgba(20, 22, 36, 0.45);
+  pointer-events: none;
+}
+
+.st-mini.is-dark .st-mini-win-controls {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.st-mini.is-win .st-mini-page {
+  padding-top: 22px;
+}
+
+.st-mini.is-win.is-right .st-mini-sidebar {
+  padding-top: 22px;
+}
+
+.st-mini.is-win.is-right .st-mini-page {
+  padding-top: 10px;
 }
 
 .st-mini-pill,
