@@ -1701,6 +1701,25 @@ void SyncStorageAdapterImpl::ApplyWorkspace(
     deps_.model->DeleteProfile(pid);
   }
 
+  // Step 4b: Apply synced Profile and Space ordering.
+  std::vector<ProfileID> present_profile_order;
+  present_profile_order.reserve(profile_order.size());
+  for (const ProfileID& pid : profile_order) {
+    if (deps_.model->FindProfile(pid)) {
+      present_profile_order.push_back(pid);
+    }
+  }
+  deps_.model->ReorderProfiles(present_profile_order);
+
+  std::vector<SpaceID> present_space_order;
+  present_space_order.reserve(space_order.size());
+  for (const SpaceID& sid : space_order) {
+    if (deps_.model->FindSpace(sid)) {
+      present_space_order.push_back(sid);
+    }
+  }
+  deps_.model->ReorderSpaces(present_space_order);
+
   // Step 5: Routing rules & default destination.
   deps_.model->SetRoutingRules(std::move(meta.routing_rules));
   deps_.model->SetDefaultDestination(std::move(meta.default_destination));

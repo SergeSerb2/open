@@ -428,7 +428,6 @@ bool PeekPolicy::IsAuthenticationFlow(std::string_view url) {
       "idmsa.apple.com",          "login.salesforce.com",
       "signin.aws.amazon.com",    "accounts.spotify.com",
       "id.atlassian.com",         "auth.atlassian.com",
-      "github.com/login",
   };
   for (std::string_view h : kExactAuthHosts) {
     if (host == h) {
@@ -459,6 +458,10 @@ bool PeekPolicy::IsAuthenticationFlow(std::string_view url) {
 
   // OAuth / OIDC / SAML path patterns.
   const std::string path = base::ToLowerASCII(CanonicalPathFromUrl(url));
+  if (host == "github.com" &&
+      (path == "/login" || path.starts_with("/login/"))) {
+    return true;
+  }
   static constexpr std::string_view kAuthPaths[] = {
       "/oauth",       "/oauth2",         "/authorize",
       "/login/oauth", "/saml",           "/sso",

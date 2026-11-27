@@ -147,12 +147,14 @@ bool IsSystemOrAppKitOnlyCommand(CommandId cid) {
     case CommandId::kHideOpen:
     case CommandId::kHideOthers:
     case CommandId::kShowAll:
+#if BUILDFLAG(IS_MAC)
     case CommandId::kQuitOpen:
     case CommandId::kCloseWindow:
     case CommandId::kMinimizeWindow:
+    case CommandId::kToggleFullScreen:
+#endif
     case CommandId::kZoomWindow:
     case CommandId::kBringAllToFront:
-    case CommandId::kToggleFullScreen:
     case CommandId::kExitModal:
       return true;
     default:
@@ -458,12 +460,26 @@ CommandRegistry::CommandRegistry() {
       CommandScope::kWindow, true, "always",
       {"Little Open", "Little Arc", "Quick Lookup", "Mini Window"});
   add(CommandId::kBlankWindow, "blank-window", "Blank Window", {"File"},
+#if BUILDFLAG(IS_MAC)
       {KeyboardShortcut{"n", kModMeta | kModCtrl}.Normalized()});
+#else
+      {KeyboardShortcut{"w", kModAlt | kModShift}.Normalized()});
+#endif
   add(CommandId::kNewNote, "new-note", "New Note", {"File"},
-      {CtrlShift("n")}, CommandScope::kWindow, true, "always",
+#if BUILDFLAG(IS_MAC)
+      {CtrlShift("n")},
+#else
+      {KeyboardShortcut{"n", kModAlt | kModShift}.Normalized()},
+#endif
+      CommandScope::kWindow, true, "always",
       {"Create Note", "Note", "Scratchpad"});
   add(CommandId::kNewNoteInSplit, "new-note-in-split", "New Note (in Split)",
-      {"File"}, {KeyboardShortcut{"n", kModCtrl | kModAlt}.Normalized()},
+      {"File"},
+#if BUILDFLAG(IS_MAC)
+      {KeyboardShortcut{"n", kModCtrl | kModAlt}.Normalized()},
+#else
+      {KeyboardShortcut{"m", kModAlt | kModShift}.Normalized()},
+#endif
       CommandScope::kWindow, true, "always",
       {"Create Note in Split View", "Note Split", "Scratchpad Split",
        "New Note in Split"});
@@ -534,7 +550,11 @@ CommandRegistry::CommandRegistry() {
       CommandScope::kWindow, true, "hasCurrentTab",
       {"Copy Link as Markdown", "Copy Markdown"});
   add(CommandId::kCopyUrlQuote, "copy-url-quote", "Copy URL as Quote", {"Edit"},
+#if BUILDFLAG(IS_MAC)
       {KeyboardShortcut{"c", kModMeta | kModCtrl | kModShift}.Normalized()},
+#else
+      {KeyboardShortcut{"c", kModAlt | kModShift}.Normalized()},
+#endif
       CommandScope::kWindow, true, "hasCurrentTab",
       {"Copy Quote", "Copy Link to Highlight"});
   add(CommandId::kFind, "find", "Find…", {"Edit", "Find"}, {Primary("f")},
@@ -551,9 +571,20 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kUseSelectionToFind, "use-selection-to-find",
       "Use Selection to Find", {"Edit", "Find"}, {}, CommandScope::kWebContent);
   add(CommandId::kJumpToSelection, "jump-to-selection", "Jump to Selection",
-      {"Edit", "Find"}, {Primary("j")}, CommandScope::kWebContent);
+      {"Edit", "Find"},
+#if BUILDFLAG(IS_MAC)
+      {Primary("j")},
+#else
+      {},
+#endif
+      CommandScope::kWebContent);
   add(CommandId::kEmojiAndSymbols, "emoji-and-symbols", "Emoji & Symbols",
-      {"Edit"}, {KeyboardShortcut{"space", kModMeta | kModCtrl}.Normalized()},
+      {"Edit"},
+#if BUILDFLAG(IS_MAC)
+      {KeyboardShortcut{"space", kModMeta | kModCtrl}.Normalized()},
+#else
+      {},
+#endif
       CommandScope::kWebContent);
 
   // --- View menu (24) ---
@@ -584,8 +615,12 @@ CommandRegistry::CommandRegistry() {
       {Primary("+"), Primary("=")}, CommandScope::kWindow, true,
       "hasCurrentTab");
   add(CommandId::kZoomOut, "zoom-out", "Zoom Out", {"View"},
-      {Primary("-"), PrimaryShift("-")}, CommandScope::kWindow, false,
-      "hasCurrentTab");
+#if BUILDFLAG(IS_MAC)
+      {Primary("-"), PrimaryShift("-")},
+#else
+      {Primary("-")},
+#endif
+      CommandScope::kWindow, false, "hasCurrentTab");
   add(CommandId::kZoomActualSize, "zoom-actual-size", "Zoom to Actual Size",
       {"View"}, {Primary("0")}, CommandScope::kWindow, false, "hasCurrentTab",
       {"Reset Zoom"});
@@ -662,9 +697,19 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kPreviousTab, "previous-tab", "Previous Tab", {"Tabs"},
       {PrimaryAlt("up")}, CommandScope::kWindow, true);
   add(CommandId::kCycleTabForward, "cycle-tab-forward", "Cycle Tab Forward",
-      {"Tabs"}, {KeyboardShortcut{"right", kModMeta | kModCtrl}.Normalized()});
+      {"Tabs"},
+#if BUILDFLAG(IS_MAC)
+      {KeyboardShortcut{"right", kModMeta | kModCtrl}.Normalized()});
+#else
+      {KeyboardShortcut{"right", kModAlt | kModShift}.Normalized()});
+#endif
   add(CommandId::kCycleTabBackward, "cycle-tab-backward", "Cycle Tab Backward",
-      {"Tabs"}, {KeyboardShortcut{"left", kModMeta | kModCtrl}.Normalized()});
+      {"Tabs"},
+#if BUILDFLAG(IS_MAC)
+      {KeyboardShortcut{"left", kModMeta | kModCtrl}.Normalized()});
+#else
+      {KeyboardShortcut{"left", kModAlt | kModShift}.Normalized()});
+#endif
   add(CommandId::kTabSwitcherForward, "tab-switcher-forward",
       "Tab Switcher (forward)", {"Tabs"}, {Ctrl("tab")}, CommandScope::kWindow,
       true);
@@ -676,7 +721,12 @@ CommandRegistry::CommandRegistry() {
       CommandScope::kWindow, true, "always",
       {"Close Unpinned Tabs", "Clear Tabs", "Clear Today"});
   add(CommandId::kNewFolder, "new-folder", "New Folder…", {"Tabs"},
-      {PrimaryShift("n")}, CommandScope::kSidebarFocused, false, "always",
+#if BUILDFLAG(IS_MAC)
+      {PrimaryShift("n")},
+#else
+      {KeyboardShortcut{"f", kModAlt | kModShift}.Normalized()},
+#endif
+      CommandScope::kSidebarFocused, false, "always",
       {"Create Folder", "Create New Folder", "New Folder from Selection"});
   add(CommandId::kDuplicateTab, "duplicate-tab", "Duplicate", {"Tabs"}, {},
       CommandScope::kWindow, false, "hasCurrentTab",
@@ -695,9 +745,17 @@ CommandRegistry::CommandRegistry() {
       "Reset all tabs in this Space", {"Tabs"}, {}, CommandScope::kWindow,
       false, "always", {"Reset Pinned Tabs"});
   add(CommandId::kPeekEmail, "peek-email", "Peek Email…", {"Tabs"},
+#if BUILDFLAG(IS_MAC)
       {PrimaryShift("e")});
+#else
+      {KeyboardShortcut{"e", kModAlt | kModShift}.Normalized()});
+#endif
   add(CommandId::kJoinMeeting, "join-meeting", "Join Meeting", {"Tabs"},
+#if BUILDFLAG(IS_MAC)
       {KeyboardShortcut{"j", kModMeta | kModCtrl}.Normalized()});
+#else
+      {KeyboardShortcut{"j", kModAlt | kModShift}.Normalized()});
+#endif
   add(CommandId::kOpenInCurrentSpace, "open-in-current-space",
       "Open Little Open or Peek in…", {"Tabs"}, {Primary("o")},
       CommandScope::kWindow, false, "hasCurrentTab");
@@ -740,8 +798,12 @@ CommandRegistry::CommandRegistry() {
 
   // --- Window (9) ---
   add(CommandId::kViewDownloads, "view-downloads", "View Downloads", {"Window"},
-      {PrimaryShift("j")}, CommandScope::kWindow, false, "always",
-      {"Downloads"});
+#if BUILDFLAG(IS_MAC)
+      {PrimaryShift("j")},
+#else
+      {Primary("j")},
+#endif
+      CommandScope::kWindow, false, "always", {"Downloads"});
   add(CommandId::kViewLibrary, "view-library", "View Library", {"Window"},
       {PrimaryShift("l")}, CommandScope::kWindow, false, "always", {"Library"});
   add(CommandId::kViewMedia, "view-media", "View Media", {"Window"}, {});
@@ -816,11 +878,16 @@ CommandRegistry::CommandRegistry() {
 #if BUILDFLAG(IS_MAC)
       {PrimaryAlt("c")},
 #else
-      {PrimaryShift("c")},
+      {KeyboardShortcut{"i", kModAlt | kModShift}.Normalized()},
 #endif
       CommandScope::kWindow, false, "hasCurrentTab");
   add(CommandId::kToggleDeveloperMode, "toggle-developer-mode",
-      "Toggle Developer Mode", {"View", "Developer"}, {Ctrl("d")});
+      "Toggle Developer Mode", {"View", "Developer"},
+#if BUILDFLAG(IS_MAC)
+      {Ctrl("d")});
+#else
+      {KeyboardShortcut{"d", kModAlt | kModShift}.Normalized()});
+#endif
   add(CommandId::kNetworkInspector, "network-inspector", "Network Inspector",
       {"View", "Developer"}, {}, CommandScope::kWindow, false, "hasCurrentTab");
   add(CommandId::kAllowJsAppleEvents, "allow-js-apple-events",
@@ -870,9 +937,21 @@ CommandRegistry::CommandRegistry() {
   add(CommandId::kFontItalic, "font-italic", "Italic",
       {"Edit", "Format", "Font"}, {Primary("i")}, CommandScope::kWebContent);
   add(CommandId::kFontUnderline, "font-underline", "Underline",
-      {"Edit", "Format", "Font"}, {Primary("u")}, CommandScope::kWebContent);
+      {"Edit", "Format", "Font"},
+#if BUILDFLAG(IS_MAC)
+      {Primary("u")},
+#else
+      {},
+#endif
+      CommandScope::kWebContent);
   add(CommandId::kShowFonts, "show-fonts", "Show Fonts",
-      {"Edit", "Format", "Font"}, {Primary("t")}, CommandScope::kWebContent);
+      {"Edit", "Format", "Font"},
+#if BUILDFLAG(IS_MAC)
+      {Primary("t")},
+#else
+      {},
+#endif
+      CommandScope::kWebContent);
 
   // --- Code-only commands (44) ---
   add(CommandId::kImportArcNotes, "import-arc-notes",
@@ -959,7 +1038,12 @@ CommandRegistry::CommandRegistry() {
   for (int i = 0; i < 4; ++i) {
     std::string num = std::to_string(i + 1);
     add(kSplitIds[i], "focus-split-pane-" + num, "Focus Split Pane " + num, {},
-        {CtrlShift(num)}, CommandScope::kWindow, false, "currentTabInSplit");
+#if BUILDFLAG(IS_MAC)
+        {CtrlShift(num)},
+#else
+        {KeyboardShortcut{num, kModAlt | kModShift}.Normalized()},
+#endif
+        CommandScope::kWindow, false, "currentTabInSplit");
   }
   add(CommandId::kNextSplitPane, "next-split-pane", "Next Split Pane", {},
       {CtrlShift("]")}, CommandScope::kWindow, false, "currentTabInSplit");

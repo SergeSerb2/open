@@ -53,6 +53,8 @@ enum class Glyph {
   kPlanet,
   kWindowClose,
   kWindowMinimize,
+  kWindowMaximize,
+  kWindowRestore,
   kWindowZoom,
   kPuzzle,       // extension without icon
   kEyeglasses,   // Incognito header mark (SF eyeglasses on macOS)
@@ -107,6 +109,16 @@ void Draw(gfx::Canvas* canvas,
           const gfx::RectF& bounds,
           SkColor color,
           gfx::Vector2dF offset = gfx::Vector2dF());
+
+// Draws a window caption control glyph (`kWindowMinimize`, `kWindowMaximize`,
+// `kWindowRestore`, `kWindowClose`) centered in `bounds` using physical-pixel-
+// snapped stroke math (`1.0f / dsf` for Windows 11 Fluent, `1.25f` for Linux
+// CSD).
+void DrawWindowControlGlyph(gfx::Canvas* canvas,
+                            Glyph glyph,
+                            const gfx::RectF& bounds,
+                            SkColor color,
+                            bool linux_csd = false);
 
 // A rounded tile with the first letter of `label` (missing favicon).
 void DrawLetterTile(gfx::Canvas* canvas,

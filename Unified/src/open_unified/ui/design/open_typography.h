@@ -51,6 +51,10 @@ const gfx::FontList& Get(OpenFont font);
 // Font list for an arbitrary absolute size and weight.
 const gfx::FontList& Make(int size, gfx::Font::Weight weight);
 
+// Clears cached font lists and base font size so DPI or theme/font changes
+// refresh metrics on the next lookup. UI thread only.
+void InvalidateCache();
+
 // Top y of a text box whose baseline must sit at `baseline_y` (Swift frames
 // record baselines: tab titles 25 pt below the row top, URL text 14 pt below
 // the text frame top, Space title 14 pt below its frame top).

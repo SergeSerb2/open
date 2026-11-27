@@ -6,9 +6,14 @@
 
 #include "base/base_paths.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "open_unified/browser/open_browser_service.h"
 #include "open_unified/core/adblock/open_adblock_profile_service.h"
+
+#if BUILDFLAG(IS_WIN)
+#include <shobjidl.h>
+#endif
 
 namespace open_unified {
 
@@ -23,6 +28,9 @@ void OpenBrowserMainExtraParts::PreProfileInit() {
 }
 
 void OpenBrowserMainExtraParts::PreBrowserStart() {
+#if BUILDFLAG(IS_WIN)
+  ::SetCurrentProcessExplicitAppUserModelID(L"OpenBrowser.Open.Unified");
+#endif
   base::FilePath user_data_dir;
   // chrome::DIR_USER_DATA honours --user-data-dir; the platform default is
   // set by hook 0008 (Open's product directory name).

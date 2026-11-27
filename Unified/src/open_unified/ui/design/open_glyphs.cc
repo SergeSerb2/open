@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
@@ -113,6 +114,273 @@ void DrawSpeakerBody(gfx::Canvas* canvas, const cc::PaintFlags& flags) {
            flags, /*close=*/true);
 }
 
+// Draws crisp original Skia vector paths (14 x 14 design box, scaled to fit
+// `box`) for common named Space icons on platforms without SF Symbols.
+bool DrawNamedSpaceIconVector(gfx::Canvas* canvas,
+                              std::string_view raw_name,
+                              std::string_view symbol_name,
+                              const gfx::RectF& box,
+                              SkColor color) {
+  auto matches = [&](std::initializer_list<std::string_view> names) {
+    for (std::string_view n : names) {
+      if (raw_name == n || symbol_name == n) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  enum class SpaceVector {
+    kNone,
+    kBriefcase,
+    kHome,
+    kStar,
+    kHeart,
+    kBolt,
+    kFlame,
+    kBook,
+    kCode,
+    kMusic,
+    kGamepad,
+    kCamera,
+    kLeaf,
+    kGlobe,
+    kFolder,
+    kRocket,
+  };
+
+  SpaceVector kind = SpaceVector::kNone;
+  if (matches({"briefcase", "briefcase.fill"})) {
+    kind = SpaceVector::kBriefcase;
+  } else if (matches({"home", "house", "house.fill"})) {
+    kind = SpaceVector::kHome;
+  } else if (matches({"star", "star.fill"})) {
+    kind = SpaceVector::kStar;
+  } else if (matches({"heart", "heart.fill"})) {
+    kind = SpaceVector::kHeart;
+  } else if (matches({"bolt", "bolt.fill", "flash"})) {
+    kind = SpaceVector::kBolt;
+  } else if (matches({"flame", "flame.fill", "bonfire"})) {
+    kind = SpaceVector::kFlame;
+  } else if (matches({"book", "book.fill", "book.closed"})) {
+    kind = SpaceVector::kBook;
+  } else if (matches(
+                 {"code", "github", "chevron.left.forwardslash.chevron.right"})) {
+    kind = SpaceVector::kCode;
+  } else if (matches({"music", "musicalNote", "music.note"})) {
+    kind = SpaceVector::kMusic;
+  } else if (matches({"gamepad", "gamecontroller", "gamecontroller.fill"})) {
+    kind = SpaceVector::kGamepad;
+  } else if (matches({"camera", "camera.fill"})) {
+    kind = SpaceVector::kCamera;
+  } else if (matches({"leaf", "leaf.fill"})) {
+    kind = SpaceVector::kLeaf;
+  } else if (matches({"globe", "globe.americas"})) {
+    kind = SpaceVector::kGlobe;
+  } else if (matches({"folder", "folder.fill"})) {
+    kind = SpaceVector::kFolder;
+  } else if (matches({"rocket", "paperplane", "paperplane.fill"})) {
+    kind = SpaceVector::kRocket;
+  }
+
+  if (kind == SpaceVector::kNone) {
+    return false;
+  }
+
+  const float target =
+      std::clamp(std::min(box.width(), box.height()) * 0.62f, 10.0f, 16.0f);
+  const float scale = target / 14.0f;
+  const float ox = box.x() + (box.width() - target) * 0.5f;
+  const float oy = box.y() + (box.height() - target) * 0.5f;
+
+  gfx::ScopedCanvas scoped(canvas);
+  canvas->sk_canvas()->translate(ox, oy);
+  canvas->sk_canvas()->scale(scale, scale);
+
+  const cc::PaintFlags pen = Stroke(color, 1.35f);
+  const cc::PaintFlags fine = Stroke(color, 1.15f);
+  const cc::PaintFlags fill = Fill(color);
+
+  switch (kind) {
+    case SpaceVector::kBriefcase: {
+      canvas->sk_canvas()->drawRRect(RRect(1.0f, 3.8f, 12.0f, 8.7f, 1.8f), pen);
+      SkPathBuilder handle;
+      handle.moveTo(4.7f, 3.8f);
+      handle.lineTo(4.7f, 2.3f);
+      handle.quadTo(4.7f, 1.4f, 5.6f, 1.4f);
+      handle.lineTo(8.4f, 1.4f);
+      handle.quadTo(9.3f, 1.4f, 9.3f, 2.3f);
+      handle.lineTo(9.3f, 3.8f);
+      canvas->DrawPath(handle.detach(), pen);
+      Line(canvas, 1.2f, 7.6f, 12.8f, 7.6f, fine);
+      break;
+    }
+    case SpaceVector::kHome: {
+      Polyline(canvas, {{1.2f, 6.8f}, {7.0f, 1.6f}, {12.8f, 6.8f}}, pen);
+      Polyline(canvas,
+               {{2.8f, 6.0f}, {2.8f, 12.4f}, {11.2f, 12.4f}, {11.2f, 6.0f}},
+               pen);
+      Polyline(canvas,
+               {{5.6f, 12.4f}, {5.6f, 8.4f}, {8.4f, 8.4f}, {8.4f, 12.4f}},
+               fine);
+      break;
+    }
+    case SpaceVector::kStar: {
+      SkPathBuilder b;
+      constexpr float kPi = 3.14159265f;
+      constexpr float kOuter = 6.0f;
+      constexpr float kInner = 2.6f;
+      for (int i = 0; i < 10; ++i) {
+        const float angle = -kPi * 0.5f + i * (kPi / 5.0f);
+        const float r = (i % 2 == 0) ? kOuter : kInner;
+        const float px = 7.0f + std::cos(angle) * r;
+        const float py = 7.3f + std::sin(angle) * r;
+        if (i == 0) {
+          b.moveTo(px, py);
+        } else {
+          b.lineTo(px, py);
+        }
+      }
+      b.close();
+      canvas->DrawPath(b.detach(), pen);
+      break;
+    }
+    case SpaceVector::kHeart: {
+      SkPathBuilder b;
+      b.moveTo(7.0f, 12.3f);
+      b.cubicTo(2.4f, 9.2f, 1.1f, 6.3f, 1.4f, 4.3f);
+      b.cubicTo(1.7f, 2.3f, 3.3f, 1.5f, 4.9f, 1.8f);
+      b.cubicTo(5.9f, 2.0f, 6.6f, 2.7f, 7.0f, 3.6f);
+      b.cubicTo(7.4f, 2.7f, 8.1f, 2.0f, 9.1f, 1.8f);
+      b.cubicTo(10.7f, 1.5f, 12.3f, 2.3f, 12.6f, 4.3f);
+      b.cubicTo(12.9f, 6.3f, 11.6f, 9.2f, 7.0f, 12.3f);
+      b.close();
+      canvas->DrawPath(b.detach(), pen);
+      break;
+    }
+    case SpaceVector::kBolt: {
+      Polyline(canvas,
+               {{8.1f, 1.0f},
+                {2.6f, 7.6f},
+                {6.7f, 7.6f},
+                {5.8f, 13.0f},
+                {11.4f, 6.3f},
+                {7.3f, 6.3f}},
+               pen, /*close=*/true);
+      break;
+    }
+    case SpaceVector::kFlame: {
+      SkPathBuilder outer;
+      outer.moveTo(7.4f, 1.2f);
+      outer.cubicTo(10.8f, 4.1f, 12.0f, 6.7f, 11.5f, 9.2f);
+      outer.cubicTo(11.0f, 11.4f, 9.2f, 12.7f, 7.0f, 12.7f);
+      outer.cubicTo(4.6f, 12.7f, 2.7f, 11.1f, 2.5f, 8.8f);
+      outer.cubicTo(2.3f, 6.9f, 3.3f, 5.2f, 4.5f, 4.0f);
+      outer.cubicTo(4.4f, 5.2f, 4.9f, 5.9f, 5.6f, 6.2f);
+      outer.cubicTo(5.6f, 4.3f, 6.3f, 2.6f, 7.4f, 1.2f);
+      outer.close();
+      canvas->DrawPath(outer.detach(), pen);
+      break;
+    }
+    case SpaceVector::kBook: {
+      SkPathBuilder left;
+      left.moveTo(7.0f, 3.2f);
+      left.quadTo(4.4f, 2.0f, 1.4f, 2.6f);
+      left.lineTo(1.4f, 11.4f);
+      left.quadTo(4.4f, 10.8f, 7.0f, 12.0f);
+      canvas->DrawPath(left.detach(), pen);
+      SkPathBuilder right;
+      right.moveTo(7.0f, 3.2f);
+      right.quadTo(9.6f, 2.0f, 12.6f, 2.6f);
+      right.lineTo(12.6f, 11.4f);
+      right.quadTo(9.6f, 10.8f, 7.0f, 12.0f);
+      canvas->DrawPath(right.detach(), pen);
+      Line(canvas, 7.0f, 3.2f, 7.0f, 12.0f, fine);
+      break;
+    }
+    case SpaceVector::kCode: {
+      Polyline(canvas, {{4.2f, 3.8f}, {1.2f, 7.0f}, {4.2f, 10.2f}}, pen);
+      Polyline(canvas, {{9.8f, 3.8f}, {12.8f, 7.0f}, {9.8f, 10.2f}}, pen);
+      Line(canvas, 8.2f, 2.5f, 5.8f, 11.5f, fine);
+      break;
+    }
+    case SpaceVector::kMusic: {
+      Line(canvas, 5.2f, 10.3f, 5.2f, 3.2f, pen);
+      Line(canvas, 11.4f, 9.1f, 11.4f, 1.9f, pen);
+      Line(canvas, 5.2f, 3.2f, 11.4f, 1.9f, Stroke(color, 1.7f));
+      Circle(canvas, 3.7f, 10.6f, 1.8f, fill);
+      Circle(canvas, 9.9f, 9.4f, 1.8f, fill);
+      break;
+    }
+    case SpaceVector::kGamepad: {
+      canvas->sk_canvas()->drawRRect(RRect(1.0f, 3.4f, 12.0f, 7.2f, 3.4f), pen);
+      Line(canvas, 3.2f, 7.0f, 6.0f, 7.0f, fine);
+      Line(canvas, 4.6f, 5.6f, 4.6f, 8.4f, fine);
+      Circle(canvas, 9.2f, 7.7f, 0.9f, fill);
+      Circle(canvas, 10.8f, 6.2f, 0.9f, fill);
+      break;
+    }
+    case SpaceVector::kCamera: {
+      canvas->sk_canvas()->drawRRect(RRect(1.0f, 3.6f, 12.0f, 8.6f, 1.8f), pen);
+      Polyline(canvas, {{4.3f, 3.6f}, {5.2f, 1.9f}, {8.8f, 1.9f}, {9.7f, 3.6f}},
+               pen);
+      Circle(canvas, 7.0f, 7.9f, 2.2f, fine);
+      break;
+    }
+    case SpaceVector::kLeaf: {
+      SkPathBuilder leaf;
+      leaf.moveTo(11.9f, 2.1f);
+      leaf.cubicTo(6.2f, 1.8f, 2.4f, 5.2f, 2.6f, 11.2f);
+      leaf.cubicTo(8.5f, 11.5f, 12.2f, 7.8f, 11.9f, 2.1f);
+      leaf.close();
+      canvas->DrawPath(leaf.detach(), pen);
+      Line(canvas, 2.2f, 11.8f, 8.8f, 5.2f, fine);
+      break;
+    }
+    case SpaceVector::kGlobe: {
+      Circle(canvas, 7.0f, 7.0f, 5.6f, pen);
+      canvas->sk_canvas()->drawOval(SkRect::MakeXYWH(4.3f, 1.4f, 5.4f, 11.2f),
+                                    fine);
+      Line(canvas, 1.6f, 7.0f, 12.4f, 7.0f, fine);
+      break;
+    }
+    case SpaceVector::kFolder: {
+      SkPathBuilder b;
+      b.moveTo(1.2f, 3.4f);
+      b.quadTo(1.2f, 2.2f, 2.4f, 2.2f);
+      b.lineTo(5.4f, 2.2f);
+      b.lineTo(6.8f, 3.8f);
+      b.lineTo(11.6f, 3.8f);
+      b.quadTo(12.8f, 3.8f, 12.8f, 5.0f);
+      b.lineTo(12.8f, 10.6f);
+      b.quadTo(12.8f, 11.8f, 11.6f, 11.8f);
+      b.lineTo(2.4f, 11.8f);
+      b.quadTo(1.2f, 11.8f, 1.2f, 10.6f);
+      b.close();
+      canvas->DrawPath(b.detach(), pen);
+      break;
+    }
+    case SpaceVector::kRocket: {
+      SkPathBuilder body;
+      body.moveTo(12.2f, 1.8f);
+      body.cubicTo(8.8f, 2.0f, 6.2f, 4.0f, 4.4f, 6.6f);
+      body.lineTo(7.4f, 9.6f);
+      body.cubicTo(10.0f, 7.8f, 12.0f, 5.2f, 12.2f, 1.8f);
+      body.close();
+      canvas->DrawPath(body.detach(), pen);
+      // Side fins and exhaust.
+      Polyline(canvas, {{4.8f, 6.2f}, {2.2f, 6.6f}, {3.6f, 8.6f}}, fine);
+      Polyline(canvas, {{7.8f, 9.2f}, {7.4f, 11.8f}, {5.4f, 10.4f}}, fine);
+      Line(canvas, 4.6f, 9.4f, 2.0f, 12.0f, fine);
+      Circle(canvas, 8.8f, 5.2f, 1.0f, fill);
+      break;
+    }
+    case SpaceVector::kNone:
+      return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 std::optional<SymbolSpec> SystemSymbolFor(Glyph glyph) {
@@ -166,6 +434,8 @@ std::optional<SymbolSpec> SystemSymbolFor(Glyph glyph) {
     case Glyph::kPlanet:
     case Glyph::kWindowClose:
     case Glyph::kWindowMinimize:
+    case Glyph::kWindowMaximize:
+    case Glyph::kWindowRestore:
     case Glyph::kWindowZoom:
       return std::nullopt;
   }
@@ -230,6 +500,15 @@ std::string_view NamedSpaceIconSymbol(std::string_view name) {
       {"linear", "line.3.horizontal"},
       {"figma", "square.stack.3d.up"},
       {"search", "magnifyingglass"},
+      {"briefcase", "briefcase"},
+      {"home", "house"},
+      {"bolt", "bolt"},
+      {"flame", "flame"},
+      {"music", "music.note"},
+      {"gamepad", "gamecontroller"},
+      {"camera", "camera"},
+      {"globe", "globe.americas"},
+      {"rocket", "paperplane"},
   };
   for (const auto& [key, symbol] : kMap) {
     if (key == name) {
@@ -316,6 +595,9 @@ gfx::SizeF InkSize(Glyph glyph) {
       return {14, 14};
     case Glyph::kWindowClose:
     case Glyph::kWindowMinimize:
+    case Glyph::kWindowMaximize:
+    case Glyph::kWindowRestore:
+      return {10, 10};
     case Glyph::kWindowZoom:
       return {6, 6};
     case Glyph::kPuzzle:
@@ -326,11 +608,112 @@ gfx::SizeF InkSize(Glyph glyph) {
   return {12, 12};
 }
 
+void DrawWindowControlGlyph(gfx::Canvas* canvas,
+                            Glyph glyph,
+                            const gfx::RectF& bounds,
+                            SkColor color,
+                            bool linux_csd) {
+  const float dsf = std::max(1.0f, canvas->image_scale());
+  const float stroke_w = linux_csd ? 1.25f : (1.0f / dsf);
+  auto snap = [dsf](float v) { return (std::floor(v * dsf) + 0.5f) / dsf; };
+
+  constexpr float kInk = 10.0f;
+  const float x0 = bounds.x() + (bounds.width() - kInk) * 0.5f;
+  const float y0 = bounds.y() + (bounds.height() - kInk) * 0.5f;
+
+  cc::PaintFlags pen;
+  pen.setAntiAlias(true);
+  pen.setStyle(cc::PaintFlags::kStroke_Style);
+  pen.setStrokeWidth(stroke_w);
+  pen.setStrokeCap(linux_csd ? cc::PaintFlags::kRound_Cap
+                             : cc::PaintFlags::kButt_Cap);
+  pen.setStrokeJoin(linux_csd ? cc::PaintFlags::kRound_Join
+                              : cc::PaintFlags::kMiter_Join);
+  pen.setColor(color);
+
+  const float x_start = snap(x0);
+  const float x_end = snap(x0 + kInk - stroke_w);
+  const float y_start = snap(y0);
+  const float y_end = snap(y0 + kInk - stroke_w);
+
+  switch (glyph) {
+    case Glyph::kWindowMinimize: {
+      const float mid_y = snap(y0 + kInk * 0.5f - stroke_w * 0.5f);
+      cc::PaintFlags min_pen = pen;
+      if (!linux_csd) {
+        min_pen.setAntiAlias(false);
+        min_pen.setStrokeCap(cc::PaintFlags::kSquare_Cap);
+      }
+      Line(canvas, x_start, mid_y, x_end, mid_y, min_pen);
+      break;
+    }
+    case Glyph::kWindowMaximize: {
+      const float r = linux_csd ? 1.5f : 1.0f;
+      const SkRect rect = SkRect::MakeLTRB(x_start, y_start, x_end, y_end);
+      canvas->sk_canvas()->drawRRect(SkRRect::MakeRectXY(rect, r, r), pen);
+      break;
+    }
+    case Glyph::kWindowRestore: {
+      // Front 8x8 square at bottom-left, offset back frame at top-right.
+      const float r = linux_csd ? 1.25f : 1.0f;
+      const float f_left = snap(x0);
+      const float f_top = snap(y0 + 2.0f);
+      const float f_right = snap(x0 + 8.0f - stroke_w);
+      const float f_bottom = snap(y0 + kInk - stroke_w);
+      const SkRect front = SkRect::MakeLTRB(f_left, f_top, f_right, f_bottom);
+      canvas->sk_canvas()->drawRRect(SkRRect::MakeRectXY(front, r, r), pen);
+
+      const float b_left = snap(x0 + 2.0f);
+      const float b_top = snap(y0);
+      const float b_right = snap(x0 + kInk - stroke_w);
+      const float b_bottom = snap(y0 + 8.0f - stroke_w);
+      const float br = std::min(r, 1.5f);
+      SkPathBuilder back;
+      back.moveTo(b_left, f_top);
+      back.lineTo(b_left, b_top + br);
+      back.quadTo(b_left, b_top, b_left + br, b_top);
+      back.lineTo(b_right - br, b_top);
+      back.quadTo(b_right, b_top, b_right, b_top + br);
+      back.lineTo(b_right, b_bottom - br);
+      back.quadTo(b_right, b_bottom, b_right - br, b_bottom);
+      back.lineTo(f_right, b_bottom);
+      canvas->DrawPath(back.detach(), pen);
+      break;
+    }
+    case Glyph::kWindowClose: {
+      cc::PaintFlags close_pen = pen;
+      close_pen.setAntiAlias(true);
+      close_pen.setStrokeCap(cc::PaintFlags::kRound_Cap);
+      const float inset = linux_csd ? 1.0f : 0.5f;
+      Line(canvas, x0 + inset, y0 + inset, x0 + kInk - inset, y0 + kInk - inset,
+           close_pen);
+      Line(canvas, x0 + kInk - inset, y0 + inset, x0 + inset, y0 + kInk - inset,
+           close_pen);
+      break;
+    }
+    default:
+      Draw(canvas, glyph, bounds, color);
+      break;
+  }
+}
+
 void Draw(gfx::Canvas* canvas,
           Glyph glyph,
           const gfx::RectF& bounds,
           SkColor color,
           gfx::Vector2dF offset) {
+  if (glyph == Glyph::kWindowClose || glyph == Glyph::kWindowMinimize ||
+      glyph == Glyph::kWindowMaximize || glyph == Glyph::kWindowRestore) {
+    gfx::RectF target = bounds;
+    target.Offset(offset.x(), offset.y());
+#if BUILDFLAG(IS_LINUX)
+    constexpr bool kDefaultLinuxCsd = true;
+#else
+    constexpr bool kDefaultLinuxCsd = false;
+#endif
+    DrawWindowControlGlyph(canvas, glyph, target, color, kDefaultLinuxCsd);
+    return;
+  }
 #if BUILDFLAG(IS_MAC)
   if (const std::optional<SymbolSpec> spec = SystemSymbolFor(glyph)) {
     if (DrawSystemSymbol(canvas, spec->name, spec->point_size, spec->weight,
@@ -513,14 +896,11 @@ void Draw(gfx::Canvas* canvas,
       canvas->sk_canvas()->restore();
       break;
     }
-    case Glyph::kWindowClose: {
-      const cc::PaintFlags pen = Stroke(color, 1.1f);
-      Line(canvas, 0.6f, 0.6f, 5.4f, 5.4f, pen);
-      Line(canvas, 5.4f, 0.6f, 0.6f, 5.4f, pen);
-      break;
-    }
+    case Glyph::kWindowClose:
     case Glyph::kWindowMinimize:
-      Line(canvas, 0.4f, 3.0f, 5.6f, 3.0f, Stroke(color, 1.1f));
+    case Glyph::kWindowMaximize:
+    case Glyph::kWindowRestore:
+      // Handled above via DrawWindowControlGlyph.
       break;
     case Glyph::kWindowZoom: {
       const cc::PaintFlags pen = Stroke(color, 1.1f);
@@ -626,8 +1006,11 @@ void DrawSpaceIcon(gfx::Canvas* canvas,
                           box, tint) &&
         !DrawSystemSymbol(canvas, "circle.dotted", point_size,
                           SymbolWeight::kMedium, box, tint)) {
-      Draw(canvas, symbol == "eyeglasses" ? Glyph::kEyeglasses : Glyph::kPlanet,
-           box, tint);
+      if (!DrawNamedSpaceIconVector(canvas, icon->value, symbol, box, tint)) {
+        Draw(canvas,
+             symbol == "eyeglasses" ? Glyph::kEyeglasses : Glyph::kPlanet, box,
+             tint);
+      }
     }
   } else {
     // No icon set: Open's planet mark, never a letter.

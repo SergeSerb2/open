@@ -241,6 +241,7 @@ void OpenPopoverHost::DiscardBubble(bool synchronous) {
         FROM_HERE, std::move(widget_));
   }
   if (bubble_delegate_) {
+    bubble_delegate_->SetAnchorView(nullptr);
     base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
         FROM_HERE, std::move(bubble_delegate_));
   }

@@ -9,9 +9,11 @@
 #include <numeric>
 #include <utility>
 
+#include "base/callback_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
+#include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_flags.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/reload_type.h"
@@ -30,13 +32,16 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_nine_patch.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/text_constants.h"
@@ -743,6 +748,10 @@ OverlayWidgetHost::OverlayWidgetHost(views::Widget* parent,
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(params));
   contents_ = widget_->SetContentsView(std::move(contents));
+  // NativeWidgetAura auto-shows TYPE_CONTROL windows during InitNativeWidget();
+  // keep the overlay hidden until Show() so invisible overlays never intercept
+  // clicks, scroll events, or cursors over the page.
+  widget_->Hide();
   observation_.Observe(contents_.get());
   widget_observation_.Observe(widget_.get());
 }
@@ -1244,9 +1253,111 @@ END_METADATA
 
 namespace split_internal {
 
-// The 2 pt ring on the focused pane. It paints on its own layer above the
-// page's native view and never takes events (Chromium's
-// ContentsContainerOutline uses the same arrangement).
+// Soft rounded nine-patch drop shadow rendered behind each split pane.
+class SplitPaneShadowView : public views::View {
+  METADATA_HEADER(SplitPaneShadowView, views::View)
+
+ public:
+  SplitPaneShadowView() {
+    SetPaintToLayer(ui::LAYER_NINE_PATCH);
+    layer()->SetFillsBoundsOpaquely(false);
+    SetCanProcessEventsWithinSubtree(false);
+    GetViewAccessibility().SetIsInvisible(true);
+    margin_ = static_cast<int>(std::ceil(3 * kSigma + std::abs(kOffsetY))) + 1;
+  }
+
+  void SetContentBounds(const gfx::Rect& content) {
+    gfx::Rect b = content;
+    b.Outset(margin_);
+    SetBoundsRect(b);
+    UpdateImageIfNeeded();
+    layer()->AsNinePatch()->UpdateNinePatchOcclusion(
+        gfx::Rect(margin_, margin_, content.width(), content.height()));
+  }
+
+  // views::View:
+  void AddedToWidget() override {
+    scale_ = 0.f;
+    UpdateImageIfNeeded();
+    if (views::Widget* widget = GetWidget()) {
+      UpdateActiveOpacity(widget->ShouldPaintAsActive());
+      paint_as_active_subscription_ =
+          widget->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+              &SplitPaneShadowView::OnPaintAsActiveChanged,
+              base::Unretained(this)));
+    }
+  }
+
+  void RemovedFromWidget() override {
+    paint_as_active_subscription_ = {};
+  }
+
+  void OnDeviceScaleFactorChanged(float old_scale, float new_scale) override {
+    scale_ = 0.f;
+    UpdateImageIfNeeded();
+  }
+
+ private:
+  static constexpr float kRadius =
+      static_cast<float>(split_metrics::kPanelCornerRadius);
+  static constexpr float kSigma = 3.0f;
+  static constexpr float kOpacity = 0.25f;
+  static constexpr float kOffsetY = 1.0f;
+
+  void OnPaintAsActiveChanged() {
+    if (const views::Widget* widget = GetWidget()) {
+      UpdateActiveOpacity(widget->ShouldPaintAsActive());
+    }
+  }
+
+  void UpdateActiveOpacity(bool active) {
+    if (layer()) {
+      layer()->SetOpacity(active ? 1.0f : 0.55f);
+    }
+  }
+
+  void UpdateImageIfNeeded() {
+    const views::Widget* widget = GetWidget();
+    const float scale = widget && widget->GetCompositor()
+                            ? widget->GetCompositor()->device_scale_factor()
+                            : 1.0f;
+    if (scale == scale_) {
+      return;
+    }
+    scale_ = scale;
+    const int corner = margin_ + static_cast<int>(std::ceil(kRadius));
+    const int size = 2 * corner + 1;
+    gfx::Canvas canvas(gfx::Size(size, size), scale, /*is_opaque=*/false);
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setColor(SkColorSetA(
+        SK_ColorBLACK, static_cast<U8CPU>(std::lround(kOpacity * 255))));
+    flags.setImageFilter(sk_make_sp<cc::BlurPaintFilter>(
+        kSigma, kSigma, SkTileMode::kDecal, nullptr));
+    canvas.DrawRoundRect(
+        gfx::RectF(margin_, margin_ + kOffsetY, size - 2 * margin_,
+                   size - 2 * margin_),
+        kRadius, flags);
+    layer()->AsNinePatch()->UpdateNinePatchLayerImage(
+        gfx::ImageSkia(gfx::ImageSkiaRep(canvas.GetBitmap(), scale)));
+    layer()->AsNinePatch()->UpdateNinePatchLayerAperture(
+        gfx::Rect(corner, corner, 1, 1));
+    layer()->AsNinePatch()->UpdateNinePatchLayerBorder(
+        gfx::Rect(corner, corner, 2 * corner, 2 * corner));
+  }
+
+  int margin_ = 0;
+  float scale_ = 0.f;
+  base::CallbackListSubscription paint_as_active_subscription_;
+};
+
+BEGIN_METADATA(SplitPaneShadowView)
+END_METADATA
+
+// The 2 pt ring on the focused pane, and a quiet 1 pt inset border on
+// unfocused split panes. It paints on its own layer above the page's native
+// view and never takes events (Chromium's ContentsContainerOutline uses the
+// same arrangement).
 class FocusRingView : public views::View {
   METADATA_HEADER(FocusRingView, views::View)
 
@@ -1266,23 +1377,78 @@ class FocusRingView : public views::View {
     SchedulePaint();
   }
 
+  void SetFocused(bool focused) {
+    if (focused_ == focused) {
+      return;
+    }
+    focused_ = focused;
+    SchedulePaint();
+  }
+
+  void SetDarkContent(bool dark) {
+    if (dark_content_ == dark) {
+      return;
+    }
+    dark_content_ = dark;
+    SchedulePaint();
+  }
+
   // views::View:
+  void AddedToWidget() override {
+    if (views::Widget* widget = GetWidget()) {
+      window_active_ = widget->ShouldPaintAsActive();
+      paint_as_active_subscription_ =
+          widget->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+              &FocusRingView::OnPaintAsActiveChanged, base::Unretained(this)));
+      SchedulePaint();
+    }
+  }
+
+  void RemovedFromWidget() override { paint_as_active_subscription_ = {}; }
+
   void OnPaint(gfx::Canvas* canvas) override {
-    // WebContentContainer: path inset 1 pt, radius cornerRadius - 1, width 2.
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setStyle(cc::PaintFlags::kStroke_Style);
-    flags.setStrokeWidth(split_metrics::kRingWidth);
-    flags.setColor(color_);
     gfx::RectF r(GetLocalBounds());
-    r.Inset(split_metrics::kRingWidth / 2.f);
-    canvas->DrawRoundRect(
-        r, split_metrics::kPanelCornerRadius - split_metrics::kRingWidth / 2.f,
-        flags);
+    if (focused_) {
+      // WebContentContainer: path inset 1 pt, radius cornerRadius - 1, width 2.
+      // Attenuate alpha to 0.40 when the browser window is inactive.
+      flags.setStrokeWidth(split_metrics::kRingWidth);
+      flags.setColor(window_active_ ? color_
+                                    : secondary::WithAlpha(color_, 0.40f));
+      r.Inset(split_metrics::kRingWidth / 2.f);
+      canvas->DrawRoundRect(
+          r, split_metrics::kPanelCornerRadius - split_metrics::kRingWidth / 2.f,
+          flags);
+      return;
+    }
+    // Unfocused split pane: subtle 1 DIP inset border.
+    flags.setStrokeWidth(1.f);
+    flags.setColor(dark_content_ ? SkColorSetARGB(26, 0xFF, 0xFF, 0xFF)
+                                 : SkColorSetARGB(20, 0x00, 0x00, 0x00));
+    r.Inset(0.5f);
+    canvas->DrawRoundRect(r, split_metrics::kPanelCornerRadius - 0.5f, flags);
   }
 
  private:
+  void OnPaintAsActiveChanged() {
+    const views::Widget* widget = GetWidget();
+    if (!widget) {
+      return;
+    }
+    const bool active = widget->ShouldPaintAsActive();
+    if (window_active_ != active) {
+      window_active_ = active;
+      SchedulePaint();
+    }
+  }
+
   SkColor color_ = SkColorSetRGB(0x31, 0x39, 0xFF);
+  bool focused_ = true;
+  bool dark_content_ = false;
+  bool window_active_ = true;
+  base::CallbackListSubscription paint_as_active_subscription_;
 };
 
 BEGIN_METADATA(FocusRingView)
@@ -1539,6 +1705,7 @@ class SplitPaneView : public views::View,
     OpenPaneChromeView::Role role = OpenPaneChromeView::Role::kPane;
     bool focused = false;
     bool show_ring = false;
+    bool dark_content = false;
     size_t pane_count = 1;
     SplitOrientation orientation = SplitOrientation::kHorizontal;
     SkColor fallback_color = SK_ColorWHITE;
@@ -1558,7 +1725,9 @@ class SplitPaneView : public views::View,
     }
     chrome_->SetVisible(context_.show_bar);
     chrome_->SetRole(context_.role);
-    ring_->SetVisible(context_.show_ring && context_.focused);
+    ring_->SetVisible(context_.show_ring);
+    ring_->SetFocused(context_.focused);
+    ring_->SetDarkContent(context_.dark_content);
     ring_->SetColor(context_.ring_color);
     UpdateEmptyPlaceholder();
     RefreshChrome();
@@ -1588,8 +1757,17 @@ class SplitPaneView : public views::View,
       return;
     }
     context_.focused = focused;
-    ring_->SetVisible(context_.show_ring && focused);
+    ring_->SetVisible(context_.show_ring);
+    ring_->SetFocused(focused);
     RefreshChrome();
+  }
+
+  void SetDarkContent(bool dark) {
+    if (context_.dark_content == dark) {
+      return;
+    }
+    context_.dark_content = dark;
+    ring_->SetDarkContent(dark);
   }
 
   void SetBackgroundOverride(SkColor color) {
@@ -1893,6 +2071,12 @@ class SplitDividerView : public views::View {
   void set_orientation(SplitOrientation orientation) {
     orientation_ = orientation;
   }
+  void set_dark_content(bool dark) {
+    if (dark_content_ != dark) {
+      dark_content_ = dark;
+      SchedulePaint();
+    }
+  }
 
   // views::View:
   ui::Cursor GetCursor(const ui::MouseEvent& event) override {
@@ -1939,6 +2123,11 @@ class SplitDividerView : public views::View {
   }
   void OnMouseExited(const ui::MouseEvent& event) override {
     hovered_ = false;
+    if (!dragging_) {
+      if (views::Widget* w = GetWidget()) {
+        w->SetCursor(ui::Cursor());
+      }
+    }
     SchedulePaint();
   }
 
@@ -1956,9 +2145,10 @@ class SplitDividerView : public views::View {
                                 b.CenterPoint().y() - length / 2.f, 4, length)
                    : gfx::RectF(b.CenterPoint().x() - length / 2.f,
                                 b.CenterPoint().y() - 2.f, length, 4);
+    const SkColor pill_color = dark_content_ ? SK_ColorWHITE : SK_ColorBLACK;
     secondary::FillRoundRect(
         canvas, pill, 2.f,
-        secondary::WithAlpha(SK_ColorWHITE, dragging_ ? 0.55f : 0.35f));
+        secondary::WithAlpha(pill_color, dragging_ ? 0.55f : 0.35f));
   }
 
  private:
@@ -1980,6 +2170,7 @@ class SplitDividerView : public views::View {
   raw_ptr<OpenSplitContainerView> container_;
   size_t pair_index_;
   SplitOrientation orientation_ = SplitOrientation::kHorizontal;
+  bool dark_content_ = true;
   gfx::Point start_;
   bool dragging_ = false;
   bool hovered_ = false;
@@ -2227,6 +2418,7 @@ void OpenSplitContainerView::SetPresentation(SplitPresentation presentation) {
   live_fractions_ =
       NormalizedFractions(presentation_.fractions, presentation_.panes.size());
   const bool split = is_split();
+  const bool dark_content = EffectiveDarkContent();
   const ItemID focused = presentation_.focused_pane_id.value_or(
       presentation_.panes.empty() ? ItemID() : presentation_.panes[0].tab_id);
   for (size_t i = 0; i < panes_.size(); ++i) {
@@ -2236,16 +2428,16 @@ void OpenSplitContainerView::SetPresentation(SplitPresentation presentation) {
                          : OpenPaneChromeView::Role::kToolbar;
     context.focused = split ? presentation_.panes[i].tab_id == focused : true;
     context.show_ring = split;
+    context.dark_content = dark_content;
     context.pane_count = panes_.size();
     context.orientation = presentation_.orientation;
     context.fallback_color = presentation_.fallback_page_color;
     context.ring_color = presentation_.focus_ring_color;
     panes_[i]->Update(presentation_.panes[i], context);
   }
+  SyncPaneShadows();
   SyncDividers();
-  if (drop_overlay_) {
-    ReorderChildView(drop_overlay_, children().size() - 1);
-  }
+  ReorderSplitChildren();
   UpdateDropOverlay();
   InvalidateLayout();
   SchedulePaint();
@@ -2278,6 +2470,25 @@ void OpenSplitContainerView::SetDropOverlayAccentColor(SkColor color) {
   UpdateDropOverlay();
 }
 
+void OpenSplitContainerView::SetDarkContent(bool dark) {
+  if (dark_content_override_ == dark) {
+    return;
+  }
+  dark_content_override_ = dark;
+  for (auto& pane : panes_) {
+    pane->SetDarkContent(dark);
+  }
+  for (auto& divider : dividers_) {
+    divider->set_dark_content(dark);
+  }
+  SchedulePaint();
+}
+
+bool OpenSplitContainerView::EffectiveDarkContent() const {
+  return dark_content_override_.value_or(
+      secondary::IsDark(presentation_.fallback_page_color));
+}
+
 bool OpenSplitContainerView::SwapPanes(size_t index_a, size_t index_b) {
   if (index_a >= panes_.size() || index_b >= panes_.size() ||
       index_a == index_b) {
@@ -2296,12 +2507,7 @@ bool OpenSplitContainerView::SwapPanes(size_t index_a, size_t index_b) {
     std::swap(presentation_.fractions[index_a],
               presentation_.fractions[index_b]);
   }
-  for (size_t i = 0; i < panes_.size(); ++i) {
-    ReorderChildView(panes_[i], i);
-  }
-  if (drop_overlay_) {
-    ReorderChildView(drop_overlay_, children().size() - 1);
-  }
+  ReorderSplitChildren();
   const bool split = is_split();
   ApplyFrames(ComputePaneFrames(GetLocalBounds(), presentation_.orientation,
                                 live_fractions_, panes_.size(),
@@ -2558,6 +2764,9 @@ void OpenSplitContainerView::ApplyFrames(const std::vector<gfx::Rect>& frames) {
   const size_t n = std::min(frames.size(), panes_.size());
   for (size_t i = 0; i < n; ++i) {
     panes_[i]->SetBoundsRect(frames[i]);
+    if (i < pane_shadows_.size()) {
+      pane_shadows_[i]->SetContentBounds(frames[i]);
+    }
   }
   const bool horizontal =
       presentation_.orientation == SplitOrientation::kHorizontal;
@@ -2568,6 +2777,19 @@ void OpenSplitContainerView::ApplyFrames(const std::vector<gfx::Rect>& frames) {
         horizontal
             ? gfx::Rect(a.right(), a.y(), b.x() - a.right(), a.height())
             : gfx::Rect(a.x(), a.bottom(), a.width(), b.y() - a.bottom()));
+  }
+}
+
+void OpenSplitContainerView::SyncPaneShadows() {
+  const size_t wanted = is_split() ? panes_.size() : 0;
+  while (pane_shadows_.size() > wanted) {
+    split_internal::SplitPaneShadowView* doomed = pane_shadows_.back().get();
+    pane_shadows_.pop_back();
+    RemoveChildViewT(doomed);
+  }
+  while (pane_shadows_.size() < wanted) {
+    pane_shadows_.push_back(
+        AddChildView(std::make_unique<split_internal::SplitPaneShadowView>()));
   }
 }
 
@@ -2583,9 +2805,27 @@ void OpenSplitContainerView::SyncDividers() {
         AddChildView(std::make_unique<split_internal::SplitDividerView>(
             this, dividers_.size())));
   }
+  const bool dark_content = EffectiveDarkContent();
   for (size_t i = 0; i < dividers_.size(); ++i) {
     dividers_[i]->set_pair_index(i);
     dividers_[i]->set_orientation(presentation_.orientation);
+    dividers_[i]->set_dark_content(dark_content);
+  }
+}
+
+void OpenSplitContainerView::ReorderSplitChildren() {
+  size_t index = 0;
+  for (auto& shadow : pane_shadows_) {
+    ReorderChildView(shadow, index++);
+  }
+  for (auto& pane : panes_) {
+    ReorderChildView(pane, index++);
+  }
+  for (auto& divider : dividers_) {
+    ReorderChildView(divider, index++);
+  }
+  if (drop_overlay_) {
+    ReorderChildView(drop_overlay_, children().size() - 1);
   }
 }
 

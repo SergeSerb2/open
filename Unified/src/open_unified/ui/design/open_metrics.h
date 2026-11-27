@@ -96,6 +96,20 @@ constexpr bool IsCompact(float sidebar_width) {
 }  // namespace chrome
 
 // ---------------------------------------------------------------------------
+// Windows 11 Fluent & Linux CSD caption controls.
+namespace win_controls {
+inline constexpr int kStripHeight = 32;
+inline constexpr int kWinButtonW = 46;
+inline constexpr int kWinButtonH = 32;
+inline constexpr int kWinClusterW = 138;
+inline constexpr int kLinuxButtonSize = 28;
+inline constexpr int kLinuxButtonPlate = 24;
+inline constexpr int kLinuxButtonGap = 4;
+inline constexpr int kLinuxOuterMargin = 8;
+inline constexpr int kLinuxCornerRadius = 12;
+}  // namespace win_controls
+
+// ---------------------------------------------------------------------------
 // Command / URL field (the "URL pill").
 namespace url_field {
 inline constexpr float kY = 46;
@@ -314,11 +328,14 @@ inline constexpr float kShadowBlur = 6;  // CSS blur; Gaussian sigma = 3
 inline constexpr float kShadowOffsetY = 1;
 inline constexpr double kEmptyFillWhiteAlpha = 0.10;
 
-// [sidebarWidth, 10, W - sidebarWidth - 10, H - 20]; hidden: [10, 10, W - 20, H - 20].
-constexpr Frame PanelFrame(SizeF window, float sidebar_width,
-                           bool sidebar_hidden) {
+// [sidebarWidth, top_inset, W - sidebarWidth - 10, H - top_inset - 10];
+// hidden: [10, top_inset, W - 20, H - top_inset - 10].
+constexpr Frame PanelFrame(SizeF window,
+                           float sidebar_width,
+                           bool sidebar_hidden,
+                           float top_inset = kInset) {
   const float x = sidebar_hidden ? kInset : sidebar_width;
-  return {x, kInset, window.w - x - kInset, window.h - 2 * kInset};
+  return {x, top_inset, window.w - x - kInset, window.h - top_inset - kInset};
 }
 }  // namespace panel
 
@@ -355,7 +372,9 @@ constexpr float ClampSidebarWidth(float w) {
 namespace reveal {
 inline constexpr double kDwell = 0.15;
 inline constexpr double kOuterEdgeDwell = 0.16;
-inline constexpr double kExitDelay = 0.15;  // guess
+inline constexpr double kExitDelay = 0.25;
+inline constexpr float kHoldRightMargin = 16;
+inline constexpr float kPassThroughVelocity = 1800.f;
 inline constexpr float kZoneUnit = 10;      // guess: the 10 pt content inset
 inline constexpr float kInnerEdgeWidth = 0.6f * kZoneUnit;
 inline constexpr float kInnerEdgeHeldMin = -2 * kZoneUnit;

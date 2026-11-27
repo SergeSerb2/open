@@ -7,17 +7,23 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/hash/hash.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_filter.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "cc/paint/paint_flags.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "content/public/browser/web_contents.h"
+#include "open_unified/ui/design/open_glyphs.h"
 #include "open_unified/ui/design/open_metrics.h"
 #include "open_unified/ui/design/open_motion.h"
 #include "open_unified/ui/design/open_theme_shader.h"
+#include "open_unified/ui/design/open_typography.h"
 #include "open_unified/ui/views/open_sidebar_view.h"
+#include "open_unified/ui/views/open_split_container_view.h"
+#include "open_unified/ui/views/open_window_controls_view.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/cursor/cursor.h"
@@ -41,6 +47,7 @@
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -85,10 +92,6 @@ theme::ContentAppearance ToAppearance(bool dark) {
               : theme::ContentAppearance::kLight;
 }
 
-#if !BUILDFLAG(IS_MAC)
-// Resize band inside the edges of a frameless (Windows / Linux) window.
-constexpr int kFrameResizeBorder = 8;
-#endif
 // Bound the favicon decode cache.
 constexpr size_t kFaviconCacheLimit = 512;
 
@@ -390,8 +393,15 @@ class OpenBrowserView::PanelShadowView : public views::View {
         opacity_(opacity),
         offset_y_(offset_y) {
     SetPaintToLayer(ui::LAYER_NINE_PATCH);
+    layer()->SetFillsBoundsOpaquely(false);
     SetCanProcessEventsWithinSubtree(false);
     margin_ = static_cast<int>(std::ceil(3 * sigma_ + std::abs(offset_y_))) + 1;
+  }
+
+  void SetOpacity(float opacity) {
+    if (layer()) {
+      layer()->SetOpacity(opacity);
+    }
   }
 
   // Places the shadow around `content` (parent coordinates).
@@ -480,9 +490,30 @@ class OpenBrowserView::PanelHostView : public views::View {
 
   // Tab fullscreen: square corners, edge to edge.
   void SetFullBleed(bool full_bleed) {
+    if (full_bleed_ == full_bleed) {
+      return;
+    }
+    full_bleed_ = full_bleed;
     layer()->SetRoundedCornerRadius(
         full_bleed ? gfx::RoundedCornersF()
                    : gfx::RoundedCornersF(m::panel::kCornerRadius));
+    SchedulePaint();
+  }
+
+  void SetSplitActive(bool split_active) {
+    if (split_active_ == split_active) {
+      return;
+    }
+    split_active_ = split_active;
+    SchedulePaint();
+  }
+
+  void SetDarkContent(bool dark_content) {
+    if (dark_content_ == dark_content) {
+      return;
+    }
+    dark_content_ = dark_content;
+    SchedulePaint();
   }
 
   // views::View:
@@ -493,8 +524,6 @@ class OpenBrowserView::PanelHostView : public views::View {
   }
 
   void OnPaint(gfx::Canvas* canvas) override {
-    // The panel draws no border stroke: only its 6 pt clip and the soft
-    // black 0.25 shadow (PanelShadowView) separate it from the theme.
     for (const views::View* child : children()) {
       if (child->GetVisible()) {
         return;
@@ -506,6 +535,34 @@ class OpenBrowserView::PanelHostView : public views::View {
                                  static_cast<U8CPU>(std::lround(
                                      m::panel::kEmptyFillWhiteAlpha * 255))));
   }
+
+  void PaintChildren(const views::PaintInfo& info) override {
+    views::View::PaintChildren(info);
+    if (full_bleed_ || split_active_ || GetLocalBounds().IsEmpty()) {
+      return;
+    }
+    ui::PaintRecorder recorder(info.context(), size());
+    gfx::Canvas* canvas = recorder.canvas();
+    const float dsf = std::max(1.0f, canvas->image_scale());
+    const float stroke_w = 1.0f / dsf;
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(stroke_w);
+    // Crisp 1 physical pixel inner rim: rgba(255,255,255,0.08) on dark Spaces,
+    // rgba(0,0,0,0.06) on light Spaces.
+    flags.setColor(dark_content_ ? SkColorSetARGB(20, 0xFF, 0xFF, 0xFF)
+                                 : SkColorSetARGB(15, 0x00, 0x00, 0x00));
+    gfx::RectF r(GetLocalBounds());
+    r.Inset(stroke_w * 0.5f);
+    canvas->DrawRoundRect(
+        r, std::max(0.0f, m::panel::kCornerRadius - stroke_w * 0.5f), flags);
+  }
+
+ private:
+  bool full_bleed_ = false;
+  bool split_active_ = false;
+  bool dark_content_ = false;
 };
 
 BEGIN_METADATA(OpenBrowserView, PanelHostView)
@@ -570,6 +627,14 @@ class OpenBrowserView::ResizeHandle : public views::View {
     owner_->OnResizeDrag(owner_->sidebar_width_, /*released=*/true);
   }
 
+  void OnMouseExited(const ui::MouseEvent& event) override {
+    if (!dragging_) {
+      if (views::Widget* w = GetWidget()) {
+        w->SetCursor(ui::Cursor());
+      }
+    }
+  }
+
  private:
   float Proposed(const ui::MouseEvent& event) const {
     gfx::Point p = event.location();
@@ -583,6 +648,80 @@ class OpenBrowserView::ResizeHandle : public views::View {
 };
 
 BEGIN_METADATA(OpenBrowserView, ResizeHandle)
+END_METADATA
+
+// ---------------------------------------------------------------------------
+// HiddenSidebarToggleButton: quiet 32 x 28 DIP toggle button shown in the
+// top caption strip on Windows/Linux whenever the sidebar is hidden.
+
+class OpenBrowserView::HiddenSidebarToggleButton : public views::Button {
+  METADATA_HEADER(HiddenSidebarToggleButton, views::Button)
+
+ public:
+  explicit HiddenSidebarToggleButton(PressedCallback callback)
+      : views::Button(std::move(callback)) {
+    SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+    SetInstallFocusRingOnFocus(false);
+    SetRequestFocusOnPress(false);
+    SetHasInkDropActionOnClick(false);
+    SetTooltipText(u"Toggle Sidebar");
+    GetViewAccessibility().SetName(u"Toggle Sidebar");
+  }
+
+  void SetThemeState(bool dark_content,
+                     bool window_active,
+                     bool increase_contrast) {
+    if (dark_content_ == dark_content && window_active_ == window_active &&
+        increase_contrast_ == increase_contrast) {
+      return;
+    }
+    dark_content_ = dark_content;
+    window_active_ = window_active;
+    increase_contrast_ = increase_contrast;
+    SchedulePaint();
+  }
+
+  // views::Button:
+  void StateChanged(ButtonState old_state) override {
+    views::Button::StateChanged(old_state);
+    SchedulePaint();
+  }
+
+  void PaintButtonContents(gfx::Canvas* canvas) override {
+    const gfx::RectF bounds(GetLocalBounds());
+    const ButtonState state = GetState();
+    if (state == STATE_HOVERED || state == STATE_PRESSED) {
+      cc::PaintFlags plate;
+      plate.setAntiAlias(true);
+      plate.setStyle(cc::PaintFlags::kFill_Style);
+      const uint8_t alpha =
+          state == STATE_PRESSED ? (dark_content_ ? 33 : 26)
+                                 : (dark_content_ ? 20 : 15);
+      plate.setColor(dark_content_ ? SkColorSetARGB(alpha, 0xFF, 0xFF, 0xFF)
+                                   : SkColorSetARGB(alpha, 0x00, 0x00, 0x00));
+      canvas->DrawRoundRect(bounds, m::chrome::kButtonPlateRadius, plate);
+    }
+    uint8_t glyph_alpha = 0;
+    if (increase_contrast_) {
+      glyph_alpha = window_active_ ? 255 : 191;
+    } else if (dark_content_) {
+      glyph_alpha = window_active_ ? 185 : 105;
+    } else {
+      glyph_alpha = window_active_ ? 175 : 105;
+    }
+    const SkColor color =
+        dark_content_ ? SkColorSetARGB(glyph_alpha, 0xFF, 0xFF, 0xFF)
+                      : SkColorSetARGB(glyph_alpha, 0x00, 0x00, 0x00);
+    glyphs::Draw(canvas, glyphs::Glyph::kSidebarToggle, bounds, color);
+  }
+
+ private:
+  bool dark_content_ = true;
+  bool window_active_ = true;
+  bool increase_contrast_ = false;
+};
+
+BEGIN_METADATA(OpenBrowserView, HiddenSidebarToggleButton)
 END_METADATA
 
 // ---------------------------------------------------------------------------
@@ -885,13 +1024,21 @@ views::NativeViewHost* OpenBrowserView::ActiveWebHolder() const {
 }
 
 void OpenBrowserView::ApplyWebCornerRadii() {
-  // Native web content is not clipped by the panel layer: its clipping
-  // window gets the panel's 6 pt corners (square in tab fullscreen).
+  // Native web content is not clipped by the panel layer: apply the panel's
+  // 6 pt corners (square in tab fullscreen) through MultiContentsView so its
+  // background and contents containers stay rounded, and also lock the active
+  // NativeViewHost directly as fallback and across tab switches.
+  const gfx::RoundedCornersF radii =
+      tab_fullscreen_applied_
+          ? gfx::RoundedCornersF()
+          : gfx::RoundedCornersF(m::panel::kCornerRadius);
+  if (auto* multi = views::AsViewClass<MultiContentsView>(
+          browser_contents_container_.get())) {
+    multi->SetShouldShowTopSeparator(false);
+    multi->SetBackgroundRadii(radii);
+  }
   if (views::NativeViewHost* holder = ActiveWebHolder()) {
-    holder->SetNativeViewCornerRadii(
-        tab_fullscreen_applied_
-            ? gfx::RoundedCornersF()
-            : gfx::RoundedCornersF(m::panel::kCornerRadius));
+    holder->SetNativeViewCornerRadii(radii);
   }
 }
 
@@ -905,10 +1052,22 @@ OpenBrowserView::OpenBrowserView(OpenViewController* controller,
       sidebar_width_(m::window::kDefaultSidebarWidth),
 #if BUILDFLAG(IS_MAC)
       window_controls_(WindowControls::kNativeMac)
+#elif BUILDFLAG(IS_WIN)
+      window_controls_(WindowControls::kWindowsFluent)
+#elif BUILDFLAG(IS_LINUX)
+      window_controls_(WindowControls::kLinuxCsd)
 #else
       window_controls_(WindowControls::kNone)
 #endif
 {
+#if BUILDFLAG(IS_LINUX)
+  if (OpenPlatform* platform = OpenPlatform::Get()) {
+    const LinuxWindowButtons linux_buttons = platform->GetLinuxWindowButtons();
+    if (linux_buttons.leading.empty() && linux_buttons.trailing.empty()) {
+      window_controls_ = WindowControls::kNone;
+    }
+  }
+#endif
   if (const BrowserWindowState* state = controller_->GetWindowState(window_id_)) {
     sidebar_width_ = m::window::ClampSidebarWidth(
         static_cast<float>(state->sidebar_width));
@@ -934,12 +1093,20 @@ OpenBrowserView::OpenBrowserView(OpenViewController* controller,
 
   resize_handle_ = AddChildView(std::make_unique<ResizeHandle>(this));
 
+  hidden_sidebar_toggle_ =
+      AddChildView(std::make_unique<HiddenSidebarToggleButton>(
+          base::BindRepeating(&OpenBrowserView::RequestToggleSidebar,
+                              base::Unretained(this))));
+  hidden_sidebar_toggle_->SetVisible(false);
+
   card_shadow_ = AddChildView(std::make_unique<PanelShadowView>(
       m::window::kRevealCardRadius, m::window::kRevealCardShadowRadius,
       m::window::kRevealCardShadowOpacity, 0));
   card_shadow_->SetVisible(false);
   reveal_card_ = AddChildView(std::make_unique<RevealCardView>());
   reveal_card_->SetVisible(false);
+
+  RebuildWindowControls();
 
   sidebar_slide_ = std::make_unique<motion::OpenSpringAnimator>(
       motion::kSidebarToggle,
@@ -961,12 +1128,14 @@ OpenBrowserView::OpenBrowserView(OpenViewController* controller,
   theme_background_->SetStyle(focused.style);
   reveal_card_->SetStyle(focused.style);
   shown_theme_space_ = FocusedSpaceId();
+  SyncWindowControlsState();
 
   GetViewAccessibility().SetRole(ax::mojom::Role::kClient);
   controller_->AddViewObserver(this);
 }
 
 OpenBrowserView::~OpenBrowserView() {
+  ReleaseMenuRevealLock();
   controller_->RemoveViewObserver(this);
   StopRevealMonitor();
   sidebar_slide_->SetCompositor(nullptr);
@@ -979,6 +1148,29 @@ const WindowID& OpenBrowserView::window_id() const {
 
 OpenViewController* OpenBrowserView::controller() const {
   return controller_;
+}
+
+void OpenBrowserView::RebindWindowId(const WindowID& window_id) {
+  window_id_ = window_id;
+  theme_cache_.clear();
+  shown_theme_space_.reset();
+  transition_space_.reset();
+  favicon_cache_.clear();
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  applied_material_.reset();
+#endif
+  SyncFromWindowState(/*animate=*/false);
+  InvalidateThemeCache();
+  sidebar_->OnSpacesChanged();
+  sidebar_->OnFavoritesChanged();
+  sidebar_->OnWindowStateChanged(/*animate=*/false);
+  sidebar_->OnActiveTabChanged();
+  SetSplitViewActive(controller_->IsSplitViewActive(window_id_));
+  UpdatePanelChildren();
+  ApplyWebCornerRadii();
+  SyncWindowControlsState();
+  InvalidateLayout();
+  UpdateWindowMaterial();
 }
 
 // --- Panel slots ---------------------------------------------------------------
@@ -1012,6 +1204,7 @@ views::View* OpenBrowserView::SetSplitContainer(
   if (container) {
     split_container_ = panel_host_->AddChildView(std::move(container));
     split_slide_client_ = slide_client;
+    SyncWindowControlsState();
   }
   UpdatePanelChildren();
   // A new child needs its bounds even when no visibility changed.
@@ -1047,6 +1240,13 @@ void OpenBrowserView::UpdatePanelChildren() {
   set_visible(split_container_, split);
   set_visible(web_contents_host_, !split && has_tab);
   set_visible(browser_contents_container_, !split && has_tab);
+  // In Split View each split pane renders its own shadow, so hide the outer
+  // single-panel shadow and unmask panel_host_ so pane shadows never clip.
+  panel_shadow_->SetVisible(!tab_fullscreen_applied_ && !split);
+  panel_host_->SetSplitActive(split);
+  if (panel_host_->layer()) {
+    panel_host_->layer()->SetMasksToBounds(!split);
+  }
   if (changed) {
     panel_host_->InvalidateLayout();
     panel_host_->SchedulePaint();
@@ -1086,6 +1286,11 @@ views::View* OpenBrowserView::GetOverlay(OverlaySlot slot) const {
 
 views::View* OpenBrowserView::GetUrlPillView() const {
   return sidebar_->url_pill();
+}
+
+gfx::Rect OpenBrowserView::UrlPillScreenBounds() const {
+  views::View* pill = GetUrlPillView();
+  return (pill && pill->IsDrawn()) ? pill->GetBoundsInScreen() : gfx::Rect();
 }
 
 views::View* OpenBrowserView::GetSiteControlAnchorView() const {
@@ -1139,10 +1344,108 @@ void OpenBrowserView::SyncFromWindowState(bool animate) {
   SetSidebarHidden(state->sidebar_mode == SidebarMode::kHidden, animate);
 }
 
+bool OpenBrowserView::HasCaptionStrip() const {
+  if (tab_fullscreen_applied_) {
+    return false;
+  }
+  if (window_controls_ != WindowControls::kWindowsFluent &&
+      window_controls_ != WindowControls::kLinuxCsd) {
+    return false;
+  }
+  if (const views::Widget* widget = GetWidget();
+      widget && widget->IsFullscreen()) {
+    return false;
+  }
+  return true;
+}
+
+void OpenBrowserView::RebuildWindowControls() {
+  if (window_controls_view_) {
+    views::View* doomed = window_controls_view_.ExtractAsDangling();
+    RemoveChildViewT(doomed);
+  }
+  if (leading_window_controls_view_) {
+    views::View* doomed = leading_window_controls_view_.ExtractAsDangling();
+    RemoveChildViewT(doomed);
+  }
+  // Keep caption controls above theme_background_/resize_handle_ and below
+  // card_shadow_/reveal_card_ (and overlay_host_).
+  size_t insert_index = children().size();
+  if (card_shadow_ && card_shadow_->parent() == this) {
+    insert_index = GetIndexOf(card_shadow_.get()).value_or(insert_index);
+  } else if (reveal_card_ && reveal_card_->parent() == this) {
+    insert_index = GetIndexOf(reveal_card_.get()).value_or(insert_index);
+  }
+
+  if (window_controls_ == WindowControls::kWindowsFluent) {
+    window_controls_view_ = AddChildViewAt(
+        std::make_unique<OpenWindowControlsView>(
+            OpenWindowControlsView::Mode::kWindowsFluent),
+        insert_index);
+  } else if (window_controls_ == WindowControls::kLinuxCsd) {
+    LinuxWindowButtons buttons;
+    if (OpenPlatform* platform = OpenPlatform::Get()) {
+      buttons = platform->GetLinuxWindowButtons();
+    } else {
+      buttons.trailing = {WindowControlButton::kMinimize,
+                          WindowControlButton::kMaximize,
+                          WindowControlButton::kClose};
+    }
+    if (!buttons.leading.empty()) {
+      leading_window_controls_view_ = AddChildViewAt(
+          std::make_unique<OpenWindowControlsView>(
+              OpenWindowControlsView::Mode::kLinuxCsd, buttons.leading),
+          insert_index++);
+    }
+    if (!buttons.trailing.empty()) {
+      window_controls_view_ = AddChildViewAt(
+          std::make_unique<OpenWindowControlsView>(
+              OpenWindowControlsView::Mode::kLinuxCsd, buttons.trailing),
+          insert_index);
+    }
+  }
+  SyncWindowControlsState();
+  InvalidateLayout();
+}
+
+void OpenBrowserView::SyncWindowControlsState() {
+  const OpenSpaceThemeState& state = FocusedThemeState();
+  const bool dark_content =
+      state.roles.content == theme::ContentAppearance::kDark;
+  const bool ic = controller_->IsIncreaseContrastEnabled();
+  const bool maximized = GetWidget() && GetWidget()->IsMaximized();
+
+  if (panel_host_) {
+    panel_host_->SetDarkContent(dark_content);
+  }
+  if (auto* split = views::AsViewClass<OpenSplitContainerView>(
+          split_container_.get())) {
+    split->SetDarkContent(dark_content);
+  }
+  if (window_controls_view_) {
+    window_controls_view_->SetThemeState(dark_content, window_active_, ic);
+    window_controls_view_->SetMaximized(maximized);
+  }
+  if (leading_window_controls_view_) {
+    leading_window_controls_view_->SetThemeState(dark_content, window_active_,
+                                                 ic);
+    leading_window_controls_view_->SetMaximized(maximized);
+  }
+  if (hidden_sidebar_toggle_) {
+    hidden_sidebar_toggle_->SetThemeState(dark_content, window_active_, ic);
+  }
+}
+
 gfx::Rect OpenBrowserView::PanelBoundsFor(bool hidden, float width) const {
+  const float top_inset =
+      tab_fullscreen_applied_
+          ? 0.0f
+          : (HasCaptionStrip()
+                 ? static_cast<float>(m::win_controls::kStripHeight)
+                 : m::panel::kInset);
   const m::Frame f = m::panel::PanelFrame(
       {static_cast<float>(this->width()), static_cast<float>(height())}, width,
-      hidden);
+      hidden, top_inset);
   return gfx::ToEnclosingRect(gfx::RectF(f.x, f.y, std::max(0.0f, f.w),
                                          std::max(0.0f, f.h)));
 }
@@ -1319,6 +1622,50 @@ void OpenBrowserView::StopRevealMonitor() {
   reveal_dwell_timer_.Stop();
   reveal_exit_timer_.Stop();
   last_reveal_point_.reset();
+  prev_reveal_point_.reset();
+  prev_reveal_time_ = base::TimeTicks();
+  reveal_suppressed_by_velocity_ = false;
+}
+
+void OpenBrowserView::IncrementRevealHoldLock() {
+  ++reveal_hold_locks_;
+  reveal_exit_timer_.Stop();
+}
+
+void OpenBrowserView::DecrementRevealHoldLock() {
+  reveal_hold_locks_ = std::max(0, reveal_hold_locks_ - 1);
+  if (reveal_hold_locks_ == 0 && IsRevealCardShown() && !IsRevealHoldLocked() &&
+      last_reveal_point_ && !PointInHoldZone(*last_reveal_point_) &&
+      !reveal_exit_timer_.IsRunning()) {
+    reveal_exit_timer_.Start(FROM_HERE, motion::Seconds(m::reveal::kExitDelay),
+                             base::BindOnce(&OpenBrowserView::HideRevealCard,
+                                            base::Unretained(this)));
+  }
+}
+
+bool OpenBrowserView::IsRevealHoldLocked() const {
+  if (reveal_hold_locks_ > 0) {
+    return true;
+  }
+  const views::Widget* widget = GetWidget();
+  if (widget && widget->GetNativeView()) {
+    for (views::Widget* owned :
+         views::Widget::GetAllOwnedWidgets(widget->GetNativeView())) {
+      if (owned && owned != widget && owned->IsVisible() &&
+          owned->widget_delegate() &&
+          owned->widget_delegate()->AsBubbleDialogDelegate() != nullptr) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void OpenBrowserView::ReleaseMenuRevealLock() {
+  if (menu_holding_reveal_lock_) {
+    menu_holding_reveal_lock_ = false;
+    DecrementRevealHoldLock();
+  }
 }
 
 gfx::Rect OpenBrowserView::RevealCardBounds() const {
@@ -1339,14 +1686,24 @@ bool OpenBrowserView::PointInRevealZone(const gfx::Point& p) const {
 }
 
 bool OpenBrowserView::PointInHoldZone(const gfx::Point& p) const {
-  if (RevealCardBounds().Contains(p)) {
+  gfx::Rect card_hold = RevealCardBounds();
+  card_hold.set_width(card_hold.width() +
+                      static_cast<int>(m::reveal::kHoldRightMargin));
+  if (card_hold.Contains(p)) {
     return true;
   }
   const bool inner_held = p.x() >= m::reveal::kInnerEdgeHeldMin &&
                           p.x() < m::reveal::kInnerEdgeHeldMax;
-  const bool lights = p.x() < m::chrome::kSidebarToggleX + m::window::kRevealCardInset &&
-                      p.y() < m::reveal::kTrafficLightRegionHeight;
-  return inner_held || lights;
+#if BUILDFLAG(IS_MAC)
+  const bool top_hold =
+      p.x() < m::chrome::kSidebarToggleX + m::window::kRevealCardInset &&
+      p.y() < m::reveal::kTrafficLightRegionHeight;
+#else
+  const bool top_hold =
+      p.x() >= 0 && p.x() < 56 && p.y() >= 0 &&
+      p.y() < m::win_controls::kStripHeight;
+#endif
+  return inner_held || top_hold;
 }
 
 void OpenBrowserView::OnRevealEvent(const ui::Event& event) {
@@ -1358,25 +1715,54 @@ void OpenBrowserView::OnRevealEvent(const ui::Event& event) {
     // Leaving through the left edge stays in the held outer-edge zone.
     const bool left_edge =
         last_reveal_point_ && last_reveal_point_->x() < m::reveal::kInnerEdgeHeldMax;
-    if (IsRevealCardShown() && !left_edge && !reveal_exit_timer_.IsRunning()) {
+    if (IsRevealCardShown() && !left_edge && !IsRevealHoldLocked() &&
+        !reveal_exit_timer_.IsRunning()) {
       reveal_exit_timer_.Start(FROM_HERE, motion::Seconds(m::reveal::kExitDelay),
                                base::BindOnce(&OpenBrowserView::HideRevealCard,
                                               base::Unretained(this)));
     }
     reveal_dwell_timer_.Stop();
+    prev_reveal_point_.reset();
+    prev_reveal_time_ = base::TimeTicks();
+    reveal_suppressed_by_velocity_ = false;
     return;
   }
   gfx::Point p = reveal_monitor_->GetLastMouseLocation();
   views::View::ConvertPointFromScreen(this, &p);
+  const base::TimeTicks now = event.time_stamp().is_null()
+                                  ? base::TimeTicks::Now()
+                                  : event.time_stamp();
+  const bool in_reveal = PointInRevealZone(p);
+  if (prev_reveal_point_ && !prev_reveal_time_.is_null()) {
+    const double dt = (now - prev_reveal_time_).InSecondsF();
+    if (dt > 0.0005) {
+      const double dx = static_cast<double>(p.x() - prev_reveal_point_->x());
+      const double dy = static_cast<double>(p.y() - prev_reveal_point_->y());
+      const double vx = dx / dt;
+      const double speed = std::hypot(dx, dy) / dt;
+      if (in_reveal && vx < -m::reveal::kPassThroughVelocity) {
+        reveal_suppressed_by_velocity_ = true;
+        reveal_dwell_timer_.Stop();
+      } else if (reveal_suppressed_by_velocity_ && speed < 400.0) {
+        reveal_suppressed_by_velocity_ = false;
+      }
+    }
+  }
+  prev_reveal_point_ = p;
+  prev_reveal_time_ = now;
+  if (!in_reveal) {
+    reveal_suppressed_by_velocity_ = false;
+  }
   last_reveal_point_ = p;
   if (card_state_ == CardState::kOff || card_state_ == CardState::kHiding) {
-    if (PointInRevealZone(p)) {
-      if (!reveal_dwell_timer_.IsRunning()) {
+    if (in_reveal) {
+      if (!reveal_suppressed_by_velocity_ && !reveal_dwell_timer_.IsRunning()) {
         reveal_dwell_timer_.Start(
             FROM_HERE, motion::Seconds(m::reveal::kDwell),
             base::BindOnce(
                 [](OpenBrowserView* self) {
                   if (self->last_reveal_point_ &&
+                      !self->reveal_suppressed_by_velocity_ &&
                       (self->PointInRevealZone(*self->last_reveal_point_) ||
                        self->PointInHoldZone(*self->last_reveal_point_))) {
                     self->ShowRevealCard();
@@ -1389,7 +1775,7 @@ void OpenBrowserView::OnRevealEvent(const ui::Event& event) {
     }
     return;
   }
-  if (PointInHoldZone(p)) {
+  if (PointInHoldZone(p) || IsRevealHoldLocked()) {
     reveal_exit_timer_.Stop();
   } else if (!reveal_exit_timer_.IsRunning()) {
     reveal_exit_timer_.Start(FROM_HERE, motion::Seconds(m::reveal::kExitDelay),
@@ -1427,7 +1813,8 @@ void OpenBrowserView::ShowRevealCard() {
 }
 
 void OpenBrowserView::HideRevealCard() {
-  if (card_state_ == CardState::kOff || card_state_ == CardState::kHiding) {
+  if (card_state_ == CardState::kOff || card_state_ == CardState::kHiding ||
+      IsRevealHoldLocked()) {
     return;
   }
   card_state_ = CardState::kHiding;
@@ -1539,6 +1926,8 @@ void OpenBrowserView::InvalidateThemeCache() {
   reveal_card_->SetStyle(focused.style);
   shown_theme_space_ = FocusedSpaceId();
   sidebar_->OnAppearanceChanged();
+  SyncWindowControlsState();
+  ApplyWebCornerRadii();
   UpdateWindowMaterial();
 }
 
@@ -1571,6 +1960,7 @@ void OpenBrowserView::EndThemeTransition(bool commit) {
     reveal_card_->SetStyle(ThemeStateFor(*transition_space_).style);
   }
   transition_space_.reset();
+  SyncWindowControlsState();
   UpdateWindowMaterial();
 }
 
@@ -1583,6 +1973,7 @@ void OpenBrowserView::CrossfadeTheme(const SpaceID& to, bool animated) {
   }
   reveal_card_->SetStyle(style);
   shown_theme_space_ = to;
+  SyncWindowControlsState();
   UpdateWindowMaterial();
 }
 
@@ -1609,6 +2000,7 @@ void OpenBrowserView::ShowSidebarMenu(const OpenMenuTarget& target,
   if (!GetWidget()) {
     return;
   }
+  ReleaseMenuRevealLock();
   menu_runner_.reset();
   menu_model_ = controller_->CreateMenuModel(window_id_, target);
   if (!menu_model_ && target.kind == OpenMenuTarget::Kind::kPlusButton) {
@@ -1619,9 +2011,13 @@ void OpenBrowserView::ShowSidebarMenu(const OpenMenuTarget& target,
   if (!menu_model_) {
     return;
   }
+  menu_holding_reveal_lock_ = true;
+  IncrementRevealHoldLock();
   menu_runner_ = std::make_unique<views::MenuRunner>(
       menu_model_.get(),
-      views::MenuRunner::CONTEXT_MENU | views::MenuRunner::HAS_MNEMONICS);
+      views::MenuRunner::CONTEXT_MENU | views::MenuRunner::HAS_MNEMONICS,
+      base::BindRepeating(&OpenBrowserView::ReleaseMenuRevealLock,
+                          weak_factory_.GetWeakPtr()));
   menu_runner_->RunMenuAt(GetWidget(), nullptr,
                           gfx::Rect(screen_point, gfx::Size()),
                           views::MenuAnchorPosition::kTopLeft, source_type);
@@ -1636,8 +2032,10 @@ gfx::ImageSkia OpenBrowserView::FaviconFor(const Tab& tab) {
   if (png.empty()) {
     return gfx::ImageSkia();
   }
+  const size_t png_hash = base::FastHash(png);
   auto it = favicon_cache_.find(tab.id);
-  if (it != favicon_cache_.end() && it->second.png_size == png.size()) {
+  if (it != favicon_cache_.end() && it->second.png_size == png.size() &&
+      it->second.png_hash == png_hash) {
     return it->second.image;
   }
   const SkBitmap bitmap = gfx::PNGCodec::Decode(png);
@@ -1649,7 +2047,9 @@ gfx::ImageSkia OpenBrowserView::FaviconFor(const Tab& tab) {
   }
   FaviconEntry& entry = favicon_cache_[tab.id];
   entry.png_size = png.size();
-  entry.image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+  entry.png_hash = png_hash;
+  const float scale = bitmap.width() >= 32 ? 2.0f : 1.0f;
+  entry.image = gfx::ImageSkia(gfx::ImageSkiaRep(bitmap, scale));
   return entry.image;
 }
 
@@ -1659,33 +2059,75 @@ int OpenBrowserView::NonClientHitTest(const gfx::Point& point) const {
   if (!GetLocalBounds().Contains(point)) {
     return HTNOWHERE;
   }
-#if !BUILDFLAG(IS_MAC)
-  // Open removes the native frame (WantsFramelessWindow()), so on Windows and
-  // Linux this view supplies the resize edges. macOS keeps the titled
-  // NSWindow and its system resize edges.
+  // When the hover-reveal sidebar card is open inside overlay_host_, let it
+  // handle hits before checking caption controls or HTCAPTION strip areas.
+  if (IsRevealCardShown() && reveal_card_ && reveal_card_->GetVisible()) {
+    gfx::Point card_pt = point;
+    views::View::ConvertPointToTarget(this, reveal_card_.get(), &card_pt);
+    if (reveal_card_->GetLocalBounds().Contains(card_pt)) {
+      views::View* card_target =
+          const_cast<RevealCardView*>(reveal_card_.get())
+              ->GetEventHandlerForPoint(card_pt);
+      if (card_target && card_target->GetProperty(kOpenWindowDragKey)) {
+        return HTCAPTION;
+      }
+      return HTCLIENT;
+    }
+  }
+  // Check client-side caption controls first so HTMINBUTTON / HTMAXBUTTON /
+  // HTCLOSE win immediately (enabling Windows 11 Snap Layouts).
+  for (const OpenWindowControlsView* controls :
+       {window_controls_view_.get(), leading_window_controls_view_.get()}) {
+    if (controls && controls->GetVisible()) {
+      gfx::Point local = point;
+      views::View::ConvertPointToTarget(this, controls, &local);
+      const int code = controls->HitTestCode(local);
+      if (code != HTNOWHERE) {
+        return code;
+      }
+    }
+  }
+#if BUILDFLAG(IS_LINUX)
+  // On Linux CSD, this view supplies the inner resize edges (Windows uses
+  // native DWM borders via BrowserFrameViewWin; macOS keeps system edges).
   const views::Widget* widget = GetWidget();
   const bool can_resize =
       widget && !widget->IsMaximized() && !widget->IsFullscreen() &&
       (!widget->widget_delegate() || widget->widget_delegate()->CanResize());
   if (WantsFramelessWindow() && can_resize) {
-    const bool left = point.x() < kFrameResizeBorder;
-    const bool right = point.x() >= width() - kFrameResizeBorder;
-    const bool top = point.y() < kFrameResizeBorder;
-    const bool bottom = point.y() >= height() - kFrameResizeBorder;
-    if (top && left) return HTTOPLEFT;
-    if (top && right) return HTTOPRIGHT;
-    if (bottom && left) return HTBOTTOMLEFT;
-    if (bottom && right) return HTBOTTOMRIGHT;
+    constexpr int kEdge = 6;
+    constexpr int kHiddenLeftEdge = 4;
+    constexpr int kCorner = 14;
+    const int left_edge = sidebar_hidden_ ? kHiddenLeftEdge : kEdge;
+    const bool left = point.x() < left_edge;
+    const bool right = point.x() >= width() - kEdge;
+    const bool top = point.y() < kEdge;
+    const bool bottom = point.y() >= height() - kEdge;
+    const bool near_left = point.x() < kCorner;
+    const bool near_right = point.x() >= width() - kCorner;
+    const bool near_top = point.y() < kCorner;
+    const bool near_bottom = point.y() >= height() - kCorner;
+    if ((top && near_left) || (left && near_top)) return HTTOPLEFT;
+    if ((top && near_right) || (right && near_top)) return HTTOPRIGHT;
+    if ((bottom && near_left) || (left && near_bottom)) return HTBOTTOMLEFT;
+    if ((bottom && near_right) || (right && near_bottom)) return HTBOTTOMRIGHT;
     if (left) return HTLEFT;
     if (right) return HTRIGHT;
     if (top) return HTTOP;
     if (bottom) return HTBOTTOM;
   }
-#endif  // !BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_LINUX)
+  if (HasCaptionStrip() && point.y() < m::win_controls::kStripHeight) {
+    if (hidden_sidebar_toggle_ && hidden_sidebar_toggle_->GetVisible() &&
+        hidden_sidebar_toggle_->bounds().Contains(point)) {
+      return HTCLIENT;
+    }
+  }
   views::View* target =
       const_cast<OpenBrowserView*>(this)->GetEventHandlerForPoint(point);
   if (!target || target == this) {
-    // The 10 pt frame inset and anything behind the panel: drag the window.
+    // The top caption strip, 10 pt frame inset, and empty frame area drag the
+    // window.
     return HTCAPTION;
   }
   // Empty drag regions (the sidebar's top bar background) are tagged; the
@@ -1698,11 +2140,15 @@ int OpenBrowserView::NonClientHitTest(const gfx::Point& point) const {
 }
 
 void OpenBrowserView::SetWindowControls(WindowControls controls) {
+  if (window_controls_ == controls) {
+    return;
+  }
   window_controls_ = controls;
   sidebar_->SetWindowControlsSlot(
       controls == WindowControls::kNativeMac
           ? OpenSidebarView::WindowControlsSlot::kNativeReserved
           : OpenSidebarView::WindowControlsSlot::kNone);
+  RebuildWindowControls();
 }
 
 void OpenBrowserView::SetTrafficLightsCallback(TrafficLightsCallback callback) {
@@ -1718,12 +2164,42 @@ void OpenBrowserView::SetClipsWindowCorners(bool clips) {
   if (clips) {
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
-    layer()->SetRoundedCornerRadius(
-        gfx::RoundedCornersF(m::window::kCornerRadius));
+#if BUILDFLAG(IS_LINUX)
+    const float radius = static_cast<float>(m::win_controls::kLinuxCornerRadius);
+#else
+    const float radius = m::window::kCornerRadius;
+#endif
+    layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(radius));
     layer()->SetIsFastRoundedCorner(true);
+    layer()->SetMasksToBounds(true);
   } else if (layer()) {
     layer()->SetRoundedCornerRadius(gfx::RoundedCornersF());
+    layer()->SetMasksToBounds(false);
   }
+  SchedulePaint();
+}
+
+void OpenBrowserView::PaintChildren(const views::PaintInfo& info) {
+  views::View::PaintChildren(info);
+#if BUILDFLAG(IS_LINUX)
+  if (!clips_window_corners_ || GetLocalBounds().IsEmpty()) {
+    return;
+  }
+  ui::PaintRecorder recorder(info.context(), size());
+  const OpenSpaceThemeState& state = FocusedThemeState();
+  const bool dark = state.roles.content == theme::ContentAppearance::kDark;
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(1.0f);
+  // Subtle 1 DIP inner window rim when restored on Linux CSD.
+  flags.setColor(dark ? SkColorSetARGB(31, 0xFF, 0xFF, 0xFF)
+                      : SkColorSetARGB(36, 0x00, 0x00, 0x00));
+  gfx::RectF r(GetLocalBounds());
+  r.Inset(0.5f);
+  recorder.canvas()->DrawRoundRect(
+      r, static_cast<float>(m::win_controls::kLinuxCornerRadius) - 0.5f, flags);
+#endif
 }
 
 // --- Layout -----------------------------------------------------------------------------
@@ -1770,23 +2246,75 @@ void OpenBrowserView::Layout(PassKey) {
       sidebar_->SetVisible(false);
     }
     resize_handle_->SetVisible(false);
+    if (window_controls_view_) {
+      window_controls_view_->SetVisible(false);
+    }
+    if (leading_window_controls_view_) {
+      leading_window_controls_view_->SetVisible(false);
+    }
+    if (hidden_sidebar_toggle_) {
+      hidden_sidebar_toggle_->SetVisible(false);
+    }
+    ApplyWebCornerRadii();
     LayoutOverlays();
     NotifyTrafficLights();
     return;
+  }
+  const bool show_caption_strip = HasCaptionStrip();
+  if (window_controls_view_) {
+    window_controls_view_->SetVisible(show_caption_strip);
+    if (show_caption_strip) {
+      if (window_controls_ == WindowControls::kWindowsFluent) {
+        window_controls_view_->SetBounds(
+            width() - m::win_controls::kWinClusterW, 0,
+            m::win_controls::kWinClusterW, m::win_controls::kStripHeight);
+      } else {
+        const gfx::Size pref = window_controls_view_->GetPreferredSize();
+        window_controls_view_->SetBounds(
+            width() - pref.width() - m::win_controls::kLinuxOuterMargin, 2,
+            pref.width(), m::win_controls::kLinuxButtonSize);
+      }
+    }
+  }
+  if (leading_window_controls_view_) {
+    leading_window_controls_view_->SetVisible(show_caption_strip);
+    if (show_caption_strip) {
+      const gfx::Size pref = leading_window_controls_view_->GetPreferredSize();
+      leading_window_controls_view_->SetBounds(
+          m::win_controls::kLinuxOuterMargin, 2, pref.width(),
+          m::win_controls::kLinuxButtonSize);
+    }
+  }
+  if (hidden_sidebar_toggle_) {
+    const bool show_toggle = show_caption_strip && sidebar_hidden_ && !sliding_;
+    hidden_sidebar_toggle_->SetVisible(show_toggle);
+    if (show_toggle) {
+      int toggle_x = 10;
+      if (leading_window_controls_view_ &&
+          leading_window_controls_view_->GetVisible()) {
+        toggle_x = leading_window_controls_view_->bounds().right() + 8;
+      }
+      hidden_sidebar_toggle_->SetBounds(toggle_x, 2, 32, 28);
+    }
   }
   const int w = static_cast<int>(std::lround(sidebar_width_));
   if (!sliding_) {
     LayoutPanel(PanelBoundsFor(sidebar_hidden_, sidebar_width_));
   }
+  const int sidebar_top =
+      (show_caption_strip && leading_window_controls_view_)
+          ? m::win_controls::kStripHeight
+          : 0;
   if (sidebar_->parent() == this) {
-    sidebar_->SetBounds(0, 0, w, height());
+    sidebar_->SetBounds(0, sidebar_top, w, std::max(0, height() - sidebar_top));
     if (!sliding_) {
       sidebar_->layer()->SetTransform(gfx::Transform());
       sidebar_->SetVisible(!sidebar_hidden_);
     }
   }
   const int handle = static_cast<int>(m::window::kResizeHandleWidth);
-  resize_handle_->SetBounds(w - handle / 2, 0, handle, height());
+  const gfx::Rect panel = panel_host_->bounds();
+  resize_handle_->SetBounds(w - handle, panel.y(), handle, panel.height());
   resize_handle_->SetVisible(!sliding_ && (!sidebar_hidden_ || resizing_));
   const gfx::Rect card = RevealCardBounds();
   reveal_card_->SetBoundsRect(card);
@@ -1795,6 +2323,7 @@ void OpenBrowserView::Layout(PassKey) {
   if (sidebar_->parent() == reveal_card_.get()) {
     sidebar_->SetBounds(0, 0, card.width(), card.height());
   }
+  ApplyWebCornerRadii();
   LayoutOverlays();
   NotifyTrafficLights();
 }
@@ -1812,12 +2341,17 @@ void OpenBrowserView::AddedToWidget() {
           &OpenBrowserView::OnPaintAsActiveChanged, base::Unretained(this)));
   theme_background_->SetActive(window_active_);
   reveal_card_->SetActive(window_active_);
+  panel_shadow_->SetOpacity(window_active_ ? 1.0f : 0.55f);
   sidebar_slide_->SetCompositor(widget->GetCompositor());
   card_motion_->SetCompositor(widget->GetCompositor());
   SyncFromWindowState(/*animate=*/false);
   if (sidebar_hidden_) {
     StartRevealMonitor();
   }
+#if BUILDFLAG(IS_LINUX)
+  SetClipsWindowCorners(!widget->IsMaximized() && !widget->IsFullscreen());
+#endif
+  SyncWindowControlsState();
   UpdateWindowMaterial();
   NotifyTrafficLights();
 }
@@ -1832,8 +2366,19 @@ void OpenBrowserView::RemovedFromWidget() {
 
 void OpenBrowserView::OnThemeChanged() {
   views::View::OnThemeChanged();
+  typography::InvalidateCache();
   // Native theme changes (e.g. high contrast) can change roles.
   InvalidateThemeCache();
+  InvalidateLayout();
+}
+
+void OpenBrowserView::OnDeviceScaleFactorChanged(
+    float old_device_scale_factor,
+    float new_device_scale_factor) {
+  views::View::OnDeviceScaleFactorChanged(old_device_scale_factor,
+                                          new_device_scale_factor);
+  typography::InvalidateCache();
+  InvalidateLayout();
 }
 
 // --- views::WidgetObserver ------------------------------------------------------
@@ -1843,6 +2388,22 @@ void OpenBrowserView::OnWidgetActivationChanged(views::Widget* widget,
   // Raw activation also flips when a child overlay takes key status; the
   // paint-as-active state (which honors the overlay's lock) decides.
   OnPaintAsActiveChanged();
+}
+
+void OpenBrowserView::OnWidgetBoundsChanged(views::Widget* widget,
+                                            const gfx::Rect& new_bounds) {
+  if (!widget || widget != GetWidget()) {
+    return;
+  }
+#if BUILDFLAG(IS_LINUX)
+  SetClipsWindowCorners(!widget->IsMaximized() && !widget->IsFullscreen());
+#endif
+  if (OpenPlatform* platform = OpenPlatform::Get()) {
+    platform->SetFullscreenCornerState(
+        widget, tab_fullscreen_applied_ || widget->IsFullscreen());
+  }
+  SyncWindowControlsState();
+  InvalidateLayout();
 }
 
 void OpenBrowserView::OnPaintAsActiveChanged() {
@@ -1857,7 +2418,9 @@ void OpenBrowserView::OnPaintAsActiveChanged() {
   window_active_ = active;
   theme_background_->SetActive(active);
   reveal_card_->SetActive(active);
+  panel_shadow_->SetOpacity(active ? 1.0f : 0.55f);
   sidebar_->OnWindowActivationChanged();
+  SyncWindowControlsState();
   UpdateWindowMaterial();
 }
 
@@ -1890,7 +2453,8 @@ void OpenBrowserView::ApplyTabFullscreen(bool fullscreen) {
   }
   tab_fullscreen_applied_ = fullscreen;
   panel_host_->SetFullBleed(fullscreen);
-  panel_shadow_->SetVisible(!fullscreen);
+  const bool split = split_view_active_ && split_container_;
+  panel_shadow_->SetVisible(!fullscreen && !split);
   if (fullscreen) {
     // No card and no reveal while the page is fullscreen.
     reveal_dwell_timer_.Stop();
@@ -1912,14 +2476,19 @@ void OpenBrowserView::ApplyTabFullscreen(bool fullscreen) {
   } else if (sidebar_hidden_) {
     StartRevealMonitor();
   }
+  if (OpenPlatform* platform = OpenPlatform::Get()) {
+    const bool any_fullscreen =
+        tab_fullscreen_applied_ || (GetWidget() && GetWidget()->IsFullscreen());
+    platform->SetFullscreenCornerState(GetWidget(), any_fullscreen);
+  }
   ApplyWebCornerRadii();
   NotifyTrafficLights();
 }
 
-// --- macOS window material -------------------------------------------------
+// --- Window material (macOS vibrancy / Windows 11 Mica) --------------------
 
 void OpenBrowserView::EnableTranslucentChrome() {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   if (translucent_chrome_enabled_ || !browser_view_) {
     return;
   }
@@ -1930,10 +2499,9 @@ void OpenBrowserView::EnableTranslucentChrome() {
     return;
   }
   translucent_chrome_enabled_ = true;
-  // BrowserFrameViewMac paints the opaque frame color under the whole
-  // window, and the ClientView (BrowserView) is its child. BrowserView gets
-  // its own transparent layer, so the browser's views still draw; the frame
-  // view's own layer is LAYER_NOT_DRAWN, which drops only its frame paint.
+  // The native browser frame paints an opaque background under the window;
+  // give BrowserView a non-opaque layer and mark the frame view LAYER_NOT_DRAWN
+  // so macOS vibrancy / Windows 11 Mica shows cleanly under theme_background_.
   browser_view_->SetPaintToLayer();
   browser_view_->layer()->SetFillsBoundsOpaquely(false);
   frame->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
@@ -1941,16 +2509,23 @@ void OpenBrowserView::EnableTranslucentChrome() {
 }
 
 void OpenBrowserView::UpdateWindowMaterial() {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   views::Widget* widget = GetWidget();
   OpenPlatform* platform = OpenPlatform::Get();
-  if (!widget || !platform || window_controls_ != WindowControls::kNativeMac) {
+  if (!widget || !platform) {
     return;
   }
+#if BUILDFLAG(IS_MAC)
+  if (window_controls_ != WindowControls::kNativeMac) {
+    return;
+  }
+#endif
   const OpenSpaceThemeState& state = FocusedThemeState();
+#if BUILDFLAG(IS_MAC)
   platform->SetWindowButtonsTone(
       widget, state.roles.content == theme::ContentAppearance::kDark,
       window_active_);
+#endif
   const theme::ThemeStyle& style = state.style;
   WindowMaterialSpec spec;
   spec.vibrant = style.is_vibrant;
@@ -2017,6 +2592,7 @@ void OpenBrowserView::OnSpaceThemeChanged(const SpaceID& space_id) {
     const theme::ThemeStyle& style = ThemeStateFor(space_id).style;
     theme_background_->SetStyle(style);
     reveal_card_->SetStyle(style);
+    SyncWindowControlsState();
     UpdateWindowMaterial();
   }
   sidebar_->OnSpaceThemeChanged(space_id);
@@ -2035,6 +2611,8 @@ void OpenBrowserView::OnWindowStateChanged(const WindowID& window_id) {
   // The pager slides the strip and drives the background cross-fade.
   sidebar_->OnWindowStateChanged(animate);
   UpdatePanelChildren();
+  ApplyWebCornerRadii();
+  SyncWindowControlsState();
   if (IsRevealCardShown()) {
     reveal_card_->SetStyle(FocusedThemeState().style);
   }

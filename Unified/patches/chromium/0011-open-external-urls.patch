@@ -139,3 +139,41 @@ diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controlle
    if (!startupTabs.empty()) {
      [self openStartupTabsReplacingNTP:std::move(startupTabs)];
    }
+diff --git a/chrome/browser/lifetime/browser_close_manager.cc b/chrome/browser/lifetime/browser_close_manager.cc
+--- a/chrome/browser/lifetime/browser_close_manager.cc
++++ b/chrome/browser/lifetime/browser_close_manager.cc
+@@ -32,6 +32,12 @@
+ #include "chrome/browser/ui/unload_controller.h"
+ #include "chrome/common/buildflags.h"
+ #include "content/public/browser/web_contents.h"
++// open_unified hook 0011-bcm-include begin
++#include "open_unified/buildflags.h"
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
++#include "open_unified/browser/open_chromium_hooks.h"  // nogncheck
++#endif
++// open_unified hook 0011-bcm-include end
+ 
+ #if BUILDFLAG(ENABLE_CHROME_NOTIFICATIONS)
+ #include "chrome/browser/notifications/notification_ui_manager.h"
+@@ -67,6 +73,21 @@
+     CloseBrowsers();
+     return;
+   }
++  // open_unified hook 0011-bcm-should-terminate begin
++#if BUILDFLAG(OPEN_UNIFIED_BROWSER)
++#if !BUILDFLAG(IS_MAC)
++  // Open Unified: Warn Before Quitting + active Downloads guard on
++  // Windows/Linux for user-initiated exits (AttemptUserExit leaves
++  // IsTryingToQuit() false; programmatic AttemptExit/restarts set it
++  // true).
++  if (!browser_shutdown::IsTryingToQuit() &&
++      !open_unified::hooks::ShouldTerminateApp()) {
++    CancelBrowserClose();
++    return;
++  }
++#endif
++#endif
++  // open_unified hook 0011-bcm-should-terminate end
+   TryToCloseBrowsers();
+ }
+ 

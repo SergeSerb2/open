@@ -701,10 +701,8 @@ void OpenBrowserService::Start() {
       user_data_dir_.AppendASCII(kStateDirName));
   translate_controller_->SetOpenLanguageSettingsCallback(base::BindRepeating(
       [](base::WeakPtr<OpenBrowserService> self) {
-        if (self && self->tab_bridge_) {
-          self->tab_bridge_->OpenTab(
-              GURL(webui::OpenWebUIURL(webui::kHostSettings)),
-              /*background=*/false);
+        if (self && self->window_controller_) {
+          self->window_controller_->OpenSettingsWindow("general");
         }
       },
       weak_factory_.GetWeakPtr()));
@@ -868,6 +866,9 @@ void OpenBrowserService::Shutdown() {
   profile_observations_.RemoveAllObservations();
   profiles_.clear();
   pending_external_urls_.clear();
+  if (OpenPlatform* platform = OpenPlatform::Get()) {
+    platform->Shutdown();
+  }
 }
 
 void OpenBrowserService::StartProfiles() {

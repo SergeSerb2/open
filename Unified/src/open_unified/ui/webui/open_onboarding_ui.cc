@@ -461,6 +461,61 @@ std::string UrlKey(const GURL& url) {
   return base::StrCat({host, path});
 }
 
+// UI-thread cache of recently prefetched onboarding favicon PNG bytes keyed by
+// UrlKey(url), so newly added starter Favorites immediately show icons.
+std::map<std::string, std::vector<uint8_t>>& PrefetchedFaviconCache() {
+  static base::NoDestructor<std::map<std::string, std::vector<uint8_t>>> cache;
+  return *cache;
+}
+
+void CachePrefetchedFavicon(const GURL& url, const std::vector<uint8_t>& png) {
+  if (!url.is_valid() || png.empty()) {
+    return;
+  }
+  auto& cache = PrefetchedFaviconCache();
+  if (cache.size() >= 128) {
+    cache.clear();
+  }
+  cache[UrlKey(url)] = png;
+}
+
+const std::vector<uint8_t>* FindCachedPrefetchedFavicon(const GURL& url) {
+  if (!url.is_valid()) {
+    return nullptr;
+  }
+  const auto& cache = PrefetchedFaviconCache();
+  auto it = cache.find(UrlKey(url));
+  return it != cache.end() ? &it->second : nullptr;
+}
+
+void ApplyFaviconToExistingFavorites(BrowserModel& model,
+                                     const ProfileID& profile_id,
+                                     const GURL& url,
+                                     const std::vector<uint8_t>& png) {
+  if (png.empty() || !url.is_valid()) {
+    return;
+  }
+  const Profile* profile = model.FindProfile(profile_id);
+  if (!profile) {
+    return;
+  }
+  const std::string target_key = UrlKey(url);
+  std::vector<ItemID> matching_ids;
+  for (const Tab& tab : profile->favorites) {
+    if (tab.live_state.favicon_png.empty() &&
+        UrlKey(GURL(tab.url)) == target_key) {
+      matching_ids.push_back(tab.id);
+    }
+  }
+  for (const ItemID& id : matching_ids) {
+    model_util::UpdateLive(model, id, [&](TabLiveState& live) {
+      if (live.favicon_png.empty()) {
+        live.favicon_png = png;
+      }
+    });
+  }
+}
+
 std::optional<SpaceID> FirstSpaceOf(const BrowserModel& model,
                                     const ProfileID& profile) {
   for (const Space& space : model.spaces()) {
@@ -1476,6 +1531,49 @@ void OpenOnboardingUI::FinishComplete(base::DictValue payload,
         if (model.AddFavorite(id, profile, index)) {
           ++index;
           ++favorites_added;
+          if (const std::vector<uint8_t>* cached =
+                  FindCachedPrefetchedFavicon(url);
+              cached && !cached->empty()) {
+            model_util::UpdateLive(model, id, [&](TabLiveState& live) {
+              live.favicon_png = *cached;
+            });
+          } else if (ProfileServices* ps = s->ProfileServicesFor(profile)) {
+            RunOnStore(
+                ps->favicons,
+                base::BindOnce(
+                    [](std::string page_url, std::string origin_url,
+                       FaviconStore* store)
+                        -> std::optional<std::vector<uint8_t>> {
+                      for (const std::string& key : {page_url, origin_url}) {
+                        std::optional<FaviconRecord> record = store->Get(key);
+                        if (!record || record->status != 0) {
+                          continue;
+                        }
+                        if (!record->png64.empty()) {
+                          return record->png64;
+                        }
+                        if (!record->png32.empty()) {
+                          return record->png32;
+                        }
+                      }
+                      return std::nullopt;
+                    },
+                    url.spec(), url.DeprecatedGetOriginAsURL().spec()),
+                base::BindOnce(
+                    [](ItemID tab_id, std::optional<std::vector<uint8_t>> png) {
+                      OpenBrowserService* svc = OpenBrowserService::Get();
+                      if (!svc || !png || png->empty()) {
+                        return;
+                      }
+                      model_util::UpdateLive(
+                          svc->model(), tab_id, [&](TabLiveState& live) {
+                            if (live.favicon_png.empty()) {
+                              live.favicon_png = std::move(*png);
+                            }
+                          });
+                    },
+                    id));
+          }
         } else {
           model.CloseTab(id);
         }
@@ -1653,27 +1751,46 @@ void OpenOnboardingUI::PrefetchOne(std::shared_ptr<FaviconJob> job,
     return;
   }
   const GURL& url = job->urls[index];
-  RunOnStore(ps->favicons,
-             base::BindOnce(
-                 [](std::string page, std::string origin,
-                    FaviconStore* store) -> std::optional<std::string> {
-                   for (const std::string& key : {page, origin}) {
-                     std::optional<FaviconRecord> record = store->Get(key);
-                     if (!record || record->status != 0) {
-                       continue;
-                     }
-                     if (!record->png64.empty()) {
-                       return PngDataUrl(record->png64);
-                     }
-                     if (!record->png32.empty()) {
-                       return PngDataUrl(record->png32);
-                     }
-                   }
-                   return std::nullopt;
-                 },
-                 url.spec(), url.DeprecatedGetOriginAsURL().spec()),
-             base::BindOnce(&OpenOnboardingUI::OnStoreIcon,
-                            weak_factory_.GetWeakPtr(), job, index));
+  RunOnStore(
+      ps->favicons,
+      base::BindOnce(
+          [](std::string page, std::string origin,
+             FaviconStore* store) -> std::optional<std::vector<uint8_t>> {
+            for (const std::string& key : {page, origin}) {
+              std::optional<FaviconRecord> record = store->Get(key);
+              if (!record || record->status != 0) {
+                continue;
+              }
+              if (!record->png64.empty()) {
+                return record->png64;
+              }
+              if (!record->png32.empty()) {
+                return record->png32;
+              }
+            }
+            return std::nullopt;
+          },
+          url.spec(), url.DeprecatedGetOriginAsURL().spec()),
+      base::BindOnce(
+          [](base::WeakPtr<OpenOnboardingUI> page,
+             std::shared_ptr<FaviconJob> job, size_t index,
+             std::optional<std::vector<uint8_t>> png) {
+            if (!page) {
+              return;
+            }
+            if (png && !png->empty()) {
+              const GURL& page_url = job->urls[index];
+              CachePrefetchedFavicon(page_url, *png);
+              if (OpenBrowserService* s = page->service()) {
+                ApplyFaviconToExistingFavorites(s->model(), page->profile_id(),
+                                                page_url, *png);
+              }
+              page->OnStoreIcon(std::move(job), index, PngDataUrl(*png));
+              return;
+            }
+            page->OnStoreIcon(std::move(job), index, std::nullopt);
+          },
+          weak_factory_.GetWeakPtr(), job, index));
 }
 
 void OpenOnboardingUI::OnStoreIcon(std::shared_ptr<FaviconJob> job,
@@ -1708,11 +1825,40 @@ void OpenOnboardingUI::QueryLargeIcon(std::shared_ptr<FaviconJob> job,
              std::shared_ptr<FaviconJob> job, size_t index, bool after_server,
              const favicon_base::LargeIconResult& result) {
             if (result.bitmap.is_valid()) {
+              const base::span<const uint8_t> span(*result.bitmap.bitmap_data);
+              std::vector<uint8_t> png(span.begin(), span.end());
+              const GURL& page_url = job->urls[index];
+              if (!png.empty()) {
+                CachePrefetchedFavicon(page_url, png);
+                if (page) {
+                  if (OpenBrowserService* s = page->service()) {
+                    const ProfileID pid = page->profile_id();
+                    if (ProfileServices* ps = s->ProfileServicesFor(pid)) {
+                      std::optional<std::string> icon_url =
+                          result.bitmap.icon_url.is_valid()
+                              ? std::optional<std::string>(
+                                    result.bitmap.icon_url.spec())
+                              : std::nullopt;
+                      RunOnStore(
+                          ps->favicons,
+                          base::BindOnce(
+                              [](std::string url,
+                                 std::vector<uint8_t> png_bytes,
+                                 std::optional<std::string> icon_url,
+                                 FaviconStore* store) {
+                                store->Put(url, png_bytes, {}, icon_url);
+                              },
+                              page_url.spec(), png, std::move(icon_url)));
+                    }
+                    ApplyFaviconToExistingFavorites(s->model(), pid, page_url,
+                                                    png);
+                  }
+                }
+              }
               FinishFavicon(
                   std::move(job), index,
                   base::DictValue()
-                      .Set("icon", PngDataUrl(base::span<const uint8_t>(
-                                       *result.bitmap.bitmap_data)))
+                      .Set("icon", PngDataUrl(span))
                       .Set("source", after_server ? "server" : "history")
                       .Set("pixel_size", result.bitmap.pixel_size.width()));
               return;

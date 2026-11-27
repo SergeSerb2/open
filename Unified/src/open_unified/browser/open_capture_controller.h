@@ -24,6 +24,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "open_unified/core/model/open_types.h"
 #include "open_unified/ui/design/open_theme_math.h"
@@ -33,6 +34,8 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
 
 namespace content {
 class WebContents;
@@ -90,7 +93,8 @@ struct CaptureResult {
 };
 
 class OpenCaptureController : public CaptureOverlayDelegate,
-                              public CaptureResultCardDelegate {
+                              public CaptureResultCardDelegate,
+                              public views::WidgetObserver {
  public:
   // Full-page height cap in device pixels (matching CaptureMetrics).
   static constexpr int kFullPageMaxDevicePixels = 32768;
@@ -177,6 +181,9 @@ class OpenCaptureController : public CaptureOverlayDelegate,
   void OnCaptureResultAction(CaptureResultAction action) override;
   void OnCaptureResultHoverChanged(bool hovered) override;
 
+  // views::WidgetObserver:
+  void OnWidgetDestroying(views::Widget* widget) override;
+
  private:
   class FullPageDevToolsSession;
 
@@ -234,6 +241,9 @@ class OpenCaptureController : public CaptureOverlayDelegate,
 
   std::unique_ptr<FullPageDevToolsSession> devtools_session_;
   std::optional<CaptureResult> last_result_;
+
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      parent_widget_observation_{this};
 
   base::WeakPtrFactory<OpenCaptureController> weak_factory_{this};
 };

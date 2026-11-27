@@ -3,15 +3,8 @@
 
 #include "open_unified/browser/platform/open_platform.h"
 
-#include <windows.h>
-
-#include <dwmapi.h>
-#include <shlobj.h>
-#include <shellapi.h>
-#include <wincred.h>
-#include <wincrypt.h>
-
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -26,8 +19,19 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_com_initializer.h"
+#include "base/win/windows_version.h"
+#include "ui/base/win/shell.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/views/win/hwnd_util.h"
+
+#include <windows.h>
+
+#include <dwmapi.h>
+#include <shlobj.h>
+#include <shellapi.h>
+#include <wincred.h>
+#include <wincrypt.h>
 
 namespace open_unified {
 
@@ -41,18 +45,20 @@ constexpr DWORD kDwmwaUseImmersiveDarkMode = DWMWA_USE_IMMERSIVE_DARK_MODE;
 
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
 constexpr DWORD kDwmwaWindowCornerPreference = 33;
+constexpr DWORD kDwmwcpDoNotRound = 1;
 constexpr DWORD kDwmwcpRound = 2;
 #else
 constexpr DWORD kDwmwaWindowCornerPreference = DWMWA_WINDOW_CORNER_PREFERENCE;
+constexpr DWORD kDwmwcpDoNotRound = DWMWCP_DONOTROUND;
 constexpr DWORD kDwmwcpRound = DWMWCP_ROUND;
 #endif
 
 #ifndef DWMWA_SYSTEMBACKDROP_TYPE
 constexpr DWORD kDwmwaSystemBackdropType = 38;
-constexpr DWORD kDwmsbtMainWindow = 2;  // Mica
+constexpr DWORD kDwmsbtNone = 1;
 #else
 constexpr DWORD kDwmwaSystemBackdropType = DWMWA_SYSTEMBACKDROP_TYPE;
-constexpr DWORD kDwmsbtMainWindow = DWMSBT_MAINWINDOW;
+constexpr DWORD kDwmsbtNone = DWMSBT_NONE;
 #endif
 
 std::wstring MakeCredTargetName(std::string_view service,
@@ -253,14 +259,22 @@ class WinCredentialManagerSecretStore final : public SecretStore {
 class WinHotkeyDispatcher {
  public:
   WinHotkeyDispatcher() = default;
-  ~WinHotkeyDispatcher() {
+  ~WinHotkeyDispatcher() { Shutdown(); }
+
+  void Shutdown() {
     std::lock_guard<std::mutex> lock(mu_);
     if (hwnd_) {
       for (const auto& [atom_id, entry] : entries_) {
         UnregisterHotKey(hwnd_, atom_id);
       }
+      entries_.clear();
+      id_to_atom_.clear();
       DestroyWindow(hwnd_);
       hwnd_ = nullptr;
+    }
+    if (class_registered_) {
+      UnregisterClassW(kClassName, GetModuleHandleW(nullptr));
+      class_registered_ = false;
     }
   }
 
@@ -295,6 +309,8 @@ class WinHotkeyDispatcher {
   }
 
  private:
+  static constexpr wchar_t kClassName[] = L"OpenUnifiedHotkeyWindow";
+
   struct Entry {
     std::string id;
     OpenPlatform::HotkeyCallback callback;
@@ -304,14 +320,18 @@ class WinHotkeyDispatcher {
     if (hwnd_) {
       return;
     }
-    static constexpr wchar_t kClassName[] = L"OpenUnifiedHotkeyWindow";
     HINSTANCE instance = GetModuleHandleW(nullptr);
-    WNDCLASSEXW wc{};
-    wc.cbSize = sizeof(wc);
-    wc.lpfnWndProc = &WinHotkeyDispatcher::WndProc;
-    wc.hInstance = instance;
-    wc.lpszClassName = kClassName;
-    RegisterClassExW(&wc);
+    if (!class_registered_) {
+      WNDCLASSEXW wc{};
+      wc.cbSize = sizeof(wc);
+      wc.lpfnWndProc = &WinHotkeyDispatcher::WndProc;
+      wc.hInstance = instance;
+      wc.lpszClassName = kClassName;
+      if (RegisterClassExW(&wc) ||
+          GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
+        class_registered_ = true;
+      }
+    }
     hwnd_ = CreateWindowExW(0, kClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
                             nullptr, instance, this);
     if (hwnd_) {
@@ -367,6 +387,7 @@ class WinHotkeyDispatcher {
 
   std::mutex mu_;
   HWND hwnd_ = nullptr;
+  bool class_registered_ = false;
   int next_atom_id_ = 1;
   std::map<int, Entry> entries_;
   std::map<std::string, int> id_to_atom_;
@@ -376,6 +397,8 @@ class OpenPlatformWin final : public OpenPlatform {
  public:
   OpenPlatformWin() = default;
   ~OpenPlatformWin() override = default;
+
+  void Shutdown() override { hotkeys_.Shutdown(); }
 
   std::unique_ptr<SecretStore> CreateSecretStore(
       const base::FilePath& data_dir,
@@ -444,9 +467,85 @@ class OpenPlatformWin final : public OpenPlatform {
     DwmSetWindowAttribute(hwnd, kDwmwaWindowCornerPreference, &corner,
                           sizeof(corner));
 
-    DWORD backdrop = kDwmsbtMainWindow;
-    DwmSetWindowAttribute(hwnd, kDwmwaSystemBackdropType, &backdrop,
-                          sizeof(backdrop));
+    // Stamp the AppUserModelID so taskbar grouping, jump lists, and pinned
+    // shortcuts identify Open Unified consistently.
+    ui::win::SetAppIdForWindow(L"OpenBrowser.Open.Unified", hwnd);
+
+    // Ensure frameless windows that support minimize/maximize keep the native
+    // WS_MINIMIZEBOX / WS_MAXIMIZEBOX styles needed for Win11 Snap Layouts and
+    // Aero Snap (remove_standard_frame strips them in widget_hwnd_utils.cc).
+    if (views::WidgetDelegate* delegate = widget->widget_delegate()) {
+      LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+      LONG_PTR desired = style;
+      if (delegate->CanMinimize()) {
+        desired |= WS_MINIMIZEBOX;
+      }
+      if (delegate->CanMaximize()) {
+        desired |= WS_MAXIMIZEBOX;
+      }
+      if (desired != style) {
+        SetWindowLongPtrW(hwnd, GWL_STYLE, desired);
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                     SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+      }
+    }
+  }
+
+  bool UpdateWindowEffects(views::Widget* widget,
+                           const WindowMaterialSpec& spec) override {
+    if (!widget) {
+      return false;
+    }
+    HWND hwnd = views::HWNDForWidget(widget);
+    if (!hwnd || !IsWindow(hwnd)) {
+      return false;
+    }
+
+    BOOL dark = spec.dark_scheme ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, kDwmwaUseImmersiveDarkMode, &dark, sizeof(dark));
+
+    // BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent() is
+    // false on Windows, so returning true here would composite translucent
+    // themes over Chromium's solid frame color instead of DWM Mica. Keep the
+    // backdrop off and return false so Open paints its crisp opaque OKLab
+    // Space gradient cleanly.
+    if (base::win::GetVersion() >= base::win::Version::WIN11_22H2) {
+      DWORD backdrop = kDwmsbtNone;
+      DwmSetWindowAttribute(hwnd, kDwmwaSystemBackdropType, &backdrop,
+                            sizeof(backdrop));
+    }
+    return false;
+  }
+
+  void SetFullscreenCornerState(views::Widget* widget,
+                                bool fullscreen) override {
+    if (!widget) {
+      return;
+    }
+    HWND hwnd = views::HWNDForWidget(widget);
+    if (!hwnd || !IsWindow(hwnd)) {
+      return;
+    }
+    DWORD corner = fullscreen ? kDwmwcpDoNotRound : kDwmwcpRound;
+    DwmSetWindowAttribute(hwnd, kDwmwaWindowCornerPreference, &corner,
+                          sizeof(corner));
+  }
+
+  int MaximizedFrameInsetDip(views::Widget* widget) const override {
+    if (!widget) {
+      return 0;
+    }
+    HWND hwnd = views::HWNDForWidget(widget);
+    if (!hwnd || !IsWindow(hwnd)) {
+      return 0;
+    }
+    const UINT dpi = GetDpiForWindow(hwnd);
+    const UINT effective_dpi = dpi > 0 ? dpi : 96;
+    const int px = GetSystemMetricsForDpi(SM_CXSIZEFRAME, effective_dpi) +
+                   GetSystemMetricsForDpi(SM_CXPADDEDBORDER, effective_dpi);
+    const float scale = static_cast<float>(effective_dpi) / 96.0f;
+    return static_cast<int>(std::floor(static_cast<float>(px) / scale));
   }
 
   base::FilePath GetDefaultUserDataDir() override {
@@ -492,8 +591,9 @@ class OpenPlatformWin final : public OpenPlatform {
 
 }  // namespace
 
-// --- OpenPlatform defaults (Windows and Linux have no native window
-// material, no movable window buttons, and no per-app URL source). ---------
+// --- OpenPlatform base defaults (OpenPlatformWin overrides
+// UpdateWindowEffects and IsIncreaseContrastEnabled; Windows has no movable
+// traffic lights or per-app URL source). ------------------------------------
 
 bool OpenPlatform::UpdateWindowEffects(views::Widget*,
                                        const WindowMaterialSpec&) {

@@ -34,6 +34,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "open_unified/core/model/open_types.h"
 #include "open_unified/ui/views/open_split_container_view.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -203,7 +204,8 @@ class LittleOpenDelegate {
                                           const ProfileID& profile_id) {}
 };
 
-class OpenLittleOpenView : public views::View {
+class OpenLittleOpenView : public views::View,
+                           public content::WebContentsObserver {
   METADATA_HEADER(OpenLittleOpenView, views::View)
 
  public:
@@ -273,13 +275,27 @@ class OpenLittleOpenView : public views::View {
   std::optional<gfx::Rect> GetElementBounds(std::string_view name) const;
 
   // views::View:
+  void AddedToWidget() override;
   void OnPaint(gfx::Canvas* canvas) override;
   void Layout(PassKey) override;
   gfx::Size GetMinimumSize() const override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
+  // content::WebContentsObserver:
+  void TitleWasSet(content::NavigationEntry* entry) override;
+  void DidFinishNavigation(content::NavigationHandle* handle) override;
+
  private:
   void LayoutTitleBar();
+  void UpdateWindowTitle();
+  gfx::Rect CapsuleRect() const;
+  gfx::Rect PillRect() const;
+  gfx::Rect PillLabelRect() const;
+  gfx::Rect DividerRect() const;
+  gfx::Rect ChevronRect() const;
+  gfx::Rect CopyRect() const;
+  gfx::Rect ExtensionsRect() const;
+  gfx::Rect WindowButtonRect(int index) const;
   void RebuildExtensionActionButtons();
   void TriggerOpenInSpace(std::optional<SpaceID> space_id);
   void PaintPill(gfx::Canvas* canvas, const gfx::Rect& bounds, bool hovered);

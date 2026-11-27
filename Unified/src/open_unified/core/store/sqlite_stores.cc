@@ -596,7 +596,7 @@ bool ArchiveStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
-    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
+    LOG(ERROR) << "ArchiveStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   sql::Transaction txn(&db_);
@@ -620,7 +620,7 @@ bool ArchiveStore::Open() {
     CREATE INDEX IF NOT EXISTS idx_archived_at ON archived_tabs(archived_at DESC);
   )SQL";
   if (!db_.Execute(kSchema)) {
-    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
+    LOG(ERROR) << "ArchiveStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }
@@ -897,7 +897,7 @@ bool SleepStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
-    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
+    LOG(ERROR) << "SleepStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   static constexpr char kSchema[] = R"SQL(
@@ -920,7 +920,7 @@ bool SleepStore::Open() {
     );
   )SQL";
   if (!db_.Execute(kSchema)) {
-    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
+    LOG(ERROR) << "SleepStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }
@@ -1091,7 +1091,7 @@ bool DownloadHistoryStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
-    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
+    LOG(ERROR) << "DownloadHistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   static constexpr char kSchema[] = R"SQL(
@@ -1104,7 +1104,7 @@ bool DownloadHistoryStore::Open() {
     CREATE INDEX IF NOT EXISTS downloads_end ON downloads(ended_at DESC, id);
   )SQL";
   if (!db_.Execute(kSchema)) {
-    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
+    LOG(ERROR) << "DownloadHistoryStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }
@@ -1255,7 +1255,7 @@ bool FaviconStore::Open() {
     return false;
   }
   if (!db_.Open(db_path_)) {
-    LOG(ERROR) << "HistoryStore::Open db_.Open failed: " << db_.GetErrorMessage();
+    LOG(ERROR) << "FaviconStore::Open db_.Open failed: " << db_.GetErrorMessage();
     return false;
   }
   static constexpr char kSchema[] = R"SQL(
@@ -1275,7 +1275,7 @@ bool FaviconStore::Open() {
     CREATE INDEX IF NOT EXISTS favicon_age ON favicons(fetched_at);
   )SQL";
   if (!db_.Execute(kSchema)) {
-    LOG(ERROR) << "HistoryStore::Open schema failed: " << db_.GetErrorMessage();
+    LOG(ERROR) << "FaviconStore::Open schema failed: " << db_.GetErrorMessage();
     db_.Close();
     return false;
   }

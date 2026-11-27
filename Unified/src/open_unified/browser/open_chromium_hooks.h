@@ -216,6 +216,8 @@ OpenHookDelegate* GetHookDelegate();
 void OnBrowserViewAddedToWidget(BrowserView* browser_view);
 // Start of BrowserView::~BrowserView().
 void OnBrowserViewDestroying(BrowserView* browser_view);
+// True when OpenBrowserView is installed in |browser_view|.
+bool HasOpenBrowserView(BrowserView* browser_view);
 // BrowserWidget::InitBrowserWidget(), after the delegate is set. Per OS:
 // Linux gets Open's frameless, translucent, drop-shadow window; macOS keeps
 // the titled full-size-content-view frame (native traffic lights); Windows

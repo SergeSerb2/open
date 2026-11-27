@@ -262,6 +262,7 @@ class BrowserModel {
   bool SetProfileIcon(const ProfileID& profile_id,
                       std::optional<SpaceIcon> icon);
   bool DeleteProfile(const ProfileID& profile_id);
+  bool ReorderProfiles(const std::vector<ProfileID>& ordered_ids);
   bool UpdateProfileSettings(const ProfileID& profile_id,
                              const ProfileSettings& settings);
 

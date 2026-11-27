@@ -347,7 +347,13 @@ class OpenCommandBarView : public views::View,
   // Privacy footer (CC-42, D14): only the (i) button and Cmd/Ctrl+I show
   // it; it never opens by itself.
   void TogglePrivacyFooter();
+  // Dismisses the privacy footer when visible and returns true; otherwise
+  // returns false so the caller can dismiss the bar itself.
+  bool HandleEscape();
   bool shows_privacy_footer() const { return shows_footer_; }
+  // Updates the inline URL-pill anchor in screen coordinates while
+  // kEditCurrentUrl is presented.
+  void UpdateScreenAnchor(const gfx::Rect& anchor_in_screen);
   // Updates the remote-suggestion permission (after the notice dismissal).
   void SetAllowsRemoteSuggestions(bool allowed);
   bool allows_remote_suggestions() const { return allows_remote_; }

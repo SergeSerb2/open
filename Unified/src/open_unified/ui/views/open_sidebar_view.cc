@@ -566,9 +566,10 @@ class OpenSidebarView::UrlPillView : public views::View,
       const int x = TextLeft(/*page=*/false);
       const int top = typography::TextTopForBaseline(
           font, text_y_frame + m::url_field::kTextBaselineOffset);
-      canvas->DrawStringRect(
+      canvas->DrawStringRectWithFlags(
           u"Search or Enter URL…", font, Sk(s.roles.placeholder),
-          gfx::Rect(x, top, std::max(0, TextRight() - x), font.GetHeight()));
+          gfx::Rect(x, top, std::max(0, TextRight() - x), font.GetHeight()),
+          gfx::Canvas::NO_SUBPIXEL_RENDERING);
       return;
     }
     const std::u16string host = DisplayHost(tab->url);
@@ -580,9 +581,10 @@ class OpenSidebarView::UrlPillView : public views::View,
         font, text_y_frame + m::url_field::kTextBaselineOffset);
     const SkColor color = Sk(s.roles.url_text);
     if (text_w <= available) {
-      canvas->DrawStringRectWithFlags(host, font, color,
-                                      gfx::Rect(x0, top, available, font.GetHeight()),
-                                      gfx::Canvas::NO_ELLIPSIS);
+      canvas->DrawStringRectWithFlags(
+          host, font, color,
+          gfx::Rect(x0, top, available, font.GetHeight()),
+          gfx::Canvas::NO_ELLIPSIS | gfx::Canvas::NO_SUBPIXEL_RENDERING);
       return;
     }
     // A long host keeps its end visible; its leading 34 pt fade to clear.
@@ -594,7 +596,7 @@ class OpenSidebarView::UrlPillView : public views::View,
     canvas->DrawStringRectWithFlags(
         host, font, color,
         gfx::Rect(x0 + available - text_w, top, text_w, font.GetHeight()),
-        gfx::Canvas::NO_ELLIPSIS);
+        gfx::Canvas::NO_ELLIPSIS | gfx::Canvas::NO_SUBPIXEL_RENDERING);
     canvas->Restore();
     const float fade = m::url_field::kLongHostFade;
     const SkPoint points[2] = {SkPoint::Make(x0, 0),
@@ -880,9 +882,9 @@ class OpenSidebarView::FavoriteTileView : public views::View,
       ink = Rgba{0.13, 0.13, 0.13, 1};
     }
     FillRoundRect(canvas, plate, h / 2, Sk(fill));
-    canvas->DrawStringRectWithFlags(text, font, Sk(ink),
-                                    gfx::ToEnclosingRect(plate),
-                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+    canvas->DrawStringRectWithFlags(
+        text, font, Sk(ink), gfx::ToEnclosingRect(plate),
+        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_SUBPIXEL_RENDERING);
   }
 
   // FavoriteBadgeView: a 14 pt capsule at the top-right, inset 3 pt, white
@@ -897,9 +899,9 @@ class OpenSidebarView::FavoriteTileView : public views::View,
         std::max(h, static_cast<float>(gfx::Canvas::GetStringWidth(text, font)) + 8);
     const gfx::RectF plate(width() - w - 3, 3, w, h);
     FillRoundRect(canvas, plate, h / 2, Sk(s.contrast_accent));
-    canvas->DrawStringRectWithFlags(text, font, SK_ColorWHITE,
-                                    gfx::ToEnclosingRect(plate),
-                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+    canvas->DrawStringRectWithFlags(
+        text, font, SK_ColorWHITE, gfx::ToEnclosingRect(plate),
+        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_SUBPIXEL_RENDERING);
   }
 
   raw_ptr<OpenSidebarView> sidebar_;
@@ -989,14 +991,15 @@ class OpenSidebarView::FavoritesEmptyStateView : public views::View {
     canvas->DrawStringRectWithFlags(
         kTitle, title_font, Sk(title, fade),
         gfx::Rect(11, 34, std::max(0, width() - 22), 17),
-        gfx::Canvas::TEXT_ALIGN_CENTER);
+        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_SUBPIXEL_RENDERING);
     const gfx::FontList& body_font =
         typography::Make(12, gfx::Font::Weight::NORMAL);
     const int body_w = std::min(150, std::max(0, width() - 22));
     canvas->DrawStringRectWithFlags(
         std::u16string(kBody), body_font, Sk(title, 0.70f * fade),
         gfx::Rect((width() - body_w) / 2, 54, body_w, 32),
-        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::MULTI_LINE);
+        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::MULTI_LINE |
+            gfx::Canvas::NO_SUBPIXEL_RENDERING);
 
     const gfx::RectF dismiss = DismissRect();
     if (dismiss_hovered_) {

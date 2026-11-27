@@ -23,7 +23,10 @@
 #include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "ui/linux/linux_ui.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/window/frame_buttons.h"
+#include "ui/views/window/window_button_order_provider.h"
 
 namespace open_unified {
 
@@ -225,6 +228,46 @@ class OpenPlatformLinux final : public OpenPlatform {
     widget->SetColorModeOverride(
         dark_mode ? ui::ColorProviderKey::ColorMode::kDark
                   : ui::ColorProviderKey::ColorMode::kLight);
+  }
+
+  LinuxWindowButtons GetLinuxWindowButtons() const override {
+    LinuxWindowButtons result;
+    if (!ui::LinuxUi::instance()) {
+      result.trailing = {WindowControlButton::kMinimize,
+                         WindowControlButton::kMaximize,
+                         WindowControlButton::kClose};
+      result.has_csd_preference = false;
+      return result;
+    }
+    // Chromium's LinuxUi toolkit (GTK/Qt) populates WindowButtonOrderProvider
+    // with the desktop environment's client-side window button ordering.
+    const auto* provider = views::WindowButtonOrderProvider::GetInstance();
+    auto map_button = [](views::FrameButton button) -> WindowControlButton {
+      switch (button) {
+        case views::FrameButton::kMinimize:
+          return WindowControlButton::kMinimize;
+        case views::FrameButton::kMaximize:
+          return WindowControlButton::kMaximize;
+        case views::FrameButton::kClose:
+          return WindowControlButton::kClose;
+      }
+      return WindowControlButton::kClose;
+    };
+    for (views::FrameButton button : provider->leading_buttons()) {
+      result.leading.push_back(map_button(button));
+    }
+    for (views::FrameButton button : provider->trailing_buttons()) {
+      result.trailing.push_back(map_button(button));
+    }
+    if (result.leading.empty() && result.trailing.empty()) {
+      result.trailing = {WindowControlButton::kMinimize,
+                         WindowControlButton::kMaximize,
+                         WindowControlButton::kClose};
+      result.has_csd_preference = false;
+      return result;
+    }
+    result.has_csd_preference = true;
+    return result;
   }
 
   base::FilePath GetDefaultUserDataDir() override {

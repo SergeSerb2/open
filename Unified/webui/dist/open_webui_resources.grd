@@ -24,8 +24,8 @@
       <include name="IDR_OPEN_WEBUI_ASSETS_LIBRARY_BOXZBHIT_CSS" file="assets/library-BOXzbHiT.css" resource_path="assets/library-BOXzbHiT.css" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_NOTE_D4SCAJUF_CSS" file="assets/note-D4ScAJUF.css" resource_path="assets/note-D4ScAJUF.css" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_NOTE_DS9UKAYW_JS" file="assets/note-DS9ukayw.js" resource_path="assets/note-DS9ukayw.js" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_E2YWSCWR_JS" file="assets/onboarding-e2ywScWr.js" resource_path="assets/onboarding-e2ywScWr.js" use_base_dir="true" type="BINDATA" />
-      <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_X_HQHUR_CSS" file="assets/onboarding-x--Hqhur.css" resource_path="assets/onboarding-x--Hqhur.css" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_CSXLSJL9_CSS" file="assets/onboarding-CsXlsjl9.css" resource_path="assets/onboarding-CsXlsjl9.css" use_base_dir="true" type="BINDATA" />
+      <include name="IDR_OPEN_WEBUI_ASSETS_ONBOARDING_GR82KY0B_JS" file="assets/onboarding-gR82kY0B.js" resource_path="assets/onboarding-gR82kY0B.js" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_RPC_CGKJRBCC_CSS" file="assets/rpc-CGkjRBCC.css" resource_path="assets/rpc-CGkjRBCC.css" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_DZGSRCDU_CSS" file="assets/settings-DZGsrcdU.css" resource_path="assets/settings-DZGsrcdU.css" use_base_dir="true" type="BINDATA" />
       <include name="IDR_OPEN_WEBUI_ASSETS_SETTINGS_PAWDWUP3_JS" file="assets/settings-PawdWUP3.js" resource_path="assets/settings-PawdWUP3.js" use_base_dir="true" type="BINDATA" />

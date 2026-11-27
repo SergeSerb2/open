@@ -731,6 +731,22 @@ void OpenCommandBarView::SetAllowsRemoteSuggestions(bool allowed) {
   SchedulePaint();
 }
 
+void OpenCommandBarView::UpdateScreenAnchor(
+    const gfx::Rect& anchor_in_screen) {
+  if (mode_ != CommandBarMode::kEditCurrentUrl) {
+    return;
+  }
+  if (anchor_in_screen.IsEmpty()) {
+    anchor_in_screen_.reset();
+    inline_anchor_.reset();
+  } else {
+    anchor_in_screen_ = anchor_in_screen;
+    ResolveScreenAnchor();
+  }
+  InvalidateLayout();
+  SchedulePaint();
+}
+
 void OpenCommandBarView::ResolveScreenAnchor() {
   if (!anchor_in_screen_ || !GetWidget()) {
     return;
@@ -763,6 +779,14 @@ void OpenCommandBarView::TogglePrivacyFooter() {
   if (!shows_footer_) {
     field_->RequestFocus();
   }
+}
+
+bool OpenCommandBarView::HandleEscape() {
+  if (shows_footer_) {
+    TogglePrivacyFooter();
+    return true;
+  }
+  return false;
 }
 
 void OpenCommandBarView::OpenSearchSettings() {
@@ -1044,8 +1068,7 @@ bool OpenCommandBarView::HandleKeyEvent(views::Textfield* sender,
   switch (event.key_code()) {
     case ui::VKEY_ESCAPE:
       // Esc closes the open footer first, then the bar.
-      if (shows_footer_) {
-        TogglePrivacyFooter();
+      if (HandleEscape()) {
         return true;
       }
       Dismiss(CommandBarDismissReason::kEscape);

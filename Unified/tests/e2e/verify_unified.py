@@ -154,6 +154,49 @@ Go</button> <span id="clicked">no</span>
 # Processes: Xvfb, SyncServer, the browser
 # =============================================================================
 
+def is_windows_binary(binary: str) -> bool:
+  return (sys.platform == "win32" or os.name == "nt" or
+          binary.lower().endswith(".exe"))
+
+
+def is_wsl_windows_target(binary: str) -> bool:
+  return os.name != "nt" and is_windows_binary(binary)
+
+
+def to_browser_path(path: str, binary: str) -> str:
+  if not is_wsl_windows_target(binary):
+    return path
+  wslpath = shutil.which("wslpath")
+  if not wslpath:
+    return path
+  try:
+    return subprocess.check_output(
+        [wslpath, "-w", path], text=True, stderr=subprocess.DEVNULL).strip()
+  except (OSError, subprocess.CalledProcessError):
+    return path
+
+
+def from_browser_path(path: str, binary: str) -> str:
+  if not is_wsl_windows_target(binary):
+    return path
+  wslpath = shutil.which("wslpath")
+  if not wslpath:
+    return path
+  try:
+    return subprocess.check_output(
+        [wslpath, "-u", path], text=True, stderr=subprocess.DEVNULL).strip()
+  except (OSError, subprocess.CalledProcessError):
+    return path
+
+
+def same_local_path(a: str, b: str) -> bool:
+  try:
+    return os.path.samefile(a, b)
+  except OSError:
+    return (os.path.normcase(os.path.abspath(a)) ==
+            os.path.normcase(os.path.abspath(b)))
+
+
 def free_port() -> int:
   with socket.socket() as s:
     s.bind(("127.0.0.1", 0))
@@ -202,23 +245,30 @@ class SyncServerProcess:
     self.log_path = log_path
     self.proc = None
     self.url = None
+    self._log = None
 
   def start(self, timeout=60):
     server_dir = os.path.join(REPO_ROOT, "SyncServer")
     entry = os.path.join(server_dir, "dist", "index.js")
     if not os.path.exists(entry):
-      if not shutil.which("npx"):
-        raise RuntimeError("SyncServer/dist is missing and npx is not found")
-      subprocess.run(["npm", "ci", "--no-audit", "--no-fund"],
+      npx_cmd = shutil.which("npx")
+      npm_cmd = shutil.which("npm")
+      if not npx_cmd or not npm_cmd:
+        raise RuntimeError("SyncServer/dist is missing and npm/npx is not found")
+      subprocess.run([npm_cmd, "ci", "--no-audit", "--no-fund"],
                      cwd=server_dir, check=True)
-      subprocess.run(["npx", "--yes", "tsrs", "-p", "tsconfig.json"],
+      subprocess.run([npx_cmd, "--yes", "tsrs", "-p", "tsconfig.json"],
                      cwd=server_dir, check=True)
+    node_cmd = shutil.which("node") or "node"
     env = dict(os.environ, OPEN_SYNC_DATA_DIR=self.data_dir,
                OPEN_SYNC_PORT="0", OPEN_SYNC_HOST="127.0.0.1")
     self._log = open(self.log_path, "w", encoding="utf-8")
+    popen_kwargs = {}
+    if os.name == "nt":
+      popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     self.proc = subprocess.Popen(
-        ["node", "--no-warnings", entry], cwd=server_dir, env=env,
-        stdout=subprocess.PIPE, stderr=self._log, text=True)
+        [node_cmd, "--no-warnings", entry], cwd=server_dir, env=env,
+        stdout=subprocess.PIPE, stderr=self._log, text=True, **popen_kwargs)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
       line = self.proc.stdout.readline()
@@ -236,20 +286,29 @@ class SyncServerProcess:
     raise RuntimeError("SyncServer did not report OPEN_SYNC_LISTENING")
 
   def _drain(self):
-    for line in self.proc.stdout:
-      self._log.write(line)
+    try:
+      for line in self.proc.stdout:
+        if self._log and not self._log.closed:
+          self._log.write(line)
+    except (OSError, ValueError):
+      pass
 
   def health(self) -> Dict:
     with urllib.request.urlopen(self.url + "/health", timeout=5) as r:
       return json.loads(r.read())
 
   def stop(self):
-    if self.proc and self.proc.poll() is None:
-      self.proc.terminate()
-      try:
-        self.proc.wait(10)
-      except subprocess.TimeoutExpired:
-        self.proc.kill()
+    try:
+      if self.proc and self.proc.poll() is None:
+        self.proc.terminate()
+        try:
+          self.proc.wait(10)
+        except subprocess.TimeoutExpired:
+          self.proc.kill()
+          self.proc.wait(5)
+    finally:
+      if self._log and not self._log.closed:
+        self._log.close()
 
 
 class Browser:
@@ -261,13 +320,17 @@ class Browser:
     self.use_port = use_port
     self.env = env
     self.extra = extra
+    self._windows_target = is_windows_binary(binary)
     self.proc = None
+    self._log = None
     self.client: Optional[OpenClient] = None
+    self.clean_exit = False
 
   def command_line(self) -> List[str]:
+    browser_ud = to_browser_path(self.user_data, self.binary)
     args = [
         self.binary,
-        f"--user-data-dir={self.user_data}",
+        f"--user-data-dir={browser_ud}",
         "--no-first-run",
         "--no-default-browser-check",
         "--open-skip-onboarding",
@@ -282,27 +345,38 @@ class Browser:
     if self.use_port:
       args.append("--automation-port=0")
     else:
-      args.append("--automation-socket=" +
-                  os.path.join(self.user_data, "automation.sock"))
+      sock_path = to_browser_path(
+          os.path.join(self.user_data, "automation.sock"), self.binary)
+      args.append("--automation-socket=" + sock_path)
     if sys.platform == "darwin":
       args.append("--use-mock-keychain")
-    if sys.platform.startswith("linux") and "DISPLAY" in self.env:
+    if (sys.platform.startswith("linux") and not self._windows_target and
+        "DISPLAY" in self.env):
       args.append("--ozone-platform=x11")
     return args + self.extra
 
   def start(self, timeout=90):
     os.makedirs(self.user_data, exist_ok=True)
     self._log = open(self.log_path, "w", encoding="utf-8")
+    popen_kwargs = {}
+    if os.name == "nt":
+      popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     self.proc = subprocess.Popen(self.command_line(), env=self.env,
-                                 stdout=self._log, stderr=subprocess.STDOUT)
+                                 stdout=self._log, stderr=subprocess.STDOUT,
+                                 **popen_kwargs)
     end = time.monotonic() + timeout
     while time.monotonic() < end:
       if self.proc.poll() is not None:
         raise RuntimeError(f"browser exited ({self.proc.returncode}); "
                            f"see {self.log_path}")
-      ready = os.path.exists(os.path.join(
-          self.user_data,
-          "automation.port" if self.use_port else "automation.sock"))
+      if self.use_port:
+        port_path = os.path.join(self.user_data, "automation.port")
+        token_path = os.path.join(self.user_data, "automation.token")
+        ready = (os.path.exists(port_path) and os.path.exists(token_path) and
+                 os.path.getsize(port_path) > 0 and
+                 os.path.getsize(token_path) > 0)
+      else:
+        ready = os.path.exists(os.path.join(self.user_data, "automation.sock"))
       if ready:
         break
       time.sleep(0.2)
@@ -320,22 +394,44 @@ class Browser:
       return int(f.read().strip())
 
   def stop(self):
-    if self.client:
-      try:
-        self.client.call("quit", _timeout=5)
-      except (OSError, OpenError, ConnectionError, TimeoutError):
-        pass
-      self.client.close()
-    if self.proc:
-      try:
-        self.proc.wait(20)
-      except subprocess.TimeoutExpired:
-        self.proc.send_signal(signal.SIGTERM if os.name != "nt"
-                              else signal.CTRL_BREAK_EVENT)
+    try:
+      if self.client:
         try:
-          self.proc.wait(10)
+          self.client.call("quit", _timeout=5)
+        except (OSError, OpenError, ConnectionError, TimeoutError):
+          pass
+        self.client.close()
+        self.client = None
+      if self.proc:
+        try:
+          rc = self.proc.wait(20)
+          self.clean_exit = (rc == 0)
         except subprocess.TimeoutExpired:
-          self.proc.kill()
+          self.clean_exit = False
+          if os.name == "nt":
+            try:
+              self.proc.send_signal(signal.CTRL_BREAK_EVENT)
+            except OSError:
+              self.proc.terminate()
+          else:
+            self.proc.send_signal(signal.SIGTERM)
+          try:
+            self.proc.wait(10)
+          except subprocess.TimeoutExpired:
+            if os.name == "nt":
+              subprocess.run(
+                  ["taskkill", "/F", "/T", "/PID", str(self.proc.pid)],
+                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                  check=False)
+            self.proc.kill()
+            try:
+              self.proc.wait(5)
+            except subprocess.TimeoutExpired:
+              pass
+        self.proc = None
+    finally:
+      if self._log and not self._log.closed:
+        self._log.close()
 
 
 # =============================================================================
@@ -380,7 +476,7 @@ class Context:
 
   def snapshot(self, name: str) -> str:
     path = os.path.join(self.out_dir, f"{name}.png")
-    result = self.call("snapshot", path=path)
+    result = self.call("snapshot", path=to_browser_path(path, self.browser.binary))
     width, height = png_size(path)
     check(width > 200 and height > 200, f"window PNG too small: {width}x{height}")
     check(result.get("width") == width, "snapshot width mismatch")
@@ -397,8 +493,10 @@ def suite_startup(ctx: Context):
         f"Chromium {ping['chromium']}, expected {CHROMIUM_TAG}")
   check(ping["engine"] == "chromium-views", "not the unified engine")
   check(ping.get("cef") is None, "CEF must not be present")
-  check(os.path.samefile(ping["dataRoot"], ctx.browser.user_data),
-        "data root differs from --user-data-dir")
+  data_root = from_browser_path(ping["dataRoot"], ctx.browser.binary)
+  check(same_local_path(data_root, ctx.browser.user_data),
+        f"data root {ping['dataRoot']!r} differs from --user-data-dir "
+        f"{ctx.browser.user_data!r}")
   spaces = ctx.call("spaces")
   check(len(spaces) >= 1, "no default Space")
   check(any(s["focused"] for s in spaces), "no focused Space")
@@ -765,7 +863,8 @@ def suite_snapshot(ctx: Context):
   check(live, "no live tab for a page snapshot")
   page_path = os.path.join(ctx.out_dir, "page-final.png")
   ctx.call("select", tab=live["id"])
-  ctx.call("snapshot", tab=live["id"], path=page_path)
+  ctx.call("snapshot", tab=live["id"],
+           path=to_browser_path(page_path, ctx.browser.binary))
   width, height = png_size(page_path)
   check(width > 100 and height > 100, "page PNG too small")
   ctx.notes["window_png"] = path
@@ -961,6 +1060,385 @@ def suite_boosts(ctx: Context):
   check(not any(b["id"] == boost["id"] for b in listed), "Boost not deleted")
 
 
+def _collect_sidebar_nodes(nodes: List[Dict], out: Dict[str, Dict]):
+  """Recursively indexes SidebarNodeToValue trees by node/tab/pane id."""
+  for node in nodes:
+    kind = node.get("kind")
+    nid = node.get("id")
+    check(isinstance(nid, str) and len(nid) > 0,
+          f"corrupted empty-id sidebar node: {node}")
+    if kind == "tab":
+      check(isinstance(node.get("url"), str) and len(node["url"]) > 0,
+            f"empty url on tab {nid}: {node}")
+      check(isinstance(node.get("title"), str) and len(node["title"]) > 0,
+            f"empty title on tab {nid}: {node}")
+      out[nid] = {"kind": "tab", "url": node["url"], "title": node["title"]}
+    elif kind == "folder":
+      check(isinstance(node.get("title"), str) and len(node["title"]) > 0,
+            f"empty title on folder {nid}: {node}")
+      children = node.get("children") or []
+      out[nid] = {"kind": "folder", "title": node["title"],
+                  "child_ids": [c.get("id") for c in children]}
+      _collect_sidebar_nodes(children, out)
+    elif kind == "split":
+      panes = node.get("panes") or []
+      check(len(panes) >= 2, f"split {nid} has fewer than 2 panes: {node}")
+      out[nid] = {"kind": "split", "pane_ids": [p.get("id") for p in panes]}
+      for pane in panes:
+        pid = pane.get("id")
+        check(isinstance(pid, str) and len(pid) > 0,
+              f"corrupted empty-id split pane in {nid}: {pane}")
+        check(isinstance(pane.get("url"), str) and len(pane["url"]) > 0,
+              f"empty url on split pane {pid}: {pane}")
+        check(isinstance(pane.get("title"), str) and len(pane["title"]) > 0,
+              f"empty title on split pane {pid}: {pane}")
+        out[pid] = {"kind": "pane", "url": pane["url"], "title": pane["title"]}
+
+
+def _scan_browser_json_nodes(nodes: List[Dict], found_ids: set,
+                             empty_shells: List[Dict]):
+  """Recursively scans SnapshotStore-encoded SidebarNodes in browser.json."""
+  for wrapped in nodes:
+    if not isinstance(wrapped, dict):
+      continue
+    if "tab" in wrapped:
+      tab = (wrapped.get("tab") or {}).get("_0") or {}
+      tid = tab.get("id")
+      if not isinstance(tid, str) or not tid:
+        empty_shells.append(tab)
+      else:
+        found_ids.add(tid)
+    elif "folder" in wrapped:
+      folder = (wrapped.get("folder") or {}).get("_0") or {}
+      fid = folder.get("id")
+      if not isinstance(fid, str) or not fid:
+        empty_shells.append(folder)
+      else:
+        found_ids.add(fid)
+      _scan_browser_json_nodes(folder.get("children") or [],
+                               found_ids, empty_shells)
+    elif "split" in wrapped:
+      split = (wrapped.get("split") or {}).get("_0") or {}
+      sid = split.get("id")
+      if not isinstance(sid, str) or not sid:
+        empty_shells.append(split)
+      else:
+        found_ids.add(sid)
+      for pane in split.get("panes") or []:
+        pid = pane.get("id") if isinstance(pane, dict) else None
+        if not isinstance(pid, str) or not pid:
+          empty_shells.append(pane)
+        else:
+          found_ids.add(pid)
+
+
+def _load_browser_json(user_data: str) -> Dict:
+  path = os.path.join(user_data, "State", "browser.json")
+  check(os.path.exists(path), f"{path} does not exist")
+  with open(path, encoding="utf-8") as f:
+    data = json.load(f)
+  check(isinstance(data, dict), "browser.json root is not an object")
+  return data
+
+
+def _audit_browser_json_tabs(data: Dict):
+  found_ids = set()
+  empty_shells: List[Dict] = []
+  for prof in data.get("profiles") or []:
+    _scan_browser_json_nodes(prof.get("favorites") or [],
+                             found_ids, empty_shells)
+  for space in data.get("spaces") or []:
+    _scan_browser_json_nodes(space.get("pinned") or [],
+                             found_ids, empty_shells)
+    _scan_browser_json_nodes(space.get("today") or [],
+                             found_ids, empty_shells)
+  return found_ids, empty_shells
+
+
+def verify_clean_exit_browser_json(user_data: str):
+  """Verifies persisted State/browser.json after a clean browser shutdown."""
+  data = _load_browser_json(user_data)
+  windows = data.get("windows")
+  check(isinstance(windows, list) and len(windows) >= 1,
+        f"browser.json windows array missing or empty after clean shutdown: "
+        f"{windows!r}")
+  space_ids = {s.get("id") for s in (data.get("spaces") or [])
+               if isinstance(s, dict) and s.get("id")}
+  valid_win = False
+  for win in windows:
+    if not isinstance(win, dict):
+      continue
+    wid = win.get("id")
+    focused_space = win.get("focusedSpaceID")
+    sidebar_width = win.get("sidebarWidth")
+    check(isinstance(wid, str) and len(wid) > 0,
+          f"saved window has empty id: {win}")
+    check(isinstance(focused_space, str) and focused_space in space_ids,
+          f"saved window focusedSpaceID {focused_space!r} not in spaces")
+    check(isinstance(sidebar_width, (int, float)) and
+          164.0 <= float(sidebar_width) <= 500.0,
+          f"saved window sidebarWidth invalid: {sidebar_width!r}")
+    valid_win = True
+  check(valid_win, "no valid saved window entry in browser.json")
+  _, empty_shells = _audit_browser_json_tabs(data)
+  check(not empty_shells,
+        f"browser.json contains empty-ID tab shells after shutdown: "
+        f"{empty_shells}")
+
+
+def suite_regression_core_and_chrome(ctx: Context):
+  spaces_initial = ctx.call("spaces")
+  focused_initial = next(s["id"] for s in spaces_initial if s["focused"])
+
+  # --- 1. Auto-archive sweep data integrity (P0 SweepExpiredList) ------------
+  reg_space = ctx.call("space-create", title="E2E Regression")["id"]
+  ctx.call("space", space=reg_space)
+
+  solo_a = ctx.open_page("/page/101.html")
+  solo_b = ctx.open_page("/page/102.html")
+  folder_t1 = ctx.open_page("/page/103.html")
+  folder_t2 = ctx.open_page("/page/104.html")
+  split_t1 = ctx.open_page("/page/105.html")
+  split_t2 = ctx.open_page("/page/106.html")
+  all_created_tabs = [solo_a, solo_b, folder_t1, folder_t2, split_t1, split_t2]
+
+  # Ensure model URL and title propagated for every tab before grouping.
+  for tid, num in zip(all_created_tabs, (101, 102, 103, 104, 105, 106)):
+    ctx.client.wait_until(
+        lambda t=tid, n=num: (
+            lambda st: st if (f"/page/{n}.html" in st.get("url", "") and
+                              st.get("title") == f"Page {n}") else None
+        )(ctx.call("tab-state", tab=t)),
+        timeout=15, what=f"tab-state for Page {num}")
+
+  folder_res = ctx.call("folder", tabs=[folder_t1, folder_t2],
+                        section="today", title="Regression Folder", at=0)
+  folder_id = folder_res["folder"]
+  check(isinstance(folder_id, str) and len(folder_id) > 0,
+        f"folder id empty: {folder_res}")
+
+  ctx.call("select", tab=split_t2)
+  split_res = ctx.call("split", tab=split_t2)
+  split_id = split_res.get("split")
+  check(isinstance(split_id, str) and len(split_id) > 0,
+        f"split not created: {split_res}")
+  check(len(split_res["node"]["panes"]) == 2,
+        f"expected 2 split panes: {split_res}")
+
+  before_rows = ctx.call("tabs", sidebar=True)["rows"]["today"]
+  before_index: Dict[str, Dict] = {}
+  _collect_sidebar_nodes(before_rows, before_index)
+  expected_ids = set(all_created_tabs) | {folder_id, split_id}
+  check(expected_ids.issubset(before_index.keys()),
+        f"missing pre-sweep ids: {expected_ids - set(before_index.keys())}")
+
+  browser_json_path = os.path.join(ctx.browser.user_data, "State",
+                                   "browser.json")
+  before_mtime = (os.stat(browser_json_path).st_mtime_ns
+                  if os.path.exists(browser_json_path) else 0)
+
+  sweep = ctx.call("auto-archive-sweep")
+  check(sweep.get("ok") is True, f"auto-archive-sweep failed: {sweep}")
+
+  after_rows = ctx.call("tabs", sidebar=True)["rows"]["today"]
+  after_index: Dict[str, Dict] = {}
+  _collect_sidebar_nodes(after_rows, after_index)
+  check(after_index == before_index,
+        f"auto-archive-sweep mutated/corrupted retained Today nodes: "
+        f"before={before_index} after={after_index}")
+
+  # Wait for SnapshotStore debounced save after sweep and audit browser.json.
+  def _post_sweep_saved():
+    if not os.path.exists(browser_json_path):
+      return None
+    try:
+      st = os.stat(browser_json_path)
+      if st.st_mtime_ns <= before_mtime:
+        return None
+      data = _load_browser_json(ctx.browser.user_data)
+    except (OSError, json.JSONDecodeError, CheckFailed):
+      return None
+    found_ids, empty_shells = _audit_browser_json_tabs(data)
+    if expected_ids.issubset(found_ids):
+      return (found_ids, empty_shells)
+    return None
+
+  _, empty_shells = ctx.client.wait_until(
+      _post_sweep_saved, timeout=15, interval=0.25,
+      what="post-sweep browser.json save")
+  check(not empty_shells,
+        f"browser.json has empty-ID tab shells after sweep: {empty_shells}")
+
+  # --- 2. ClearToday retained-item integrity (P0 ClearToday) -----------------
+  clear_space = ctx.call("space-create", title="E2E ClearToday")["id"]
+  ctx.call("space", space=clear_space)
+  only_tab = ctx.open_page("/page/107.html")
+  ctx.call("select", tab=only_tab)
+  only_state = ctx.client.wait_until(
+      lambda: (lambda st: st if ("/page/107.html" in st.get("url", "") and
+                                 st.get("title") == "Page 107") else None)(
+          ctx.call("tab-state", tab=only_tab)),
+      timeout=15, what="only tab state for ClearToday")
+  expected_url = only_state["url"]
+  expected_title = only_state["title"]
+
+  # Default clear-today keeps the active tab -> 0 removed, no shell corruption.
+  cleared_default = ctx.call("clear-today", space=clear_space)
+  check(cleared_default.get("removed") == 0,
+        f"clear-today removed active tab: {cleared_default}")
+  cleared_explicit = ctx.call("clear-today", space=clear_space,
+                              keep=[only_tab])
+  check(cleared_explicit.get("removed") == 0,
+        f"clear-today(keep=[active]) removed retained tab: {cleared_explicit}")
+
+  today_after_clear = ctx.call("tabs", sidebar=True)["rows"]["today"]
+  check(len(today_after_clear) == 1,
+        f"expected 1 retained tab in Today, got {today_after_clear}")
+  kept_node = today_after_clear[0]
+  check(kept_node.get("id") == only_tab,
+        f"retained tab id corrupted: {kept_node}")
+  check(kept_node.get("url") == expected_url,
+        f"retained tab url corrupted: {kept_node}")
+  check(kept_node.get("title") == expected_title,
+        f"retained tab title corrupted: {kept_node}")
+  post_clear_state = ctx.call("tab-state", tab=only_tab)
+  check(post_clear_state["id"] == only_tab and
+        post_clear_state["url"] == expected_url and
+        post_clear_state["title"] == expected_title,
+        f"tab-state corrupted after ClearToday: {post_clear_state}")
+
+  # --- 3. Space theme live propagation (UpdateSpace) -------------------------
+  style_a = {
+      "math_version": 1,
+      "key_color": {"r": 0.15, "g": 0.65, "b": 0.90, "a": 1},
+      "color_count": 2, "wheel": "analogous", "appearance": "light",
+      "noise_factor": 0.2, "texture": "sand", "intensity_factor": 0.7,
+  }
+  theme_a = ctx.call("space-theme", space=clear_space, style=style_a)
+  check(abs(theme_a["style"]["key_color"]["r"] - 0.15) < 1e-6 and
+        theme_a["style"]["appearance"] == "light",
+        f"first space-theme did not apply: {theme_a}")
+
+  style_b = {
+      "math_version": 1,
+      "key_color": {"r": 0.88, "g": 0.22, "b": 0.55, "a": 1},
+      "color_count": 2, "wheel": "complementary", "appearance": "dark",
+      "noise_factor": 0.4, "texture": "grain", "intensity_factor": 0.85,
+  }
+  theme_b = ctx.call("space-theme", space=clear_space, style=style_b)
+  check(abs(theme_b["style"]["key_color"]["r"] - 0.88) < 1e-6 and
+        theme_b["style"]["wheel"] == "complementary" and
+        theme_b["style"]["appearance"] == "dark",
+        f"second space-theme did not update: {theme_b}")
+  spaces_now = {s["id"]: s for s in ctx.call("spaces")}
+  stored_style = spaces_now[clear_space]["theme"]["style"]
+  check(abs(stored_style["key_color"]["r"] - 0.88) < 1e-6 and
+        abs(stored_style["key_color"]["b"] - 0.55) < 1e-6 and
+        stored_style["appearance"] == "dark",
+        f"updated Space theme stale in spaces readback: {stored_style}")
+  ctx.snapshot("regression-space-theme")
+
+  # --- 4. Overlay non-blocking visibility (OverlayWidgetHost) ----------------
+  # Exercise Command Bar, Find Bar, and Tab Switcher open/close cycles and
+  # verify no overlay remains visible or blocks subsequent tab navigation.
+  cb = ctx.call("command-bar", action="open", text="regression")
+  check(cb["shown"], "command bar failed to open")
+  cb = ctx.call("command-bar", action="close")
+  check(not cb["shown"], "command bar stayed shown after close")
+
+  fb = ctx.call("find-bar", action="open", text="marker")
+  check(fb["shown"], "find bar failed to open")
+  fb = ctx.call("find-bar", action="close")
+  check(not fb["shown"], "find bar stayed shown after close")
+
+  ctx.call("tab-switcher", action="forward")
+  ctx.call("tab-switcher", action="cancel")
+  sw_after = ctx.call("tab-switcher")
+  check(not sw_after["active"] and not sw_after.get("shown"),
+        f"tab switcher leaked visible: {sw_after}")
+
+  check(not ctx.call("command-bar")["shown"], "command bar leaked visible")
+  check(not ctx.call("find-bar")["shown"], "find bar leaked visible")
+
+  # Normal tab creation & navigation remain unblocked after overlay cycles.
+  nav_tab = ctx.open_page("/page/108.html")
+  ctx.call("navigate", tab=nav_tab, url=ctx.fixtures.url("/page/109.html"))
+  ctx.call("wait", tab=nav_tab, timeout=30)
+  check("/page/109.html" in ctx.call("tab-state", tab=nav_tab)["url"],
+        "navigation blocked after overlay open/close")
+  marker = ctx.client.eval("document.getElementById('marker').textContent",
+                           tab=nav_tab)
+  check(marker == "marker-109", f"unexpected page marker: {marker!r}")
+
+  # --- 5. Secondary window & Incognito independence (P0 MainWindowId) --------
+  wins_before = ctx.call("windows")
+  main_id = wins_before["mainWindowId"]
+  check(isinstance(main_id, str) and len(main_id) > 0,
+        f"missing mainWindowId: {wins_before}")
+  main_before = next(
+      (w for w in wins_before["windows"] if w["id"] == main_id), None)
+  check(main_before is not None, f"main window missing: {wins_before}")
+  main_space_before = main_before["focusedSpace"]
+  main_sel_before = main_before["selectedNode"]
+
+  win2 = ctx.call("windows", action="open", space=reg_space)
+  win2_id = win2.get("windowId")
+  check(isinstance(win2_id, str) and len(win2_id) > 0 and win2_id != main_id,
+        f"secondary window did not get distinct id: {win2}")
+  check(win2["mainWindowId"] == main_id,
+        f"secondary window changed mainWindowId: {win2}")
+  main_after_w2 = next(
+      (w for w in win2["windows"] if w["id"] == main_id), None)
+  check(main_after_w2 is not None and
+        main_after_w2["focusedSpace"] == main_space_before and
+        main_after_w2["selectedNode"] == main_sel_before,
+        f"secondary window overwrote main window state: "
+        f"before={main_before} after={main_after_w2}")
+  sec_entry = next(
+      (w for w in win2["windows"] if w["id"] == win2_id), None)
+  check(sec_entry is not None and sec_entry["incognito"] is False and
+        sec_entry["focusedSpace"] == reg_space,
+        f"secondary window state wrong: {sec_entry}")
+  ctx.call("windows", action="close", window=win2_id)
+  ctx.client.wait_until(
+      lambda: not any(w["id"] == win2_id
+                      for w in ctx.call("windows")["windows"]),
+      timeout=15, what="secondary window close")
+
+  inc = ctx.call("windows", action="incognito")
+  inc_id = inc.get("windowId")
+  check(isinstance(inc_id, str) and len(inc_id) > 0 and inc_id != main_id,
+        f"incognito window did not get distinct id: {inc}")
+  check(inc["mainWindowId"] == main_id,
+        f"incognito window changed mainWindowId: {inc}")
+  inc_entry = next(
+      (w for w in inc["windows"] if w["id"] == inc_id), None)
+  check(inc_entry is not None and inc_entry["incognito"] is True and
+        inc_entry["focusedSpace"] != main_space_before,
+        f"incognito window did not get its own ephemeral Space: {inc_entry}")
+  # Fresh Incognito window has <2 tabs: Tab Switcher must stay hidden/inactive
+  # (OverlayWidgetHost regression with <2 tabs).
+  sw_inc = ctx.call("tab-switcher", action="forward", window=inc_id)
+  check(not sw_inc["active"] and not sw_inc.get("shown"),
+        f"tab switcher active/shown with <2 tabs in fresh window: {sw_inc}")
+  main_after_inc = next(
+      (w for w in inc["windows"] if w["id"] == main_id), None)
+  check(main_after_inc is not None and
+        main_after_inc["focusedSpace"] == main_space_before and
+        main_after_inc["selectedNode"] == main_sel_before,
+        f"incognito window overwrote main window state: "
+        f"before={main_before} after={main_after_inc}")
+  ctx.call("windows", action="close", window=inc_id)
+  ctx.client.wait_until(
+      lambda: not any(w["id"] == inc_id
+                      for w in ctx.call("windows")["windows"]),
+      timeout=15, what="incognito window close")
+
+  # Restore initial focused Space for any following suite.
+  ctx.call("space", space=focused_initial)
+  ctx.notes["regression_verified"] = True
+
+
 SUITES: Dict[str, Callable[[Context], None]] = {
     "startup": suite_startup,
     "spaces": suite_spaces,
@@ -979,6 +1457,7 @@ SUITES: Dict[str, Callable[[Context], None]] = {
     "webui": suite_webui,
     "boosts": suite_boosts,
     "extensions": suite_extensions,
+    "regression_core_and_chrome": suite_regression_core_and_chrome,
     "snapshot": suite_snapshot,
 }
 
@@ -991,7 +1470,7 @@ def main(argv) -> int:
   parser = argparse.ArgumentParser(
       description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   parser.add_argument("--binary", help="the built browser (open, open.exe, "
-                      "or .app/Contents/MacOS/<name>)")
+                      "chrome.exe, or .app/Contents/MacOS/<name>)")
   parser.add_argument("--only", help="comma-separated suites")
   parser.add_argument("--list", action="store_true", help="list suites")
   parser.add_argument("--out", default=None,
@@ -1003,7 +1482,8 @@ def main(argv) -> int:
   parser.add_argument("--xvfb", action="store_true",
                       help="force Xvfb (Linux; automatic without $DISPLAY)")
   parser.add_argument("--port", action="store_true",
-                      help="loopback TCP instead of AF_UNIX")
+                      help="loopback TCP instead of AF_UNIX "
+                           "(automatic for Windows .exe binaries)")
   parser.add_argument("--sync-url", help="use a running SyncServer")
   parser.add_argument("--no-sync-server", action="store_true",
                       help="do not start a local SyncServer")
@@ -1026,6 +1506,9 @@ def main(argv) -> int:
     if unknown:
       parser.error(f"unknown suites: {', '.join(unknown)}")
 
+  win_binary = is_windows_binary(binary)
+  use_port = options.port or win_binary
+
   out_dir = options.out or tempfile.mkdtemp(prefix="open-unified-e2e-")
   os.makedirs(out_dir, exist_ok=True)
   if options.user_data:
@@ -1033,7 +1516,7 @@ def main(argv) -> int:
   else:
     ud_parent = None
     # macOS sun_path is 104 bytes; keep AF_UNIX socket paths short when $TMPDIR is deep.
-    if not options.port and os.name != "nt" and os.path.isdir("/tmp"):
+    if not use_port and os.name != "nt" and os.path.isdir("/tmp"):
       sample = os.path.join(tempfile.gettempdir(), "open-unified-ud-XXXXXXXX",
                             "automation.sock")
       if len(sample.encode("utf-8")) >= 100:
@@ -1044,8 +1527,9 @@ def main(argv) -> int:
   report = {"binary": binary, "platform": platform.platform(),
             "started": time.time(), "suites": []}
   exit_code = 0
+  browser: Optional[Browser] = None
   try:
-    if sys.platform.startswith("linux") and \
+    if sys.platform.startswith("linux") and not win_binary and \
         (options.xvfb or not env.get("DISPLAY")):
       xvfb = Xvfb().start()
       cleanups.append(xvfb.stop)
@@ -1066,7 +1550,7 @@ def main(argv) -> int:
       sync_url = sync_proc.url
 
     browser = Browser(binary, user_data, os.path.join(out_dir, "browser.log"),
-                      options.port, env, options.browser_arg)
+                      use_port, env, options.browser_arg)
     started = time.monotonic()
     browser.start()
     cleanups.append(browser.stop)
@@ -1095,7 +1579,7 @@ def main(argv) -> int:
             + (f"  {entry.get('error')}" if entry["status"] != "PASS" else ""),
             flush=True)
     report["notes"] = {k: v for k, v in ctx.notes.items()
-                       if isinstance(v, (str, int, float, list))}
+                       if isinstance(v, (str, int, float, list, bool))}
   except Exception as e:  # noqa: BLE001 - harness setup failure
     report["setup_error"] = f"{type(e).__name__}: {e}"
     print(f"SETUP FAILED: {report['setup_error']}", file=sys.stderr)
@@ -1106,6 +1590,27 @@ def main(argv) -> int:
         cleanup()
       except Exception:  # noqa: BLE001
         pass
+    # Session restore & clean exit check: after browser.stop() sends "quit" and
+    # the process exits cleanly, State/browser.json must retain a non-empty
+    # "windows" array (with focusedSpaceID & sidebarWidth) and zero empty tabs.
+    if browser is not None and "regression_core_and_chrome" in selected:
+      t0 = time.monotonic()
+      entry = {"suite": "clean_exit_browser_json"}
+      try:
+        check(browser.clean_exit, "browser did not exit cleanly on quit")
+        verify_clean_exit_browser_json(user_data)
+        entry["status"] = "PASS"
+      except (CheckFailed, OSError, json.JSONDecodeError) as e:
+        entry["status"] = "FAIL"
+        entry["error"] = f"{type(e).__name__}: {e}"
+        entry["trace"] = traceback.format_exc(limit=4)
+        if exit_code == 0:
+          exit_code = 1
+      entry["seconds"] = round(time.monotonic() - t0, 2)
+      report["suites"].append(entry)
+      print(f"{entry['status']:4}  {entry['suite']:12} {entry['seconds']:7.2f}s"
+            + (f"  {entry.get('error')}" if entry["status"] != "PASS" else ""),
+            flush=True)
     report["finished"] = time.time()
     with open(os.path.join(out_dir, "report.json"), "w",
               encoding="utf-8") as f:

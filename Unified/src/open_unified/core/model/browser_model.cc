@@ -3259,6 +3259,17 @@ size_t BrowserModel::ClearToday(const SpaceID& space_id,
     return false;
   };
 
+  bool any_removable = false;
+  for (const SidebarNode& node : space->today) {
+    if (!retained(node)) {
+      any_removable = true;
+      break;
+    }
+  }
+  if (!any_removable) {
+    return 0;
+  }
+
   struct RemovedEntry {
     size_t original_index;
     SidebarNode node;
@@ -3282,6 +3293,7 @@ size_t BrowserModel::ClearToday(const SpaceID& space_id,
     }
   }
   if (removed.empty()) {
+    space->today = std::move(kept);
     return 0;
   }
   size_t removed_count = removed.size();
@@ -3380,10 +3392,22 @@ bool BrowserModel::SweepExpiredList(std::vector<SidebarNode>& list,
       }
       kept.push_back(std::move(node));
     } else if (Split* split = node.as_split()) {
+      bool any_pane_expired = false;
+      for (const Tab& pane : split->panes) {
+        const bool is_shown = shown_tabs.count(pane.id) > 0;
+        if (!is_shown && pane.last_active_at < cutoff) {
+          any_pane_expired = true;
+          break;
+        }
+      }
+      if (!any_pane_expired) {
+        kept.push_back(std::move(node));
+        continue;
+      }
+
       NodeParent sp{NodeParentKind::kSplitPane, split->id};
       std::vector<Tab> live_panes;
       std::vector<double> live_fractions;
-      bool split_changed = false;
       bool has_valid_fractions = (split->fractions.size() == split->panes.size());
       for (size_t i = 0; i < split->panes.size(); ++i) {
         Tab& pane = split->panes[i];
@@ -3402,17 +3426,12 @@ bool BrowserModel::SweepExpiredList(std::vector<SidebarNode>& list,
           rec.kind = "tab";
           archived->push_back(std::move(rec));
           UnregisterTab(pane);
-          split_changed = true;
         } else {
           if (has_valid_fractions) {
             live_fractions.push_back(split->fractions[i]);
           }
           live_panes.push_back(std::move(pane));
         }
-      }
-      if (!split_changed) {
-        kept.push_back(std::move(node));
-        continue;
       }
       if (live_panes.size() >= 2) {
         double sum =
@@ -3452,8 +3471,8 @@ bool BrowserModel::SweepExpiredList(std::vector<SidebarNode>& list,
     }
   }
 
+  list = std::move(kept);
   if (list_changed) {
-    list = std::move(kept);
     changed_parents->push_back(parent);
   }
   return list_changed;
@@ -3888,6 +3907,64 @@ bool BrowserModel::DeleteProfile(const ProfileID& profile_id) {
         return true;
       },
       [profile_id](BrowserModel& m) { return m.DeleteProfile(profile_id); });
+  return true;
+}
+
+bool BrowserModel::ReorderProfiles(const std::vector<ProfileID>& ordered_ids) {
+  if (ordered_ids.empty() || profiles_.size() <= 1) {
+    return false;
+  }
+
+  std::unordered_set<ProfileID> seen;
+  seen.reserve(ordered_ids.size());
+  for (const ProfileID& id : ordered_ids) {
+    if (profile_index_by_id_.find(id) == profile_index_by_id_.end()) {
+      return false;
+    }
+    if (!seen.insert(id).second) {
+      return false;
+    }
+  }
+
+  std::vector<ProfileID> old_order;
+  old_order.reserve(profiles_.size());
+  for (const Profile& profile : profiles_) {
+    old_order.push_back(profile.id);
+  }
+
+  std::vector<ProfileID> new_order;
+  new_order.reserve(profiles_.size());
+  for (const ProfileID& id : ordered_ids) {
+    new_order.push_back(id);
+  }
+  for (const Profile& profile : profiles_) {
+    if (seen.find(profile.id) == seen.end()) {
+      new_order.push_back(profile.id);
+    }
+  }
+
+  if (new_order == old_order) {
+    return false;
+  }
+
+  std::vector<Profile> reordered;
+  reordered.reserve(profiles_.size());
+  for (const ProfileID& id : new_order) {
+    size_t idx = profile_index_by_id_.at(id);
+    reordered.push_back(std::move(profiles_[idx]));
+  }
+  profiles_ = std::move(reordered);
+  RebuildContainerIndexMaps();
+
+  TreeChange reload;
+  reload.kind = TreeChange::Kind::kReload;
+  reload.parent = NodeParent{NodeParentKind::kFavorites, profiles_.front().id};
+  Emit(reload);
+
+  PushUndo(
+      "Reorder Profiles",
+      [old_order](BrowserModel& m) { return m.ReorderProfiles(old_order); },
+      [new_order](BrowserModel& m) { return m.ReorderProfiles(new_order); });
   return true;
 }
 

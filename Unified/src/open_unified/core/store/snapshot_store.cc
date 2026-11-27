@@ -686,6 +686,116 @@ void MoveCorruptSnapshotAside(const base::FilePath& file_path) {
   base::Move(file_path, dest);
 }
 
+// Detects corrupted moved-from empty-shell tab entries (id == "", url == "",
+// title == "") left behind by the old SweepExpiredList bug.
+bool IsCorruptedEmptyShellTab(const base::DictValue& d) {
+  const std::string* id = d.FindString("id");
+  if (!id || !id->empty()) {
+    return false;
+  }
+  const std::string* url = d.FindString("url");
+  const std::string* title = d.FindString("title");
+  return (!url || url->empty()) && (!title || title->empty());
+}
+
+std::optional<SidebarNode> DeserializeNodeImpl(
+    const base::DictValue& d,
+    std::vector<std::string>* repairs_out) {
+  if (const base::DictValue* wrap = d.FindDict("tab")) {
+    const base::DictValue* inner = wrap->FindDict("_0");
+    if (!inner) return std::nullopt;
+    if (IsCorruptedEmptyShellTab(*inner)) {
+      if (repairs_out) {
+        repairs_out->push_back("dropped corrupted empty-shell tab");
+      }
+      return std::nullopt;
+    }
+    return SidebarNode(SnapshotStore::DeserializeTab(*inner));
+  }
+  if (const base::DictValue* wrap = d.FindDict("folder")) {
+    const base::DictValue* inner = wrap->FindDict("_0");
+    if (!inner) return std::nullopt;
+    Folder f;
+    f.id = SafeUuid(inner->FindString("id"));
+    if (const std::string* title = inner->FindString("title")) {
+      f.title = *title;
+    }
+    f.is_expanded = inner->FindBool("isExpanded").value_or(false);
+    f.peeked_child_id = OptionalUuid(inner->FindString("peekedChildID"));
+    if (const std::string* ci = inner->FindString("customIcon")) {
+      f.custom_icon = *ci;
+    }
+    f.icon_override = DeserializeIcon(inner->FindDict("iconOverride"));
+    if (const base::ListValue* children = inner->FindList("children")) {
+      for (const base::Value& v : *children) {
+        if (const base::DictValue* cd = v.GetIfDict()) {
+          if (auto child = DeserializeNodeImpl(*cd, repairs_out)) {
+            f.children.push_back(std::move(*child));
+          }
+        }
+      }
+    }
+    if (const base::DictValue* ld = inner->FindDict("live")) {
+      LiveFolderConfig cfg;
+      if (const std::string* prov = ld->FindString("provider")) {
+        cfg.provider = *prov;
+      } else if (const std::string* src = ld->FindString("source")) {
+        cfg.provider = *src;
+      }
+      if (const std::string* q = ld->FindString("query")) {
+        cfg.query = *q;
+      }
+      cfg.refresh_interval_sec = ld->FindInt("refreshIntervalSec").value_or(300);
+      cfg.enabled = ld->FindBool("enabled").value_or(true);
+      f.live = std::move(cfg);
+    }
+    return SidebarNode(std::move(f));
+  }
+  if (const base::DictValue* wrap = d.FindDict("split")) {
+    const base::DictValue* inner = wrap->FindDict("_0");
+    if (!inner) return std::nullopt;
+    Split s;
+    s.id = SafeUuid(inner->FindString("id"));
+    const std::string* orient = inner->FindString("orientation");
+    s.orientation = (orient && *orient == "vertical")
+                        ? SplitOrientation::kVertical
+                        : SplitOrientation::kHorizontal;
+    if (const base::ListValue* fracs = inner->FindList("fractions")) {
+      for (const base::Value& v : *fracs) {
+        if (v.is_double() || v.is_int()) {
+          s.fractions.push_back(v.GetDouble());
+        }
+      }
+    }
+    if (const base::ListValue* panes = inner->FindList("panes")) {
+      for (const base::Value& v : *panes) {
+        if (const base::DictValue* pd = v.GetIfDict()) {
+          if (IsCorruptedEmptyShellTab(*pd)) {
+            if (repairs_out) {
+              repairs_out->push_back("dropped corrupted empty-shell tab");
+            }
+            continue;
+          }
+          s.panes.push_back(SnapshotStore::DeserializeTab(*pd));
+        }
+      }
+    }
+    if (s.panes.empty()) {
+      return std::nullopt;
+    }
+    if (s.panes.size() == 1) {
+      return SidebarNode(std::move(s.panes.front()));
+    }
+    s.focused_pane_id = OptionalUuid(inner->FindString("focusedPaneID"));
+    if (const std::string* ct = inner->FindString("customTitle")) {
+      s.custom_title = *ct;
+    }
+    s.icon_override = DeserializeIcon(inner->FindDict("iconOverride"));
+    return SidebarNode(std::move(s));
+  }
+  return std::nullopt;
+}
+
 }  // namespace
 
 SnapshotStore::SnapshotStore(base::FilePath data_root)
@@ -1046,87 +1156,7 @@ base::DictValue SnapshotStore::SerializeNode(const SidebarNode& node) {
 
 std::optional<SidebarNode> SnapshotStore::DeserializeNode(
     const base::DictValue& d) {
-  if (const base::DictValue* wrap = d.FindDict("tab")) {
-    const base::DictValue* inner = wrap->FindDict("_0");
-    if (!inner) return std::nullopt;
-    return SidebarNode(DeserializeTab(*inner));
-  }
-  if (const base::DictValue* wrap = d.FindDict("folder")) {
-    const base::DictValue* inner = wrap->FindDict("_0");
-    if (!inner) return std::nullopt;
-    Folder f;
-    f.id = SafeUuid(inner->FindString("id"));
-    if (const std::string* title = inner->FindString("title")) {
-      f.title = *title;
-    }
-    f.is_expanded = inner->FindBool("isExpanded").value_or(false);
-    f.peeked_child_id = OptionalUuid(inner->FindString("peekedChildID"));
-    if (const std::string* ci = inner->FindString("customIcon")) {
-      f.custom_icon = *ci;
-    }
-    f.icon_override = DeserializeIcon(inner->FindDict("iconOverride"));
-    if (const base::ListValue* children = inner->FindList("children")) {
-      for (const base::Value& v : *children) {
-        if (const base::DictValue* cd = v.GetIfDict()) {
-          if (auto child = DeserializeNode(*cd)) {
-            f.children.push_back(std::move(*child));
-          }
-        }
-      }
-    }
-    if (const base::DictValue* ld = inner->FindDict("live")) {
-      LiveFolderConfig cfg;
-      if (const std::string* prov = ld->FindString("provider")) {
-        cfg.provider = *prov;
-      } else if (const std::string* src = ld->FindString("source")) {
-        cfg.provider = *src;
-      }
-      if (const std::string* q = ld->FindString("query")) {
-        cfg.query = *q;
-      }
-      cfg.refresh_interval_sec = ld->FindInt("refreshIntervalSec").value_or(300);
-      cfg.enabled = ld->FindBool("enabled").value_or(true);
-      f.live = std::move(cfg);
-    }
-    return SidebarNode(std::move(f));
-  }
-  if (const base::DictValue* wrap = d.FindDict("split")) {
-    const base::DictValue* inner = wrap->FindDict("_0");
-    if (!inner) return std::nullopt;
-    Split s;
-    s.id = SafeUuid(inner->FindString("id"));
-    const std::string* orient = inner->FindString("orientation");
-    s.orientation = (orient && *orient == "vertical")
-                        ? SplitOrientation::kVertical
-                        : SplitOrientation::kHorizontal;
-    if (const base::ListValue* fracs = inner->FindList("fractions")) {
-      for (const base::Value& v : *fracs) {
-        if (v.is_double() || v.is_int()) {
-          s.fractions.push_back(v.GetDouble());
-        }
-      }
-    }
-    if (const base::ListValue* panes = inner->FindList("panes")) {
-      for (const base::Value& v : *panes) {
-        if (const base::DictValue* pd = v.GetIfDict()) {
-          s.panes.push_back(DeserializeTab(*pd));
-        }
-      }
-    }
-    if (s.panes.empty()) {
-      return std::nullopt;
-    }
-    if (s.panes.size() == 1) {
-      return SidebarNode(std::move(s.panes.front()));
-    }
-    s.focused_pane_id = OptionalUuid(inner->FindString("focusedPaneID"));
-    if (const std::string* ct = inner->FindString("customTitle")) {
-      s.custom_title = *ct;
-    }
-    s.icon_override = DeserializeIcon(inner->FindDict("iconOverride"));
-    return SidebarNode(std::move(s));
-  }
-  return std::nullopt;
+  return DeserializeNodeImpl(d, nullptr);
 }
 
 base::DictValue SnapshotStore::SerializeModel(const BrowserModel& model) {
@@ -1250,7 +1280,8 @@ std::unique_ptr<BrowserModel> SnapshotStore::DeserializeModel(
       if (const base::ListValue* favs = pd->FindList("favorites")) {
         for (const base::Value& fv : *favs) {
           if (const base::DictValue* fd = fv.GetIfDict()) {
-            if (auto node = DeserializeNode(*fd); node && node->as_tab()) {
+            if (auto node = DeserializeNodeImpl(*fd, repairs_out);
+                node && node->as_tab()) {
               p.favorites.push_back(std::move(*node->as_tab()));
             }
           }
@@ -1282,7 +1313,7 @@ std::unique_ptr<BrowserModel> SnapshotStore::DeserializeModel(
       if (const base::ListValue* pinned = sd->FindList("pinned")) {
         for (const base::Value& nv : *pinned) {
           if (const base::DictValue* nd = nv.GetIfDict()) {
-            if (auto node = DeserializeNode(*nd)) {
+            if (auto node = DeserializeNodeImpl(*nd, repairs_out)) {
               s.pinned.push_back(std::move(*node));
             }
           }
@@ -1291,7 +1322,7 @@ std::unique_ptr<BrowserModel> SnapshotStore::DeserializeModel(
       if (const base::ListValue* today = sd->FindList("today")) {
         for (const base::Value& nv : *today) {
           if (const base::DictValue* nd = nv.GetIfDict()) {
-            if (auto node = DeserializeNode(*nd)) {
+            if (auto node = DeserializeNodeImpl(*nd, repairs_out)) {
               s.today.push_back(std::move(*node));
             }
           }

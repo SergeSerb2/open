@@ -70,16 +70,21 @@ class OpenClient:
               timeout: float = 120.0) -> "OpenClient":
     if port is None and socket_path is None and user_data_dir:
       port_file = os.path.join(user_data_dir, "automation.port")
-      if not hasattr(socket, "AF_UNIX") and os.path.exists(port_file):
+      sock_file = default_socket_path(user_data_dir)
+      if os.path.exists(port_file) and (
+          sys.platform == "win32" or not hasattr(socket, "AF_UNIX") or
+          not os.path.exists(sock_file)):
         with open(port_file, encoding="utf-8") as f:
           port = int(f.read().strip())
       else:
-        socket_path = default_socket_path(user_data_dir)
+        socket_path = sock_file
     if port is not None:
       if token is None and user_data_dir:
         token_file = os.path.join(user_data_dir, "automation.token")
         with open(token_file, encoding="utf-8") as f:
           token = f.read().strip()
+        if not token:
+          raise ValueError("automation.token is empty")
       sock = socket.create_connection(("127.0.0.1", port), timeout=timeout)
       return cls(sock, token=token, timeout=timeout)
     if not socket_path:
@@ -104,6 +109,7 @@ class OpenClient:
     last_error: Optional[BaseException] = None
     timeout = connect_args.pop("timeout", 120.0)
     while time.monotonic() < end:
+      client = None
       try:
         resolved = port() if callable(port) else port
         client = cls.connect(timeout=10.0, port=resolved, **connect_args)
@@ -111,6 +117,8 @@ class OpenClient:
         client._sock.settimeout(timeout)
         return client
       except (OSError, OpenError, ValueError, json.JSONDecodeError) as e:
+        if client is not None:
+          client.close()
         last_error = e
         time.sleep(poll_s)
     raise TimeoutError(f"automation channel not ready: {last_error}")

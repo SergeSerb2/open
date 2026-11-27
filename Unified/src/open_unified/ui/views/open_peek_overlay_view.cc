@@ -158,6 +158,21 @@ class OpenPeekOverlayView::StackEntryDelegate
         owner_->GoForward();
         return true;
       }
+#if !BUILDFLAG(IS_MAC)
+      const bool alt_only =
+          (event.GetModifiers() & blink::WebInputEvent::kAltKey) != 0 &&
+          (event.GetModifiers() & (blink::WebInputEvent::kControlKey |
+                                   blink::WebInputEvent::kMetaKey |
+                                   blink::WebInputEvent::kShiftKey)) == 0;
+      if (alt_only && event.windows_key_code == ui::VKEY_LEFT) {
+        owner_->GoBack();
+        return true;
+      }
+      if (alt_only && event.windows_key_code == ui::VKEY_RIGHT) {
+        owner_->GoForward();
+        return true;
+      }
+#endif
     }
     if (views::FocusManager* focus_manager = owner_->GetFocusManager()) {
       return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
@@ -282,6 +297,10 @@ OpenPeekOverlayView::OpenPeekOverlayView(PeekDelegate* delegate)
   AddAccelerator(ui::Accelerator(ui::VKEY_O, secondary::kPrimaryModifier));
   AddAccelerator(ui::Accelerator(ui::VKEY_OEM_4, secondary::kPrimaryModifier));
   AddAccelerator(ui::Accelerator(ui::VKEY_OEM_6, secondary::kPrimaryModifier));
+#if !BUILDFLAG(IS_MAC)
+  AddAccelerator(ui::Accelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN));
+  AddAccelerator(ui::Accelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN));
+#endif
 }
 
 OpenPeekOverlayView::~OpenPeekOverlayView() {
@@ -790,6 +809,16 @@ bool OpenPeekOverlayView::AcceleratorPressed(
     GoForward();
     return true;
   }
+#if !BUILDFLAG(IS_MAC)
+  if (accelerator.key_code() == ui::VKEY_LEFT && accelerator.IsAltDown()) {
+    GoBack();
+    return true;
+  }
+  if (accelerator.key_code() == ui::VKEY_RIGHT && accelerator.IsAltDown()) {
+    GoForward();
+    return true;
+  }
+#endif
   return false;
 }
 

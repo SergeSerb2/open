@@ -592,6 +592,8 @@ void OpenCaptureController::Cancel() {
   }
   DestroyOverlay();
   DismissResultCard();
+  parent_widget_observation_.Reset();
+  active_.parent_widget = nullptr;
 }
 
 void OpenCaptureController::DismissResultCard() {
@@ -817,8 +819,11 @@ void OpenCaptureController::OnCaptureResultAction(CaptureResultAction action) {
       last_result_.reset();
       DismissResultCard();
       if (active_.web_contents && active_.parent_widget) {
-        CaptureRegion(active_.web_contents.get(), active_.parent_widget,
-                      active_.content_rect, active_.appearance);
+        content::WebContents* wc = active_.web_contents.get();
+        views::Widget* parent = active_.parent_widget;
+        const gfx::Rect rect = active_.content_rect;
+        const secondary::Appearance appearance = active_.appearance;
+        CaptureRegion(wc, parent, rect, appearance);
       }
       break;
     }
@@ -846,14 +851,26 @@ void OpenCaptureController::OnCaptureResultHoverChanged(bool hovered) {
   (void)hovered;
 }
 
+void OpenCaptureController::OnWidgetDestroying(views::Widget* widget) {
+  if (widget == active_.parent_widget) {
+    parent_widget_observation_.Reset();
+    active_.parent_widget = nullptr;
+    Cancel();
+  }
+}
+
 void OpenCaptureController::PrepareContext(
     content::WebContents* web_contents,
     views::Widget* parent_widget,
     const gfx::Rect& content_rect_in_widget,
     const secondary::Appearance& appearance) {
+  parent_widget_observation_.Reset();
   active_ = ActiveContext();
   active_.web_contents = web_contents->GetWeakPtr();
   active_.parent_widget = parent_widget;
+  if (parent_widget) {
+    parent_widget_observation_.Observe(parent_widget);
+  }
   active_.content_rect = content_rect_in_widget;
   active_.appearance = appearance;
   active_.off_the_record =
@@ -985,11 +1002,18 @@ void OpenCaptureController::FinalizeCapturedBitmap(
     return;
   }
 
+  std::string capture_id = result.capture_id;
+  const CaptureKind capture_kind = result.kind;
+  std::string source_url = result.source_url;
+  std::string title = result.title;
+  const TimestampSec created_at = result.created_at;
+  std::vector<uint8_t> png_bytes_copy = result.png_bytes;
+
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&SaveCaptureFileOnIo, data_dir_, result.capture_id,
-                     result.kind, result.source_url, result.title,
-                     result.created_at, result.png_bytes),
+      base::BindOnce(&SaveCaptureFileOnIo, data_dir_, std::move(capture_id),
+                     capture_kind, std::move(source_url), std::move(title),
+                     created_at, std::move(png_bytes_copy)),
       base::BindOnce(
           [](base::WeakPtr<OpenCaptureController> self, uint64_t gen,
              CaptureResult res, DiskSaveOutcome outcome) {

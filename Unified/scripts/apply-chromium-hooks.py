@@ -543,6 +543,11 @@ def build_patches() -> List[Patch]:
                            'browser_widget_impl', kind='source_set'),
       op_gn_buildflags_dep(frame_gn, '0001-buildflags-layout',
                            'browser_view_layout_impl', kind='source_set'),
+      op_gn_buildflags_dep(frame_gn, '0001-buildflags-frame-win',
+                           'browser_frame_view_win_impl', kind='source_set'),
+      op_gn_buildflags_dep('chrome/browser/lifetime/BUILD.gn',
+                           '0001-buildflags-lifetime', 'impl',
+                           kind='source_set'),
       op_gn_buildflags_dep('chrome/browser/ui/webui/BUILD.gn',
                            '0001-buildflags', 'configs', kind='source_set'),
       op_gn_buildflags_dep('chrome/browser/resource_coordinator/BUILD.gn',
@@ -588,6 +593,7 @@ def build_patches() -> List[Patch]:
   bv = 'chrome/browser/ui/views/frame/browser_view.cc'
   bw = 'chrome/browser/ui/views/frame/browser_widget.cc'
   bvl = 'chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc'
+  bfvw = 'chrome/browser/ui/views/frame/browser_frame_view_win.cc'
   p.append(Patch('0002', 'open-browser-view-hook',
                  'OpenBrowserView in BrowserView/BrowserWidget: install, '
                  'uninstall, OS-aware widget params, layout and non-client '
@@ -630,6 +636,31 @@ def build_patches() -> List[Patch]:
                   '    return;\n'
                   '  }'),
           params={'host': r'views::View\*\s+(\w+)'}, indent='  '),
+      op_include(bfvw, '0002-win-include', HOOKS_HEADER, guard=True),
+      op_function_start(
+          bfvw, '0002-win-hide-caption-buttons',
+          r'^void BrowserFrameViewWin::LayoutCaptionButtons\(\)',
+          guarded('  if (open_unified::hooks::HasOpenBrowserView('
+                  'GetBrowserView())) {\n'
+                  '    caption_button_container_->SetVisible(false);\n'
+                  '    return;\n'
+                  '  }'), indent='  '),
+      op_before_line(
+          bfvw, '0002-win-caption-hit-test',
+          r'^    if \(window_component == HTTOP && !IsMaximized\(\)\) \{',
+          within=r'^int BrowserFrameViewWin::NonClientHitTest\(',
+          code=guarded(
+              '    if (open_unified::hooks::HasOpenBrowserView('
+              'GetBrowserView()) &&\n'
+              '        (frame_component == HTMINBUTTON ||\n'
+              '         frame_component == HTMAXBUTTON ||\n'
+              '         frame_component == HTCLOSE)) {\n'
+              '      if (window_component == HTTOP && !IsMaximized() &&\n'
+              '          point.y() < 1) {\n'
+              '        return window_component;\n'
+              '      }\n'
+              '      return frame_component;\n'
+              '    }'), indent='    '),
   ]))
 
   # 0003 ------------------------------------------------------------------
@@ -881,6 +912,60 @@ def build_patches() -> List[Patch]:
           '          Open Helper\n'
           '        </message>\n'
           '      </if>'),
+      op_replace(
+          'chrome/app/chromium_strings.grd',
+          '0008-grd-task-manager-title',
+          '      <if expr="not is_macosx and not is_chromeos">\n'
+          '        <message name="IDS_TASK_MANAGER_TITLE" desc="The title of the Task Manager window">\n'
+          '          Task Manager - Chromium\n'
+          '        </message>\n'
+          '      </if>',
+          '      <if expr="not is_macosx and not is_chromeos">\n'
+          '        <message name="IDS_TASK_MANAGER_TITLE" desc="The title of the Task Manager window">\n'
+          '          Task Manager — Open\n'
+          '        </message>\n'
+          '      </if>'),
+      op_replace(
+          'chrome/app/chromium_strings.grd',
+          '0008-grd-window-title-format',
+          '          <else>\n'
+          '            <message name="IDS_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for titles displayed in tabs and popup windows">\n'
+          '              <ph name="PAGE_TITLE">$1<ex>Google</ex></ph> - Chromium\n'
+          '            </message>\n'
+          '          </else>',
+          '          <else>\n'
+          '            <message name="IDS_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for titles displayed in tabs and popup windows">\n'
+          '              <ph name="PAGE_TITLE">$1<ex>Google</ex></ph> — Open\n'
+          '            </message>\n'
+          '          </else>'),
+      op_replace(
+          'chrome/app/chromium_strings.grd',
+          '0008-grd-captive-portal-title-format',
+          '      <if expr="not is_chromeos and not is_macosx">\n'
+          '        <!-- Captive Portal Browser Window Title Format -->\n'
+          '        <message name="IDS_CAPTIVE_PORTAL_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for titles displayed in captive portal popup windows">\n'
+          '          <ph name="PAGE_TITLE">$1<ex>Google</ex></ph> - Network Sign-in - Chromium\n'
+          '        </message>\n'
+          '      </if>',
+          '      <if expr="not is_chromeos and not is_macosx">\n'
+          '        <!-- Captive Portal Browser Window Title Format -->\n'
+          '        <message name="IDS_CAPTIVE_PORTAL_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for titles displayed in captive portal popup windows">\n'
+          '          <ph name="PAGE_TITLE">$1<ex>Google</ex></ph> - Network Sign-in — Open\n'
+          '        </message>\n'
+          '      </if>'),
+      op_replace(
+          'chrome/app/chromium_strings.grd',
+          '0008-grd-accessible-window-title-format',
+          '        <else>\n'
+          '          <message name="IDS_ACCESSIBLE_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for the accessible name of a tabbed browser window">\n'
+          '            <ph name="PAGE_TITLE">$1<ex>Google</ex></ph> - Chromium\n'
+          '          </message>\n'
+          '        </else>',
+          '        <else>\n'
+          '          <message name="IDS_ACCESSIBLE_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for the accessible name of a tabbed browser window">\n'
+          '            <ph name="PAGE_TITLE">$1<ex>Google</ex></ph> — Open\n'
+          '          </message>\n'
+          '        </else>'),
   ]))
 
   # 0009 ------------------------------------------------------------------
@@ -926,6 +1011,7 @@ def build_patches() -> List[Patch]:
   # 0011 ------------------------------------------------------------------
   sbci = 'chrome/browser/ui/startup/startup_browser_creator_impl.cc'
   appc = 'chrome/browser/app_controller_mac.mm'
+  bcm = 'chrome/browser/lifetime/browser_close_manager.cc'
   p.append(Patch('0011', 'open-external-urls',
                  'URLs the OS hands over (command line, second launch, macOS '
                  'application:openURLs: with sender bundle id), quit guard, '
@@ -1013,6 +1099,23 @@ def build_patches() -> List[Patch]:
               '      return;\n'
               '    }\n'
               '  }'), indent='  '),
+      op_include(bcm, '0011-bcm-include', HOOKS_HEADER, guard=True),
+      op_before_line(
+          bcm, '0011-bcm-should-terminate',
+          r'^  TryToCloseBrowsers\(\);\n',
+          within=r'^void BrowserCloseManager::StartClosingBrowsers\(\) \{',
+          code=guarded(
+              '#if !BUILDFLAG(IS_MAC)\n'
+              '  // Open Unified: Warn Before Quitting + active Downloads guard on\n'
+              '  // Windows/Linux for user-initiated exits (AttemptUserExit leaves\n'
+              '  // IsTryingToQuit() false; programmatic AttemptExit/restarts set it\n'
+              '  // true).\n'
+              '  if (!browser_shutdown::IsTryingToQuit() &&\n'
+              '      !open_unified::hooks::ShouldTerminateApp()) {\n'
+              '    CancelBrowserClose();\n'
+              '    return;\n'
+              '  }\n'
+              '#endif'), indent='  '),
   ]))
 
   # 0012 ------------------------------------------------------------------

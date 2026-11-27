@@ -110,7 +110,17 @@ diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
-@@ -2384,6 +2384,9 @@
+@@ -1466,6 +1466,9 @@
+       "//ui/gfx",
+       "//ui/strings:ui_strings",
+     ]
++    # open_unified hook 0001-buildflags-frame-win begin
++    deps += [ "//open_unified:buildflags" ]
++    # open_unified hook 0001-buildflags-frame-win end
+   }
+ 
+   source_set("browser_native_widget_factory_aura") {
+@@ -2384,6 +2387,9 @@
      "//chrome/browser/ui/views/bookmarks",
      "//ui/base:features",
    ]
@@ -120,7 +130,7 @@ diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/fr
  }
  
  source_set("browser_view_app_layout_impl") {
-@@ -2779,4 +2782,7 @@
+@@ -2779,4 +2785,7 @@
    if (is_win) {
      deps += [ "//media" ]
    }
@@ -129,6 +139,19 @@ diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/fr
 +  deps += [ "//open_unified:buildflags" ]
 +  # open_unified hook 0001-buildflags-widget end
 +}
+diff --git a/chrome/browser/lifetime/BUILD.gn b/chrome/browser/lifetime/BUILD.gn
+--- a/chrome/browser/lifetime/BUILD.gn
++++ b/chrome/browser/lifetime/BUILD.gn
+@@ -213,6 +213,9 @@
+   if (enable_background_mode) {
+     deps += [ "//chrome/browser/background/extensions" ]
+   }
++  # open_unified hook 0001-buildflags-lifetime begin
++  deps += [ "//open_unified:buildflags" ]
++  # open_unified hook 0001-buildflags-lifetime end
+ }
+ 
+ if (!is_android) {
 diff --git a/chrome/browser/ui/webui/BUILD.gn b/chrome/browser/ui/webui/BUILD.gn
 --- a/chrome/browser/ui/webui/BUILD.gn
 +++ b/chrome/browser/ui/webui/BUILD.gn

@@ -1906,7 +1906,14 @@ void OpenAutomationServer::RegisterCommands() {
 
   Add("tab-switcher", base::BindRepeating([](const base::DictValue& args,
                                              Reply reply) {
-        OpenWindowUi* ui = MainUi();
+        OpenWindowUi* ui = nullptr;
+        if (const std::string* wid = args.FindString("window");
+            wid && !wid->empty()) {
+          OpenWindowController* wc = Svc()->window_controller();
+          ui = wc ? wc->WindowUiFor(*wid) : nullptr;
+        } else {
+          ui = MainUi();
+        }
         if (!ui) {
           Err(std::move(reply), "no window");
           return;
@@ -2302,6 +2309,154 @@ void OpenAutomationServer::RegisterCommands() {
           std::move(status_reply).Run(sync->Status());
         }
       }));
+
+#if BUILDFLAG(OPEN_ENABLE_AUTOMATION)
+  // --- Auto-archive, Clear Today, and Windows --------------------------------
+  Add("auto-archive-sweep",
+      base::BindRepeating([](const base::DictValue&, Reply reply) {
+        OpenBrowserService* service = Svc();
+        service->RunAutoArchiveSweep();
+        service->ScheduleSave();
+        Ok(std::move(reply), base::DictValue().Set("ok", true));
+      }));
+
+  Add("clear-today",
+      base::BindRepeating([](const base::DictValue& args, Reply reply) {
+        OpenBrowserService* service = Svc();
+        BrowserModel& model = service->model();
+        std::string space_id = json::GetString(args, "space");
+        if (space_id.empty()) {
+          if (const BrowserWindowState* window =
+                  model.FindWindow(service->MainWindowId())) {
+            space_id = window->focused_space_id;
+          }
+        } else if (!model.FindSpace(space_id)) {
+          for (const Space& space : model.spaces()) {
+            if (space.title == space_id) {
+              space_id = space.id;
+              break;
+            }
+          }
+        }
+        if (space_id.empty() || !model.FindSpace(space_id)) {
+          Err(std::move(reply), "no space " + space_id);
+          return;
+        }
+        std::set<ItemID> keeping;
+        const base::ListValue* keep_list = args.FindList("keep");
+        if (keep_list) {
+          for (const base::Value& item : *keep_list) {
+            if (item.is_string() && !item.GetString().empty()) {
+              keeping.insert(item.GetString());
+            }
+          }
+        }
+        if (args.FindBool("keepActive").value_or(!keep_list)) {
+          if (std::optional<ItemID> active =
+                  service->tab_bridge()->ActiveTabId()) {
+            keeping.insert(*active);
+          }
+        }
+        const size_t removed = model.ClearToday(space_id, keeping);
+        Ok(std::move(reply),
+           base::DictValue().Set("removed", static_cast<int>(removed)));
+      }));
+
+  Add("windows",
+      base::BindRepeating([](const base::DictValue& args, Reply reply) {
+        OpenBrowserService* service = Svc();
+        const BrowserModel& model = service->model();
+        OpenTabBridge* bridge = service->tab_bridge();
+        OpenWindowController* wc = service->window_controller();
+        const std::string action = json::GetString(args, "action", "state");
+        std::optional<WindowID> opened_id;
+
+        if (action == "open") {
+          std::optional<SpaceID> space_id;
+          if (const std::string* s = args.FindString("space");
+              s && !s->empty()) {
+            space_id = *s;
+          }
+          WindowID id = bridge->OpenNewWindow(space_id);
+          if (id.empty()) {
+            Err(std::move(reply), "cannot open window");
+            return;
+          }
+          opened_id = std::move(id);
+        } else if (action == "incognito") {
+          std::optional<ProfileID> profile_id;
+          if (const std::string* p = args.FindString("profile");
+              p && !p->empty()) {
+            profile_id = *p;
+          }
+          std::optional<GURL> url;
+          if (const std::string* u = args.FindString("url"); u && !u->empty()) {
+            GURL parsed(*u);
+            if (!parsed.is_valid()) {
+              Err(std::move(reply), "bad url");
+              return;
+            }
+            url = std::move(parsed);
+          }
+          WindowID id = bridge->OpenNewIncognitoWindow(profile_id, url);
+          if (id.empty()) {
+            Err(std::move(reply), "cannot open incognito window");
+            return;
+          }
+          opened_id = std::move(id);
+        } else if (action == "close") {
+          const std::string window_id = json::GetString(args, "window");
+          if (window_id.empty()) {
+            Err(std::move(reply), "close needs window");
+            return;
+          }
+          if (window_id == service->MainWindowId()) {
+            Err(std::move(reply), "cannot close main window via windows");
+            return;
+          }
+          BrowserWindowInterface* browser = bridge->BrowserForWindow(window_id);
+          if (!browser || !browser->GetWindow()) {
+            Err(std::move(reply), "no window " + window_id);
+            return;
+          }
+          browser->GetWindow()->Close();
+        } else if (action != "state") {
+          Err(std::move(reply), "unknown action " + action);
+          return;
+        }
+
+        auto append_window = [wc](base::ListValue& out,
+                                  const BrowserWindowState& w) {
+          base::DictValue row;
+          row.Set("id", w.id);
+          row.Set("incognito", w.is_incognito);
+          row.Set("focusedSpace", w.focused_space_id);
+          row.Set("sidebarWidth", w.sidebar_width);
+          row.Set("hasUi", wc && wc->WindowUiFor(w.id) != nullptr);
+          auto sel = w.selected_node_by_space.find(w.focused_space_id);
+          row.Set("selectedNode", sel == w.selected_node_by_space.end()
+                                      ? base::Value()
+                                      : base::Value(sel->second));
+          out.Append(std::move(row));
+        };
+
+        base::ListValue list;
+        for (const BrowserWindowState& w : model.windows()) {
+          append_window(list, w);
+        }
+        for (const BrowserWindowState& w : model.incognito_windows()) {
+          append_window(list, w);
+        }
+        base::DictValue result;
+        result.Set("mainWindowId", service->MainWindowId());
+        result.Set("activeWindowId", service->ActiveWindowId());
+        if (opened_id) {
+          result.Set("windowId", *opened_id);
+        }
+        result.Set("windows", std::move(list));
+        Ok(std::move(reply), std::move(result));
+      }));
+#endif  // BUILDFLAG(OPEN_ENABLE_AUTOMATION)
 }
 
 }  // namespace open_unified

@@ -629,6 +629,7 @@ class OpenPaneChromeView : public views::View,
 
 namespace split_internal {
 class SplitPaneView;
+class SplitPaneShadowView;
 class SplitDividerView;
 class SplitDropOverlayView;
 }  // namespace split_internal
@@ -681,6 +682,9 @@ class OpenSplitContainerView : public views::View {
     return drop_target_pane_index_;
   }
   void SetDropOverlayAccentColor(SkColor color);
+  // Theme content polarity (true = dark Space, false = light Space) for the
+  // divider grabber pill and unfocused split-pane inset border.
+  void SetDarkContent(bool dark);
 
   // Swaps two panes in place (2..4 panes) without detaching or reloading
   // their WebContents. Notifies OpenSplitContainerDelegate::OnPanesSwapped.
@@ -777,7 +781,10 @@ class OpenSplitContainerView : public views::View {
                    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
 
   void ApplyFrames(const std::vector<gfx::Rect>& frames);
+  void SyncPaneShadows();
   void SyncDividers();
+  void ReorderSplitChildren();
+  bool EffectiveDarkContent() const;
   void UpdateDropOverlay();
   bool is_split() const { return presentation_.split_id.has_value(); }
   split_internal::SplitPaneView* FindPane(const ItemID& tab_id);
@@ -786,6 +793,8 @@ class OpenSplitContainerView : public views::View {
 
   raw_ptr<OpenSplitContainerDelegate> delegate_;
   SplitPresentation presentation_;
+  std::optional<bool> dark_content_override_;
+  std::vector<raw_ptr<split_internal::SplitPaneShadowView>> pane_shadows_;
   std::vector<raw_ptr<split_internal::SplitPaneView>> panes_;
   std::vector<raw_ptr<split_internal::SplitDividerView>> dividers_;
   raw_ptr<split_internal::SplitDropOverlayView> drop_overlay_ = nullptr;

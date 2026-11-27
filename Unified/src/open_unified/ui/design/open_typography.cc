@@ -4,10 +4,19 @@
 
 #include <array>
 #include <cmath>
+#include <optional>
 #include <string>
 
 #include "base/check_op.h"
+#include "build/build_config.h"
 #include "ui/base/resource/resource_bundle.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "skia/ext/font_utils.h"
+#include "third_party/skia/include/core/SkFontMgr.h"
+#include "third_party/skia/include/core/SkFontStyle.h"
+#include "third_party/skia/include/core/SkTypeface.h"
+#endif
 
 namespace open_unified::typography {
 
@@ -15,12 +24,47 @@ namespace {
 
 using Weight = gfx::Font::Weight;
 
+std::array<const gfx::FontList*, static_cast<size_t>(OpenFont::kCount)>
+    g_font_cache{};
+std::optional<int> g_base_font_size;
+
 int BaseFontSize() {
-  static const int size = ui::ResourceBundle::GetSharedInstance()
-                              .GetFontListWithDelta(0)
-                              .GetFontSize();
-  return size;
+  if (!g_base_font_size.has_value()) {
+    g_base_font_size = ui::ResourceBundle::GetSharedInstance()
+                           .GetFontListWithDelta(0)
+                           .GetFontSize();
+  }
+  return *g_base_font_size;
 }
+
+#if BUILDFLAG(IS_WIN)
+bool IsWindowsFontFamilyInstalled(const char* family) {
+  sk_sp<SkFontMgr> fm = skia::DefaultFontMgr();
+  return fm && fm->matchFamilyStyle(family, SkFontStyle()) != nullptr;
+}
+
+std::string TypefaceForSize(int size) {
+  static const bool has_variable_text =
+      IsWindowsFontFamilyInstalled("Segoe UI Variable Text");
+  static const bool has_variable_display =
+      IsWindowsFontFamilyInstalled("Segoe UI Variable Display");
+  if (size >= 18) {
+    if (has_variable_display) {
+      return "Segoe UI Variable Display";
+    }
+    if (has_variable_text) {
+      return "Segoe UI Variable Text";
+    }
+    return std::string();
+  }
+  return has_variable_text ? std::string("Segoe UI Variable Text")
+                           : std::string();
+}
+#else
+std::string TypefaceForSize(int) {
+  return std::string();
+}
+#endif
 
 }  // namespace
 
@@ -76,20 +120,23 @@ const gfx::FontList& Make(int size, gfx::Font::Weight weight) {
   // ResourceBundle caches font lists per (typeface, delta, weight) and
   // returns a stable reference.
   return ui::ResourceBundle::GetSharedInstance().GetFontListForDetails(
-      ui::ResourceBundle::FontDetails(std::string(), size - BaseFontSize(),
-                                      weight));
+      ui::ResourceBundle::FontDetails(TypefaceForSize(size),
+                                      size - BaseFontSize(), weight));
 }
 
 const gfx::FontList& Get(OpenFont font) {
   DCHECK_LT(static_cast<int>(font), static_cast<int>(OpenFont::kCount));
-  static std::array<const gfx::FontList*, static_cast<size_t>(OpenFont::kCount)>
-      cache{};
-  const gfx::FontList*& slot = cache[static_cast<size_t>(font)];
+  const gfx::FontList*& slot = g_font_cache[static_cast<size_t>(font)];
   if (!slot) {
     const FontToken token = TokenFor(font);
     slot = &Make(token.size, token.weight);
   }
   return *slot;
+}
+
+void InvalidateCache() {
+  g_font_cache.fill(nullptr);
+  g_base_font_size.reset();
 }
 
 int TextTopForBaseline(const gfx::FontList& font_list, float baseline_y) {

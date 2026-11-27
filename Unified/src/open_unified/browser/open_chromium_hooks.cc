@@ -199,6 +199,7 @@ std::optional<CommandId> MapChromiumCommandToOpen(int command_id) {
     case IDC_ZOOM_NORMAL:
       return CommandId::kZoomActualSize;
     case IDC_DEV_TOOLS:
+    case IDC_DEV_TOOLS_TOGGLE:
       return CommandId::kDeveloperTools;
     case IDC_DEV_TOOLS_CONSOLE:
       return CommandId::kJavaScriptConsole;
@@ -556,6 +557,11 @@ void OnBrowserViewDestroying(BrowserView* browser_view) {
   OpenBrowserView::Uninstall(browser_view);
 }
 
+bool HasOpenBrowserView(BrowserView* browser_view) {
+  return browser_view &&
+         OpenBrowserView::FromBrowserView(browser_view) != nullptr;
+}
+
 bool LayoutOpenBrowserView(views::View* host) {
   auto* browser_view = views::AsViewClass<BrowserView>(host);
   OpenBrowserView* open_view =
@@ -590,6 +596,11 @@ void AdjustBrowserWidgetParams(BrowserView* browser_view,
   params->remove_standard_frame = true;
   params->opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params->shadow_type = views::Widget::InitParams::ShadowType::kDrop;
+#if BUILDFLAG(IS_LINUX)
+  params->wm_class_name = "open-browser";
+  params->wm_class_class = "Open";
+  params->wayland_app_id = "open-browser";
+#endif
 #endif
 }
 
@@ -889,6 +900,16 @@ bool IsReservedBrowserCommand(int command_id) {
     case IDC_SELECT_PREVIOUS_TAB:
     case IDC_CYCLE_TO_NEXT_TAB:
     case IDC_CYCLE_TO_PREV_TAB:
+    case IDC_SELECT_TAB_0:
+    case IDC_SELECT_TAB_1:
+    case IDC_SELECT_TAB_2:
+    case IDC_SELECT_TAB_3:
+    case IDC_SELECT_TAB_4:
+    case IDC_SELECT_TAB_5:
+    case IDC_SELECT_TAB_6:
+    case IDC_SELECT_TAB_7:
+    case IDC_SELECT_LAST_TAB:
+    case IDC_TOGGLE_VERTICAL_TABS_COLLAPSE:
     case IDC_EXIT:
       return true;
     default:

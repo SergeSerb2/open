@@ -103,6 +103,9 @@ class OpenTabBridge : public BrowserModel::Observer,
     virtual void OnTabDocumentAvailable(const ItemID& tab_id,
                                         content::WebContents* contents) {}
     virtual void OnTabActivated(const ItemID& tab_id) {}
+    // A Chromium Browser has been tracked and bound to |window_id|.
+    virtual void OnBrowserWindowBound(BrowserWindowInterface* browser,
+                                      const WindowID& window_id) {}
   };
 
   explicit OpenTabBridge(OpenBrowserService* service);
@@ -210,6 +213,9 @@ class OpenTabBridge : public BrowserModel::Observer,
       BrowserWindowInterface* browser) const {
     return WindowOfBrowser(browser);
   }
+  // WindowID currently being created by EnsureBrowser() while
+  // CreateBrowserWindow() is on the stack.
+  std::optional<WindowID> PendingWindowId() const { return pending_window_id_; }
   std::vector<std::pair<ItemID, content::WebContents*>> LoadedTabs() const;
 
   // Called by OpenTabObserver.
@@ -326,6 +332,8 @@ class OpenTabBridge : public BrowserModel::Observer,
   // resulting notifications are not mirrored back.
   bool applying_ = false;
   bool resync_pending_ = false;
+  std::optional<WindowID> pending_window_id_;
+  std::set<raw_ptr<BrowserWindowInterface>> single_profile_closing_browsers_;
 
   std::map<WindowID, WindowBrowsers> windows_;
   std::map<raw_ptr<BrowserWindowInterface>, ManagedBrowser> browsers_;

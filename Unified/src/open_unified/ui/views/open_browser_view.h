@@ -28,8 +28,10 @@
 #include "base/callback_list.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_observation.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "open_unified/browser/platform/open_platform.h"
@@ -60,6 +62,7 @@ class NativeViewHost;
 namespace open_unified {
 
 class OpenSidebarView;
+class OpenWindowControlsView;
 
 // ---------------------------------------------------------------------------
 // Intents: everything the hot-path views ask the browser to do.
@@ -276,8 +279,10 @@ class OpenBrowserView : public views::View,
   };
 
   enum class WindowControls {
-    kNativeMac,  // macOS system traffic lights; the sidebar reserves x 0..77
-    kNone,       // Windows / Linux: no window controls in the sidebar
+    kNativeMac,      // macOS system traffic lights; the sidebar reserves x 0..77
+    kWindowsFluent,  // Windows 11 Fluent flush caption buttons (top-right)
+    kLinuxCsd,       // Linux CSD circular caption buttons (leading/trailing)
+    kNone,           // Tiling WM / frameless with no window controls
   };
 
   // Native traffic-light placement for the macOS adapter: `origin` is the
@@ -310,6 +315,9 @@ class OpenBrowserView : public views::View,
 
   const WindowID& window_id() const override;
   OpenViewController* controller() const override;
+  // Rebinds this view to a different model WindowID (multi-window handoff),
+  // resetting cached theme/space/favicon state and refreshing chrome.
+  void RebindWindowId(const WindowID& window_id);
 
   // --- Panel slots -----------------------------------------------------------------
   // Single-pane web contents host (e.g. a views::WebView). Gets 6 pt corner
@@ -329,6 +337,7 @@ class OpenBrowserView : public views::View,
   views::View* GetOverlay(OverlaySlot slot) const;
   // Anchors for bubbles and the inline Command Bar.
   views::View* GetUrlPillView() const;
+  gfx::Rect UrlPillScreenBounds() const;
   views::View* GetSiteControlAnchorView() const;
   gfx::Rect GetPanelBounds() const;    // this view's coordinates
   gfx::Rect GetSidebarBounds() const;  // anchored or card
@@ -342,6 +351,9 @@ class OpenBrowserView : public views::View,
   bool sidebar_hidden() const { return sidebar_hidden_; }
   float sidebar_width() const { return sidebar_width_; }
   bool IsRevealCardShown() const;
+  // Holds the hover-reveal card open while a menu or popover is active.
+  void IncrementRevealHoldLock();
+  void DecrementRevealHoldLock();
 
   // --- Theme ---------------------------------------------------------------------------
   const OpenSpaceThemeState& FocusedThemeState();
@@ -402,9 +414,12 @@ class OpenBrowserView : public views::View,
 
   // --- views::View --------------------------------------------------------------------
   void Layout(PassKey) override;
+  void PaintChildren(const views::PaintInfo& info) override;
   void AddedToWidget() override;
   void RemovedFromWidget() override;
   void OnThemeChanged() override;
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override;
 
   // --- views::WidgetObserver ---------------------------------------------------------
   // Kept for API compatibility; the active look follows
@@ -412,6 +427,8 @@ class OpenBrowserView : public views::View,
   // or Find bar child window never paints the browser window inactive.
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override;
   void OnWidgetDestroying(views::Widget* widget) override;
 
  private:
@@ -419,6 +436,7 @@ class OpenBrowserView : public views::View,
   class PanelShadowView;
   class PanelHostView;
   class ResizeHandle;
+  class HiddenSidebarToggleButton;
   class RevealCardView;
   class RevealObserver;
   class PlusMenuDelegate;
@@ -429,6 +447,9 @@ class OpenBrowserView : public views::View,
   enum class CardState { kOff, kShowing, kShown, kHiding };
 
   // Layout helpers.
+  bool HasCaptionStrip() const;
+  void RebuildWindowControls();
+  void SyncWindowControlsState();
   gfx::Rect PanelBoundsFor(bool sidebar_hidden, float sidebar_width) const;
   void LayoutPanel(const gfx::Rect& panel);
   gfx::Rect RevealCardBounds() const;
@@ -468,6 +489,8 @@ class OpenBrowserView : public views::View,
   void StopRevealMonitor();
   bool PointInRevealZone(const gfx::Point& point) const;
   bool PointInHoldZone(const gfx::Point& point) const;
+  bool IsRevealHoldLocked() const;
+  void ReleaseMenuRevealLock();
   void ShowRevealCard();
   void HideRevealCard();
   void ApplyCardOffset(double offset);
@@ -491,6 +514,9 @@ class OpenBrowserView : public views::View,
   raw_ptr<PanelHostView> panel_host_ = nullptr;
   raw_ptr<OpenSidebarView> sidebar_ = nullptr;
   raw_ptr<ResizeHandle> resize_handle_ = nullptr;
+  raw_ptr<OpenWindowControlsView> window_controls_view_ = nullptr;
+  raw_ptr<OpenWindowControlsView> leading_window_controls_view_ = nullptr;
+  raw_ptr<HiddenSidebarToggleButton> hidden_sidebar_toggle_ = nullptr;
   raw_ptr<RevealCardView> reveal_card_ = nullptr;
   raw_ptr<views::View> web_contents_host_ = nullptr;
   raw_ptr<views::View> overlay_host_ = nullptr;
@@ -521,6 +547,11 @@ class OpenBrowserView : public views::View,
   base::OneShotTimer reveal_exit_timer_;
   // Last pointer position seen by the reveal monitor (view coordinates).
   std::optional<gfx::Point> last_reveal_point_;
+  std::optional<gfx::Point> prev_reveal_point_;
+  base::TimeTicks prev_reveal_time_;
+  bool reveal_suppressed_by_velocity_ = false;
+  int reveal_hold_locks_ = 0;
+  bool menu_holding_reveal_lock_ = false;
   std::unique_ptr<motion::OpenSpringAnimator> card_motion_;
 
   // Window and frame.
@@ -535,9 +566,9 @@ class OpenBrowserView : public views::View,
   bool tab_fullscreen_ = false;
   bool tab_fullscreen_applied_ = false;
 
-  // macOS window material.
+  // Window material (macOS vibrancy, Windows 11 Mica/Mica Alt).
   bool translucent_window_ = false;
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   bool translucent_chrome_enabled_ = false;
   std::optional<WindowMaterialSpec> applied_material_;
 #endif
@@ -547,9 +578,10 @@ class OpenBrowserView : public views::View,
   std::optional<SpaceID> shown_theme_space_;
   std::optional<SpaceID> transition_space_;
 
-  // Favicon decode cache: tab id -> (PNG size, image).
+  // Favicon decode cache: tab id -> (PNG size, hash, image).
   struct FaviconEntry {
     size_t png_size = 0;
+    size_t png_hash = 0;
     gfx::ImageSkia image;
   };
   std::map<ItemID, FaviconEntry> favicon_cache_;
@@ -560,6 +592,7 @@ class OpenBrowserView : public views::View,
 
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       widget_observation_{this};
+  base::WeakPtrFactory<OpenBrowserView> weak_factory_{this};
 };
 
 }  // namespace open_unified

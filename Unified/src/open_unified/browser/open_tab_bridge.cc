@@ -14,8 +14,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/devtools/devtools_window.h"  // nogncheck
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/profiles/profile.h"
@@ -159,6 +161,12 @@ WEB_CONTENTS_USER_DATA_KEY_IMPL(OpenEmptyStateMarker);
 
 bool IsEmptyState(content::WebContents* contents) {
   return contents && OpenEmptyStateMarker::FromWebContents(contents);
+}
+
+bool IsBrowserClosing(BrowserWindowInterface* browser) {
+  return !browser || !browser->GetTabStripModel() ||
+         browser->GetTabStripModel()->closing_all() ||
+         browser->IsDeleteScheduled();
 }
 
 }  // namespace
@@ -430,6 +438,7 @@ void OpenTabBridge::Shutdown() {
   media_capture_observer_.reset();
   content::DevToolsAgentHost::RemoveObserver(this);
   ClearObservedStrips();
+  single_profile_closing_browsers_.clear();
   windows_.clear();
   browsers_.clear();
   contents_.clear();
@@ -581,7 +590,12 @@ BrowserWindowInterface* OpenTabBridge::EnsureBrowser(
         static_cast<int>(window->frame_height));
   }
   base::AutoReset<bool> applying(&applying_, true);
-  BrowserWindowInterface* browser = CreateBrowserWindow(std::move(params));
+  BrowserWindowInterface* browser = nullptr;
+  {
+    base::AutoReset<std::optional<WindowID>> pending_window(
+        &pending_window_id_, window_id);
+    browser = CreateBrowserWindow(std::move(params));
+  }
   if (!browser) {
     return nullptr;
   }
@@ -601,15 +615,22 @@ void OpenTabBridge::TrackBrowser(BrowserWindowInterface* browser,
   managed.primary = managed.primary || primary;
   managed.incognito = managed.incognito || incognito;
   AddObservedStrip(browser->GetTabStripModel());
+  for (Observer& observer : observers_) {
+    observer.OnBrowserWindowBound(browser, window_id);
+  }
 }
 
 void OpenTabBridge::ScrubNewTabPagesLater(BrowserWindowInterface* browser) {
+  if (IsBrowserClosing(browser)) {
+    return;
+  }
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           [](base::WeakPtr<OpenTabBridge> self,
              base::WeakPtr<BrowserWindowInterface> browser) {
-            if (!self || !browser || !self->browsers_.contains(browser.get())) {
+            if (!self || !browser || IsBrowserClosing(browser.get()) ||
+                !self->browsers_.contains(browser.get())) {
               return;
             }
             TabStripModel* strip = browser->GetTabStripModel();
@@ -637,12 +658,16 @@ void OpenTabBridge::ScrubNewTabPagesLater(BrowserWindowInterface* browser) {
 }
 
 void OpenTabBridge::ResyncBrowserLater(BrowserWindowInterface* browser) {
+  if (IsBrowserClosing(browser)) {
+    return;
+  }
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(
           [](base::WeakPtr<OpenTabBridge> self,
              base::WeakPtr<BrowserWindowInterface> browser) {
-            if (self && browser && self->ProfileOfBrowser(browser.get())) {
+            if (self && browser && !IsBrowserClosing(browser.get()) &&
+                self->ProfileOfBrowser(browser.get())) {
               self->ResyncBrowser(browser.get());
             }
           },
@@ -718,10 +743,18 @@ void OpenTabBridge::RunScheduledResync() {
   }
   ResyncAll();
   for (const BrowserWindowState& window : service_->model().windows()) {
+    BrowserWindowInterface* browser = BrowserForWindow(window.id);
+    if (!browser || IsBrowserClosing(browser)) {
+      continue;
+    }
     ApplySelectionFromModel(window.id);
   }
   for (const BrowserWindowState& window :
        service_->model().incognito_windows()) {
+    BrowserWindowInterface* browser = BrowserForWindow(window.id);
+    if (!browser || IsBrowserClosing(browser)) {
+      continue;
+    }
     ApplySelectionFromModel(window.id);
   }
 }
@@ -780,6 +813,9 @@ std::vector<ItemID> OpenTabBridge::StripOrderFor(
 }
 
 void OpenTabBridge::ResyncBrowser(BrowserWindowInterface* browser) {
+  if (IsBrowserClosing(browser)) {
+    return;
+  }
   auto managed = browsers_.find(browser);
   if (managed == browsers_.end()) {
     return;
@@ -931,6 +967,9 @@ void OpenTabBridge::ApplySelectionFromModel(const WindowID& window_id) {
 }
 
 void OpenTabBridge::EnsureEmptyStatePresent(BrowserWindowInterface* browser) {
+  if (IsBrowserClosing(browser)) {
+    return;
+  }
   TabStripModel* strip = browser->GetTabStripModel();
   for (int i = 0; i < strip->count(); ++i) {
     if (IsEmptyState(strip->GetWebContentsAt(i))) {
@@ -948,6 +987,9 @@ void OpenTabBridge::EnsureEmptyStatePresent(BrowserWindowInterface* browser) {
 }
 
 void OpenTabBridge::EnsureNonEmpty(BrowserWindowInterface* browser) {
+  if (IsBrowserClosing(browser)) {
+    return;
+  }
   TabStripModel* strip = browser->GetTabStripModel();
   if (strip->count() > 1) {
     return;
@@ -1556,6 +1598,7 @@ void OpenTabBridge::CloseBrowsersForProfile(const ProfileID& profile_id) {
   }
   for (BrowserWindowInterface* browser : targets) {
     if (browsers_.contains(browser) && browser->GetWindow()) {
+      single_profile_closing_browsers_.insert(browser);
       browser->GetWindow()->Close();
     }
   }
@@ -1712,6 +1755,10 @@ void OpenTabBridge::OnTabStripModelChanged(
       const auto* replace = change.GetReplace();
       if (std::optional<ItemID> id =
               TabIdForWebContents(replace->old_contents)) {
+        for (Observer& observer : observers_) {
+          observer.OnTabContentsDetaching(*id, replace->old_contents);
+        }
+        replace->old_contents->RemoveUserData(OpenTabHandle::UserDataKey());
         AttachHandle(replace->new_contents, *id);
         contents_[*id] = replace->new_contents;
         PushLiveState(*id, replace->new_contents);
@@ -1914,6 +1961,8 @@ void OpenTabBridge::OnBrowserCreated(BrowserWindowInterface* browser) {
 }
 
 void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
+  const bool closing_single_profile =
+      single_profile_closing_browsers_.erase(browser) > 0;
   std::optional<ManagedBrowser> closed_info;
   if (auto it = browsers_.find(browser); it != browsers_.end()) {
     closed_info = it->second;
@@ -1928,14 +1977,52 @@ void OpenTabBridge::OnBrowserClosed(BrowserWindowInterface* browser) {
 
   if (closed_info) {
     auto win_it = windows_.find(closed_info->window);
+    if (!closing_single_profile && win_it != windows_.end() &&
+        !win_it->second.by_profile.empty()) {
+      // Close remaining hidden sibling profile Browsers that belong to this
+      // Open window (ShowBrowserForSpace only calls Hide(), never Close(), so
+      // leaving hidden siblings alive leaks a zombie process on Windows/Linux
+      // after the visible window closes).
+      std::vector<BrowserWindowInterface*> siblings;
+      siblings.reserve(win_it->second.by_profile.size());
+      for (const auto& [profile_id, sibling] : win_it->second.by_profile) {
+        if (sibling && !IsBrowserClosing(sibling)) {
+          siblings.push_back(sibling);
+        }
+      }
+      for (BrowserWindowInterface* sibling : siblings) {
+        if (browsers_.contains(sibling) && !IsBrowserClosing(sibling) &&
+            sibling->GetWindow()) {
+          sibling->GetWindow()->Close();
+        }
+      }
+      // Re-lookup in case closing siblings synchronously triggered recursive
+      // OnBrowserClosed notifications.
+      win_it = windows_.find(closed_info->window);
+    }
     if (win_it != windows_.end() && win_it->second.by_profile.empty()) {
       windows_.erase(win_it);
       // When an OS window closes during normal operation (not shutdown), remove
       // it from BrowserModel: Incognito windows vanish completely, and normal
       // windows record last_closed_window_ for Dock reopen.
+      // On Windows/Linux, closing the last standard window exits the app; keep
+      // it in model_.windows_ so browser.json preserves window geometry,
+      // sidebar_width, sidebar_mode, focused_space_id, and
+      // selected_node_by_space for the next launch.
       if (started_ && service_ && service_->started()) {
+#if !BUILDFLAG(IS_MAC)
+        const bool preserve_standard_window =
+            !closed_info->incognito &&
+            (service_->model().windows().size() <= 1 ||
+             browser_shutdown::IsTryingToQuit());
+        if (!preserve_standard_window) {
+          base::AutoReset<bool> applying(&applying_, true);
+          service_->model().CloseWindow(closed_info->window);
+        }
+#else
         base::AutoReset<bool> applying(&applying_, true);
         service_->model().CloseWindow(closed_info->window);
+#endif
       }
     }
   }

@@ -200,6 +200,8 @@ class OpenWindowController : public OpenViewController,
   void OnTabActivated(const ItemID& tab_id) override;
   void OnTabContentsAttached(const ItemID& tab_id,
                              content::WebContents* contents) override;
+  void OnBrowserWindowBound(BrowserWindowInterface* browser,
+                            const WindowID& window_id) override;
   // OpenExtensionBridge::Observer:
   void OnExtensionActionsChanged() override;
   // OpenBrowserService::Observer:
@@ -345,6 +347,7 @@ class OpenWindowUi : public CommandBarDelegate,
   OpenWindowUi& operator=(const OpenWindowUi&) = delete;
 
   const WindowID& window_id() const { return window_id_; }
+  void RebindWindowId(const WindowID& window_id);
   BrowserView* browser_view() const { return browser_view_; }
   OpenBrowserView* open_view() const { return open_view_; }
 
@@ -587,6 +590,7 @@ class OpenWindowUi : public CommandBarDelegate,
   void EnsureToasts();
   void EnsureTabSwitcher();
   void UpdateOverlayAnchors();
+  void RestackVisibleOverlays();
   void PopulatePeekSpaceChoices();
   content::WebContents* FindTargetContents() const;
   find_in_page::FindTabHelper* FindHelper() const;

@@ -99,6 +99,16 @@ struct WindowMaterialSpec {
 inline constexpr int kWindowButtonCenterX[3] = {20, 43, 66};
 inline constexpr int kWindowButtonCenterY = 24;
 
+// Logical caption buttons for Windows 11 Fluent and Linux CSD window controls.
+enum class WindowControlButton { kMinimize, kMaximize, kClose };
+
+// Desktop-environment window button placement reported on Linux CSD.
+struct LinuxWindowButtons {
+  std::vector<WindowControlButton> leading;
+  std::vector<WindowControlButton> trailing;
+  bool has_csd_preference = false;
+};
+
 // Platform-specific OS integration facade.
 class OpenPlatform {
  public:
@@ -112,6 +122,10 @@ class OpenPlatform {
 
   // Returns the process-wide singleton for the host operating system.
   static OpenPlatform* Get();
+
+  // Cleanly releases platform resources (such as the Win32 message-only hotkey
+  // window) before process shutdown.
+  virtual void Shutdown() {}
 
   // Creates a SecretStore rooted at |data_dir| (used for file-backed storage
   // or DPAPI blob storage). Pass |force_file_backend = true| for isolated test
@@ -146,6 +160,23 @@ class OpenPlatform {
   // field. Default: no native material (returns false).
   virtual bool UpdateWindowEffects(views::Widget* widget,
                                    const WindowMaterialSpec& spec);
+
+  // Toggles platform rounded window corners when entering/exiting fullscreen
+  // (Windows 11 DWMWCP_DONOTROUND vs DWMWCP_ROUND).
+  virtual void SetFullscreenCornerState(views::Widget* widget,
+                                        bool fullscreen) {}
+
+  // Returns the off-screen DWM resize border thickness (in DIPs) to inset a
+  // maximized frameless window's client view on Windows (0 on other OSes).
+  virtual int MaximizedFrameInsetDip(views::Widget* widget) const { return 0; }
+
+  // Returns the Linux desktop environment's CSD window control button ordering.
+  virtual LinuxWindowButtons GetLinuxWindowButtons() const {
+    return {{},
+            {WindowControlButton::kMinimize, WindowControlButton::kMaximize,
+             WindowControlButton::kClose},
+            false};
+  }
 
   // Places the native window buttons (macOS traffic lights). `origin` is the
   // group's offset from Arc's resting place (kWindowButtonCenterX/Y): (0, 0)

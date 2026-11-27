@@ -9,6 +9,7 @@
 #include <set>
 #include <utility>
 
+#include "base/callback_list.h"
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/functional/bind.h"
@@ -26,8 +27,10 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -73,6 +76,7 @@
 #include "open_unified/ui/design/open_metrics.h"
 #include "open_unified/ui/views/open_sidebar_view.h"
 #include "open_unified/ui/views/open_tab_tree_view.h"
+#include "open_unified/ui/views/open_window_controls_view.h"
 #include "open_unified/ui/webui/open_boosts_ui.h"
 #include "open_unified/ui/webui/open_ipc_contract.h"
 #include "open_unified/ui/webui/open_library_ui.h"
@@ -83,21 +87,30 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/hit_test.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/event_monitor.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
+#include "ui/views/window/frame_view.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -390,6 +403,7 @@ ui::KeyboardCode KeyCodeForToken(std::string_view token) {
       case '-':
         return ui::VKEY_OEM_MINUS;
       case '=':
+      case '+':
         return ui::VKEY_OEM_PLUS;
       case ';':
         return ui::VKEY_OEM_1;
@@ -773,8 +787,13 @@ class MinSizeWebContainer : public views::View {
  public:
   MinSizeWebContainer(gfx::Size default_size,
                       gfx::Size min_size,
-                      std::unique_ptr<views::WebView> web_view)
-      : default_size_(default_size), min_size_(min_size) {
+                      std::unique_ptr<views::WebView> web_view,
+                      float corner_radius = 0.f,
+                      int hit_test_top_inset = 0)
+      : default_size_(default_size),
+        min_size_(min_size),
+        corner_radius_(corner_radius),
+        hit_test_top_inset_(hit_test_top_inset) {
     SetLayoutManager(std::make_unique<views::FillLayout>());
     web_view_ = AddChildView(std::move(web_view));
   }
@@ -789,10 +808,169 @@ class MinSizeWebContainer : public views::View {
 
   gfx::Size GetMinimumSize() const override { return min_size_; }
 
+  void Layout(PassKey) override {
+    LayoutSuperclass<views::View>(this);
+    ApplyNativeViewEffects();
+  }
+
+  void ApplyNativeViewEffects() {
+    if (!web_view_ || !web_view_->holder()) {
+      return;
+    }
+    if (corner_radius_ > 0.f) {
+      web_view_->holder()->SetNativeViewCornerRadii(
+          gfx::RoundedCornersF(corner_radius_));
+    }
+    if (hit_test_top_inset_ > 0) {
+      web_view_->holder()->SetHitTestTopInset(hit_test_top_inset_);
+    }
+  }
+
  private:
   gfx::Size default_size_;
   gfx::Size min_size_;
+  float corner_radius_ = 0.f;
+  int hit_test_top_inset_ = 0;
   raw_ptr<views::WebView> web_view_ = nullptr;
+};
+
+// Lightweight custom frame for frameless standalone WebUI windows (First Run /
+// Onboarding): provides a 36 DIP draggable caption strip at the top and, on
+// Windows/Linux, a quiet top-right Minimize + Close control cluster.
+class FramelessWebFrameView : public views::FrameView {
+  METADATA_HEADER(FramelessWebFrameView, views::FrameView)
+
+ public:
+  static constexpr int kDragStripHeight = 36;
+
+  FramelessWebFrameView() {
+#if !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_WIN)
+    const auto mode = OpenWindowControlsView::Mode::kWindowsFluent;
+#else
+    const auto mode = OpenWindowControlsView::Mode::kLinuxCsd;
+#endif
+    auto controls = std::make_unique<OpenWindowControlsView>(
+        mode,
+        std::vector<WindowControlButton>{WindowControlButton::kMinimize,
+                                         WindowControlButton::kClose},
+        /*allow_maximize=*/false);
+    controls->SetPaintToLayer();
+    controls->layer()->SetFillsBoundsOpaquely(false);
+    controls->SetThemeState(/*dark_content=*/true, /*window_active=*/true,
+                            /*increase_contrast=*/false);
+    window_controls_ = AddChildView(std::move(controls));
+#endif
+  }
+  FramelessWebFrameView(const FramelessWebFrameView&) = delete;
+  FramelessWebFrameView& operator=(const FramelessWebFrameView&) = delete;
+  ~FramelessWebFrameView() override = default;
+
+  // views::FrameView:
+  gfx::Rect GetBoundsForClientView() const override { return bounds(); }
+  gfx::Rect GetWindowBoundsForClientBounds(
+      const gfx::Rect& client_bounds) const override {
+    return client_bounds;
+  }
+
+  void Layout(PassKey) override {
+    LayoutSuperclass<views::FrameView>(this);
+#if !BUILDFLAG(IS_MAC)
+    if (window_controls_) {
+      const gfx::Size pref = window_controls_->GetPreferredSize();
+#if BUILDFLAG(IS_WIN)
+      window_controls_->SetBounds(width() - pref.width(), 0, pref.width(),
+                                  pref.height());
+#else
+      constexpr int kLinuxControlsInsetX = 8;
+      constexpr int kLinuxControlsInsetY = 4;
+      window_controls_->SetBounds(
+          width() - pref.width() - kLinuxControlsInsetX, kLinuxControlsInsetY,
+          pref.width(), pref.height());
+#endif
+    }
+#endif
+  }
+
+  int NonClientHitTest(const gfx::Point& point) override {
+    if (!bounds().Contains(point)) {
+      return HTNOWHERE;
+    }
+#if !BUILDFLAG(IS_MAC)
+    if (window_controls_ && window_controls_->GetVisible()) {
+      gfx::Point local = point;
+      views::View::ConvertPointToTarget(this, window_controls_, &local);
+      const int hit = window_controls_->HitTestCode(local);
+      if (hit != HTNOWHERE) {
+        return hit;
+      }
+    }
+#endif
+    if (point.y() < kDragStripHeight) {
+      return HTCAPTION;
+    }
+    return HTCLIENT;
+  }
+
+  void AddedToWidget() override {
+    views::FrameView::AddedToWidget();
+#if !BUILDFLAG(IS_MAC)
+    if (views::Widget* widget = GetWidget()) {
+      paint_as_active_subscription_ =
+          widget->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+              &FramelessWebFrameView::UpdateWindowControlsState,
+              base::Unretained(this)));
+      UpdateWindowControlsState();
+    }
+#endif
+  }
+
+  void RemovedFromWidget() override {
+#if !BUILDFLAG(IS_MAC)
+    paint_as_active_subscription_ = {};
+#endif
+    views::FrameView::RemovedFromWidget();
+  }
+
+ private:
+#if !BUILDFLAG(IS_MAC)
+  void UpdateWindowControlsState() {
+    if (!window_controls_ || !GetWidget()) {
+      return;
+    }
+    OpenPlatform* platform = OpenPlatform::Get();
+    const bool high_contrast =
+        platform && platform->IsIncreaseContrastEnabled();
+    window_controls_->SetThemeState(/*dark_content=*/true,
+                                    ShouldPaintAsActive(), high_contrast);
+  }
+
+  raw_ptr<OpenWindowControlsView> window_controls_ = nullptr;
+  base::CallbackListSubscription paint_as_active_subscription_;
+#endif
+};
+
+BEGIN_METADATA(FramelessWebFrameView)
+END_METADATA
+
+class StandaloneWidgetDelegate : public views::WidgetDelegate {
+ public:
+  explicit StandaloneWidgetDelegate(bool frameless) : frameless_(frameless) {}
+  StandaloneWidgetDelegate(const StandaloneWidgetDelegate&) = delete;
+  StandaloneWidgetDelegate& operator=(const StandaloneWidgetDelegate&) = delete;
+  ~StandaloneWidgetDelegate() override = default;
+
+  // views::WidgetDelegate:
+  std::unique_ptr<views::FrameView> CreateFrameView(
+      views::Widget* widget) override {
+    if (!frameless_) {
+      return views::WidgetDelegate::CreateFrameView(widget);
+    }
+    return std::make_unique<FramelessWebFrameView>();
+  }
+
+ private:
+  bool frameless_ = false;
 };
 
 // WebView for the in-window Library Drawer that preserves views::WebView's own
@@ -856,19 +1034,29 @@ class OpenWindowController::StandaloneWebWindow {
                       std::string name,
                       base::OnceClosure on_closed)
       : on_closed_(std::move(on_closed)) {
-    delegate_ = std::make_unique<views::WidgetDelegate>();
+    delegate_ = std::make_unique<StandaloneWidgetDelegate>(frameless);
     delegate_->SetTitle(title);
     delegate_->SetShowTitle(!frameless);
     delegate_->SetShowCloseButton(!frameless);
     delegate_->SetCanResize(!frameless);
     delegate_->SetCanMaximize(!frameless);
-    delegate_->SetCanMinimize(!frameless);
+    delegate_->SetCanMinimize(true);
     delegate_->RegisterWindowClosingCallback(base::BindOnce(
         &StandaloneWebWindow::OnWindowClosing, weak_factory_.GetWeakPtr()));
 
+#if BUILDFLAG(IS_MAC)
+    const float corner_radius = frameless ? 16.f : 0.f;
+    const int hit_test_top_inset = 0;
+#else
+    const float corner_radius = frameless ? 12.f : 0.f;
+    const int hit_test_top_inset =
+        frameless ? FramelessWebFrameView::kDragStripHeight : 0;
+#endif
     auto web_view = std::make_unique<views::WebView>(browser_context);
     auto container = std::make_unique<MinSizeWebContainer>(
-        default_size, min_size, std::move(web_view));
+        default_size, min_size, std::move(web_view), corner_radius,
+        hit_test_top_inset);
+    MinSizeWebContainer* container_ptr = container.get();
     web_view_ = container->web_view();
     delegate_->SetContentsView(std::move(container));
     delegate_->SetInitiallyFocusedView(web_view_);
@@ -892,16 +1080,34 @@ class OpenWindowController::StandaloneWebWindow {
     params.delegate = delegate_.get();
     params.bounds = initial_bounds_;
     params.name = std::move(name);
+#if BUILDFLAG(IS_LINUX)
+    params.wm_class_name = "open-browser";
+    params.wm_class_class = "Open";
+    params.wayland_app_id = "open-browser";
+#endif
     if (frameless) {
       params.remove_standard_frame = true;
+#if BUILDFLAG(IS_WIN)
+      // Avoid legacy XP CS_DROPSHADOW + kTranslucent on Win11: use opaque
+      // window with native DWMWCP_ROUND corners & crisp DWM shadow via
+      // ApplyWindowEffects().
+      params.opacity = views::Widget::InitParams::WindowOpacity::kOpaque;
+      params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
+#else
       params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
       params.shadow_type = views::Widget::InitParams::ShadowType::kDrop;
+#endif
+      params.rounded_corners = gfx::RoundedCornersF(corner_radius);
     }
 
     widget_ = std::make_unique<views::Widget>();
     widget_->Init(std::move(params));
     widget_->SetBounds(initial_bounds_);
+    if (OpenPlatform* platform = OpenPlatform::Get()) {
+      platform->ApplyWindowEffects(widget_.get(), /*dark_mode=*/true);
+    }
     web_view_->LoadInitialURL(url);
+    container_ptr->ApplyNativeViewEffects();
   }
 
   ~StandaloneWebWindow() {
@@ -970,7 +1176,7 @@ class OpenWindowController::StandaloneWebWindow {
   }
 
   // Declared before widget_ so delegate_ outlives widget_.
-  std::unique_ptr<views::WidgetDelegate> delegate_;
+  std::unique_ptr<StandaloneWidgetDelegate> delegate_;
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<views::WebView> web_view_ = nullptr;
   base::OnceClosure on_closed_;
@@ -1139,6 +1345,22 @@ void OpenWindowController::OnBrowserViewDestroying(BrowserView* browser_view) {
     if (OpenHandoffController* handoff = service_->handoff()) {
       handoff->OnWindowClosed();
     }
+#if !BUILDFLAG(IS_MAC)
+    if (little_opens_.empty() && (settings_window_ || first_run_window_)) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<OpenWindowController> self) {
+                if (!self || !self->windows_.empty() ||
+                    !self->little_opens_.empty()) {
+                  return;
+                }
+                self->CloseSettingsWindow();
+                self->CloseFirstRunWindow();
+              },
+              weak_factory_.GetWeakPtr()));
+    }
+#endif
   }
 }
 
@@ -1263,7 +1485,9 @@ void OpenWindowController::OpenFirstRunWindow() {
 }
 
 void OpenWindowController::CloseFirstRunWindow() {
-  first_run_window_.reset();
+  if (first_run_window_) {
+    first_run_window_.reset();
+  }
   if (hid_main_window_for_first_run_) {
     hid_main_window_for_first_run_ = false;
     if (OpenWindowUi* main_ui = MainWindowUi()) {
@@ -1277,7 +1501,26 @@ void OpenWindowController::CloseFirstRunWindow() {
 
 void OpenWindowController::OnOnboardingCompleted() {
   const bool had_first_run_window = first_run_window_ != nullptr;
-  CloseFirstRunWindow();
+  // Never synchronously destroy first_run_window_ here: OnOnboardingCompleted()
+  // is invoked while OpenOnboardingUI::FinishComplete is still on the stack.
+  // Hide the window immediately and post destruction to the next UI task.
+  if (first_run_window_) {
+    if (views::Widget* w = first_run_window_->widget()) {
+      w->Hide();
+    }
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&OpenWindowController::CloseFirstRunWindow,
+                                  weak_factory_.GetWeakPtr()));
+  }
+  if (hid_main_window_for_first_run_) {
+    hid_main_window_for_first_run_ = false;
+    if (OpenWindowUi* main_ui = MainWindowUi()) {
+      if (views::Widget* w = main_ui->widget()) {
+        w->Show();
+        w->Activate();
+      }
+    }
+  }
   if (had_first_run_window) {
     if (OpenTabBridge* bridge = service_->tab_bridge()) {
       const BrowserModel& model = service_->model();
@@ -1305,6 +1548,9 @@ void OpenWindowController::OnOnboardingCompleted() {
         bridge->OpenTab(welcome_url, /*background=*/false);
       }
     }
+  }
+  for (auto& [browser_view, ui] : windows_) {
+    ui->UpdateThemeForLiveSurfaces();
   }
   if (OpenWindowUi* main_ui = MainWindowUi()) {
     main_ui->ActivateWindow();
@@ -1380,6 +1626,23 @@ void OpenWindowController::OnLittleOpenClosed(
   std::erase_if(little_opens_,
                 [little_open](const std::unique_ptr<OpenLittleOpenController>&
                                   entry) { return entry.get() == little_open; });
+#if !BUILDFLAG(IS_MAC)
+  if (windows_.empty() && little_opens_.empty() &&
+      (settings_window_ || first_run_window_)) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](base::WeakPtr<OpenWindowController> self) {
+              if (!self || !self->windows_.empty() ||
+                  !self->little_opens_.empty()) {
+                return;
+              }
+              self->CloseSettingsWindow();
+              self->CloseFirstRunWindow();
+            },
+            weak_factory_.GetWeakPtr()));
+  }
+#endif
 }
 
 void OpenWindowController::ReloadShortcuts() {
@@ -1608,10 +1871,15 @@ bool OpenWindowController::IsSystemDarkMode() const {
 WindowID OpenWindowController::WindowIdForBrowserView(
     BrowserView* browser_view) {
   OpenTabBridge* bridge = service_->tab_bridge();
-  if (bridge && browser_view) {
-    if (std::optional<WindowID> id =
-            bridge->WindowIdForBrowser(browser_view->browser())) {
-      return *id;
+  if (bridge) {
+    if (browser_view) {
+      if (std::optional<WindowID> id =
+              bridge->WindowIdForBrowser(browser_view->browser())) {
+        return *id;
+      }
+    }
+    if (std::optional<WindowID> pending = bridge->PendingWindowId()) {
+      return *pending;
     }
   }
   return service_->MainWindowId();
@@ -2733,7 +3001,27 @@ void OpenWindowController::OnTreeChanged(const TreeChange& change) {
         for (OpenViewObserver& observer : view_observers_) {
           observer.OnTabLiveStateChanged(change.node_id);
         }
-      } else {
+      }
+      if (!change.space_id.empty()) {
+        for (OpenViewObserver& observer : view_observers_) {
+          observer.OnSpaceThemeChanged(change.space_id);
+        }
+        for (const BrowserWindowState& window : service_->model().windows()) {
+          for (OpenViewObserver& observer : view_observers_) {
+            observer.OnSpacesChanged(window.id);
+          }
+        }
+        for (const BrowserWindowState& window :
+             service_->model().incognito_windows()) {
+          for (OpenViewObserver& observer : view_observers_) {
+            observer.OnSpacesChanged(window.id);
+          }
+        }
+        for (auto& [browser_view, ui] : windows_) {
+          ui->UpdateThemeForLiveSurfaces();
+        }
+        NotifyWindowStateChanged();
+      } else if (change.node_id.empty()) {
         NotifyWindowStateChanged();
       }
       if (change.parent.kind == NodeParentKind::kFavorites) {
@@ -2761,17 +3049,25 @@ void OpenWindowController::OnTreeChanged(const TreeChange& change) {
       break;
     case TreeChange::Kind::kInsert:
     case TreeChange::Kind::kRemove:
-    case TreeChange::Kind::kMove:
-      if (change.parent.kind == NodeParentKind::kFavorites ||
-          change.to_parent.kind == NodeParentKind::kFavorites) {
+    case TreeChange::Kind::kMove: {
+      const bool from_fav = change.parent.kind == NodeParentKind::kFavorites;
+      const bool to_fav = change.to_parent.kind == NodeParentKind::kFavorites;
+      if (from_fav) {
         for (OpenViewObserver& observer : view_observers_) {
           observer.OnFavoritesChanged(change.parent.owner_id);
+        }
+      }
+      if (to_fav &&
+          (!from_fav || change.to_parent.owner_id != change.parent.owner_id)) {
+        for (OpenViewObserver& observer : view_observers_) {
+          observer.OnFavoritesChanged(change.to_parent.owner_id);
         }
       }
       for (auto& [browser_view, ui] : windows_) {
         ui->UpdatePanel();
       }
       break;
+    }
   }
   for (auto& [browser_view, ui] : windows_) {
     ui->OnModelChanged();
@@ -2818,6 +3114,38 @@ void OpenWindowController::OnTabContentsAttached(
     content::WebContents* contents) {
   for (OpenViewObserver& observer : view_observers_) {
     observer.OnTabLiveStateChanged(tab_id);
+  }
+}
+
+void OpenWindowController::OnBrowserWindowBound(BrowserWindowInterface* browser,
+                                                const WindowID& window_id) {
+  if (!browser || window_id.empty()) {
+    return;
+  }
+  BrowserView* bv = BrowserView::GetBrowserViewForBrowser(browser);
+  if (!bv) {
+    return;
+  }
+  bool rebound = false;
+  if (OpenBrowserView* open_view = OpenBrowserView::FromBrowserView(bv);
+      open_view && open_view->window_id() != window_id) {
+    open_view->RebindWindowId(window_id);
+    rebound = true;
+  }
+  OpenWindowUi* ui = WindowUiForBrowserView(bv);
+  if (ui && ui->window_id() != window_id) {
+    ui->RebindWindowId(window_id);
+    rebound = true;
+  } else if (rebound && ui) {
+    ui->UpdateThemeForLiveSurfaces();
+    ui->UpdatePanel();
+  }
+  if (rebound) {
+    for (OpenViewObserver& observer : view_observers_) {
+      observer.OnSpacesChanged(window_id);
+      observer.OnWindowStateChanged(window_id);
+      observer.OnActiveTabChanged(window_id);
+    }
   }
 }
 
@@ -3023,9 +3351,16 @@ bool OpenWindowController::ShouldTerminateApp() {
     return true;
   }
   const bool warn_pref = PrefBool("general.warnBeforeQuitting", false);
+#if BUILDFLAG(IS_MAC)
   const bool active_downloads =
       service_->download_bridge() &&
       service_->download_bridge()->HasActiveDownloads();
+#else
+  // On Windows/Linux, BrowserCloseManager::TryToCloseBrowsers() already runs
+  // CheckForDownloadsInProgress(); only prompt for warnBeforeQuitting here so
+  // users never see two download confirmation dialogs back to back.
+  const bool active_downloads = false;
+#endif
   if (!warn_pref && !active_downloads) {
     return true;
   }
@@ -3523,6 +3858,17 @@ OpenWindowUi::~OpenWindowUi() {
   panel_tracker_ = nullptr;
 }
 
+void OpenWindowUi::RebindWindowId(const WindowID& window_id) {
+  if (window_id.empty() || window_id_ == window_id) {
+    return;
+  }
+  window_id_ = window_id;
+  last_focused_space_ =
+      model_util::FocusedSpace(service()->model(), window_id_);
+  UpdateThemeForLiveSurfaces();
+  UpdatePanel();
+}
+
 void OpenWindowUi::MountMediaPlayerStack() {
   if (!open_view_ || !open_view_->sidebar()) {
     return;
@@ -3849,6 +4195,7 @@ void OpenWindowUi::ShowCommandBar(CommandBarMode mode,
   command_bar_host_->Show();
   command_bar_->SetVisible(true);
   command_bar_->Present(request);
+  RestackVisibleOverlays();
   UpdateEscapeRegistration();
   if (!was_shown) {
     controller_->NotifyCommandBarStateChanged(window_id_);
@@ -4036,6 +4383,7 @@ void OpenWindowUi::ShowLibraryDrawer(std::string_view section) {
   }
   UpdateOverlayAnchors();
   library_host_->Show();
+  RestackVisibleOverlays();
   library_web_view_->RequestFocus();
   UpdateEscapeRegistration();
 }
@@ -4125,6 +4473,7 @@ void OpenWindowUi::OpenBoostEditor(const std::optional<std::string>& boost_id,
       weak_factory_.GetWeakPtr()));
   boost_editor_->Show(widget(), PanelRectInScreen(), target,
                       CurrentAppearance().dark);
+  RestackVisibleOverlays();
   if (arm_zap && !target.id.empty()) {
     std::string msg;
     boosts->StartZapForTab(*tab_id, target.id, &msg);
@@ -4610,6 +4959,9 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
     case CommandId::kAboutOpen:
       controller_->OpenSettingsWindow("about");
       return true;
+    case CommandId::kQuitOpen:
+      chrome::AttemptUserExit();
+      return true;
     case CommandId::kSettings:
       controller_->OpenSettingsWindow();
       return true;
@@ -4778,6 +5130,11 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
       }
       return false;
     case CommandId::kToggleFullScreen:
+      if (browser_view_ && browser_view_->browser()) {
+        chrome::ToggleFullscreenMode(browser_view_->browser(),
+                                     /*user_initiated=*/true);
+        return true;
+      }
       if (views::Widget* w = widget()) {
         w->SetFullscreen(!w->IsFullscreen());
         return true;
@@ -5174,6 +5531,7 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
           cap && ActiveWebContents() && widget()) {
         cap->CaptureRegion(ActiveWebContents(), widget(), PanelRectInWidget(),
                            CurrentAppearance());
+        RestackVisibleOverlays();
       }
       return true;
     case CommandId::kCaptureFullPage:
@@ -5181,6 +5539,7 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
           cap && ActiveWebContents() && widget()) {
         cap->CaptureFullPage(ActiveWebContents(), widget(), PanelRectInWidget(),
                              CurrentAppearance());
+        RestackVisibleOverlays();
       }
       return true;
     case CommandId::kCapturePortrait:
@@ -5192,6 +5551,7 @@ bool OpenWindowUi::RunCommandId(CommandId command) {
         }
         cap->CapturePortrait(ActiveWebContents(), widget(), PanelRectInWidget(),
                              CurrentAppearance(), opts);
+        RestackVisibleOverlays();
       }
       return true;
     case CommandId::kSharePage:
@@ -5507,16 +5867,13 @@ void OpenWindowUi::OpenPeekWithContents(
   peek_->SetAppearance(CurrentAppearance());
   UpdateOverlayAnchors();
   peek_host_->Show();
-  // The Command Bar (when open) stays above Peek.
-  if (command_bar_host_ && command_bar_host_->IsVisible()) {
-    command_bar_host_->Show();
-  }
   peek_->SetVisible(true);
   if (peek_->is_showing()) {
     peek_->PushWebContents(std::move(wc));
   } else {
     peek_->AdoptWebContents(std::move(wc), open_view_->GetPanelBounds());
   }
+  RestackVisibleOverlays();
   UpdateEscapeRegistration();
   controller_->NotifyPeekChanged(window_id_);
 }
@@ -6458,6 +6815,7 @@ void OpenWindowUi::EnsureToasts() {
         if (visible) {
           self->UpdateOverlayAnchors();
           self->toast_host_->Show();
+          self->RestackVisibleOverlays();
         } else {
           self->toast_host_->Hide();
         }
@@ -6483,6 +6841,12 @@ void OpenWindowUi::UpdateOverlayAnchors() {
   const gfx::Rect window = WindowRectInWidget();
   if (command_bar_host_) {
     command_bar_host_->SetAnchor(window, Alignment::kFill);
+    if (command_bar_shown() && open_view_) {
+      const gfx::Rect pill_rect = open_view_->UrlPillScreenBounds();
+      if (!pill_rect.IsEmpty()) {
+        command_bar_->UpdateScreenAnchor(pill_rect);
+      }
+    }
   }
   if (peek_host_) {
     peek_host_->SetAnchor(window, Alignment::kFill);
@@ -6520,6 +6884,64 @@ void OpenWindowUi::UpdateOverlayAnchors() {
   if (OpenCaptureController* cap = service()->capture_controller();
       cap && (cap->IsOverlayVisible() || cap->IsResultCardVisible())) {
     cap->UpdateContentRect(panel);
+  }
+}
+
+void OpenWindowUi::RestackVisibleOverlays() {
+  // Deterministic bottom-to-top Z-order across all visible child overlays:
+  // FindBar < Toasts < BoostEditor < LibraryDrawer < Peek < TabSwitcher
+  // < CaptureOverlay < CommandBar.
+  std::vector<views::Widget*> ordered;
+  ordered.reserve(9);
+  auto push_if_visible = [&ordered](views::Widget* w) {
+    if (w && w->IsVisible()) {
+      ordered.push_back(w);
+    }
+  };
+  if (find_host_ && find_host_->IsVisible()) {
+    push_if_visible(find_host_->widget());
+  }
+  if (toast_host_ && toast_host_->IsVisible()) {
+    push_if_visible(toast_host_->widget());
+  }
+  if (boost_editor_ && boost_editor_->IsVisible() && boost_editor_->view()) {
+    push_if_visible(boost_editor_->view()->GetWidget());
+  }
+  if (library_host_ && library_host_->IsVisible()) {
+    push_if_visible(library_host_->widget());
+  }
+  if (peek_host_ && peek_host_->IsVisible()) {
+    push_if_visible(peek_host_->widget());
+  }
+  if (switcher_host_ && switcher_host_->IsVisible()) {
+    push_if_visible(switcher_host_->widget());
+  }
+  if (OpenCaptureController* cap = service()->capture_controller();
+      cap && (cap->IsOverlayVisible() || cap->IsResultCardVisible())) {
+    if (views::Widget* parent = widget()) {
+      views::Widget* capture_overlay = nullptr;
+      views::Widget* capture_card = nullptr;
+      views::Widget::ForEachOwnedWidget(
+          parent->GetNativeView(), [&](views::Widget* owned) {
+            if (!owned || !owned->IsVisible()) {
+              return;
+            }
+            const std::string name = owned->GetName();
+            if (name == "OpenCaptureOverlay") {
+              capture_overlay = owned;
+            } else if (name == "OpenCaptureResultCard") {
+              capture_card = owned;
+            }
+          });
+      push_if_visible(capture_card);
+      push_if_visible(capture_overlay);
+    }
+  }
+  if (command_bar_host_ && command_bar_host_->IsVisible()) {
+    push_if_visible(command_bar_host_->widget());
+  }
+  for (views::Widget* w : ordered) {
+    w->StackAtTop();
   }
 }
 
@@ -6605,6 +7027,7 @@ void OpenWindowUi::ShowFindBar(std::optional<std::u16string> query) {
   UpdateOverlayAnchors();
   find_host_->Show();
   UpdateOverlayAnchors();
+  RestackVisibleOverlays();
   find_bar_->Activate(seed);
   if (!find_bar_->query().empty() && seed == find_bar_->query()) {
     helper->StartFinding(std::u16string(find_bar_->query()),
@@ -6882,6 +7305,7 @@ void OpenWindowUi::OnTabSwitcherVisibilityChanged(bool visible) {
   if (visible) {
     UpdateOverlayAnchors();
     switcher_host_->Show();
+    RestackVisibleOverlays();
   } else {
     switcher_host_->Hide();
   }
@@ -6985,10 +7409,24 @@ bool OpenWindowUi::RunShortcut(CommandId command) {
     case CommandId::kTabSwitcherBackward:
       TabSwitcherStep(/*reverse=*/true);
       return true;
+    case CommandId::kArchiveTab:
+      if (command_bar_shown()) {
+        HideCommandBar();
+        return true;
+      }
+      if (peek_shown()) {
+        ClosePeek();
+        return true;
+      }
+      // On an empty Space, consume Ctrl/Cmd+W as a no-op instead of falling
+      // through to Chromium's IDC_CLOSE_TAB (which would close the window).
+      if (!ActiveWebContents()) {
+        return true;
+      }
+      return RunCommandId(command);
     case CommandId::kCopyUrl:
     case CommandId::kCopyUrlMarkdown:
     case CommandId::kCopyUrlQuote:
-    case CommandId::kArchiveTab:
     case CommandId::kPinUnpinTab:
     case CommandId::kAddSplitView:
     case CommandId::kClearCacheAndRefresh:
@@ -7007,12 +7445,29 @@ bool OpenWindowUi::HandleFindCommand(CommandId command) {
 }
 
 bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
+  // Never stomp active IME composition in overlays or inline sidebar rename
+  // fields (both Escape and single-chord accelerators).
+  if (find_bar_shown() && find_bar_ && find_bar_->HasCompositionText()) {
+    return false;
+  }
+  if (command_bar_shown() && command_bar_->HasCompositionText()) {
+    return false;
+  }
+  if (views::FocusManager* focus_manager =
+          browser_view_ ? browser_view_->GetFocusManager() : nullptr) {
+    if (auto* textfield =
+            views::AsViewClass<views::Textfield>(focus_manager->GetFocusedView());
+        textfield && textfield->HasCompositionText()) {
+      return false;
+    }
+  }
+
   if (accelerator.key_code() == ui::VKEY_ESCAPE &&
       accelerator.modifiers() == ui::EF_NONE &&
       escape_priority_ != EscapePriority::kNone) {
     if (command_bar_shown()) {
-      if (command_bar_->HasCompositionText()) {
-        return false;
+      if (command_bar_->HandleEscape()) {
+        return true;
       }
       command_bar_->Dismiss(CommandBarDismissReason::kEscape);
       return true;
@@ -7030,9 +7485,6 @@ bool OpenWindowUi::AcceleratorPressed(const ui::Accelerator& accelerator) {
       return true;
     }
     if (find_bar_shown()) {
-      if (find_bar_ && find_bar_->HasCompositionText()) {
-        return false;
-      }
       CloseFindBar();
       return true;
     }
