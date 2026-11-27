@@ -662,10 +662,6 @@ void OpenBrowserService::LoadOrCreateState() {
   const base::FilePath state_dir = user_data_dir_.AppendASCII(kStateDirName);
   base::CreateDirectory(state_dir);
   snapshot_store_ = std::make_unique<SnapshotStore>(user_data_dir_);
-  // browser.json is serialized on the UI thread and written on Open's file
-  // sequence (BLOCK_SHUTDOWN): debounced saves and the shutdown save never
-  // block BrowserThread::UI.
-  snapshot_store_->SetIoTaskRunner(file_runner_);
   std::vector<std::string> repairs;
   std::string error;
   model_ = snapshot_store_->Load(&repairs, &error);
@@ -684,8 +680,15 @@ void OpenBrowserService::LoadOrCreateState() {
     VLOG(1) << "Open: browser.json repair: " << repair;
   }
   if (first_run_) {
+    // Force a synchronous initial write while startup blocking I/O is
+    // permitted (SetIoTaskRunner(nullptr) disables lazy async runner creation)
+    // before attaching file_runner_ for ongoing debounced saves.
+    snapshot_store_->SetIoTaskRunner(nullptr);
     snapshot_store_->SaveNow(*model_);
   }
+  // Ongoing debounced saves are serialized on the UI thread and written on
+  // Open's file sequence (BLOCK_SHUTDOWN) so they never block BrowserThread::UI.
+  snapshot_store_->SetIoTaskRunner(file_runner_);
   onboarding_completed_ =
       base::PathExists(state_dir.AppendASCII(kOnboardingMarker));
   did_set_default_meet_route_ =

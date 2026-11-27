@@ -2313,9 +2313,14 @@ void OpenSidebarView::OnTreeChanged(const TreeChange& change) {
 }
 
 void OpenSidebarView::OnSpacesChanged() {
+  const SpaceID prev_shown = pager_->shown_space_id();
   pager_->SetSpaces(context_->controller()->GetWindowSpaceIds(
       context_->window_id()));
   pager_->ForEachPage([](OpenTabTreeView* page) { page->OnSpaceChanged(); });
+  if (!prev_shown.empty() && pager_->shown_space_id() != prev_shown) {
+    OnFavoritesChanged();
+    OnSpaceThemeChanged(pager_->shown_space_id());
+  }
   bottom_bar_->Refresh();
   ApplyIncognitoChrome();
 }

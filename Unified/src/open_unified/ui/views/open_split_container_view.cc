@@ -17,6 +17,7 @@
 #include "cc/paint/paint_flags.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/reload_type.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "open_unified/ui/design/open_glyphs.h"
@@ -2180,7 +2181,12 @@ class SplitPaneView : public views::View,
     if (web_view_->web_contents() != contents) {
       web_view_->SetWebContents(contents);
     }
-    web_view_->SetVisible(contents != nullptr && !spec_.is_empty_placeholder);
+    const bool show_web = contents != nullptr && !spec_.is_empty_placeholder;
+    web_view_->SetVisible(show_web);
+    if (show_web && GetWidget() && GetWidget()->IsVisible() && IsDrawn() &&
+        contents->GetVisibility() != content::Visibility::VISIBLE) {
+      contents->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
+    }
     UpdateEmptyPlaceholder();
     applied_radii_.reset();
     ApplyCornerRadii();

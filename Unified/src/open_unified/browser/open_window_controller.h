@@ -135,6 +135,7 @@ class OpenWindowController : public OpenViewController,
   views::Widget* ActiveLittleOpenWidget() const;
   views::Widget* FirstRunWidget() const;
   views::Widget* SettingsWindowWidget() const;
+  views::Widget* SiteControlsWidget() const;
 
   // Extension bridges of every Profile (OpenBrowserService adds each one
   // when its ProfileServices exist and removes it before they go away), so
@@ -433,6 +434,7 @@ class OpenWindowUi : public OpenBrowserView::Delegate,
   void ShowSiteControls(views::View* anchor);
   void HideSiteControls();
   bool site_controls_shown() const;
+  views::Widget* site_controls_widget() const;
 
   // Split View: re-presents the selected node (single page or 2..4 panes).
   void UpdatePanel();

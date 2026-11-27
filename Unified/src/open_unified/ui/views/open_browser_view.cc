@@ -276,6 +276,9 @@ class OpenBrowserView::ThemeBackgroundView : public views::View {
   void SetStyle(const theme::ThemeStyle& style) {
     StopFade();
     current_->SetStyle(style);
+    current_->layer()->SetOpacity(1.0f);
+    incoming_->SetVisible(false);
+    incoming_->layer()->SetOpacity(0.0f);
     target_.reset();
   }
 
@@ -2672,10 +2675,14 @@ void OpenBrowserView::SetThemeTransitionProgress(double progress) {
 }
 
 void OpenBrowserView::EndThemeTransition(bool commit) {
-  theme_background_->EndTransition(commit);
+  if (theme_background_) {
+    theme_background_->EndTransition(commit);
+  }
   if (commit && transition_space_) {
     shown_theme_space_ = transition_space_;
-    reveal_card_->SetStyle(ThemeStateFor(*transition_space_).style);
+    if (reveal_card_) {
+      reveal_card_->SetStyle(ThemeStateFor(*transition_space_).style);
+    }
   }
   transition_space_.reset();
   SyncWindowControlsState();
@@ -2684,12 +2691,16 @@ void OpenBrowserView::EndThemeTransition(bool commit) {
 
 void OpenBrowserView::CrossfadeTheme(const SpaceID& to, bool animated) {
   const theme::ThemeStyle& style = ThemeStateFor(to).style;
-  if (animated && AnimationsEnabled()) {
-    theme_background_->Crossfade(style);
-  } else {
-    theme_background_->SetStyle(style);
+  if (theme_background_) {
+    if (animated && AnimationsEnabled()) {
+      theme_background_->Crossfade(style);
+    } else {
+      theme_background_->SetStyle(style);
+    }
   }
-  reveal_card_->SetStyle(style);
+  if (reveal_card_) {
+    reveal_card_->SetStyle(style);
+  }
   shown_theme_space_ = to;
   SyncWindowControlsState();
   UpdateWindowMaterial();
@@ -3370,8 +3381,12 @@ void OpenBrowserView::OnSpaceThemeChanged(const SpaceID& space_id) {
   if (shown_theme_space_ && *shown_theme_space_ == space_id) {
     // Theme edits apply at once (the editor previews live).
     const theme::ThemeStyle& style = ThemeStateFor(space_id).style;
-    theme_background_->SetStyle(style);
-    reveal_card_->SetStyle(style);
+    if (theme_background_) {
+      theme_background_->SetStyle(style);
+    }
+    if (reveal_card_) {
+      reveal_card_->SetStyle(style);
+    }
     SyncWindowControlsState();
     UpdateWindowMaterial();
   }
@@ -3390,6 +3405,13 @@ void OpenBrowserView::OnWindowStateChanged(const WindowID& window_id) {
   SyncFromWindowState(animate);
   // The pager slides the strip and drives the background cross-fade.
   sidebar_->OnWindowStateChanged(animate);
+  if (!transition_space_) {
+    const SpaceID focused = FocusedSpaceId();
+    if (!focused.empty() &&
+        (!shown_theme_space_ || *shown_theme_space_ != focused)) {
+      CrossfadeTheme(focused, animate);
+    }
+  }
   UpdatePanelChildren();
   ApplyWebCornerRadii();
   SyncWindowControlsState();

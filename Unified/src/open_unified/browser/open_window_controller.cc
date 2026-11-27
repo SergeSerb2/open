@@ -57,6 +57,7 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
@@ -2039,6 +2040,17 @@ views::Widget* OpenWindowController::FirstRunWidget() const {
 
 views::Widget* OpenWindowController::SettingsWindowWidget() const {
   return settings_window_ ? settings_window_->widget() : nullptr;
+}
+
+views::Widget* OpenWindowController::SiteControlsWidget() const {
+  for (const auto& [browser_view, ui] : windows_) {
+    if (ui) {
+      if (views::Widget* w = ui->site_controls_widget()) {
+        return w;
+      }
+    }
+  }
+  return nullptr;
 }
 
 void OpenWindowController::OnFirstRunWindowClosed() {
@@ -7623,6 +7635,14 @@ bool OpenWindowUi::site_controls_shown() const {
   return site_controls_ && site_controls_->IsShowing();
 }
 
+views::Widget* OpenWindowUi::site_controls_widget() const {
+  if (!site_controls_ || !site_controls_->IsShowing()) {
+    return nullptr;
+  }
+  views::Widget* w = site_controls_->widget();
+  return (w && !w->IsClosed()) ? w : nullptr;
+}
+
 void OpenWindowUi::CopyUrl(const GURL& url) {
   ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
       .WriteText(base::UTF8ToUTF16(url.spec()));
@@ -7958,6 +7978,11 @@ void OpenWindowUi::UpdatePanel() {
                 browser_view_->GetActiveContentsWebView()) {
           web_view->SetWebContents(active);
         }
+        if (views::Widget* w = widget();
+            w && w->IsVisible() &&
+            active->GetVisibility() != content::Visibility::VISIBLE) {
+          active->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
+        }
       }
     }
     split_->SetSinglePaneToolbarVisible(single_pane_toolbar_visible_);
@@ -7996,6 +8021,15 @@ void OpenWindowUi::UpdatePanel() {
   split_->SetPresentation(presentation);
   open_view_->SetSplitViewActive(true);
   split_active_ = true;
+  if (views::Widget* w = widget(); w && w->IsVisible()) {
+    for (const SplitPaneSpec& spec : presentation.panes) {
+      if (spec.web_contents && !spec.is_empty_placeholder &&
+          spec.web_contents->GetVisibility() != content::Visibility::VISIBLE) {
+        spec.web_contents->UpdateWebContentsVisibility(
+            content::Visibility::VISIBLE);
+      }
+    }
+  }
 }
 
 void OpenWindowUi::OnSplitFractionsCommitted(

@@ -42,6 +42,7 @@ import time
 import traceback
 import urllib.request
 import uuid
+import zlib
 from typing import Callable, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -451,6 +452,62 @@ def png_size(path: str):
   return width, height
 
 
+def png_sample_rgb(path: str, fx: float, fy: float):
+  """Returns (r, g, b) at normalized coordinates (fx, fy) of an 8-bit PNG."""
+  with open(path, "rb") as f:
+    data = f.read()
+  check(data[:8] == b"\x89PNG\r\n\x1a\n", f"{path} is not a PNG")
+  pos = 8
+  idat = bytearray()
+  w = h = bd = ct = interlace = 0
+  while pos < len(data):
+    ln, ctype = struct.unpack(">I4s", data[pos:pos + 8])
+    chunk = data[pos + 8:pos + 8 + ln]
+    pos += 12 + ln
+    if ctype == b"IHDR":
+      w, h, bd, ct, _, _, interlace = struct.unpack(">IIBBBBB", chunk[:13])
+    elif ctype == b"IDAT":
+      idat.extend(chunk)
+    elif ctype == b"IEND":
+      break
+  check(w > 0 and h > 0 and bd == 8 and ct in (2, 6) and interlace == 0,
+        f"unsupported PNG format {w}x{h} bd={bd} ct={ct} interlace={interlace}")
+  raw = zlib.decompress(bytes(idat))
+  bpp = 4 if ct == 6 else 3
+  stride = w * bpp
+  prev = bytearray(stride)
+  idx = 0
+  ty = min(h - 1, max(0, int(h * fy)))
+  tx = min(w - 1, max(0, int(w * fx)))
+  for _ in range(ty + 1):
+    filt = raw[idx]
+    idx += 1
+    row = bytearray(raw[idx:idx + stride])
+    idx += stride
+    if filt == 1:
+      for i in range(bpp, stride):
+        row[i] = (row[i] + row[i - bpp]) & 0xFF
+    elif filt == 2:
+      for i in range(stride):
+        row[i] = (row[i] + prev[i]) & 0xFF
+    elif filt == 3:
+      for i in range(stride):
+        a = row[i - bpp] if i >= bpp else 0
+        row[i] = (row[i] + ((a + prev[i]) >> 1)) & 0xFF
+    elif filt == 4:
+      for i in range(stride):
+        a = row[i - bpp] if i >= bpp else 0
+        b = prev[i]
+        c = prev[i - bpp] if i >= bpp else 0
+        p = a + b - c
+        pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+        pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+        row[i] = (row[i] + pr) & 0xFF
+    prev = row
+  p = tx * bpp
+  return (prev[p], prev[p + 1], prev[p + 2])
+
+
 class Context:
   def __init__(self, browser: Browser, fixtures: FixtureServer, out_dir: str,
                sync: Optional[SyncServerProcess], sync_url: Optional[str]):
@@ -479,14 +536,16 @@ class Context:
         return tab
     return None
 
-  def snapshot(self, name: str, window: Optional[str] = None) -> str:
+  def snapshot(self, name: str, window: Optional[str] = None,
+               min_size: int = 200) -> str:
     path = os.path.join(self.out_dir, f"{name}.png")
     kwargs = {"path": to_browser_path(path, self.browser.binary)}
     if window:
       kwargs["window"] = window
     result = self.call("snapshot", **kwargs)
     width, height = png_size(path)
-    check(width > 200 and height > 200, f"window PNG too small: {width}x{height}")
+    check(width > min_size and height > min_size,
+          f"window PNG too small: {width}x{height}")
     check(result.get("width") == width, "snapshot width mismatch")
     return path
 
@@ -508,9 +567,9 @@ def suite_startup(ctx: Context):
   spaces = ctx.call("spaces")
   check(len(spaces) >= 1, "no default Space")
   check(any(s["focused"] for s in spaces), "no focused Space")
-  check(os.path.exists(os.path.join(ctx.browser.user_data, "State",
-                                    "browser.json")),
-        "State/browser.json was not written")
+  browser_json = os.path.join(ctx.browser.user_data, "State", "browser.json")
+  ctx.client.wait_until(lambda: os.path.exists(browser_json), timeout=5,
+                        what="State/browser.json")
   ctx.notes["platform"] = ping["platform"]
 
 
@@ -523,6 +582,9 @@ def suite_spaces(ctx: Context):
   ctx.call("space", space=created["id"])
   spaces = {s["id"]: s for s in ctx.call("spaces")}
   check(spaces[created["id"]]["focused"], "new Space not focused")
+  default_shot = ctx.snapshot("spaces-default")
+  default_rgb = png_sample_rgb(default_shot, 0.04, 0.55)
+  ctx.notes["default_space_rgb"] = list(default_rgb)
   style = {
       "math_version": 1,
       "key_color": {"r": 0.92, "g": 0.35, "b": 0.20, "a": 1},
@@ -535,7 +597,16 @@ def suite_spaces(ctx: Context):
   key = spaces[created["id"]]["theme"]["style"]["key_color"]
   check(abs(key["r"] - 0.92) < 1e-6, "theme not stored in the model")
   time.sleep(0.30)  # Let 210ms kThemeCrossfade settle before snapshot.
-  ctx.snapshot("spaces-themed")
+  themed_shot = ctx.snapshot("spaces-themed")
+  themed_rgb = png_sample_rgb(themed_shot, 0.04, 0.55)
+  rgb_delta = sum(abs(a - b) for a, b in zip(default_rgb, themed_rgb))
+  check(rgb_delta >= 25,
+        f"Space theme background did not update: default={default_rgb} "
+        f"themed={themed_rgb} delta={rgb_delta}")
+  try:
+    os.remove(default_shot)
+  except OSError:
+    pass
   # Back to the first Space for the following suites.
   ctx.call("space", space=focused_before)
   ctx.notes["e2e_space"] = created["id"]
@@ -614,6 +685,10 @@ def suite_split(ctx: Context):
   check(pane_ids == {a, b}, f"unexpected panes {pane_ids}")
   for pane in pane_ids:
     check(ctx.call("tab-state", tab=pane)["loaded"], "pane not live")
+    ctx.client.wait_until(
+        lambda p=pane: ctx.client.eval("document.visibilityState", tab=p) ==
+        "visible", timeout=5, what=f"split pane {pane} visible")
+  time.sleep(0.25)
   ctx.snapshot("split-view")
   ctx.call("split", tab=b)  # Unsplit.
   check(ctx.call("tabs", sidebar=True)["selectedNode"] != split_id,
@@ -820,6 +895,9 @@ def suite_webui(ctx: Context):
     check(not health["failed"],
           f"open://{host} failed resource loads: {health['failed']}")
     ctx.notes[f"webui_{host}_children"] = health["children"]
+    if host in ("welcome", "boosts"):
+      time.sleep(0.25)
+      ctx.snapshot(f"webui-{host}")
     ctx.call("close", tab=tab)
 
   settings_tab = ctx.call("open", url="open://settings/")["id"]
@@ -1037,7 +1115,8 @@ def suite_site_controls(ctx: Context):
   check(state["host"] == "127.0.0.1", f"host {state['host']}")
   check(state["secure"] is False, "http page reported secure")
   check(isinstance(state["extensions"], list), "extensions shape")
-  ctx.snapshot("site-controls")
+  time.sleep(0.20)
+  ctx.snapshot("site-controls", window="site-controls", min_size=150)
   ctx.call("site-controls", action="close")
   ctx.client.wait_until(lambda: not ctx.call("site-controls")["shown"],
                         what="Site Control closed")
@@ -1360,7 +1439,14 @@ def suite_regression_core_and_chrome(ctx: Context):
         stored_style["appearance"] == "dark",
         f"updated Space theme stale in spaces readback: {stored_style}")
   time.sleep(0.30)  # Let 210ms kThemeCrossfade settle before snapshot.
-  ctx.snapshot("regression-space-theme")
+  reg_shot = ctx.snapshot("regression-space-theme")
+  if "default_space_rgb" in ctx.notes:
+    reg_rgb = png_sample_rgb(reg_shot, 0.04, 0.55)
+    base_rgb = ctx.notes["default_space_rgb"]
+    reg_delta = sum(abs(a - b) for a, b in zip(base_rgb, reg_rgb))
+    check(reg_delta >= 25,
+          f"regression Space theme background did not update: "
+          f"default={base_rgb} themed={reg_rgb} delta={reg_delta}")
 
   # --- 4. Overlay non-blocking visibility (OverlayWidgetHost) ----------------
   # Exercise Command Bar, Find Bar, and Tab Switcher open/close cycles and

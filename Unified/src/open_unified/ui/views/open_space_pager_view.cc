@@ -153,7 +153,12 @@ OpenSpacePagerView::~OpenSpacePagerView() {
 }
 
 void OpenSpacePagerView::SetSpaces(const std::vector<SpaceID>& space_ids) {
+  const bool list_changed = (space_ids_ != space_ids);
   space_ids_ = space_ids;
+  if (list_changed && swipe_) {
+    swipe_.reset();
+    context_->EndThemeTransition(/*commit=*/false);
+  }
   // Destroy pages of Spaces that left this window.
   for (auto it = pages_.begin(); it != pages_.end();) {
     if (std::find(space_ids_.begin(), space_ids_.end(), it->first) ==
@@ -167,10 +172,18 @@ void OpenSpacePagerView::SetSpaces(const std::vector<SpaceID>& space_ids) {
     }
   }
   const SpaceID focused = context_->FocusedSpaceId();
-  if (!focused.empty() && IndexOf(focused) >= 0) {
-    shown_space_id_ = focused;
-  } else if (IndexOf(shown_space_id_) < 0) {
-    shown_space_id_ = space_ids_.empty() ? SpaceID() : space_ids_.front();
+  const bool had_shown = !shown_space_id_.empty();
+  bool shown_changed = false;
+  if (shown_space_id_.empty() || IndexOf(shown_space_id_) < 0) {
+    const SpaceID next = (!focused.empty() && IndexOf(focused) >= 0)
+                             ? focused
+                             : (space_ids_.empty() ? SpaceID()
+                                                   : space_ids_.front());
+    shown_changed = (next != shown_space_id_);
+    shown_space_id_ = next;
+  }
+  if ((shown_changed || list_changed) && slide_->is_animating()) {
+    slide_->Stop();
   }
   if (!slide_->is_animating() && !swipe_) {
     const int index = std::max(0, IndexOf(shown_space_id_));
@@ -183,6 +196,9 @@ void OpenSpacePagerView::SetSpaces(const std::vector<SpaceID>& space_ids) {
       if (index >= 0) {
         SetPagesVisibleInRange(index, index);
       }
+    }
+    if (had_shown && shown_changed) {
+      context_->CrossfadeTheme(shown_space_id_, /*animated=*/false);
     }
   }
   InvalidateLayout();

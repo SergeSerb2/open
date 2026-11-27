@@ -684,7 +684,7 @@ class OpenSiteControlBubble {
   void SetReloadBannerVisible(bool visible);
 
   OpenSiteControlView* contents() { return contents_; }
-  views::Widget* widget() { return widget_.get(); }
+  views::Widget* widget() const { return widget_.get(); }
 
  private:
   class LiveObserver;

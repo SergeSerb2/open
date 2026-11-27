@@ -900,7 +900,12 @@ CommandRegistry::CommandRegistry() {
       {}
 #endif
   );
+#if BUILDFLAG(IS_MAC)
   add(CommandId::kZoomWindow, "zoom-window", "Zoom", {"Window"}, {});
+#else
+  add(CommandId::kZoomWindow, "zoom-window", "Maximize Window", {"Window"}, {},
+      CommandScope::kWindow, false, "always", {"Zoom"});
+#endif
 #if BUILDFLAG(IS_MAC)
   add(CommandId::kBringAllToFront, "bring-all-to-front", "Bring All to Front",
       {"Window"}, {});

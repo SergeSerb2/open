@@ -968,6 +968,8 @@ views::Widget* ResolveSnapshotWidget(const std::string& window_name,
       w = wc->FirstRunWidget();
     } else if (window_name == "settings") {
       w = wc->SettingsWindowWidget();
+    } else if (window_name == "site-controls") {
+      w = wc->SiteControlsWidget();
     }
   }
   return IsWidgetCapturable(w) ? w : nullptr;
